@@ -317,6 +317,10 @@
   gap: var(--space-2);
 }
 
+.warningHeaderClickable {
+  cursor: pointer;
+}
+
 .warningMessage {
   word-break: break-word;
 }
@@ -338,6 +342,17 @@
   border-left: 1px solid var(--gray-a5);
   margin-top: var(--space-1);
   padding-left: var(--space-3);
+}
+
+// Applied to plan headers when a plan file is available to click-to-open.
+.planHeaderClickable {
+  cursor: pointer;
+}
+
+// Expanded detail body for the plan-revision state.
+.planRevisionDetail {
+  padding-left: var(--space-4);
+  padding-top: var(--space-1);
 }
 
 .toolGroupHeader {

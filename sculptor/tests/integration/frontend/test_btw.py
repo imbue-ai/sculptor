@@ -3,11 +3,13 @@
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.base import clear_tiptap
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.btw_popup import get_btw_popup
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -446,11 +448,11 @@ def test_btw_popup_dismisses_on_agent_tab_switch(sculptor_instance_: SculptorIns
     expect(popup).to_be_visible(timeout=60_000)
     expect(popup.get_answer()).to_contain_text("agent A answer", timeout=60_000)
 
-    # Add a second agent in the same workspace and switch to it.
-    add_agent_button = page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON)
-    add_agent_button.click()
-    agent_tabs = page.get_by_test_id(ElementIDs.AGENT_TAB)
-    expect(agent_tabs).to_have_count(2, timeout=30_000)
+    # Add a second agent in the same workspace (the add-panel dropdown creates it
+    # in the center section and navigates to it).
+    create_agent_panel(page, section="center")
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(2, timeout=30_000)
 
     # The popup must disappear: it belonged to agent A and we're now on agent B.
     expect(popup).not_to_be_visible()

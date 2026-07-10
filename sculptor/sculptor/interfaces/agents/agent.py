@@ -44,6 +44,8 @@ from sculptor.state.messages import PersistentAgentMessage
 from sculptor.state.messages import PersistentMessage
 from sculptor.state.messages import PersistentUserMessage
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.state.workflow_state import WorkflowProgressEntryTypes
+from sculptor.state.workflow_state import WorkflowUsage
 
 ParsedAgentResponseType = ParsedAgentResponsePassthrough | ParsedToolResultResponse
 
@@ -364,6 +366,14 @@ class RequestSuccessAgentMessage(PersistentRequestCompleteAgentMessage):
     # pyrefly: ignore [bad-override]
     error: None = None
     interrupted: bool = False
+    # Only meaningful when interrupted=True. An interrupted success normally
+    # means "the turn may still be resumed after a restart", so replay keeps the
+    # request orphaned and startup reconciliation refuses to count it as
+    # processed. turn_abandoned=True declares the opposite contract: this
+    # completion terminally settles the request and the turn will not be
+    # continued (harness orphan-finalization on a no-op resume, pi's
+    # resume-settle). Replay and dedup treat such requests as fully processed.
+    turn_abandoned: bool = False
 
 
 class RequestFailureAgentMessage(PersistentRequestCompleteAgentMessage, ErrorMessage):
@@ -414,6 +424,27 @@ class BackgroundTaskStartedAgentMessage(EphemeralAgentMessage):
     tool_use_id: str
     description: str = ""
     task_type: str = ""
+    workflow_name: str = Field(
+        default="", description="Workflow name from the script's meta block; only set for Workflow tasks"
+    )
+
+
+class WorkflowTaskProgressAgentMessage(EphemeralAgentMessage):
+    """Progress snapshot for a running Workflow background task.
+
+    Always carries the full accumulated progress tree — the output processor
+    merges the CLI's delta payloads into it — so any consumer can rebuild
+    the workflow's state from a single message.
+    """
+
+    object_type: str = "WorkflowTaskProgressAgentMessage"
+    background_task_id: str
+    tool_use_id: str
+    workflow_name: str = ""
+    entries: tuple[WorkflowProgressEntryTypes, ...] = ()
+    usage: WorkflowUsage | None = None
+    last_tool_name: str | None = None
+    summary: str = ""
 
 
 class BackgroundTaskNotificationAgentMessage(PersistentAgentMessage):
@@ -441,6 +472,15 @@ class BackgroundTaskNotificationAgentMessage(PersistentAgentMessage):
     # subagent's own messages never reach the parent's stream (which is the
     # common case for Agent-tool background tasks — see SCU-1151).
     duration_seconds: float | None = None
+    # Workflow-task fields. The progress messages that stream a workflow's
+    # state are ephemeral, so the final tree rides on this persistent
+    # notification — after a restart it is the only record of what the
+    # workflow ran. final_workflow_entries doubles as the workflow marker:
+    # always a tuple for workflow tasks (empty when the run reported no tree
+    # before finishing), None for other background tasks.
+    workflow_name: str = ""
+    final_workflow_entries: tuple[WorkflowProgressEntryTypes, ...] | None = None
+    workflow_usage: WorkflowUsage | None = None
 
 
 class AutoCompactingAgentMessage(EphemeralAgentMessage):
@@ -510,6 +550,8 @@ EphemeralAgentMessageUnion = (
     | Annotated[AutoCompactingAgentMessage, Tag("AutoCompactingAgentMessage")]
     | Annotated[AutoCompactingDoneAgentMessage, Tag("AutoCompactingDoneAgentMessage")]
     | Annotated[ModelsAvailableAgentMessage, Tag("ModelsAvailableAgentMessage")]
+    | Annotated[BackgroundTaskStartedAgentMessage, Tag("BackgroundTaskStartedAgentMessage")]
+    | Annotated[WorkflowTaskProgressAgentMessage, Tag("WorkflowTaskProgressAgentMessage")]
 )
 AgentMessageUnion = PersistentAgentMessageUnion | EphemeralAgentMessageUnion
 # this is necessary because pydantic won't let us use PersistentMessageTypes, which already has a discriminator, to make MessageTypes

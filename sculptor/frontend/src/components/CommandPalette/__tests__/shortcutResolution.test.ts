@@ -37,16 +37,14 @@ const noop = (): void => {};
 const makeRuntime = (): CommandRuntime =>
   ({
     store: getDefaultStore(),
-    navigate: { toHome: noop, toSettings: vi.fn(), toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    navigate: { toHome: noop, toSettings: vi.fn(), toWorkspace: vi.fn(), toAgent: vi.fn() },
+    openNewWorkspaceModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
-      toggleZenMode: noop,
-      toggleFocusMode: noop,
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
-      togglePanel: noop,
       setTheme: noop,
       focusChatInput: noop,
       showChatSearch: noop,
@@ -63,12 +61,12 @@ const makeRuntime = (): CommandRuntime =>
   }) as unknown as CommandRuntime;
 
 const WORKSPACE_CTX: PaletteContext = {
-  route: { isHome: false, isWorkspace: true, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: false, isWorkspace: true, isSettings: false, isAgent: false },
   activeWorkspaceId: "ws-1",
   activeAgentId: null,
   hasChatPanel: true,
   hasTerminalPanel: false,
-  isZenMode: false,
+  isSectionMaximized: false,
   page: null,
 };
 

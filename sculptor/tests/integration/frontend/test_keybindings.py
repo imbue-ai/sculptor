@@ -6,13 +6,21 @@ Tests cover:
 - Functional: default keybinding works, customized keybinding honored
 """
 
+import re
+
 import pytest
+from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import dismiss_with_escape
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
+from sculptor.testing.playwright_utils import dispatch_modified_shortcuts_in_one_task
+from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -22,6 +30,18 @@ def _navigate_to_keybindings(sculptor_instance_: SculptorInstance):
     """Navigate to Settings > Keybindings and return the section element."""
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
     return settings_page.click_on_keybindings()
+
+
+def _ensure_workspace(sculptor_instance_: SculptorInstance) -> None:
+    """Create a workspace so the shortcut flows below run unobstructed.
+
+    Per-test cleanup deletes every workspace, and with zero workspaces Home
+    auto-opens the new-workspace dialog — a dismissible overlay that suppresses
+    global shortcuts while it is open. A workspace keeps the auto-open
+    away (and gives workspace-bound shortcuts something to act on); this is
+    idempotent (a no-op once one exists).
+    """
+    PlaywrightProjectLayoutPage(page=sculptor_instance_.page).ensure_workspace_exists()
 
 
 @pytest.mark.release
@@ -242,6 +262,9 @@ def test_starting_second_recording_cancels_first(sculptor_instance_: SculptorIns
 @user_story("to see customized keybindings in the help dialog")
 def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorInstance) -> None:
     """After changing a keybinding in settings, the help dialog should show the new binding."""
+    # With zero workspaces Home auto-opens the new-workspace dialog, which
+    # suppresses global shortcuts while it is open — create a workspace first.
+    _ensure_workspace(sculptor_instance_)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
@@ -276,6 +299,9 @@ def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorIn
 @user_story("to not see unbound keybindings in the help dialog")
 def test_help_dialog_hides_unbound(sculptor_instance_: SculptorInstance) -> None:
     """Unbound keybindings should not appear in the help dialog."""
+    # With zero workspaces Home auto-opens the new-workspace dialog, which
+    # suppresses global shortcuts while it is open — create a workspace first.
+    _ensure_workspace(sculptor_instance_)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
@@ -323,13 +349,18 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
 
+    # With zero workspaces Home auto-opens the new-workspace dialog, which
+    # suppresses global shortcuts while it is open — create a workspace first
+    # (before the workspace-row count is captured) so the count stays stable.
+    _ensure_workspace(sculptor_instance_)
+
     # Reset keybindings and navigate away from settings
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     keybindings.reset_all_to_defaults()
     blur_active_element(page)
 
     layout = PlaywrightProjectLayoutPage(page=page)
-    initial_tab_count = layout.get_workspace_tabs().count()
+    initial_tab_count = get_workspace_sidebar(page).get_workspace_rows().count()
 
     # Open the help dialog (a dismissible overlay)
     layout.press_keyboard_shortcut(f"{mod}+/")
@@ -350,7 +381,7 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
     dismiss_with_escape(dialog)
 
     # No new workspace should have been created
-    expect(layout.get_workspace_tabs()).to_have_count(initial_tab_count)
+    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(initial_tab_count)
 
 
 @pytest.mark.release
@@ -358,6 +389,10 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
 def test_default_command_palette_keybinding_works(sculptor_instance_: SculptorInstance) -> None:
     """Pressing the default Command palette shortcut (Meta+K) should open the search modal."""
     page = sculptor_instance_.page
+
+    # With zero workspaces Home auto-opens the new-workspace dialog, which
+    # suppresses global shortcuts while it is open — create a workspace first.
+    _ensure_workspace(sculptor_instance_)
 
     # Reset keybindings to defaults (earlier tests may have changed them)
     keybindings = _navigate_to_keybindings(sculptor_instance_)
@@ -382,6 +417,10 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     """After remapping Command palette to Meta+J, Meta+J should open the modal and Meta+K should not."""
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
+
+    # With zero workspaces Home auto-opens the new-workspace dialog, which
+    # suppresses global shortcuts while it is open — create a workspace first.
+    _ensure_workspace(sculptor_instance_)
 
     # Change "Command palette" from Meta+K to Meta+J in settings. Meta+J
     # is unbound by default; Meta+P would now collide with open_workspace
@@ -414,6 +453,216 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     # Reset keybindings for subsequent tests
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     keybindings.reset_all_to_defaults()
+
+
+@pytest.mark.release
+@user_story("to toggle the sidebar with its keybinding from the home page")
+def test_sidebar_toggle_keybinding_works_on_home_page(sculptor_instance_: SculptorInstance) -> None:
+    """The sidebar-toggle shortcut fires on /home, not just on workspace routes.
+
+    The sidebar rail is app-shell chrome mounted on every route, so its
+    keybinding handler must live at the shell level rather than in the
+    workspace-only shortcut set.
+    """
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    # Keep the empty-state auto-opened dialog (which suppresses global
+    # shortcuts while it is open) away by creating a workspace first.
+    _ensure_workspace(sculptor_instance_)
+
+    # Reset keybindings to defaults (earlier tests may have changed them).
+    keybindings = _navigate_to_keybindings(sculptor_instance_)
+    keybindings.reset_all_to_defaults()
+
+    navigate_to_home_page(page)
+    blur_active_element(page)
+
+    sidebar_root = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+    expect(sidebar_root).to_be_visible()
+
+    # Meta+Alt+B collapses the sidebar down to the expand icon...
+    page.keyboard.press(f"{mod}+Alt+b")
+    expect(sidebar_root).to_be_hidden()
+    expect(get_workspace_sidebar(page).get_expand_icon()).to_be_visible()
+
+    # ...and pressing it again restores the rail (also resets shared state
+    # for subsequent tests on the same worker).
+    blur_active_element(page)
+    page.keyboard.press(f"{mod}+Alt+b")
+    expect(sidebar_root).to_be_visible()
+
+
+@pytest.mark.release
+@user_story("to toggle the sidebar with its keybinding from the settings page")
+def test_sidebar_toggle_keybinding_works_on_settings_page(sculptor_instance_: SculptorInstance) -> None:
+    """The sidebar-toggle shortcut fires on /settings, not just on workspace routes."""
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    # Keep the empty-state auto-opened dialog (which suppresses global
+    # shortcuts while it is open) away by creating a workspace first.
+    _ensure_workspace(sculptor_instance_)
+
+    # Reset keybindings to defaults; this also lands us on the settings page.
+    keybindings = _navigate_to_keybindings(sculptor_instance_)
+    keybindings.reset_all_to_defaults()
+    blur_active_element(page)
+
+    sidebar_root = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+    expect(sidebar_root).to_be_visible()
+
+    page.keyboard.press(f"{mod}+Alt+b")
+    expect(sidebar_root).to_be_hidden()
+    expect(get_workspace_sidebar(page).get_expand_icon()).to_be_visible()
+
+    # Restore the rail for subsequent tests on the same worker.
+    blur_active_element(page)
+    page.keyboard.press(f"{mod}+Alt+b")
+    expect(sidebar_root).to_be_visible()
+
+
+def _workspace_id_from_url(page: Page) -> str:
+    """Extract the workspace id from the current ``/ws/<id>`` route."""
+    match = re.search(r"/ws/([^/]+)", page.url)
+    assert match is not None, f"expected a workspace route, got {page.url}"
+    return match.group(1)
+
+
+def _workspace_id_from_hash(hash_fragment: str) -> str:
+    """Extract the workspace id from a ``#/ws/<id>[/agent/<id>]`` hash fragment.
+
+    Cycling navigates to ``/ws/<id>`` while an agent page sits at
+    ``/ws/<id>/agent/<id>``, so tests must compare workspace ids rather than raw
+    hashes.
+    """
+    match = re.search(r"/ws/([^/?]+)", hash_fragment)
+    assert match is not None, f"expected a workspace hash, got {hash_fragment!r}"
+    return match.group(1)
+
+
+@user_story("to open the delete-workspace confirmation with its keybinding")
+def test_delete_workspace_keybinding_opens_confirmation(sculptor_instance_: SculptorInstance) -> None:
+    """Meta+Shift+W on a workspace page opens the delete confirmation; cancel aborts.
+
+    The handler mounts with the workspace shell, so the shortcut must fire while
+    on a workspace route. Not @release-marked: start_task_and_wait_for_ready
+    selects the Fake Claude model, which is gated off in packaged-release runs.
+    """
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Delete Keybinding WS")
+    sidebar = get_workspace_sidebar(page)
+    expect(sidebar.get_workspace_rows()).to_have_count(1)
+    blur_active_element(page)
+
+    page.keyboard.press(f"{mod}+Shift+W")
+
+    dialog = sidebar.get_delete_confirmation_dialog()
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("Delete Keybinding WS")
+
+    # Cancel aborts: the workspace survives.
+    sidebar.cancel_delete()
+    expect(dialog).to_be_hidden()
+    expect(sidebar.get_workspace_rows()).to_have_count(1)
+
+
+@user_story("to cycle between workspaces with the next/previous workspace keybindings")
+def test_workspace_cycle_keybindings(sculptor_instance_: SculptorInstance) -> None:
+    """Meta+] / Meta+[ switch to the adjacent workspace.
+
+    With exactly two workspaces, cycling in either direction lands on the other
+    one, which keeps the assertion independent of the underlying list order.
+    Not @release-marked: start_task_and_wait_for_ready selects the Fake Claude
+    model, which is gated off in packaged-release runs.
+    """
+    page = sculptor_instance_.page
+    mod = get_playwright_modifier_key()
+
+    start_task_and_wait_for_ready(page, prompt="WS A agent", workspace_name="Cycle WS A")
+    ws_a = _workspace_id_from_url(page)
+    start_task_and_wait_for_ready(page, prompt="WS B agent", workspace_name="Cycle WS B")
+    ws_b = _workspace_id_from_url(page)
+    assert ws_a != ws_b
+    blur_active_element(page)
+
+    # From B, "next workspace" lands on A (the only other workspace)...
+    page.keyboard.press(f"{mod}+]")
+    expect(page).to_have_url(re.compile(re.escape(f"/ws/{ws_a}")))
+
+    # ...and "previous workspace" cycles back to B.
+    blur_active_element(page)
+    page.keyboard.press(f"{mod}+[")
+    expect(page).to_have_url(re.compile(re.escape(f"/ws/{ws_b}")))
+
+
+@user_story("to rapidly cycle workspaces without landing back on an already-visited one")
+def test_rapid_workspace_cycle_reads_live_route(sculptor_instance_: SculptorInstance) -> None:
+    """Two next-workspace presses fired back-to-back land two workspaces away, not one.
+
+    Regression test for the cycle anchor going stale under rapid input:
+    ``navigateToWorkspace`` updates ``window.location.hash`` synchronously, while
+    ``activeWorkspaceIdAtom`` is only written by a layout effect after React
+    commits. A second press arriving in the same task therefore must not anchor
+    on the atom — it still names the workspace the first press just left, so
+    both presses would land on that workspace's neighbour. The handler anchors
+    on the live hash instead.
+
+    ``dispatch_modified_shortcuts_in_one_task`` makes the timing deterministic:
+    both keydowns run in one task, so React cannot commit (and update the atom)
+    between them. With three workspaces, two forward presses from a live anchor
+    visit two distinct workspaces; from a stale anchor the second press re-lands
+    on the first press's destination.
+
+    Not @release-marked: start_task_and_wait_for_ready selects the Fake Claude
+    model, which is gated off in packaged-release runs.
+    """
+    page = sculptor_instance_.page
+
+    start_task_and_wait_for_ready(page, prompt="WS A agent", workspace_name="Rapid Cycle WS A")
+    ws_a = _workspace_id_from_url(page)
+    start_task_and_wait_for_ready(page, prompt="WS B agent", workspace_name="Rapid Cycle WS B")
+    ws_b = _workspace_id_from_url(page)
+    start_task_and_wait_for_ready(page, prompt="WS C agent", workspace_name="Rapid Cycle WS C")
+    ws_c = _workspace_id_from_url(page)
+    workspace_ids = {ws_a, ws_b, ws_c}
+    assert len(workspace_ids) == 3
+    blur_active_element(page)
+
+    # Fire Cmd+] twice back-to-back, before React can commit in between.
+    hashes = dispatch_modified_shortcuts_in_one_task(page, [("]", "BracketRight"), ("]", "BracketRight")])
+    before, after_first, after_second = (_workspace_id_from_hash(hash_fragment) for hash_fragment in hashes)
+
+    # The first press must have navigated; otherwise the synthetic events were
+    # not handled and the stale-anchor assertion below would pass vacuously.
+    assert after_first != before, f"first Cmd+] did not change the workspace: {hashes}"
+    # The regression: a stale anchor makes the second press cycle from `before`
+    # again and re-land on the first press's destination.
+    assert after_second != after_first, f"second Cmd+] cycled from a stale anchor: {hashes}"
+    # With three workspaces, two forward presses land two away — on the remaining
+    # workspace, not back at the start.
+    assert after_second != before, f"two Cmd+] presses wrapped back to the start: {hashes}"
+    assert after_second in workspace_ids, f"cycling left the created workspaces: {hashes}"
+
+
+@pytest.mark.release
+@user_story("to see workspace navigation keybindings without the removed close-workspace entry")
+def test_workspace_keybinding_rows_reflect_removal_and_relabel(sculptor_instance_: SculptorInstance) -> None:
+    """The removed close_workspace binding is gone; next/previous read as workspace navigation.
+
+    A user may still have a persisted override saved under the removed id; the
+    settings page must simply render without that row (the stale override is
+    ignored) while the surviving workspace bindings stay present and labeled.
+    """
+    keybindings = _navigate_to_keybindings(sculptor_instance_)
+
+    expect(keybindings.get_keybinding_row("close_workspace")).to_have_count(0)
+
+    expect(keybindings.get_keybinding_row("delete_workspace")).to_be_visible()
+    expect(keybindings.get_keybinding_row("next_tab")).to_contain_text("Next workspace")
+    expect(keybindings.get_keybinding_row("previous_tab")).to_contain_text("Previous workspace")
 
 
 @pytest.mark.release

@@ -13,14 +13,22 @@
 //
 // Each entry config passes its own `root` (the frontend dir) so path resolution
 // here never depends on how Vite bundles this module.
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 import react from "@vitejs/plugin-react-swc";
-import { defineConfig, loadEnv, type Plugin, type UserConfig, type UserConfigExport } from "vite";
+import {
+  defineConfig,
+  loadEnv,
+  type HtmlTagDescriptor,
+  type Plugin,
+  type UserConfig,
+  type UserConfigExport,
+} from "vite";
 
-import { bundledPlugins } from "./vite-plugins/bundled-plugins.ts";
-import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
+import { bundledExtensions } from "./vite-plugins/bundled-extensions.ts";
+import { extensionRuntimeStubs } from "./vite-plugins/extension-runtime-stubs.ts";
 
 /**
  * Exclude ``@xterm/xterm`` from the bundle and serve it as a standalone
@@ -79,8 +87,8 @@ export function externalizeXterm(root: string): Plugin {
 /** Plugins shared by the web and Electron-renderer builds. */
 export const sharedPlugins = (root: string): Array<Plugin> => [
   externalizeXterm(root),
-  pluginRuntimeStubs(),
-  bundledPlugins(),
+  extensionRuntimeStubs(),
+  bundledExtensions(),
   react(),
 ];
 
@@ -142,7 +150,7 @@ export const sharedDefine = (
  * factory, so each entry config only declares what actually differs.
  */
 export interface FrontendConfigOptions {
-  /** Frontend dir; drives `root`, the `~` alias, SCSS load paths, and plugin file copies. */
+  /** Frontend dir; drives `root`, the `~` alias, SCSS load paths, and extension file copies. */
   root: string;
   /** Dev-server port used when SCULPTOR_FRONTEND_PORT is unset (5174 web, 5173 renderer). */
   defaultFrontendPort: number;
@@ -155,6 +163,8 @@ export interface FrontendConfigOptions {
    * origin root — the backend for web, the `sculptor://app` scheme (and the
    * Vite dev server in development) for the packaged renderer — never `file://`,
    * so assets resolve against the origin regardless of the document's path.
+   * (Under the OpenHost preview front — SCULPTOR_OPENHOST_PROXY set — the factory
+   * overrides this with `/proxy/<frontend-port>/`; see defineFrontendConfig.)
    */
   base?: string;
   /** Extra `build` options merged over the shared `{ sourcemap: true }`. */
@@ -165,10 +175,82 @@ export interface FrontendConfigOptions {
   gateHmrUnderPytest?: boolean;
 }
 
-/** Dev-only proxy server forwarding `/api`, `/ws`, and `/plugins/local` to the backend. */
-function devServer(env: Record<string, string>, defaultFrontendPort: number): import("vite").ServerOptions {
+/**
+ * OpenHost preview identity: inject `<meta name="sculptor-preview">` into
+ * index.html so the /proxy/ switchboard (openhost-preview-fallback.html) and
+ * the openhost-preview-switcher extension can label this preview. A dev server has
+ * no "build time" to report; instead branch/sha/dirty are read fresh from the
+ * working tree on each index.html request. HMR patches modules without
+ * refetching index.html, so a loaded page keeps the identity it loaded with —
+ * but scanners always GET index.html anew, so listings stay current.
+ *
+ * Deliberately calls git per request rather than reusing an existing config
+ * value: Vite carries no VCS context of its own, and the one git-derived value
+ * we do have (the web build's sentry release sha, read once in
+ * vite.web.config.ts) is frozen at config load. A preview session is
+ * long-lived — commits land mid-session while HMR keeps serving — so a
+ * boot-time identity would go stale exactly when the label matters. The cost
+ * is a few ~10ms subprocess calls per index.html request, dev-only and gated
+ * behind SCULPTOR_OPENHOST_PROXY.
+ */
+function previewIdentity(root: string): Plugin {
+  const git = (...args: Array<string>): string => {
+    try {
+      return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+      return ""; // e.g. /app previews: the deploy image ships without .git
+    }
+  };
+  return {
+    name: "sculptor:preview-identity",
+    // Dev-server only: baking a serve-time identity into a `vite build`
+    // dist/index.html would freeze an immediately-stale label (e.g. an
+    // in-place prod rebuild from a shell where the preview env var leaked).
+    apply: "serve",
+    transformIndexHtml(): Array<HtmlTagDescriptor> {
+      const branch = git("branch", "--show-current");
+      const sha = git("rev-parse", "--short", "HEAD");
+      const dirty = git("status", "--porcelain") === "" ? "" : "*";
+      // Without git (no branch AND no sha), fall back to the serving dir —
+      // still enough to tell /app from a workspace checkout.
+      const content = branch === "" && sha === "" ? root : `${branch}@${sha}${dirty}`;
+      return [{ tag: "meta", attrs: { name: "sculptor-preview", content }, injectTo: "head" }];
+    },
+  };
+}
+
+/**
+ * OpenHost preview HMR keepalive: periodically send a no-op custom event to
+ * every connected HMR client so the websocket never looks idle. The HMR socket
+ * carries traffic only on file edits, so during normal browsing an
+ * intermediary's idle timeout (the OpenHost edge in front of the nginx /proxy
+ * route) can silently kill it — and Vite's client answers any lost connection
+ * with a full location.reload() once the server responds again, which on a
+ * phone shows up as the page "randomly" hard-reloading about once a minute
+ * (and on every return from the background, where the frozen page stops
+ * generating traffic but the socket can survive if packets keep flowing).
+ * Clients ignore custom events they have no listener for, so this is
+ * invisible to the app.
+ */
+function previewHmrKeepalive(): Plugin {
+  const KEEPALIVE_INTERVAL_MS = 25_000; // safely under common 60s idle timeouts
+  return {
+    name: "sculptor:preview-hmr-keepalive",
+    apply: "serve",
+    configureServer(server): void {
+      const interval = setInterval(() => {
+        server.ws.send({ type: "custom", event: "sculptor:preview-keepalive" });
+      }, KEEPALIVE_INTERVAL_MS);
+      // Don't let the timer hold the process; stop it with the server.
+      interval.unref();
+      server.httpServer?.on("close", () => clearInterval(interval));
+    },
+  };
+}
+
+/** Dev-only proxy server forwarding `/api`, `/ws`, and `/extensions/local` to the backend. */
+function devServer(env: Record<string, string>, fePort: number): import("vite").ServerOptions {
   const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
-  const fePort = Number(env.SCULPTOR_FRONTEND_PORT || defaultFrontendPort);
   const apiTarget = env.SCULPTOR_CUSTOM_BACKEND_URL || `http://127.0.0.1:${apiPort}`;
 
   console.log(`Proxying frontend: target=${apiTarget} SCULPTOR_FRONTEND_PORT=${fePort}`);
@@ -188,13 +270,13 @@ function devServer(env: Record<string, string>, defaultFrontendPort: number): im
         ws: true,
         rewriteWsOrigin: true,
       },
-      // Local/dev plugins are served by the backend's `/plugins/local` static
+      // Local/dev extensions are served by the backend's `/extensions/local` static
       // mount; in production the backend serves the SPA too (same origin), but in
       // dev the SPA is on Vite, so forward this prefix to the backend or the
-      // plugin loader's manifest fetch hits Vite's SPA fallback (HTML, not JSON).
-      // Only `/plugins/local` — builtin plugins (`/plugins/<id>`) are Vite public
-      // assets and must keep being served by Vite.
-      "/plugins/local": {
+      // extension loader's manifest fetch hits Vite's SPA fallback (HTML, not JSON).
+      // Only `/extensions/local` — builtin extensions (`/extensions/<id>`) are Vite
+      // public assets and must keep being served by Vite.
+      "/extensions/local": {
         target: apiTarget,
         changeOrigin: true,
       },
@@ -213,9 +295,18 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
 
     console.log(`Started vite with command: "${command}" and mode: "${mode}"`);
 
+    // OpenHost-only: behind the nginx /proxy/<port>/ front, the asset `base` and the
+    // HMR client must both point at that sub-path. Derive base from the SAME frontend
+    // port the dev server binds (see devServer below) so the two can never drift;
+    // gated on SCULPTOR_OPENHOST_PROXY so normal dev/build is unaffected. (base can't
+    // ride a `vite --base=…` CLI flag here: `pnpm run dev -- --base=…` forwards a stray
+    // `--` that Vite treats as an end-of-options marker, silently dropping the flag.)
+    const fePort = Number(env.SCULPTOR_FRONTEND_PORT || opts.defaultFrontendPort);
+    const openhostProxyBase = env.SCULPTOR_OPENHOST_PROXY ? `/proxy/${fePort}/` : undefined;
+
     const config: UserConfig = {
       root: opts.root,
-      base: opts.base ?? "/",
+      base: openhostProxyBase ?? opts.base ?? "/",
       optimizeDeps: sharedOptimizeDeps,
       define: sharedDefine(env, {
         apiUrlBaseExpr: opts.apiUrlBase(env),
@@ -226,14 +317,29 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
       envPrefix: "SCULPTOR_",
       resolve: sharedResolve(opts.root),
       css: sharedCss(opts.root),
-      plugins: [...sharedPlugins(opts.root), ...(opts.extraPlugins ?? [])],
+      plugins: [
+        ...sharedPlugins(opts.root),
+        ...(opts.extraPlugins ?? []),
+        ...(openhostProxyBase ? [previewIdentity(opts.root), previewHmrKeepalive()] : []),
+      ],
     };
 
     if (command === "serve" || mode === "development") {
-      const server = devServer(env, opts.defaultFrontendPort);
-      // HMR can cause race conditions in integration tests, so disable it there.
-      if (opts.gateHmrUnderPytest) {
-        server.hmr = !env.PYTEST_CURRENT_TEST;
+      const server = devServer(env, fePort);
+      // OpenHost-only: when served behind the nginx /proxy/<port>/ front, accept the
+      // public Host (forwarded by nginx) and dial the HMR client back through the TLS
+      // edge (:443, wss) at the sub-path. The matching asset `base` is derived above;
+      // these HMR bits have no CLI/base equivalent and must live here. Gated on
+      // SCULPTOR_OPENHOST_PROXY so normal dev/build is unaffected.
+      if (env.SCULPTOR_OPENHOST_PROXY) {
+        server.allowedHosts = true;
+        server.hmr = { protocol: "wss", clientPort: 443 };
+      }
+      // HMR can race in integration tests, so disable it there — but only force
+      // the disable, leaving any other HMR config (e.g. the OpenHost override
+      // above) intact otherwise.
+      if (opts.gateHmrUnderPytest && env.PYTEST_CURRENT_TEST) {
+        server.hmr = false;
       }
       config.server = server;
     }

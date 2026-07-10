@@ -71,7 +71,9 @@ Model selection: ``get_available_models`` returns a fixed catalog (``_FAKE_PI_MO
 and ``get_state`` reports a current model, so PiAgent surfaces them onto task state
 and the chat switcher offers pi's own models. ``set_model`` echoes the chosen model
 back and updates the current model, so a switch persists for a following ``get_state``
-— the hook the model-selection integration test asserts on.
+— the hook the model-selection integration test asserts on. The ``fake_pi:report_model``
+directive echoes that current model into the turn text, so a test can assert a switch
+reached pi (the turn ran under it), not just that the switcher's display updated.
 
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
@@ -437,20 +439,6 @@ def _emit_agent_end(text: str) -> None:
     )
 
 
-def _emit_reaction_turn(ack: str) -> None:
-    """Emit the out-of-band reaction turn pi runs when the extension wakes the agent
-    via `sendUserMessage` after a completion: an assistant acknowledgement bracketed
-    by agent_start/agent_end, so Sculptor consumes it as the auto-resume reaction."""
-    _emit({"type": "agent_start"})
-    _emit(
-        {
-            "type": "message_end",
-            "message": {"role": "assistant", "content": [{"type": "text", "text": ack}], "stopReason": "stop"},
-        }
-    )
-    _emit_agent_end(ack)
-
-
 def _emit_aborted_agent_end(text: str) -> None:
     """Emit the interrupted-turn boundary: an `agent_end` whose assistant message
     carries `stopReason:"aborted"` plus the partial text streamed so far.
@@ -718,14 +706,12 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
         "notifyType": "info" if status == "completed" else "warning",
         "message": json.dumps({"sculptorSubagentTask": completion}, separators=(",", ":")),
     }
-    # Optionally script the auto-resume reaction turn pi runs when the extension
-    # wakes the agent (sendUserMessage) after the completion notify.
-    reaction = args.get("reaction")
+    # No reaction turn is scripted here: real pi never self-starts a run after a
+    # completion — Sculptor initiates the reaction by sending a wake prompt,
+    # which FakePi answers like any other prompt (SCU-1776).
 
     def _emit_completion() -> None:
         _emit(notify_event)
-        if isinstance(reaction, str) and reaction:
-            _emit_reaction_turn(reaction)
 
     wait_path = args.get("wait_path")
     if wait_path:
@@ -839,14 +825,12 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
         "notifyType": "info" if status == "completed" else "warning",
         "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
     }
-    # Optionally script the auto-resume reaction turn pi runs when the extension
-    # wakes the agent (sendUserMessage) after the completion notify.
-    reaction = args.get("reaction")
+    # No reaction turn is scripted here: real pi never self-starts a run after a
+    # completion — Sculptor initiates the reaction by sending a wake prompt,
+    # which FakePi answers like any other prompt (SCU-1776).
 
     def _emit_completion() -> None:
         _emit(notify_event)
-        if isinstance(reaction, str) and reaction:
-            _emit_reaction_turn(reaction)
 
     wait_path = args.get("wait_path")
     if wait_path:
@@ -897,6 +881,19 @@ def _handle_report_inputs(args: dict, builder: _TurnBuilder, abort_event: Event,
     """
     mime_types = ",".join(str(image.get("mimeType", "")) for image in builder.images)
     summary = f"[FakePi] images={len(builder.images)}; mimeTypes=[{mime_types}]; prompt={builder.prompt_text}"
+    accumulated = builder.full_text + summary
+    _emit_text_delta(summary, accumulated)
+    builder.emit(summary)
+
+
+def _handle_report_model(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Echo the model FakePi is running this turn (its session `current_model`).
+
+    Lets a test assert that a model switch actually reached pi — that the turn ran
+    under the selected model — not merely that the switcher's display updated.
+    """
+    model_id = state.current_model.get("id", "") if state.current_model else ""
+    summary = f"[FakePi] current_model={model_id}"
     accumulated = builder.full_text + summary
     _emit_text_delta(summary, accumulated)
     builder.emit(summary)
@@ -999,6 +996,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
     "report_inputs": _handle_report_inputs,
+    "report_model": _handle_report_model,
     "compaction": _handle_compaction,
     "ui_request": _handle_ui_request,
 }

@@ -1,54 +1,45 @@
-import { panelRegistryAtom } from "~/components/panels/atoms.ts";
-import type { PanelDefinition } from "~/components/panels/types.ts";
+import type { PanelDefinition } from "~/components/sections/registry/panelRegistry.ts";
+import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
+import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
+import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
 
 /**
- * Surfaces one Cmd+K command per registered IDE panel — Files,
- * Actions, Agent tasks, Terminal, Notes (if the feature flag is on),
- * and any future panel that gets added to `workspacePanels` /
- * `panelRegistryAtom`. Each command toggles that panel's visibility via
- * `usePanelActions().togglePanel`, which handles open / switch-active /
- * close-zone correctly even when several panels share a zone.
+ * Surfaces one Cmd+K command per placed section panel — Files, Actions, agents,
+ * terminals, Notes, and any future panel — driven off the new section
+ * `panelRegistryAtom`. Each command REVEALS its panel: it activates the panel in
+ * its section, expands the section if collapsed, and jumps there. "Show X" is
+ * jump-only — it never closes the panel, even when the panel is already visible
+ * and active (running it then is simply a jump to its section).
  *
- * Driving these off the registry (instead of hardcoding a static list)
- * means a new panel only needs an entry in `workspacePanels` to
- * appear in the palette — no cross-cutting changes to this file or the
- * builtin command list.
+ * Driving these off the registry (instead of hardcoding a static list) means a new
+ * panel only needs an entry in the registry to appear in the palette.
  *
  * Visibility:
- *   - Scoped to the `view.panels` sub-page so the root list isn't
- *     dominated by N "Toggle X" rows. The user opens the page via
- *     "Toggle panel visibility..." (see builtinCommands/panels.ts).
- *   - The palette closes after each toggle rather than using
- *     `keepOpen: true`. Mounting a heavy panel (e.g. the file browser)
- *     while the palette is still on screen makes the toggle feel
- *     noticeably laggier than toggling via the topbar button. Closing
- *     first lets the panel mount alone, matching the mouse-toggle latency.
+ *   - Scoped to the `view.panels` sub-page so the root list isn't dominated by N
+ *     "Show X" rows. The user opens the page via the panels entry point (see
+ *     builtinCommands/panels.ts).
+ *   - The palette closes after each reveal rather than using `keepOpen: true`.
+ *     Mounting a heavy panel (e.g. the file browser) while the palette is still on
+ *     screen makes the reveal feel noticeably laggier; closing first lets the panel
+ *     mount alone, matching the mouse latency.
  *
  * Ranking:
- *   - `boost` lifts these rows above same-tier Settings sub-page entries
- *     that share their name. Without it, typing "Actions" surfaces
- *     "Settings: Actions" (exact title match, score 1000 → 250 after
- *     the page-scoped penalty) above "Toggle Actions" (word-prefix
- *     match, 200 → 50 after penalty). The boost reverses that so the
- *     panel toggle leads. Settings entries still appear, just below.
+ *   - `boost` lifts these rows above same-tier Settings sub-page entries that share
+ *     their name. Without it, typing "Actions" surfaces "Settings: Actions" above
+ *     "Show Actions". The boost reverses that so the panel reveal leads.
  */
 
-// Ad-hoc keyword extensions per panel id. The display name "File browser"
-// already matches "browser" and "file browser" via the title; the alias
-// here adds "files" (so the legacy short name still resolves) and
-// "explorer" (the VS Code shorthand).
+// Ad-hoc keyword extensions per panel id. The display name "Files" already matches
+// "files"; the alias here adds "explorer" (the VS Code shorthand).
 const PANEL_SEARCH_ALIASES: Record<string, ReadonlyArray<string>> = {
   files: ["files", "explorer"],
 };
 
-// 8× lifts a penalised word-prefix match (200 × 0.25 = 50) to 400,
-// clearing the penalised exact-title match of a same-name Settings
-// entry (1000 × 0.25 = 250). Tiers stay intact: a penalised
-// subsequence (≤ 0.5) still cannot reach a real word-prefix match
-// even after the boost.
+// 8× lifts a penalised word-prefix match (200 × 0.25 = 50) to 400, clearing the
+// penalised exact-title match of a same-name Settings entry (1000 × 0.25 = 250).
 const PANEL_TOGGLE_BOOST = 8;
 
 export const buildPanelTogglesProvider = (runtime: CommandRuntime): DynamicProvider => ({
@@ -56,19 +47,35 @@ export const buildPanelTogglesProvider = (runtime: CommandRuntime): DynamicProvi
   produce: (ctx): Array<Command> => {
     if (!ctx.route.isWorkspace) return [];
     const registry = runtime.store.get(panelRegistryAtom);
-    return registry.map((panel: PanelDefinition): Command => {
-      const aliases = PANEL_SEARCH_ALIASES[panel.id] ?? [];
-      return {
-        id: `view.toggle_panel.${panel.id}`,
-        title: `Toggle ${panel.displayName}`,
-        subtitle: "Show or hide this panel",
-        keywords: ["panel", "show", "hide", panel.id, panel.displayName.toLowerCase(), ...aliases],
-        group: "view",
-        icon: panel.icon,
-        onPage: "view.panels",
-        boost: PANEL_TOGGLE_BOOST,
-        perform: () => runtime.ui.togglePanel(panel.id),
-      };
-    });
+    // Only panels actively placed in a section — this list focuses/reveals an existing
+    // panel, it does not open new ones (that is what "Add panel..." is for).
+    const placement = runtime.store.get(workspaceLayoutAtom).placement;
+    return registry
+      .filter((panel: PanelDefinition) => placement[panel.id] !== undefined)
+      .map((panel: PanelDefinition): Command => {
+        const aliases = PANEL_SEARCH_ALIASES[panel.id] ?? [];
+        return {
+          id: `view.toggle_panel.${panel.id}`,
+          title: `Show ${panel.displayName}`,
+          subtitle: "Focus this panel",
+          keywords: ["panel", "show", "focus", "reveal", panel.id, panel.displayName.toLowerCase(), ...aliases],
+          group: "panels",
+          icon: panel.icon,
+          onPage: "view.panels",
+          boost: PANEL_TOGGLE_BOOST,
+          perform: (): void => {
+            // Re-read placement at run time — the panel may have moved (or closed)
+            // since this command list was produced.
+            const current = runtime.store.get(workspaceLayoutAtom).placement[panel.id];
+            if (current === undefined) {
+              return;
+            }
+            // openPanel activates the panel in place and expands a collapsed host
+            // section; the jump makes the section active and pulses the ring.
+            runtime.store.set(openPanelAtom, { panelId: panel.id, in: current });
+            runtime.store.set(jumpToSectionAtom, { subSection: current });
+          },
+        };
+      });
   },
 });

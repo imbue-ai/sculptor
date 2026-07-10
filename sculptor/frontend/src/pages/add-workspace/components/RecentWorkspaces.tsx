@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { RecentWorkspaceResponse } from "../../../api";
 import { listRecentWorkspaces } from "../../../api";
-import { deletedWorkspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
+import { deletedWorkspaceIdsAtom, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
 import { EmptyState } from "./EmptyState.tsx";
@@ -60,15 +60,31 @@ export const RecentWorkspaces = ({
     setDeleteTarget(null);
   }, [deleteTarget, executeDelete]);
 
-  // Fetch the recent workspaces once on mount. `isLoading` starts true, so the
-  // loading state is already correct without a synchronous setState here; the
-  // ignore flag prevents a stale write if the component unmounts mid-request.
+  // The set of live workspace ids, kept fresh by the unified stream. Reduced
+  // to an order-insensitive key so the fetch below re-runs exactly when
+  // membership changes — a workspace created or deleted outside this page
+  // (the CLI, another window) must show up without a remount, since Home can
+  // stay mounted indefinitely.
+  const liveWorkspaceIds = useAtomValue(workspaceIdsAtom);
+  const liveMembershipKey = useMemo(() => [...(liveWorkspaceIds ?? [])].sort().join(","), [liveWorkspaceIds]);
+
+  // Fetch the recent workspaces on mount and again whenever the live
+  // membership changes. `isLoading` starts true and never flips back, so a
+  // refetch swaps the list in place with no spinner flash; the ignore flag
+  // prevents a stale write if the component unmounts (or the membership
+  // changes again) mid-request.
   useEffect(() => {
     let isIgnored = false;
 
     void (async (): Promise<void> => {
       try {
-        const response = await listRecentWorkspaces();
+        // Read-only fetch consumed straight from the response body, so the
+        // unified-stream acknowledgment adds nothing here. Waiting for it would
+        // also fail this load spuriously: the Home page can mount right as the
+        // stream reconnects, and an ack for a
+        // request in flight across a reconnect never arrives — the tracker would
+        // time out and leave the list empty even though the data landed.
+        const response = await listRecentWorkspaces({ meta: { skipWsAck: true } });
         if (!isIgnored && response.data) {
           setWorkspaces(response.data.workspaces);
         }
@@ -84,7 +100,7 @@ export const RecentWorkspaces = ({
     return (): void => {
       isIgnored = true;
     };
-  }, []);
+  }, [liveMembershipKey]);
 
   const enrichedWorkspaces = useMemo(
     () => workspaces.filter((ws) => !deletedIds.has(ws.objectId)),

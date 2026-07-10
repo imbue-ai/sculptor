@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { TaskStatus } from "~/api";
 
+import type { AgentDotStatus } from "./statusUtils";
 import { computeWorkspaceDotStatus, getAgentDotStatus } from "./statusUtils";
 
 // An agent whose content changed after the last recorded read — the raw
@@ -51,18 +52,29 @@ describe("getAgentDotStatus", () => {
   });
 });
 
+// Focus reaches the workspace aggregate through the injectable per-task
+// resolver (not a positional parameter): callers close over the viewed agent's
+// id and map the match onto getAgentDotStatus's isFocused flag, exactly like
+// the production resolvers in unreadOverrides.ts/workspaces.ts.
+const resolveWithViewedAgent =
+  (viewedAgentId: string) =>
+  (task: WorkspaceTask): AgentDotStatus =>
+    getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt, task.id === viewedAgentId);
+
 describe("computeWorkspaceDotStatus", () => {
   it("flags a workspace as unread when an agent has unseen updates", () => {
     expect(computeWorkspaceDotStatus([unreadTask("agent-1")]).hasUnread).toBe(true);
   });
 
   it("does not flag a workspace whose only unread agent is the focused one", () => {
-    expect(computeWorkspaceDotStatus([unreadTask("agent-1")], "agent-1").hasUnread).toBe(false);
+    expect(computeWorkspaceDotStatus([unreadTask("agent-1")], resolveWithViewedAgent("agent-1")).hasUnread).toBe(false);
   });
 
   it("still flags unread agents in the workspace that are not focused", () => {
     // The focused agent lives in another workspace; this workspace's agent is
     // genuinely unread and must keep its indicator.
-    expect(computeWorkspaceDotStatus([unreadTask("agent-1")], "agent-in-other-workspace").hasUnread).toBe(true);
+    expect(
+      computeWorkspaceDotStatus([unreadTask("agent-1")], resolveWithViewedAgent("agent-in-other-workspace")).hasUnread,
+    ).toBe(true);
   });
 });

@@ -25,7 +25,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -80,9 +80,7 @@ def test_ask_user_question_invalid_input_returns_mcp_error_and_does_not_stick(
     # Workspace is NOT stuck in the yellow ``Waiting for input`` state.
     # The peek popover is the surface the user sees; an unanswered AUQ
     # would surface there as an orange waiting banner.
-    navigate_to_add_workspace_page(page)
-    workspace_tab = task_page.get_workspace_tabs().first
-    workspace_tab.hover()
+    get_workspace_sidebar(page).get_workspace_rows().first.hover()
     peek = task_page.get_workspace_peek_popover()
     expect(peek).to_be_visible()
     waiting_banner = peek.get_banner()

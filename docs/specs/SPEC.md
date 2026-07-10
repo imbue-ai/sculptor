@@ -291,7 +291,7 @@ isolated copy of it for agents to work in, rather than touching your own checkou
 from the **Add Workspace** form (titled "Name your workspace") — choosing the repo, the source branch
 to start from, a workspace name, the name for the workspace's new branch (with a live preview and a
 warning if that branch already exists), and the **type of the first agent** to create (Claude, a
-terminal agent, Pi where enabled, or a registered agent → §7.4). By default
+terminal agent, Pi, or a registered agent → §7.4). By default
 the workspace is a **worktree**: it shares your repo's history but gets its own branch, so the
 agent's commits show up in your repo right away and you can push them yourself. (The older **clone**
 mode and the unisolated **in-place** mode are experimental opt-ins that, once enabled in Settings,
@@ -333,7 +333,10 @@ agents at once is §7.4.
 **Chat** is where you direct an agent. You compose a prompt in the input box at the bottom, and the
 agent's reply, its tool calls, and its progress stream into the panel above. Press the send
 keybinding (or click **Send**) to send; the editor and any attachments clear. The Send button
-explains itself when it can't act — for example when the editor is empty. The send keybinding is
+explains itself when it can't act — for example when the editor is empty. When the agent's harness
+has no usable model at all — for a Pi agent, no authenticated providers — the Send button is replaced
+by a **Go to harness configuration** button that routes you to where you fix it (Settings → Pi for a
+Pi agent, Settings → Dependencies for Claude), so a message that could only fail is never sent. The send keybinding is
 **Cmd/Ctrl+Enter**, so a plain **Enter** (or **Shift+Enter**) inserts a line break and a prompt can
 span several lines while still sending as one message.
 
@@ -343,7 +346,9 @@ agent), and shown disabled with the current model for those that don't; the list
 the agent's own harness, so a **Claude** agent picks from the Claude models while a **Pi** agent
 surfaces Pi's live catalog grouped by provider — a single provider lists its models flat, while two or
 more providers cascade into a per-provider submenu, and a Pi agent with no authenticated providers
-shows an **Authenticate a provider** prompt in place of the list. Changing a Pi agent's model takes
+shows the model picker **disabled** ("No models available") in place of the list — reached whenever
+no provider is authenticated, including when a model had previously been selected, whose now-unusable
+choice is dropped rather than shown; the action to fix it lives on the Send button (above). Changing a Pi agent's model takes
 effect in-session (a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
 selector budgets how much thinking it spends per step (Low, Medium, High, Extra High, Max — Extra High
 by default); a **fast mode** toggle trades some depth for quicker output on the models that support it
@@ -445,8 +450,8 @@ the next/previous-agent keybinding) to switch between them.
 
 Create a new agent with the **+** button at the end of the tab bar (or the new-agent keybinding); it
 creates an agent of your last-used **type**. Next to it, a small **chevron** opens a menu of the types
-you can create: the built-in **Claude** rich-chat agent (and the experimental **Pi** chat agent where
-enabled → §7.12), a plain **Terminal**, and then each **registered terminal agent** by its display
+you can create: the built-in **Claude** rich-chat agent, the **Pi** chat agent, a plain **Terminal**,
+and then each **registered terminal agent** by its display
 name — out of the box that's **"Claude CLI"**, which runs the Claude Code TUI in the workspace (→ §7.3
 Chat). The menu marks your last-used type with a check, Sculptor remembers it, and a plain **+** click
 re-creates that type without opening the menu. **Double-click** a tab to rename it (Enter saves, Escape cancels), drag tabs to **reorder**
@@ -685,7 +690,7 @@ conflicts.
 
 The remaining sections cover the environment and account. **Dependencies** manages the Claude CLI and
 git binaries Sculptor uses — switching between a managed install and a custom path, showing each one's
-version and health. **Pi (experimental)** is the parallel dependency manager for the experimental Pi
+version and health. **Pi** is the parallel dependency manager for the Pi
 agent harness — its binary (managed or custom path), version, and the API-key environment variable it
 needs. **Environment Variables** surfaces the global and per-repo `.sculptor/.env` files (which you edit
 directly) and controls whether they override existing variables. **Privacy** shows your (read-only) email address and
@@ -744,8 +749,6 @@ product makes no finer distinction than that: a feature is either generally avai
   (→ §7.11).
 - **Rich markdown rendering** — render `.md` / `.markdown` files as formatted HTML in the file
   viewer, toggled by the eye icon in the diff toolbar.
-- **Pi agent** — offer the experimental **Pi** agent as a choice when creating an agent (→ §7.4); an
-  already-running Pi agent keeps going regardless of the toggle.
 - **Custom backend command** — the entry point for the container / remote backend described below.
 
 The **CI babysitter** (→ §7.6, §7.10) is likewise experimental and off by default.
@@ -772,39 +775,40 @@ automatically restarts the custom backend (with backoff) if it crashes. The comm
 in Settings or through an environment variable, and setting or clearing it requires restarting the app
 (→ §9.1 for the isolation and trust implications).
 
-### 7.13 Frontend plugins
+### 7.13 Extensions
 
-Sculptor loads **plugins** that extend the app's own UI from inside the renderer — contributing new
-**panels** (which show up in the Panels list with a "plugin" badge), full-screen **overlays**, and
+Sculptor loads **extensions** that extend the app's own UI from inside the renderer — contributing new
+**panels** (which show up in the Panels list with an "extension" badge), full-screen **overlays**, and
 compact **workspace widgets** that sit in the workspace banner's action row (collapsing in priority
 order as space tightens, like the built-in segments) — built against a small versioned Sculptor SDK
 that reuses the host's React, Radix theming, icons, and shared data client so they look and behave
-like native UI. The plugin system is **on by default**. A
-toggle at the top of the **Plugins** settings section globally enables or disables all plugins:
-turning it off hides the plugin-management controls and, after an app reload, stops loading plugins
-(already-loaded plugins aren't torn down live), while the section and its toggle stay in place so the
-system can be turned back on.
+like native UI. The extension system is **on by default**. A
+toggle at the top of the **Extensions** settings section globally enables or disables all extensions:
+turning it off hides the extension-management controls and, after an app reload, stops loading
+extensions (already-loaded extensions aren't torn down live), while the section and its toggle stay in
+place so the system can be turned back on.
 
-The **Plugins** settings section manages plugin **sources**: you add a plugin by dropping its folder
-into the Sculptor folder's `plugins/` directory (picked up on the next launch or via a **Refresh**
-button) or by adding the **URL** of a plugin server (saved and re-fetched on every launch). Each row
-has an enable/disable switch (mute a plugin without removing it) and, while enabled, Settings and
-Reload controls; user-added URL sources can also be removed, while bundled and disk-discovered plugins
-can't. Sculptor ships a bundled **Linear** plugin, enabled by default, alongside two no-build example
-plugins — **Sculpty** and **Pomodoro** — that ship disabled and can be switched on per plugin. The
-Linear plugin shows two surfaces: a banner **widget**, shown by default, displaying the workspace's
+The **Extensions** settings section manages extension **sources**: you add an extension by dropping
+its folder into the Sculptor folder's `extensions/` directory (picked up on the next launch or via a
+**Refresh** button) or by adding the **URL** of an extension server (saved and re-fetched on every
+launch). Each row has an enable/disable switch (mute an extension without removing it) and, while
+enabled, Settings and Reload controls; user-added URL sources can also be removed, while bundled and
+disk-discovered extensions can't. Sculptor ships a bundled **Linear** extension, enabled by default,
+alongside two no-build example extensions — **Sculpty** and **Pomodoro** — that ship disabled and can
+be switched on per extension. The
+Linear extension shows two surfaces: a banner **widget**, shown by default, displaying the workspace's
 primary issue as a `# TICKET-ID` badge with a state dot (clicking it opens the issue in Linear), and a
 side **panel** of ticket details with collapsible **sub-issues** (the open state is remembered per
 workspace) and badges marking where each ticket came from (branch, PR, or a pinned search). The panel
 ships **off by default** and is enabled from Settings → Panels (like the built-in Browser panel), so an
-on-by-default plugin doesn't claim a slot in the panel layout uninvited. It resolves the workspace's
+on-by-default extension doesn't claim a slot in the panel layout uninvited. It resolves the workspace's
 **primary issue** from the branch name first, falling back to the issues linked from the workspace's
 pull request.
 
-Because a plugin runs with the **same privileges as Sculptor's own UI** — and a URL source serves
-whatever code it holds at load time — adding a plugin means running that code, so you should only add
-sources you trust (the plugin trust model is documented in `SECURITY.md`; outbound links a plugin
-opens are restricted to `http(s)`).
+Because an extension runs with the **same privileges as Sculptor's own UI** — and a URL source serves
+whatever code it holds at load time — adding an extension means running that code, so you should only
+add sources you trust (the extension trust model is documented in `SECURITY.md`; outbound links an
+extension opens are restricted to `http(s)`).
 
 ## 8. The `sculpt` CLI  _(core product surface)_
 

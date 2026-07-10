@@ -11,6 +11,9 @@ class PlaywrightHomePage(PlaywrightIntegrationTestPage):
         return self._page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
     def get_empty_state(self) -> Locator:
+        # The home list's "No workspaces yet" heading. On a boot with zero
+        # workspaces Home also auto-opens the new-workspace dialog over it;
+        # the heading underneath stays CSS-visible.
         return self._page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
 
     def get_search_input(self) -> Locator:

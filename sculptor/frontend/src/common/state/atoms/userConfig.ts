@@ -146,12 +146,6 @@ export const ciBabysitterAgentAtom = atom<NonNullable<CiBabysitterConfig["agent"
 );
 
 // File browser settings
-export const fileBrowserSplitRatioAtom = atom<number>((get) => get(userConfigAtom)?.fileBrowserDefaultSplitRatio ?? 50);
-
-export const fileBrowserTabCloseBehaviorAtom = atom<"mru" | "adjacent">(
-  (get) => (get(userConfigAtom)?.fileBrowserTabCloseBehavior as "mru" | "adjacent") ?? "mru",
-);
-
 export const fileBrowserLineWrappingAtom = atom<"wrap" | "scroll">(
   (get) => (get(userConfigAtom)?.fileBrowserLineWrapping as "wrap" | "scroll") ?? "wrap",
 );
@@ -174,11 +168,6 @@ export const isSmoothStreamingUserPreferenceAtom = atom<boolean>(
   (get) => (get(userConfigAtom)?.isSmoothStreamingEnabled as boolean | undefined) ?? true,
 );
 
-// Per-workspace panel layout
-export const isPanelLayoutPerWorkspaceAtom = atom<boolean>(
-  (get) => get(userConfigAtom)?.isPanelLayoutPerWorkspace ?? false,
-);
-
 // In-place workspaces (opt-in — off by default)
 export const isInPlaceWorkspacesEnabledAtom = atom<boolean>(
   (get) => get(userConfigAtom)?.enableInPlaceWorkspaces ?? false,
@@ -199,32 +188,24 @@ export const workspaceBranchDeletionPolicyAtom = atom<"never" | "delete_if_safe"
     "delete_if_safe",
 );
 
-// Review All combined diff view (experimental — off by default)
-export const isReviewAllEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableReviewAll ?? false);
-
 // Entity mentions (experimental — off by default)
 export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableEntityMentions ?? false);
 
-// Pi agent (experimental — off by default). Gates only whether the pi option
-// is offered in the agent-type pickers (the + button menu and the
-// new-workspace form); an already-created pi agent keeps running regardless.
-export const isPiAgentEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enablePiAgent ?? false);
-
-// Frontend plugin system (experimental — off by default). Gates plugin
-// loading at boot and the Plugins settings section. Enabling takes effect
-// immediately (PluginLoader bootstraps when the flag turns on); disabling only
-// fully takes effect after a reload, since already-loaded plugins are not
+// Extension system (experimental — off by default). Gates extension
+// loading at boot and the Extensions settings section. Enabling takes effect
+// immediately (ExtensionLoader bootstraps when the flag turns on); disabling only
+// fully takes effect after a reload, since already-loaded extensions are not
 // unloaded mid-session.
-export const isFrontendPluginsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableFrontendPlugins ?? false);
+export const isExtensionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableExtensions ?? false);
 
-// Whether agents may drive this renderer's plugin system over the per-user
-// WebSocket (the `sculpt plugin` commands). Off by default: even with the
-// frontend-plugins runtime on, an agent can't install or run a plugin in the UI
+// Whether agents may drive this renderer's extension system over the per-user
+// WebSocket (the `sculpt extension` commands). Off by default: even with the
+// extensions runtime on, an agent can't install or run an extension in the UI
 // until the user opts in here. (The stream handler still replies to the agent
-// when off — see `respondToPluginCommand` — so the CLI gets a clear signal
+// when off — see `respondToExtensionCommand` — so the CLI gets a clear signal
 // rather than a timeout.)
-export const isAgentPluginLoadingAllowedAtom = atom<boolean>(
-  (get) => get(userConfigAtom)?.allowAgentPluginLoading ?? false,
+export const isAgentExtensionLoadingAllowedAtom = atom<boolean>(
+  (get) => get(userConfigAtom)?.allowAgentExtensionLoading ?? false,
 );
 
 // Agent defaults

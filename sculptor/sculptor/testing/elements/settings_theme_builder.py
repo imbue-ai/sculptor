@@ -30,10 +30,6 @@ class PlaywrightThemeBuilderSettingsElement(PlaywrightIntegrationTestElement):
         """Click the 'Reset to defaults' button."""
         self._get_reset_button().click()
 
-    def click_component_gallery_button(self) -> None:
-        """Click the 'Component gallery' button to open the gallery as a tab."""
-        self.get_by_test_id(ElementIDs.SETTINGS_THEME_BUILDER_COMPONENT_GALLERY).click()
-
     # --- Assertion methods ---
 
     def expect_accent_color(self, color: str) -> None:
@@ -90,9 +86,6 @@ class PlaywrightThemeBuilderSettingsElement(PlaywrightIntegrationTestElement):
 
     def get_reset_button(self) -> Locator:
         return self._get_reset_button()
-
-    def get_component_gallery_button(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.SETTINGS_THEME_BUILDER_COMPONENT_GALLERY)
 
     # --- Private interaction helpers ---
 

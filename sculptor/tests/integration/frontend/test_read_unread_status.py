@@ -3,18 +3,24 @@
 These tests verify:
 - Agent tabs show unread (green) when an agent has updates the user hasn't seen
 - Agent tabs show read (grey) after the user navigates to that agent
+- Agent tabs render a visible status dot carrying that state (not just a data attribute)
 - Workspace tabs derive unread state from their agents
 - The focused agent stays read as it receives updates
 - Read/unread status persists across server restarts
+- A restored idle terminal agent stays read (grey) after a restart
 """
 
 import re
 
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
+from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -40,48 +46,55 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Read Test WS")
 
     # Agent 1 should be read (we're viewing it and it finished)
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
+
+    # The tab renders a visible status dot, not just the data attribute.
+    status_dot = panel_tabs.get_tab_status_dot(tabs.first)
+    expect(status_dot).to_be_visible()
+    expect(status_dot).to_have_attribute("data-panel-tab-dot", "read")
 
     # Workspace tab should also be read (only agent is read)
-    workspace_tabs = task_page.get_workspace_tabs()
+    workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
     expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
     # Add a second agent (auto-navigates to it)
-    agent_tab_bar.get_add_agent_button().click()
-    expect(agent_tabs).to_have_count(2)
+    create_agent_panel(page, section="center")
+    expect(tabs).to_have_count(2)
 
-    # Adding an agent auto-navigates to it; the chat input is keyed by task id
-    # and remounts as the route settles. Typing before the chat panel is bound
-    # to the new agent can drop the draft and leave the send button disabled, so
-    # wait for the chat panel's data-taskid to flip to the new agent first.
-    new_agent_tab = agent_tabs.last
-    expect(new_agent_tab).to_have_attribute("data-tab-id", re.compile(r".+"))
-    new_agent_id = new_agent_tab.get_attribute("data-tab-id")
-    assert new_agent_id is not None  # narrowed for the type checker; the expect above guarantees it
+    # Adding an agent auto-navigates to it; SectionBody swaps the active chat
+    # panel as the route settles, so typing early can land in agent 1's chat and
+    # drop the draft. Wait for the visible chat panel to be bound to the new
+    # agent first: panel tabs carry data-panel-id="agent:<taskId>" while the
+    # chat panel stamps the bare task id as data-taskid.
+    new_agent_tab = tabs.last
+    expect(new_agent_tab).to_have_attribute("data-panel-id", re.compile(r"^agent:.+"))
+    new_agent_panel_id = new_agent_tab.get_attribute("data-panel-id")
+    assert new_agent_panel_id is not None  # narrowed for the type checker; the expect above guarantees it
     chat_panel = task_page.get_chat_panel()
-    expect(chat_panel).to_have_attribute("data-taskid", new_agent_id)
+    expect(chat_panel).to_have_attribute("data-taskid", new_agent_panel_id.removeprefix("agent:"))
 
     # Send a message on agent 2 so it gets response activity
     send_chat_message(chat_panel, "Do something")
     wait_for_completed_message_count(chat_panel, expected_message_count=2)
 
     # Agent 2 should be read (we're viewing it)
-    expect(agent_tabs.last).to_have_attribute("data-dot-status", "read")
+    expect(tabs.last).to_have_attribute("data-dot-status", "read")
 
     # Switch to agent 1 — we leave agent 2 behind
-    agent_tabs.first.click()
+    tabs.first.click()
 
     # Wait for chat panel to update (we're now on agent 1)
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
 
     # Agent 1 should be read (we just navigated to it)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Agent 2 should still be read — no new updates happened after we left
-    expect(agent_tabs.last).to_have_attribute("data-dot-status", "read")
+    expect(tabs.last).to_have_attribute("data-dot-status", "read")
+    expect(panel_tabs.get_tab_status_dot(tabs.last)).to_be_visible()
 
     # Now send a follow-up to agent 1 (which will make agent 1's updatedAt change,
     # but we're viewing it so it stays read)
@@ -89,7 +102,7 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     wait_for_completed_message_count(chat_panel, expected_message_count=4)
 
     # Agent 1 should still be read (we're viewing it while it updates)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
 
 @user_story("to see which workspaces have unseen agent updates")
@@ -119,7 +132,7 @@ def test_unread_workspace_indicator_across_workspaces(
     chat_panel_a = task_page_a.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=2)
 
-    workspace_tabs = task_page_a.get_workspace_tabs()
+    workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
     expect(workspace_tabs).to_have_count(1)
     expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
@@ -171,12 +184,15 @@ def test_focused_agent_stays_read_while_receiving_updates(
     # Create a workspace with an agent
     task_page = start_task_and_wait_for_ready(page, prompt="Initial prompt", workspace_name="Focused WS")
 
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
 
-    # Agent should be read (we just viewed the initial response)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    # Agent should be read (we just viewed the initial response), with a visible dot.
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
+    status_dot = panel_tabs.get_tab_status_dot(tabs.first)
+    expect(status_dot).to_be_visible()
+    expect(status_dot).to_have_attribute("data-panel-tab-dot", "read")
 
     # Send a follow-up message while staying on this agent
     chat_panel = task_page.get_chat_panel()
@@ -184,17 +200,17 @@ def test_focused_agent_stays_read_while_receiving_updates(
     wait_for_completed_message_count(chat_panel, expected_message_count=4)
 
     # Agent should still be read (useMarkRead re-fires on updatedAt change)
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Send another follow-up
     send_chat_message(chat_panel, "Follow up 2")
     wait_for_completed_message_count(chat_panel, expected_message_count=6)
 
     # Agent should still be read
-    expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+    expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Workspace should also show no unread
-    workspace_tabs = task_page.get_workspace_tabs()
+    workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
     expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
 
@@ -230,12 +246,11 @@ def test_read_status_persists_after_restart(
         wait_for_completed_message_count(chat_panel, expected_message_count=2)
 
         # Step 2: Verify the workspace and agent show as read
-        agent_tab_bar = task_page.get_agent_tab_bar()
-        agent_tabs = agent_tab_bar.get_agent_tabs()
-        expect(agent_tabs).to_have_count(1)
-        expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
+        tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+        expect(tabs).to_have_count(1)
+        expect(tabs.first).to_have_attribute("data-dot-status", "read")
 
-        workspace_tabs = task_page.get_workspace_tabs()
+        workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
         expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
         # Step 3: Give time for the debounced mark_read to fire and persist
@@ -246,8 +261,7 @@ def test_read_status_persists_after_restart(
         page = instance.page
 
         # Step 4: Wait for the workspace tab to appear (server has restarted)
-        layout_page = PlaywrightTaskPage(page=page)
-        workspace_tabs = layout_page.get_workspace_tabs()
+        workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
         expect(workspace_tabs.first).to_be_visible()
 
         # Step 5: Check workspace tab shows read WITHOUT clicking on it.
@@ -272,8 +286,10 @@ def test_terminal_agent_read_status_persists_after_restart(
     counterpart of test_read_status_persists_after_restart above.
 
     Steps:
-    1. Start Sculptor, create a chat agent and a terminal agent, view both
-       (so both are read), and let the debounced mark_read persist.
+    1. Start Sculptor with a terminal agent as the workspace's first agent
+       (created via the new-workspace form's agent-type picker — the add-panel
+       dropdown offers no bare terminal agent type), then add a chat agent.
+       Both get viewed, and the debounced mark_read persists both as read.
     2. Restart Sculptor against the same database.
     3. Without viewing the terminal (viewing re-marks it read and masks the
        bug), wait for it to re-acquire its environment, then assert its tab
@@ -283,57 +299,75 @@ def test_terminal_agent_read_status_persists_after_restart(
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
 
-        task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Restart WS")
-        chat_panel = task_page.get_chat_panel()
-        wait_for_completed_message_count(chat_panel, expected_message_count=2)
+        # The terminal agent is the workspace's initial — and therefore viewed —
+        # agent.
+        task_page = start_task_and_wait_for_ready(page, workspace_name="Terminal Restart WS", agent_type="terminal")
 
-        agent_tab_bar = PlaywrightAgentTabBarElement(page)
-        agent_tabs = agent_tab_bar.get_agent_tabs()
-        expect(agent_tabs).to_have_count(1)
-
-        # Add a terminal agent (creating it navigates to it, so it is viewed).
-        agent_tab_bar.open_agent_type_menu()
-        agent_tab_bar.get_agent_type_menu_item_terminal().click()
-        expect(agent_tabs).to_have_count(2)
-        terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        tabs = panel_tabs.get_panel_tabs()
+        terminal_tab = panel_tabs.get_panel_tab_by_name("Terminal 1").first
         expect(terminal_tab).to_be_visible()
 
-        # The idle terminal settles to read (grey) once its environment is
-        # acquired and the debounced mark_read has run.
+        # The viewed idle terminal settles to read (grey) once its environment
+        # is acquired and the debounced mark_read has run.
         expect(terminal_tab).to_have_attribute("data-dot-status", "read")
 
-        # Return to the chat agent and leave it focused: it (not the terminal)
-        # is then the restored active agent after restart, so the terminal is
-        # never viewed in the second instance (viewing it would re-mark it read
-        # and mask the bug). Re-focusing also re-marks the chat read after the
-        # switch away.
-        agent_tabs.first.click()
-        expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
+        # Add a chat agent (the pinned "New {recent} agent" row normalizes a
+        # terminal MRU to Claude). Creating it auto-navigates to it and leaves
+        # it focused, making it (not the terminal) the server-side MRU agent
+        # restored after restart — so the terminal is never viewed in the
+        # second instance (viewing it would re-mark it read and mask the bug).
+        create_agent_panel(page, section="center")
+        expect(tabs).to_have_count(2)
+
+        # Wait for the visible chat panel to be bound to the new agent before
+        # driving it (same settle-gate as above: the tab carries
+        # data-panel-id="agent:<taskId>", the chat panel the bare task id).
+        new_agent_tab = tabs.last
+        expect(new_agent_tab).to_have_attribute("data-panel-id", re.compile(r"^agent:.+"))
+        new_agent_panel_id = new_agent_tab.get_attribute("data-panel-id")
+        assert new_agent_panel_id is not None  # narrowed for the type checker; the expect above guarantees it
+        chat_panel = task_page.get_chat_panel()
+        expect(chat_panel).to_have_attribute("data-taskid", new_agent_panel_id.removeprefix("agent:"))
+
+        # A terminal-first workspace skips model selection at creation, so pick
+        # the deterministic FakeClaude model explicitly before messaging.
+        select_model_by_name(chat_panel=chat_panel, model_name=FAKE_CLAUDE_MODEL_NAME)
+        send_chat_message(chat_panel, "Say hello")
+        wait_for_completed_message_count(chat_panel, expected_message_count=2)
+
+        # The unfocused terminal stays read — it has had no updates since it
+        # was viewed.
+        expect(terminal_tab).to_have_attribute("data-dot-status", "read")
 
         # With both agents read, the whole workspace shows read before the restart.
-        workspace_tabs = task_page.get_workspace_tabs()
-        expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
+        workspace_rows = get_workspace_sidebar(page).get_workspace_rows()
+        expect(workspace_rows.first).to_have_attribute("data-has-unread", "false")
 
         # Give the debounced mark_read POSTs time to persist to the database.
+        # The chat agent stays focused through shutdown so it is the MRU agent
+        # restored after the restart.
         page.wait_for_timeout(2000)
 
     # === Second instance: the restored idle terminal must still be read ===
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
 
-        task_page = PlaywrightTaskPage(page=page)
-        workspace_tabs = task_page.get_workspace_tabs()
-        expect(workspace_tabs.first).to_be_visible()
-        workspace_tabs.first.click()
+        workspace_rows = get_workspace_sidebar(page).get_workspace_rows()
+        expect(workspace_rows.first).to_be_visible()
+        # A fresh browser context has no per-workspace tab state, so the click
+        # lands on the workspace root, which resolves the server-side MRU agent
+        # — the chat agent left focused above, not the terminal.
+        workspace_rows.first.click()
 
-        agent_tab_bar = PlaywrightAgentTabBarElement(page)
-        agent_tabs = agent_tab_bar.get_agent_tabs()
-        expect(agent_tabs).to_have_count(2)
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        tabs = panel_tabs.get_panel_tabs()
+        expect(tabs).to_have_count(2)
         # Keep the chat agent focused; never view the terminal (viewing it would
         # re-mark it read and mask the bug).
-        agent_tabs.first.click()
+        tabs.filter(has_not_text="Terminal 1").first.click()
 
-        terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
+        terminal_tab = panel_tabs.get_panel_tab_by_name("Terminal 1").first
         expect(terminal_tab).to_be_visible()
 
         # Gate on the terminal re-acquiring its environment after restart: a

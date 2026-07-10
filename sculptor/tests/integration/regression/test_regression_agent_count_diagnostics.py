@@ -17,8 +17,8 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -71,7 +71,7 @@ def test_agent_count_matches_between_settings_and_diagnostics(
 
     # Create a workspace with an agent that asks a user question.
     # This keeps the agent in RUNNING state, waiting for user input.
-    start_task_and_wait_for_ready(
+    task_page = start_task_and_wait_for_ready(
         page,
         prompt="""\
 fake_claude:ask_user_question `{
@@ -95,22 +95,21 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible()
 
-    # Save the URL before deletion so we can detect when the new agent loads
-    old_url = page.url
+    # Delete the agent via the close button on the agent tab. The tab removal is
+    # optimistic (it vanishes before the backend confirms), so the DELETE
+    # response is the real sync point: waiting on it proves the backend has
+    # committed is_deleting before we read any counts.
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
+    with page.expect_response(lambda response: response.request.method == "DELETE" and "/agents/" in response.url):
+        panel_tabs.delete_panel_via_close_button(f"agent:{task_page.get_task_id()}")
 
-    # Delete the agent via the close button on the agent tab
-    agent_tab_bar = PlaywrightAgentTabBarElement(page)
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
-    agent_tab_bar.delete_agent_via_close_button(0)
-
-    # Wait for the deletion dialog to close
-    expect(agent_tab_bar.get_delete_confirmation_dialog()).to_be_hidden()
-
-    # After deleting the last agent, the frontend auto-creates a new one and
-    # navigates to its URL. Wait for the URL to change from the old agent's
-    # path to the new one, proving the post-deletion navigation completed.
-    page.wait_for_url(lambda url: url != old_url and "/agent/" in url)
+    # Confirm the delete dialog closed and the (optimistically removed) tab is
+    # gone. Closing the last agent leaves the center section empty — no
+    # replacement is auto-created — so the tab count settles at zero.
+    expect(panel_tabs.get_delete_confirmation_dialog()).to_be_hidden()
+    expect(tabs).to_have_count(0)
 
     # Now compare: the health check API count should match the settings page count.
     # With the bug, the health check would still count the is_deleting task,

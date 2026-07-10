@@ -338,7 +338,8 @@ describe("useAlphaAutoScroll", () => {
     // User was at bottom, sent a message which grew scrollHeight, pushing them
     // slightly above the old bottom. The streaming-start effect should read the
     // live scroll position (still within threshold) and engage.
-    const el = createMockScrollContainer(1300, 2000, 500); // distance=200, at bottom
+    // Desktop-height container (>= 700px), where the at-bottom threshold is 200px.
+    const el = createMockScrollContainer(1200, 2000, 800); // distance=0, at bottom
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
 
@@ -350,7 +351,7 @@ describe("useAlphaAutoScroll", () => {
     // User was pinned to bottom (distance=0). New message adds ~100px to
     // scrollHeight, pushing distance to 100 — still within the 200px threshold.
     // No scroll event fires, so isAtBottom state reflects the initial value.
-    setScrollPosition(el, 1500, 2100); // distance = 2100 - 1500 - 500 = 100 ≤ 200
+    setScrollPosition(el, 1200, 2100); // distance = 2100 - 1200 - 800 = 100 ≤ 200
 
     // No scroll event fired — isAtBottom state reflects initial value, not live position
     expect(result.current.isAtBottom).toBe(true);
@@ -358,6 +359,93 @@ describe("useAlphaAutoScroll", () => {
     // Streaming starts — should read live position and engage
     rerender({ isStreaming: true });
     expect(result.current.isEngaged).toBe(true);
+  });
+
+  describe("following pin direction", () => {
+    /** Engage `following` by starting a stream while the view sits at the bottom. */
+    const renderFollowing = (el: HTMLDivElement): void => {
+      const ref = { current: el };
+      const virtualizer = createMockVirtualizer();
+      const { result, rerender } = renderHook(
+        ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+        { initialProps: { isStreaming: false } },
+      );
+      act(() => {
+        el.dispatchEvent(new Event("scroll"));
+      });
+      rerender({ isStreaming: true });
+      expect(result.current.isEngaged).toBe(true);
+    };
+
+    it("chases a tail shrink back up to the pin while following", () => {
+      const el = createMockScrollContainer(1300, 2000, 500); // distance=200, at bottom
+      renderFollowing(el);
+
+      // A reflow while following lands on the pin.
+      act(() => {
+        triggerResize();
+      });
+      expectPinnedToBottom(el);
+
+      // The tail shrinks by a text line with scrollTop untouched — the view is
+      // now stranded past the pin. The next reflow must correct back up.
+      setScrollPosition(el, el.scrollTop, 1975);
+      act(() => {
+        triggerResize();
+      });
+      expectPinnedToBottom(el);
+    });
+
+    it("holds a sub-dead-band overshoot instead of chasing measurement wobble", () => {
+      const el = createMockScrollContainer(1300, 2000, 500);
+      renderFollowing(el);
+      act(() => {
+        triggerResize();
+      });
+      const pinnedScrollTop = el.scrollTop;
+
+      // A shrink smaller than the dead-band: within measurement rounding — hold.
+      setScrollPosition(el, pinnedScrollTop, 1995);
+      act(() => {
+        triggerResize();
+      });
+      expect(el.scrollTop).toBe(pinnedScrollTop);
+    });
+
+    it("leaves an overshoot in place when not following (down-only preserved)", () => {
+      // Not streaming, never engaged: the authority is userControlled, and a
+      // position past the pin (inside the tail padding) is legitimate.
+      const el = createMockScrollContainer(1540, 2000, 500); // pin target is 1500
+      const ref = { current: el };
+      const virtualizer = createMockVirtualizer();
+      const { result } = renderHook(() => useAlphaAutoScroll(ref, false, 10, virtualizer, null, -1, "test-task"));
+
+      act(() => {
+        result.current.scrollToBottom();
+      });
+      expect(el.scrollTop).toBe(1540);
+    });
+  });
+
+  it("does not auto-engage at streaming start 100px above the bottom on a short viewport", () => {
+    // Same scenario as above, but the scroll container is short (< 700px), so
+    // the at-bottom threshold tightens to 80px: 100px above the bottom is
+    // NOT "at bottom" on mobile, and streaming must not yank the view down.
+    const el = createMockScrollContainer(1500, 2000, 500); // distance=0, at bottom
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer();
+
+    const { result, rerender } = renderHook(
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      { initialProps: { isStreaming: false } },
+    );
+
+    // Content grew by 100px with no scroll event — the same growth the desktop
+    // test treats as still-at-bottom (100 ≤ 200).
+    setScrollPosition(el, 1500, 2100); // distance = 2100 - 1500 - 500 = 100 > 80
+
+    rerender({ isStreaming: true });
+    expect(result.current.isEngaged).toBe(false);
   });
 
   it("scrolls to bottom when messageCount increases while at bottom (pin-to-bottom)", () => {
@@ -559,7 +647,7 @@ describe("useAlphaAutoScroll", () => {
     expect(virtualizer.scrollToIndex).not.toHaveBeenCalled();
   });
 
-  it("re-engages when user scrolls to exact bottom during streaming", () => {
+  it("re-engages when user scrolls to exact bottom during streaming", async () => {
     // After disengaging, if the user scrolls all the way to the bottom
     // (distance ≈ 0), auto-scroll should re-engage — this is an intentional
     // gesture to resume following the stream.
@@ -572,9 +660,12 @@ describe("useAlphaAutoScroll", () => {
     // Engaged via isStreaming effect
     expect(result.current.isEngaged).toBe(true);
 
-    // User scrolls away → disengage
+    // User scrolls away → disengage. Async act: the engage pin flagged a
+    // programmatic scroll which swallows this first scroll event; the flag
+    // clears in a microtask, so the await provides the task boundary that
+    // separates real browser scroll events.
     setScrollPosition(el, 500, 2000);
-    act(() => {
+    await act(async () => {
       el.dispatchEvent(new Event("wheel"));
       el.dispatchEvent(new Event("scroll"));
     });
@@ -823,7 +914,7 @@ describe("useAlphaAutoScroll", () => {
       expect(result.current.isJumpSuppressed).toBe(true);
     });
 
-    it("filling phase exits on user scroll", () => {
+    it("filling phase exits on user scroll", async () => {
       const el = createMockScrollContainer(1500, 2000, 500);
       const ref = { current: el };
       const virtualizer = createMockVirtualizerWithFilling(300, 100);
@@ -860,7 +951,9 @@ describe("useAlphaAutoScroll", () => {
 
       // The scroll-to-top effect sets isProgrammaticScrollRef. Consume it
       // with a bare scroll event so it doesn't swallow the real user scroll.
-      act(() => {
+      // Async act: the flag clears in a microtask after the event, so the
+      // await provides the task boundary real browser scroll events have.
+      await act(async () => {
         el.dispatchEvent(new Event("scroll"));
       });
 

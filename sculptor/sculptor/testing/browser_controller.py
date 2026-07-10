@@ -20,9 +20,17 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+from playwright.sync_api import Locator
 from playwright.sync_api import Page
 
 from sculptor.testing.manual_test_harness import ManualTestHarness
+
+# The chat message editor and its send button, by data-testid. The editor is a
+# ProseMirror contenteditable (not a plain <textarea>): the test id sits on the
+# editable region itself, so targeting it by id focuses the right element —
+# unlike clicking the container's center, which hits the toolbar/padding.
+_CHAT_INPUT_TEST_ID = "CHAT_INPUT"
+_SEND_BUTTON_TEST_ID = "SEND_BUTTON"
 
 
 class BrowserController:
@@ -34,6 +42,37 @@ class BrowserController:
         self._harness = harness
         self._screenshot_counter = 0
         self._server: HTTPServer | None = None
+
+    def _resolve_locator(self, action: dict[str, Any]) -> Locator:
+        """Resolve an element from an action's ``id`` (data-testid) or ``selector``.
+
+        Prefer this over coordinate clicks for anything you can name: it targets
+        the element directly, so it can't miss because of a focus-stealing panel
+        or a container whose center isn't the interactive part.
+        """
+        test_id = action.get("id")
+        selector = action.get("selector")
+        if test_id:
+            return self._page.get_by_test_id(test_id)
+        if selector:
+            return self._page.locator(selector)
+        raise ValueError("action requires 'id' (data-testid) or 'selector'")
+
+    def _focus_and_replace(self, locator: Locator, text: str) -> None:
+        """Focus an editable element and replace its contents with ``text``.
+
+        Works for plain inputs/textareas and for contenteditable rich editors
+        (TipTap/ProseMirror). Clicks to focus and place the caret, selects any
+        existing content, then types real key events so the editor's own input
+        handling runs — a direct value set would bypass ProseMirror's model.
+        ``ControlOrMeta`` resolves to Cmd on macOS and Ctrl elsewhere, matching
+        the app's own platform handling.
+        """
+        locator.click()
+        locator.press("ControlOrMeta+a")
+        locator.press("Delete")
+        if text:
+            self._page.keyboard.type(text)
 
     def _take_screenshot(self, label: str = "step") -> str:
         """Take a screenshot and return the absolute path."""
@@ -81,6 +120,54 @@ class BrowserController:
             page.keyboard.press(key)
             time.sleep(0.3)
             screenshot_path = self._take_screenshot(f"press_{key}")
+            return {"success": True, "screenshot": screenshot_path}
+
+        if action_type == "focus":
+            # Move keyboard focus to a named element. Use this before `type` when
+            # another surface (e.g. the agent terminal, which grabs focus on
+            # load) would otherwise capture the keystrokes. Uses focus() rather
+            # than a click so it can't accidentally activate a button/checkbox.
+            locator = self._resolve_locator(action)
+            locator.focus()
+            time.sleep(0.3)
+            screenshot_path = self._take_screenshot("focus")
+            return {"success": True, "screenshot": screenshot_path}
+
+        if action_type == "fill":
+            # Focus a named editable element and type into it. Prefer this over
+            # click-then-`type` for the chat input and other text fields: it
+            # targets the element directly, so it can't miss because the terminal
+            # panel holds focus or the click landed on a non-editable container.
+            locator = self._resolve_locator(action)
+            self._focus_and_replace(locator, action["text"])
+            time.sleep(0.3)
+            screenshot_path = self._take_screenshot("fill")
+            return {"success": True, "screenshot": screenshot_path}
+
+        if action_type == "send_message":
+            # Type a prompt into the chat input and submit it via the send
+            # button — the reliable real-user path. Clicking the button avoids
+            # the platform-specific send keybinding (Meta+Enter by default; plain
+            # Enter only inserts a newline), and the button enables itself once
+            # the typed draft is non-empty. Pass no `text` to submit the existing
+            # draft as-is.
+            text = action.get("text")
+            if text is not None and not text.strip():
+                raise ValueError("send_message 'text' is empty — omit 'text' to submit the existing draft")
+            chat_input = page.get_by_test_id(_CHAT_INPUT_TEST_ID)
+            if text is not None:
+                self._focus_and_replace(chat_input, text)
+                time.sleep(0.2)
+            else:
+                chat_input.click()
+            send_button = page.get_by_test_id(_SEND_BUTTON_TEST_ID)
+            # The button disables itself while the draft is empty; report that
+            # plainly instead of letting the click block until it times out.
+            if send_button.is_disabled():
+                raise ValueError("nothing to send — the chat draft is empty")
+            send_button.click()
+            time.sleep(0.5)
+            screenshot_path = self._take_screenshot("send_message")
             return {"success": True, "screenshot": screenshot_path}
 
         if action_type == "hover":

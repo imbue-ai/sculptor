@@ -91,7 +91,7 @@ describe("groupCommands", () => {
 
   it("during search, sorts groups by their best command score (descending)", () => {
     // Regression: typing a query that exact-matches a command in a
-    // late-ordered group ("Dark" in the Theme & Layout group, id "view")
+    // late-ordered group ("Dark" in the Theme group, id "view")
     // used to leave the earlier-ordered Workspaces group on top, so cmdk
     // auto-selected a weak subsequence match instead of the exact hit.
     // Sorting groups by their best score moves the merged view group

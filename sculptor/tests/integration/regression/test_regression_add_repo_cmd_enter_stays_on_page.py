@@ -14,7 +14,7 @@ leaves the user on the Add Workspace page.
 from playwright.sync_api import expect
 
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.test_repo_factory import TestRepoFactory
 from sculptor.testing.user_stories import user_story
@@ -42,7 +42,7 @@ def test_add_repo_cmd_enter_stays_on_add_workspace_page(
     target_repo = test_repo_factory_.create_repo(name=target_repo_name, branch="main")
     target_repo_path = str(target_repo.base_path.resolve())
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     # The page's Cmd+Enter handler bails on an empty branch name, so wait for the
     # submit button to enable (branch-name preview loaded) before triggering it.
@@ -54,8 +54,9 @@ def test_add_repo_cmd_enter_stays_on_add_workspace_page(
     add_repo_dialog = add_ws_page.get_add_repo_dialog()
     expect(add_repo_dialog).to_be_visible()
 
-    # The dialog defaults to the GitHub source; switch to Local so the path
-    # input is visible.
+    # Local is the dialog's default source; select it explicitly (an
+    # idempotent radio click) so the path input's visibility doesn't
+    # silently depend on the default.
     add_repo_dialog.select_local_source()
 
     # Add the repo with Cmd+Enter; a successful add closes the dialog.
@@ -64,8 +65,12 @@ def test_add_repo_cmd_enter_stays_on_add_workspace_page(
     path_input.press(f"{get_playwright_modifier_key()}+Enter")
     expect(add_repo_dialog).to_be_hidden(timeout=30_000)
 
-    # Cmd+Enter must only add the repo: we stay on the Add Workspace page with
-    # the new repo selected and no workspace created.
+    # Cmd+Enter must only add the repo: we stay on the Add Workspace page and no
+    # workspace was created (no chat panel opened).
     expect(add_ws_page.get_submit_button()).to_be_enabled(timeout=30_000)
-    expect(add_ws_page.get_project_selector()).to_contain_text(target_repo_name)
     expect(add_ws_page.get_chat_panel()).not_to_be_visible()
+
+    # The repo really was added (and is auto-selected once it appears) — opening
+    # the selector confirms it is now one of the listed options.
+    add_ws_page.get_project_selector().click()
+    expect(add_ws_page.get_project_options().filter(has_text=target_repo_name)).to_be_visible()

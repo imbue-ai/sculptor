@@ -47,6 +47,28 @@ class ModelOption(SerializableModel):
     display_name: str
 
 
+class ModelCatalogState(StrEnum):
+    """The catalog states a plain `list[ModelOption]` cannot express.
+
+    `NOT_FETCHED_YET` is the birth state of a backend (pi) catalog on task state,
+    before the start-time probe runs — distinct from a fetched-but-empty `[]`
+    (authenticated, but no providers), which is what drives the empty state. Keeping
+    the two apart is what stops the switcher flashing that empty state during startup. A
+    StrEnum member is a value-less, interned singleton that survives serialization
+    by identity, so read sites use `is` rather than overloading `None`.
+    """
+
+    NOT_FETCHED_YET = "not_fetched_yet"
+
+
+# Canonical singleton, so call sites read `NOT_FETCHED_YET` not the dotted form.
+NOT_FETCHED_YET = ModelCatalogState.NOT_FETCHED_YET
+
+# A backend model catalog as stored on task state and surfaced to the switcher:
+# the fetched list (possibly empty = no providers), or a lifecycle sentinel.
+ModelCatalog = list[ModelOption] | ModelCatalogState
+
+
 class AgentMessageSource(StrEnum):
     """
     Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)

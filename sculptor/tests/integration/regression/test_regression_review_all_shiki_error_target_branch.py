@@ -20,22 +20,13 @@ used in the single-file DiffPanel view: when scope is `vs-target-branch`,
 let `useFileLines` fall back to the target branch ref.
 """
 
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.elements.diff_viewer import wait_for_full_content_diff_render
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-
-def _enable_review_all_via_settings(page: Page) -> None:
-    """Enable the Review All experimental setting via the Settings UI."""
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.enable_review_all()
-
 
 # Strategy: src/helpers.py is 75 lines on `main` (the target branch).  This
 # prompt overwrites it with a 25-line version on the workspace branch and
@@ -86,7 +77,13 @@ def test_review_all_diff_stays_visible_when_target_branch_longer_than_head(
     """
     page = sculptor_instance_.page
 
-    _enable_review_all_via_settings(page)
+    # Capture Pierre's hunk-renderer crash. Pierre throws during hunk expansion
+    # from its async Shiki highlight callback (outside React's render cycle, so
+    # the FileDiff error boundary does not catch it), surfacing as an uncaught
+    # pageerror or a console error rather than replacing the body with a banner.
+    js_errors: list[str] = []
+    page.on("pageerror", lambda err: js_errors.append(err.message))
+    page.on("console", lambda msg: js_errors.append(msg.text) if msg.type == "error" else None)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_PROMPT)
     chat_panel = task_page.get_chat_panel()
@@ -96,26 +93,42 @@ def test_review_all_diff_stays_visible_when_target_branch_longer_than_head(
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
+    review_all_panel = task_page.get_review_all_panel()
+    expect(review_all_panel).to_be_visible()
 
     # Switch the scope picker to "All" — the bug only manifests for the
     # vs-target-branch combined diff path.
-    all_scope = diff_panel.get_scope_all()
+    all_scope = review_all_panel.get_scope_all()
     expect(all_scope).to_be_visible()
     all_scope.click()
 
     # Combined diff should show the shrunk helpers.py header and content.
-    expect(diff_panel).to_contain_text("helpers.py")
-    expect(diff_panel).to_contain_text("is_even")
+    expect(review_all_panel).to_contain_text("helpers.py")
+    expect(review_all_panel).to_contain_text("is_even")
 
-    # Wait for syntax highlighting decorations and Pierre's
-    # context-expansion to run — the bug caused the diff to disappear at
-    # this point because oldLines came from the wrong ref.
-    page.wait_for_timeout(3000)
+    # Block until Pierre's full-content render pass — the pass that reads the
+    # fetched old/new line arrays at the diff's merge-base-aligned hunk indices,
+    # and where the wrong-ref bug either crashes the renderer or applies an
+    # out-of-range Shiki decoration — has run all the way through the LAST hunk.
+    # The two-hunk deletion diff drops the trailing truncate() group, so its last
+    # hunk's final deleted line is truncate's body; is_even is unchanged context
+    # in the collapsed gap between the hunks and paints in the first partial pass,
+    # so it cannot gate this second pass. helpers.py is Modified, so the combined
+    # view honors the shared unified/split preference; the anchor pierces either
+    # view's <diffs-container> shadow root, so no view needs forcing here. The
+    # combined view mounts one diff view per changed file, so the anchor scans
+    # them all and locks onto helpers.py — the only file whose shadow root
+    # carries both the expandable separator and truncate's deleted body.
+    wait_for_full_content_diff_render(page, "return text[:max_length - 3]")
 
     # Diff must still be visible afterwards.
-    expect(diff_panel).to_contain_text("helpers.py")
-    expect(diff_panel).to_contain_text("is_even")
+    expect(review_all_panel).to_contain_text("helpers.py")
+    expect(review_all_panel).to_contain_text("is_even")
     # No Shiki crash banner.
-    expect(diff_panel).not_to_contain_text("Invalid decoration position")
+    expect(review_all_panel).not_to_contain_text("Invalid decoration position")
+
+    # Defense in depth: Pierre must not have crashed during hunk expansion. The
+    # crash message names Pierre's renderer: "renderHunks" in older @pierre/diffs
+    # releases, "DiffHunksRenderer" in 1.2.x.
+    render_hunks_errors = [e for e in js_errors if "renderHunks" in e or "DiffHunksRenderer" in e]
+    assert not render_hunks_errors, f"Pierre renderHunks crash: {render_hunks_errors[:1]}"

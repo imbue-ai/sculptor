@@ -1,0 +1,55 @@
+.launcher {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-4);
+  width: 100%;
+}
+
+// A centered column: the button, heading, and rows are all center-aligned, and
+// the column itself is centered in the section via `margin: auto` (which also
+// keeps it scrollable when the section is too short for the full Quick add list).
+.column {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin: auto;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- fixed launcher column width; no spacing token fits
+  width: 210px;
+}
+
+// The "Quick add" label between the add button and the shortcut rows.
+.heading {
+  padding: 0 var(--space-2) var(--space-3);
+}
+
+// The primary action, above Quick add, sized to its text and centered over the
+// list, with space below so the shortcuts read as a separate, secondary block.
+// Layers the launcher look (border, softer radius, roomier padding) over the
+// soft gray Button, which supplies the background and hover.
+.addPanelButton {
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  font-weight: var(--font-weight-medium);
+  height: auto;
+  margin-bottom: var(--space-5);
+  padding: var(--space-1) var(--space-3);
+}
+
+// The split-half escape hatch, spaced below the Quick add block. Outlined
+// secondary action mirroring the primary Add panel button's launcher look
+// (border, softer radius, roomier padding) but one notch dimmer, so it reads
+// as subordinate to the filled primary above.
+.closeSplit {
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-3);
+  // The outline Button variant draws its own inset ring; the launcher border
+  // above replaces it so both launcher buttons share the same border token.
+  box-shadow: none;
+  color: var(--gray-11);
+  height: auto;
+  margin-top: var(--space-4);
+  padding: var(--space-1) var(--space-3);
+}

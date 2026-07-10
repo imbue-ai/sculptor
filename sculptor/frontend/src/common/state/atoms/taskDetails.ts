@@ -1,9 +1,15 @@
-import type { PrimitiveAtom } from "jotai";
+import type { Atom, PrimitiveAtom } from "jotai";
 import { atom } from "jotai";
-import { atomFamily } from "jotai/utils";
+import { atomFamily, selectAtom } from "jotai/utils";
 import isEqual from "lodash/isEqual";
 
-import type { ArtifactType, AskUserQuestionData, ChatMessage, SubmittedQuestionAnswers } from "../../../api";
+import type {
+  ArtifactType,
+  AskUserQuestionData,
+  ChatMessage,
+  SubmittedQuestionAnswers,
+  WorkflowTaskState,
+} from "../../../api";
 import type { ArtifactsMap } from "../../../pages/workspace/Types";
 
 /**
@@ -24,11 +30,31 @@ export type TaskDetailState = {
   // "waiting for background task" label so it doesn't claim the agent is
   // thinking while the harness is actually idle (SCU-387).
   pendingBackgroundTaskIds: Array<string>;
+  // Live/last-known state of Workflow-tool background tasks, keyed by the
+  // launching tool_use_id. Drives the Workflow pill's executing state and
+  // the workflow popover's phase/agent tree.
+  workflowTaskStates: Record<string, WorkflowTaskState>;
   error?: string;
 };
 
 export const taskDetailAtomFamily = atomFamily<string, PrimitiveAtom<TaskDetailState | null>>(() =>
   atom<TaskDetailState | null>(null),
+);
+
+type WorkflowTaskStateKey = {
+  taskId: string;
+  toolUseId: string;
+};
+
+// One derived atom per workflow pill, selected with deep equality: the
+// reducer produces a fresh detail object on every TaskUpdate (and a fresh
+// workflow map whenever one changes), so subscribing to a single entry keeps
+// a progress tick on one workflow from re-rendering every other pill in the
+// transcript.
+export const workflowTaskStateAtomFamily = atomFamily<WorkflowTaskStateKey, Atom<WorkflowTaskState | undefined>>(
+  (key) =>
+    selectAtom(taskDetailAtomFamily(key.taskId), (detail) => detail?.workflowTaskStates?.[key.toolUseId], isEqual),
+  (a, b) => a.taskId === b.taskId && a.toolUseId === b.toolUseId,
 );
 
 export const getEmptyTaskDetailState = (): TaskDetailState => {
@@ -42,6 +68,7 @@ export const getEmptyTaskDetailState = (): TaskDetailState => {
     submittedQuestionAnswers: {},
     isInPlanMode: false,
     pendingBackgroundTaskIds: [],
+    workflowTaskStates: {},
   };
 };
 

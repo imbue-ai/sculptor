@@ -1,16 +1,15 @@
 import { Flex, Spinner, Text } from "@radix-ui/themes";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { DiffStatus, ElementIds } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import { openDiffTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
 
+import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
 import { expandChangesFoldersAtom, fileBrowserStateAtomFamily, toggleChangesFolderAtom } from "./atoms.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
 import styles from "./FileTree.module.scss";
@@ -20,7 +19,7 @@ import { TreeRow } from "./TreeRow.tsx";
 import type { FileStatus, TreeNode, ViewMode } from "./types.ts";
 import { useActiveFileOperation } from "./useActiveFileOperation.ts";
 import { useKeyboardNavigation } from "./useKeyboardNavigation.ts";
-import { useAgentFileTracking, useCollapseChildren, useTreeNodeMap } from "./useTreeView.ts";
+import { useAgentFileTracking, useCollapseChildren, useSearchAutoExpand, useTreeNodeMap } from "./useTreeView.ts";
 import {
   buildChangesTree,
   collectAllFolderPaths,
@@ -55,6 +54,14 @@ type ChangesTreeViewProps = {
   scope?: DiffScope;
   searchMatchingPaths?: Set<string> | null;
   onDiscardFile?: (filePath: string) => void;
+  /**
+   * A file click calls this with the clicked path and its status. The
+   * ChangesPanel drives its embedded viewer from per-panel selection state
+   * rather than the shared diff-panel tab list.
+   */
+  onSelectFile: (filePath: string, status: FileStatus) => void;
+  /** The currently selected file path, highlighted in the list. */
+  selectedPath?: string | null;
 };
 
 export const ChangesTreeView = ({
@@ -63,14 +70,18 @@ export const ChangesTreeView = ({
   scope = "uncommitted",
   searchMatchingPaths,
   onDiscardFile,
+  onSelectFile,
+  selectedPath,
 }: ChangesTreeViewProps): ReactElement => {
   const [fileBrowserState, setFileBrowserState] = useAtom(fileBrowserStateAtomFamily(workspaceId));
   const toggleFolder = useSetAtom(toggleChangesFolderAtom);
   const expandFolders = useSetAtom(expandChangesFoldersAtom);
-  const openDiffTab = useSetAtom(openDiffTabAtom);
 
-  const { agentID } = useWorkspacePageParams();
-  const activeOperation = useActiveFileOperation(agentID);
+  // Track file operations of the workspace's current agent, resolved from the
+  // section shell rather than the route: activating a different center tab
+  // doesn't navigate, so the route's agent id goes stale.
+  const agentId = useAtomValue(activeAgentIdAtomFamily(workspaceId));
+  const activeOperation = useActiveFileOperation(agentId);
   const workspace = useWorkspace(workspaceId);
   const { data: diff } = useWorkspaceDiff(workspaceId);
   const isDiffReady = workspace?.diffStatus === DiffStatus.READY && diff != null;
@@ -104,18 +115,38 @@ export const ChangesTreeView = ({
 
   const folderChangeCounts = useMemo(() => computeFolderChangeCounts(changesTree), [changesTree]);
 
-  // Auto-expand all folders in the changes tree on first render and when tree changes
-  const prevTreeIdRef = useRef<string>("");
+  // Open each changed folder the first time it appears in the tree, but only once:
+  // folders already recorded in `changesAutoExpandedFolders` are left as the user
+  // left them, so a collapse survives a remount, a change tick, and a workspace
+  // switch. Search-driven expansion is transient and handled by useSearchAutoExpand
+  // below, so this stays out of its way while a search is active.
   useEffect(() => {
-    const allFolders = collectAllFolderPaths(compactedTree);
-    const treeId = [...allFolders].sort().join(",");
-    if (treeId !== prevTreeIdRef.current) {
-      prevTreeIdRef.current = treeId;
-      if (allFolders.length > 0) {
-        expandFolders({ workspaceId, paths: allFolders });
-      }
+    if (isSearchActive) {
+      return;
     }
-  }, [compactedTree, expandFolders, workspaceId]);
+    const allFolders = collectAllFolderPaths(compactedTree);
+    if (allFolders.length === 0) {
+      return;
+    }
+    setFileBrowserState((prev) => {
+      // A persisted snapshot can omit this field, so coalesce before use.
+      const prevAutoExpanded = prev.changesAutoExpandedFolders ?? [];
+      const alreadyAutoExpanded = new Set(prevAutoExpanded);
+      const newlyAppeared = allFolders.filter((path) => !alreadyAutoExpanded.has(path));
+      if (newlyAppeared.length === 0) {
+        return prev;
+      }
+      const expanded = new Set(prev.changesExpandedFolders);
+      for (const path of newlyAppeared) {
+        expanded.add(path);
+      }
+      return {
+        ...prev,
+        changesExpandedFolders: Array.from(expanded),
+        changesAutoExpandedFolders: [...prevAutoExpanded, ...newlyAppeared],
+      };
+    });
+  }, [compactedTree, isSearchActive, setFileBrowserState]);
 
   const expandedFoldersSet = useMemo(
     () => new Set(fileBrowserState.changesExpandedFolders),
@@ -165,11 +196,12 @@ export const ChangesTreeView = ({
     (path: string): void => {
       const statusMap = viewMode === "tree" ? flatRowStatusMap : flatFileStatusMap;
       const status = statusMap.get(path);
-      if (status != null) {
-        openDiffTab({ workspaceId, filePath: path, status, scope });
+      if (status == null) {
+        return;
       }
+      onSelectFile(path, status);
     },
-    [viewMode, flatRowStatusMap, flatFileStatusMap, openDiffTab, workspaceId, scope],
+    [viewMode, flatRowStatusMap, flatFileStatusMap, onSelectFile],
   );
 
   const setExpandedFolders = useCallback(
@@ -178,6 +210,19 @@ export const ChangesTreeView = ({
     },
     [setFileBrowserState],
   );
+
+  // Expand every folder in the filtered tree while a search is active so matches
+  // are visible, then restore the pre-search expand state on clear — the same
+  // transient search behaviour the Files tree uses, so a collapse the user makes
+  // outside search is preserved once the search ends.
+  useSearchAutoExpand({
+    isSearchActive,
+    tree: compactedTree,
+    currentExpandedFolders: fileBrowserState.changesExpandedFolders,
+    expandFolders,
+    setExpandedFolders,
+    workspaceId,
+  });
 
   const handleCollapseChildren = useCollapseChildren({
     flatRows,
@@ -281,6 +326,7 @@ export const ChangesTreeView = ({
                   <FlatListRow
                     entry={entry}
                     isFocused={virtualItem.index === focusedIndex}
+                    isSelected={entry.path === selectedPath}
                     addedLines={fileDiff?.addedLines}
                     removedLines={fileDiff?.removedLines}
                     onFileClick={handleFileClick}
@@ -332,6 +378,7 @@ export const ChangesTreeView = ({
                   isExpanded={isExpanded}
                   isFocused={virtualItem.index === focusedIndex}
                   isActiveFile={node.path === activeOperation?.filePath}
+                  isSelected={node.path === selectedPath}
                   folderChangeCount={folderChangeCount}
                   addedLines={fileDiff?.addedLines}
                   removedLines={fileDiff?.removedLines}

@@ -8,25 +8,33 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <!-- iOS ignores PWA manifest icons; Add to Home Screen uses this link.
+         Opaque on purpose — iOS renders icon transparency as black. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!--
-      Import map for runtime-loaded frontend plugins. Each specifier resolves
+      Import map for runtime-loaded extensions. Each specifier resolves
       to a tiny stub that re-exports from window.__SCULPTOR_HOST__, ensuring
-      plugins share the host's singleton instances of React, Jotai, Radix,
+      extensions share the host's singleton instances of React, Jotai, Radix,
       etc. The host populates window.__SCULPTOR_HOST__ during boot, before
-      any plugin is loaded.
+      any extension is loaded.
+
+      "@sculptor/plugin-sdk" is the SDK's pre-rename specifier; extensions
+      compiled before the rename still import it, so it maps to the same stub
+      as "@sculptor/extension-sdk".
     -->
     <script type="importmap">
       {
         "imports": {
-          "react": "/plugin-runtime/react.js",
-          "react/jsx-runtime": "/plugin-runtime/react-jsx-runtime.js",
-          "react-dom": "/plugin-runtime/react-dom.js",
-          "react-dom/client": "/plugin-runtime/react-dom.js",
-          "jotai": "/plugin-runtime/jotai.js",
-          "@tanstack/react-query": "/plugin-runtime/tanstack-react-query.js",
-          "@radix-ui/themes": "/plugin-runtime/radix-themes.js",
-          "lucide-react": "/plugin-runtime/lucide-react.js",
-          "@sculptor/plugin-sdk": "/plugin-runtime/sculptor-plugin-sdk.js"
+          "react": "/extension-runtime/react.js",
+          "react/jsx-runtime": "/extension-runtime/react-jsx-runtime.js",
+          "react-dom": "/extension-runtime/react-dom.js",
+          "react-dom/client": "/extension-runtime/react-dom.js",
+          "jotai": "/extension-runtime/jotai.js",
+          "@tanstack/react-query": "/extension-runtime/tanstack-react-query.js",
+          "@radix-ui/themes": "/extension-runtime/radix-themes.js",
+          "lucide-react": "/extension-runtime/lucide-react.js",
+          "@sculptor/extension-sdk": "/extension-runtime/sculptor-extension-sdk.js",
+          "@sculptor/plugin-sdk": "/extension-runtime/sculptor-extension-sdk.js"
         }
       }
     </script>

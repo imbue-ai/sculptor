@@ -49,9 +49,14 @@ def make_task_started_message(
     tool_use_id: str,
     description: str = "",
     task_type: str = "local_bash",
+    workflow_name: str | None = None,
 ) -> dict:
-    """Return a dict for a system/task_started message."""
-    return {
+    """Return a dict for a system/task_started message.
+
+    ``workflow_name`` is only present on the wire for Workflow tasks
+    (task_type="local_workflow").
+    """
+    msg: dict = {
         "type": "system",
         "subtype": "task_started",
         "task_id": task_id,
@@ -59,11 +64,92 @@ def make_task_started_message(
         "description": description,
         "task_type": task_type,
     }
+    if workflow_name is not None:
+        msg["workflow_name"] = workflow_name
+    return msg
+
+
+def make_task_progress_message(
+    task_id: str,
+    tool_use_id: str,
+    description: str = "",
+    total_tokens: int = 0,
+    tool_uses: int = 0,
+    duration_ms: int = 0,
+    last_tool_name: str | None = None,
+    workflow_progress: list[dict] | None = None,
+) -> dict:
+    """Return a dict for a system/task_progress message.
+
+    ``workflow_progress`` mirrors the real CLI: a delta of
+    workflow_phase/workflow_agent entries (camelCase keys) whose state
+    changed since the previous payload, omitted entirely on pure token-tick
+    batches.
+    """
+    msg: dict = {
+        "type": "system",
+        "subtype": "task_progress",
+        "task_id": task_id,
+        "tool_use_id": tool_use_id,
+        "description": description,
+        "usage": {"total_tokens": total_tokens, "tool_uses": tool_uses, "duration_ms": duration_ms},
+    }
+    if last_tool_name is not None:
+        msg["last_tool_name"] = last_tool_name
+    if workflow_progress is not None:
+        msg["workflow_progress"] = workflow_progress
+    return msg
+
+
+def make_workflow_phase_entry(index: int, title: str, kind: str = "") -> dict:
+    """Return a workflow_phase entry for a workflow_progress tree."""
+    return {"type": "workflow_phase", "index": index, "title": title, "kind": kind}
+
+
+def make_workflow_agent_entry(
+    index: int,
+    label: str,
+    phase_index: int = 0,
+    phase_title: str = "",
+    state: str = "start",
+    model: str = "fake-claude",
+    tokens: int | None = None,
+    tool_calls: int | None = None,
+    duration_ms: int | None = None,
+    last_tool_summary: str | None = None,
+    result_preview: str | None = None,
+    error: str | None = None,
+    prompt_preview: str = "",
+) -> dict:
+    """Return a workflow_agent entry for a workflow_progress tree (camelCase wire keys)."""
+    entry: dict = {
+        "type": "workflow_agent",
+        "index": index,
+        "label": label,
+        "phaseIndex": phase_index,
+        "phaseTitle": phase_title,
+        "state": state,
+        "model": model,
+        "promptPreview": prompt_preview,
+    }
+    if tokens is not None:
+        entry["tokens"] = tokens
+    if tool_calls is not None:
+        entry["toolCalls"] = tool_calls
+    if duration_ms is not None:
+        entry["durationMs"] = duration_ms
+    if last_tool_summary is not None:
+        entry["lastToolSummary"] = last_tool_summary
+    if result_preview is not None:
+        entry["resultPreview"] = result_preview
+    if error is not None:
+        entry["error"] = error
+    return entry
 
 
 def make_task_notification_message(
     task_id: str,
-    tool_use_id: str,
+    tool_use_id: str | None,
     status: str = "completed",
     summary: str = "",
     duration_ms: int | None = None,
@@ -72,18 +158,44 @@ def make_task_notification_message(
 
     When ``duration_ms`` is provided it is emitted nested under ``usage`` to
     match the real Claude CLI shape (see SCU-1151).
+
+    Pass ``tool_use_id=None`` to omit the field entirely. The real CLI drops
+    ``tool_use_id`` when a background task is orphaned by a process exit (e.g. a
+    restart) and reported as failed on resume, because the launching tool call's
+    id was lost with the dead process — see SCU-1666.
     """
     msg: dict = {
         "type": "system",
         "subtype": "task_notification",
         "task_id": task_id,
-        "tool_use_id": tool_use_id,
         "status": status,
         "summary": summary,
     }
+    if tool_use_id is not None:
+        msg["tool_use_id"] = tool_use_id
     if duration_ms is not None:
         msg["usage"] = {"duration_ms": duration_ms}
     return msg
+
+
+def make_task_updated_message(
+    task_id: str,
+    status: str = "completed",
+) -> dict:
+    """Return a dict for a system/task_updated message.
+
+    The real Claude CLI emits task_updated as a background task moves through
+    its lifecycle; the status lives under ``patch``. A terminal ``patch.status``
+    (completed/failed/stopped) can arrive with NO accompanying task_notification
+    when the task finishes while the CLI is busy with another turn (see the
+    handling in ``output_processor._process_output``).
+    """
+    return {
+        "type": "system",
+        "subtype": "task_updated",
+        "task_id": task_id,
+        "patch": {"status": status},
+    }
 
 
 def make_text_block(text: str) -> dict:
@@ -215,9 +327,18 @@ def make_hook_callback_control_request(
     }
 
 
-def make_end_message(session_id: str | None, is_error: bool = False, result: str = "") -> dict:
-    """Return a dict for the end-of-stream message."""
-    return {
+def make_end_message(
+    session_id: str | None,
+    is_error: bool = False,
+    result: str = "",
+    api_error_status: int | None = None,
+) -> dict:
+    """Return a dict for the end-of-stream message.
+
+    ``api_error_status`` mirrors the real CLI: the HTTP status is included only when
+    the turn failed on an API error, and the key is omitted entirely otherwise.
+    """
+    message = {
         "type": "result",
         "subtype": "success",
         "is_error": is_error,
@@ -234,6 +355,9 @@ def make_end_message(session_id: str | None, is_error: bool = False, result: str
         },
         "total_cost_usd": 0,
     }
+    if api_error_status is not None:
+        message["api_error_status"] = api_error_status
+    return message
 
 
 def make_streaming_text_events(

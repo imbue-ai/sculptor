@@ -1,17 +1,27 @@
 """Integration tests for the Settings page functionality."""
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 
 from sculptor.services.user_config.user_config import load_config
 from sculptor.testing.elements.base import dismiss_with_escape
-from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
+from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
+
+
+def _extract_workspace_id(url: str) -> str:
+    """Extract the workspace ID from a Sculptor URL (format: /ws/{workspaceID}/agent/...)."""
+    match = re.search(r"/ws/([a-zA-Z0-9_-]+)/", url)
+    if not match:
+        raise ValueError(f"Could not extract workspace ID from URL: {url}")
+    return match.group(1)
 
 
 @pytest.mark.release
@@ -97,38 +107,46 @@ def test_keybinding_settings_command_palette_shortcut(sculptor_instance_: Sculpt
     keybindings.reset_all_to_defaults()
 
 
-@user_story("to find the Review All toggle in the Settings > Experimental section")
-def test_settings_experimental_has_review_all_toggle(sculptor_instance_: SculptorInstance) -> None:
-    """The Settings page should have an Experimental section with a Review All toggle."""
-    page = sculptor_instance_.page
+@user_story("to have workspaces cleaned up when I delete a project")
+def test_deleting_project_also_deletes_its_workspaces(
+    sculptor_instance_factory_: SculptorInstanceFactory,
+) -> None:
+    """Deleting a project from Settings → Repositories also deletes its workspaces.
 
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    toggle = experimental.get_review_all_toggle()
-    expect(toggle).to_be_visible()
+    Runs on an isolated instance (not the shared one) because removing the only
+    configured repo would strand every later test in that browser context.
+    """
+    with sculptor_instance_factory_.spawn_instance() as sculptor_instance:
+        page = sculptor_instance.page
+
+        start_task_and_wait_for_ready(
+            sculptor_page=page,
+            prompt="Setup task",
+            workspace_name="Workspace To Delete",
+        )
+
+        workspace_id = _extract_workspace_id(page.url)
+        base_url = sculptor_instance.backend_api_url.rstrip("/")
+
+        get_response = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}")
+        assert get_response.ok, f"Expected workspace {workspace_id} to exist, got status {get_response.status}"
+
+        settings_page = navigate_to_settings_page(page=page)
+        repos_section = settings_page.click_on_repositories()
+
+        # Delete the first repo row (the original project).
+        repos_section.remove_first_repo()
+
+        # The cascade: the project's workspace is gone (soft-deleted → 404), so
+        # no surface can list it anymore.
+        get_response = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}")
+        assert get_response.status == 404, (
+            f"Expected workspace {workspace_id} to be deleted (404) after project deletion,"
+            + f" but got status {get_response.status}"
+        )
 
 
-@user_story("to toggle Review All on in Settings and see the button appear in the workspace")
-def test_enable_review_all_via_settings_shows_button(sculptor_instance_: SculptorInstance) -> None:
-    """Enabling enable_review_all via the Settings UI should make the Review All
-    button visible when there are changes."""
-    page = sculptor_instance_.page
-
-    # Enable the setting via Settings UI before creating a workspace
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.enable_review_all()
-
-    # Create a workspace with uncommitted changes (navigates to the workspace)
-    task_page = start_task_and_wait_for_ready(
-        page,
-        prompt='fake_claude:write_file `{"file_path": "hello.py", "content": "print(\'hello\')"}`',
-    )
-    chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
-
-    # The Review All button should be visible since the setting is enabled
-    task_page.activate_file_browser()
-    file_browser = task_page.get_file_browser()
-    review_all_btn = file_browser.get_review_all_button()
-    expect(review_all_btn).to_be_visible()
+# NOTE: there are no Review All tests here because Review All has no settings gate:
+# it is a no-default-section registered panel, always available from a section's
+# add-panel ``+`` dropdown (see ``task_page.click_review_all``). Its open behavior
+# is covered in ``test_review_all_panel.py``.

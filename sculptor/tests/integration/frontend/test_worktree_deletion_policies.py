@@ -19,9 +19,10 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_fixed
 
+from sculptor.testing.backend_url import resolve_backend_api_url
 from sculptor.testing.elements.user_config import _set_user_config_flag
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -35,7 +36,7 @@ def _create_worktree_workspace(page: Page, workspace_name: str) -> tuple[str, st
     empty-workspace-name preview (which returns a random ``<adj>-<noun>``
     slug) and pick that up instead.
     """
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     add_ws_page.get_workspace_name_input().fill(workspace_name)
 
@@ -109,7 +110,7 @@ def _commit_on_worktree(worktree_path: Path, message: str) -> None:
 )
 def _delete_workspace_via_api(page: Page, workspace_id: str) -> None:
     # Retry on transient ECONNRESET under heavy offload-sandbox load (SCU-773).
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     response = page.request.delete(f"{base_url}/api/v1/workspaces/{workspace_id}")
     assert response.ok, f"DELETE workspace failed: {response.status} {response.text()}"
 

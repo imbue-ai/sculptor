@@ -1,11 +1,10 @@
 """Integration tests for the experimental Browser panel.
 
-The Browser panel is registered in the workspace registry but ships
-disabled by default (``defaultEnabled: false``).  Users opt in via
-Settings → Panels.  These tests cover that opt-in flow plus the
+The Browser is a registered single-instance panel with no default section.
+It is opened on demand from a workspace section's add-panel ``+`` dropdown,
+exactly like the Files / Changes / Commits panels.  These tests cover the
 panel's user-visible contract:
 
-- Visibility gating (icon hidden until enabled, web-mode placeholder).
 - Navigation toolbar (address bar auto-prefix, back/forward, refresh,
   in-page link sync, ``target=_blank`` containment, invalid URL safety).
 - Screenshot-to-clipboard (R7).
@@ -20,8 +19,6 @@ from __future__ import annotations
 import io
 import re
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
 from urllib.request import urlopen
 
 import pytest
@@ -31,8 +28,11 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.browser_panel_fixture_server import BrowserPanelFixtureServer
-from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.elements.add_panel_dropdown import open_panel
+from sculptor.testing.elements.browser_panel import PlaywrightBrowserPanelElement
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -40,35 +40,21 @@ from sculptor.testing.user_stories import user_story
 _PNG_MAGIC: bytes = b"\x89PNG\r\n\x1a\n"
 
 
-def _set_browser_panel_enabled(page: Page, enabled: bool) -> None:
-    """Toggle the Browser panel via Settings → Panels (idempotent)."""
-    settings_page = navigate_to_settings_page(page=page)
-    panels = settings_page.click_on_panels()
-    panels.set_panel_enabled("browser", enabled)
+def _open_browser_panel(page: Page) -> PlaywrightBrowserPanelElement:
+    """Open (or reveal) the Browser panel in the right section and return its POM.
 
-
-@pytest.fixture
-def enable_browser_panel_(sculptor_instance_: SculptorInstance) -> Iterator[Callable[[], None]]:
-    """Yield a callable that enables the Browser panel via Settings → Panels.
-
-    Tests call the returned function *after* ``start_task_and_wait_for_ready``
-    so a workspace exists to return to via ``page.go_back()``.  The fixture
-    auto-disables the panel on teardown if it was activated, so a single
-    enabled-state leak can't bleed across tests in a shared instance.
+    The Browser is a registered single-instance panel with no default section, so
+    it is opened via the section add-panel dropdown. If the active workspace
+    already has it open (e.g. after a collapse, or on returning to a workspace),
+    expanding the right section reveals it again with its preserved state.
     """
-    page = sculptor_instance_.page
-    activated = False
-
-    def _activate() -> None:
-        nonlocal activated
-        _set_browser_panel_enabled(page, enabled=True)
-        page.go_back()
-        activated = True
-
-    yield _activate
-
-    if activated:
-        _set_browser_panel_enabled(page, enabled=False)
+    root = page.get_by_test_id(ElementIDs.BROWSER_PANEL)
+    if not root.is_visible():
+        PlaywrightWorkspaceSection(page, "right").expand_section()
+        if not root.is_visible():
+            open_panel(page, "browser", "right")
+    expect(root).to_be_visible()
+    return PlaywrightBrowserPanelElement(locator=root, page=page)
 
 
 @user_story("to smoke-check that the Browser panel fixture server serves its pages")
@@ -85,53 +71,16 @@ def test_browser_panel_fixture_server_serves_index(
         assert response.headers.get_content_type() == "image/png"
 
 
-@user_story("to keep the Browser panel hidden until I opt in")
-def test_browser_panel_hidden_by_default(sculptor_instance_: SculptorInstance) -> None:
-    page = sculptor_instance_.page
-
-    start_task_and_wait_for_ready(sculptor_page=page)
-
-    task_page = PlaywrightTaskPage(page=page)
-    expect(task_page.get_browser_panel_icon()).not_to_be_visible()
-
-
-@user_story("to opt into the Browser panel and back out again, in one session")
-def test_browser_panel_toggle_shows_and_hides_icon(
-    sculptor_instance_: SculptorInstance,
-    enable_browser_panel_: Callable[[], None],
-) -> None:
-    page = sculptor_instance_.page
-
-    start_task_and_wait_for_ready(sculptor_page=page)
-    enable_browser_panel_()
-
-    task_page = PlaywrightTaskPage(page=page)
-    icon = task_page.get_browser_panel_icon()
-    expect(icon).to_be_visible()
-    icon.click()
-    expect(task_page.get_browser_panel_root()).to_be_visible()
-    panel = task_page.get_browser_panel()
-    expect(panel.get_web_mode_placeholder()).to_be_visible()
-
-
 @pytest.mark.electron
 @user_story("to open the Browser panel in the desktop app without the web-mode placeholder")
 def test_browser_panel_electron_mode_hides_web_placeholder(
     sculptor_instance_: SculptorInstance,
-    enable_browser_panel_: Callable[[], None],
 ) -> None:
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(sculptor_page=page)
-    enable_browser_panel_()
 
-    task_page = PlaywrightTaskPage(page=page)
-    icon = task_page.get_browser_panel_icon()
-    expect(icon).to_be_visible()
-    icon.click()
-
-    expect(task_page.get_browser_panel_root()).to_be_visible()
-    panel = task_page.get_browser_panel()
+    panel = _open_browser_panel(page)
     expect(panel.get_web_mode_placeholder()).not_to_be_visible()
 
 
@@ -140,7 +89,6 @@ def test_browser_panel_electron_mode_hides_web_placeholder(
 def test_browser_panel_navigation_tour(
     sculptor_instance_: SculptorInstance,
     browser_panel_fixture_server_: BrowserPanelFixtureServer,
-    enable_browser_panel_: Callable[[], None],
 ) -> None:
     """End-to-end tour of the navigation contract on a single panel.
 
@@ -150,10 +98,8 @@ def test_browser_panel_navigation_tour(
     """
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(sculptor_page=page)
-    enable_browser_panel_()
 
-    task_page = PlaywrightTaskPage(page=page)
-    panel = task_page.get_browser_panel()
+    panel = _open_browser_panel(page)
     base = browser_panel_fixture_server_.base_url
     port = browser_panel_fixture_server_.port
 
@@ -213,7 +159,7 @@ def test_browser_panel_navigation_tour(
     assert nav_type == "reload"
 
     panel.navigate("not a url", wait_for_webview_load=False)
-    expect(task_page.get_browser_panel_root()).to_be_visible()
+    expect(panel.get_root()).to_be_visible()
     expect(panel.get_url_error()).to_be_visible()
     expect(panel.get_url_input()).not_to_have_value(re.compile(r"http://"))
 
@@ -223,7 +169,6 @@ def test_browser_panel_navigation_tour(
 def test_browser_panel_url_input_polish(
     sculptor_instance_: SculptorInstance,
     browser_panel_fixture_server_: BrowserPanelFixtureServer,
-    enable_browser_panel_: Callable[[], None],
 ) -> None:
     """SCU-1157: polish the Browser panel's URL input.
 
@@ -241,10 +186,8 @@ def test_browser_panel_url_input_polish(
     page = sculptor_instance_.page
     base = browser_panel_fixture_server_.base_url
     start_task_and_wait_for_ready(sculptor_page=page)
-    enable_browser_panel_()
 
-    task_page = PlaywrightTaskPage(page=page)
-    panel = task_page.get_browser_panel()
+    panel = _open_browser_panel(page)
 
     # (1) Fresh open: the URL input should hold keyboard focus so the user
     # can start typing immediately.
@@ -257,10 +200,9 @@ def test_browser_panel_url_input_polish(
     panel.navigate(target_url)
     panel.wait_for_address_bar_contains(target_url)
 
-    task_page.get_browser_panel_icon().click()
-    expect(task_page.get_browser_panel_root()).not_to_be_visible()
-    task_page.get_browser_panel_icon().click()
-    panel = task_page.get_browser_panel()
+    PlaywrightWorkspaceSection(page, "right").collapse_section()
+    expect(panel.get_root()).not_to_be_visible()
+    panel = _open_browser_panel(page)
     expect(panel.get_url_input()).to_be_focused()
 
     # (2) Focusing the input selects its existing text.  Blur first so the
@@ -305,13 +247,11 @@ def test_browser_panel_url_input_polish(
 def test_browser_panel_screenshot(
     sculptor_instance_: SculptorInstance,
     browser_panel_fixture_server_: BrowserPanelFixtureServer,
-    enable_browser_panel_: Callable[[], None],
 ) -> None:
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(sculptor_page=page)
-    enable_browser_panel_()
 
-    panel = PlaywrightTaskPage(page=page).get_browser_panel()
+    panel = _open_browser_panel(page)
 
     panel.click_screenshot()
     blank_png = panel.wait_for_clipboard_png()
@@ -335,23 +275,20 @@ def test_browser_panel_screenshot(
 def test_browser_panel_url_persists_across_collapse(
     sculptor_instance_: SculptorInstance,
     browser_panel_fixture_server_: BrowserPanelFixtureServer,
-    enable_browser_panel_: Callable[[], None],
 ) -> None:
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(sculptor_page=page)
-    enable_browser_panel_()
 
-    task_page = PlaywrightTaskPage(page=page)
-    panel = task_page.get_browser_panel()
+    panel = _open_browser_panel(page)
     target_url = f"{browser_panel_fixture_server_.base_url}/next.html"
 
     panel.navigate(target_url)
     expect(panel.get_url_input()).to_have_value(re.compile(re.escape(target_url)))
 
-    task_page.get_browser_panel_icon().click()
-    expect(task_page.get_browser_panel_root()).not_to_be_visible()
+    PlaywrightWorkspaceSection(page, "right").collapse_section()
+    expect(panel.get_root()).not_to_be_visible()
 
-    panel = task_page.get_browser_panel()
+    panel = _open_browser_panel(page)
     expect(panel.get_url_input()).to_have_value(re.compile(re.escape(target_url)))
     assert (
         panel.webview_evaluate("document.querySelector('[data-testid=browser-panel-fixture-next]').textContent")
@@ -364,7 +301,6 @@ def test_browser_panel_url_persists_across_collapse(
 def test_browser_panel_cross_workspace_isolation(
     sculptor_instance_: SculptorInstance,
     browser_panel_fixture_server_: BrowserPanelFixtureServer,
-    enable_browser_panel_: Callable[[], None],
 ) -> None:
     """One flow asserting URL independence, cookie isolation, cross-write
     safety, and back/forward history independence between two workspaces."""
@@ -373,21 +309,17 @@ def test_browser_panel_cross_workspace_isolation(
 
     start_task_and_wait_for_ready(sculptor_page=page, workspace_name="Browser Iso A")
     start_task_and_wait_for_ready(sculptor_page=page, workspace_name="Browser Iso B")
-    enable_browser_panel_()
 
-    task_page = PlaywrightTaskPage(page=page)
-    workspace_tabs = task_page.get_workspace_tabs()
-
-    workspace_tabs.first.click()
-    panel_a = task_page.get_browser_panel()
+    navigate_to_workspace(page, "Browser Iso A")
+    panel_a = _open_browser_panel(page)
     panel_a.navigate(f"{base}/cookie.html?v=workspaceA")
     assert "btest=workspaceA" in panel_a.webview_evaluate("document.cookie")
     panel_a.navigate(f"{base}/index.html")
     panel_a.navigate(f"{base}/next.html")
     expect(panel_a.get_back_button()).to_be_enabled()
 
-    workspace_tabs.last.click()
-    panel_b = task_page.get_browser_panel()
+    navigate_to_workspace(page, "Browser Iso B")
+    panel_b = _open_browser_panel(page)
     expect(panel_b.get_back_button()).to_be_disabled()
     panel_b.navigate(f"{base}/cookie.html")
     assert "workspaceA" not in panel_b.webview_evaluate("document.cookie")
@@ -396,8 +328,8 @@ def test_browser_panel_cross_workspace_isolation(
     assert "btest=workspaceB" in cookies_b
     assert "workspaceA" not in cookies_b
 
-    workspace_tabs.first.click()
-    panel_a = task_page.get_browser_panel()
+    navigate_to_workspace(page, "Browser Iso A")
+    panel_a = _open_browser_panel(page)
     expect(panel_a.get_url_input()).to_have_value(re.compile(r"/next\.html"))
     expect(panel_a.get_back_button()).to_be_enabled()
     panel_a.click_back()
@@ -413,7 +345,6 @@ def test_browser_panel_cross_workspace_isolation(
 def test_browser_panel_in_page_state_preserved_across_workspace_switch(
     sculptor_instance_: SculptorInstance,
     browser_panel_fixture_server_: BrowserPanelFixtureServer,
-    enable_browser_panel_: Callable[[], None],
 ) -> None:
     """In-page DOM state on workspace A's panel must survive a switch to
     workspace B and back.  This is the strongest signal that the
@@ -426,24 +357,20 @@ def test_browser_panel_in_page_state_preserved_across_workspace_switch(
 
     start_task_and_wait_for_ready(sculptor_page=page, workspace_name="State A")
     start_task_and_wait_for_ready(sculptor_page=page, workspace_name="State B")
-    enable_browser_panel_()
 
-    task_page = PlaywrightTaskPage(page=page)
-    workspace_tabs = task_page.get_workspace_tabs()
-
-    workspace_tabs.first.click()
-    panel_a = task_page.get_browser_panel()
+    navigate_to_workspace(page, "State A")
+    panel_a = _open_browser_panel(page)
     panel_a.navigate(f"{base}/counter.html")
     for _ in range(3):
         panel_a.webview_evaluate("document.getElementById('increment').click()")
     assert panel_a.webview_evaluate("document.getElementById('counter').textContent") == "3"
 
-    workspace_tabs.last.click()
-    panel_b = task_page.get_browser_panel()
+    navigate_to_workspace(page, "State B")
+    panel_b = _open_browser_panel(page)
     panel_b.navigate(f"{base}/index.html")
 
-    workspace_tabs.first.click()
-    panel_a = task_page.get_browser_panel()
+    navigate_to_workspace(page, "State A")
+    panel_a = _open_browser_panel(page)
     assert panel_a.webview_evaluate("document.getElementById('counter').textContent") == "3"
 
 
@@ -452,39 +379,35 @@ def test_browser_panel_in_page_state_preserved_across_workspace_switch(
 def test_browser_panel_in_page_state_preserved_across_route_detour(
     sculptor_instance_: SculptorInstance,
     browser_panel_fixture_server_: BrowserPanelFixtureServer,
-    enable_browser_panel_: Callable[[], None],
 ) -> None:
     """In-page DOM state on a workspace's Browser panel must survive a
-    detour through a non-workspace route (e.g. /settings, /ws/new).  The
-    PageLayout element used by /ws/:workspaceID is a different React element
-    than the one used by /settings, so react-router unmounts the entire
-    workspace subtree on detour — taking the <webview> with it under the
-    current "mount-and-hide" approach.
+    detour through a non-workspace route (e.g. /settings, /ws/new).
+
+    The workspace route (/ws/:workspaceID) renders through the shell's route
+    Outlet, so navigating to a non-workspace route swaps the Outlet and
+    unmounts the workspace subtree — taking the <webview> with it under the
+    "mount-and-hide" approach and destroying its webContents.
 
     The user-observed reproducer: open a workspace's Browser panel, click
     "+ New Workspace" (route changes to /ws/new/<draftId>), then click back
-    to the original workspace.  In-page state is gone because the original
-    webContents was destroyed.
+    to the original workspace.  If the webview was destroyed, the in-page
+    state is gone.
     """
     page = sculptor_instance_.page
     base = browser_panel_fixture_server_.base_url
 
     start_task_and_wait_for_ready(sculptor_page=page, workspace_name="Detour A")
-    enable_browser_panel_()
 
-    task_page = PlaywrightTaskPage(page=page)
-    workspace_tabs = task_page.get_workspace_tabs()
-
-    workspace_tabs.first.click()
-    panel_a = task_page.get_browser_panel()
+    navigate_to_workspace(page, "Detour A")
+    panel_a = _open_browser_panel(page)
     panel_a.navigate(f"{base}/counter.html")
     for _ in range(3):
         panel_a.webview_evaluate("document.getElementById('increment').click()")
     assert panel_a.webview_evaluate("document.getElementById('counter').textContent") == "3"
 
-    task_page.get_settings_button().click()
+    navigate_to_settings_page(page)
     expect(page.get_by_test_id(ElementIDs.SETTINGS_NAV_GENERAL)).to_be_visible()
 
-    workspace_tabs.first.click()
-    panel_a = task_page.get_browser_panel()
+    navigate_to_workspace(page, "Detour A")
+    panel_a = _open_browser_panel(page)
     assert panel_a.webview_evaluate("document.getElementById('counter').textContent") == "3"

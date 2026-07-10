@@ -70,6 +70,27 @@ const deriveOptionalCliStatus = (info: DependencyInfo | undefined): DependencySt
   return { state: "installed", path: info.path ?? "—", version: info.version ?? "—", isOverride: info.isOverride };
 };
 
+const derivePiStatus = (
+  info: DependencyInfo | undefined,
+  isInstalling: boolean,
+  installError: string | null,
+): DependencyStatus => {
+  if (!info) return { state: "loading" };
+  if (isInstalling) return { state: "installing" };
+  if (installError) return { state: "error", message: installError };
+  if (!info.installed) return { state: "not-installed" };
+  if (info.isVersionInRange === false) {
+    return {
+      state: "wrong-version",
+      path: info.path ?? "—",
+      version: info.version ?? "—",
+      // pi pins one exact version (min == max), so show it bare rather than as a range.
+      requiredVersion: info.versionRange?.recommendedVersion ?? "unknown",
+    };
+  }
+  return { state: "installed", path: info.path ?? "—", version: info.version ?? "—", isOverride: info.isOverride };
+};
+
 type InstallationStepProps = {
   onComplete: () => void;
   isLoading: boolean;
@@ -102,6 +123,11 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
   const [ghAuthError, setGhAuthError] = useState<string | null>(null);
   const [isRechecking, setIsRechecking] = useState(false);
   const { startPolling, stopPolling } = usePollingInterval();
+  // pi's optional managed install runs on its own polling instance so it can't
+  // stomp the Claude install / gh auth poll (and vice versa).
+  const [isPiInstalling, setIsPiInstalling] = useState(false);
+  const [piInstallError, setPiInstallError] = useState<string | null>(null);
+  const { startPolling: startPiPolling, stopPolling: stopPiPolling } = usePollingInterval();
 
   const loadDependencies = useCallback(async (silent = false): Promise<void> => {
     try {
@@ -164,6 +190,60 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
       setIsInstalling(false);
     }
   }, [startPolling, stopPolling]);
+
+  const triggerPiInstall = useCallback(async (): Promise<void> => {
+    setIsPiInstalling(true);
+    setPiInstallError(null);
+    try {
+      // The managed copy is only used while pi's mode is MANAGED; a migrated
+      // config may pin a CUSTOM path, so opting in flips the mode back first.
+      if (dependencies?.pi?.mode === "CUSTOM") {
+        const { data: currentConfig } = await getUserConfig({ meta: { skipWsAck: true } });
+        if (currentConfig) {
+          await updateUserConfig({
+            body: {
+              userConfig: {
+                ...currentConfig,
+                dependencyPaths: { ...(currentConfig.dependencyPaths ?? {}), pi: "MANAGED" },
+              },
+            },
+            meta: { skipWsAck: true },
+          });
+        }
+      }
+      // Fire-and-forget install (see triggerInstall); completion is tracked by
+      // the poll below.
+      const response = await installDependency({ query: { tool: "PI" }, meta: { skipWsAck: true } });
+      if (!response.data?.success) {
+        setPiInstallError(response.data?.error ?? "Installation failed");
+        setIsPiInstalling(false);
+        return;
+      }
+      startPiPolling(async () => {
+        try {
+          const { data: newDeps } = await getDependenciesStatus();
+          setDependencies(newDeps);
+          if (newDeps?.pi?.installError) {
+            stopPiPolling();
+            setIsPiInstalling(false);
+            return;
+          }
+
+          // A PATH-fallback pi reports installed before the download finishes,
+          // so completion is the managed copy becoming the active binary.
+          if (newDeps?.pi?.source === "MANAGED" && !newDeps?.pi?.installProgress) {
+            stopPiPolling();
+            setIsPiInstalling(false);
+          }
+        } catch {
+          // Continue polling on error
+        }
+      });
+    } catch (err) {
+      setPiInstallError(err instanceof Error ? err.message : "Installation failed");
+      setIsPiInstalling(false);
+    }
+  }, [dependencies?.pi?.mode, startPiPolling, stopPiPolling]);
 
   const handleModeSwitch = async (newMode: string): Promise<void> => {
     try {
@@ -353,7 +433,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     return (): void => window.removeEventListener("keydown", handleKeyDown);
   });
 
-  const handleOverride = async (depKey: "claude" | "git" | "gh", path: string): Promise<void> => {
+  const handleOverride = async (depKey: "claude" | "git" | "gh" | "pi", path: string): Promise<void> => {
     const { data: currentConfig } = await getUserConfig({ meta: { skipWsAck: true } });
     if (!currentConfig) throw new Error("Config not loaded");
 
@@ -404,6 +484,20 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
         ? [{ label: "Use Managed", mode: "MANAGED" }]
         : undefined;
 
+  // The backend install error is process-lifetime; ignore it once the managed
+  // copy is the healthy active binary (a healthy PATH-fallback pi must not hide
+  // a failed managed download the user asked for).
+  const piInfo = dependencies?.pi;
+  const isPiManagedHealthy = piInfo?.source === "MANAGED" && piInfo.isVersionInRange !== false;
+  const backendPiInstallError = isPiManagedHealthy ? null : (piInfo?.installError ?? null);
+  const piStatus = derivePiStatus(piInfo, isPiInstalling, piInstallError ?? backendPiInstallError);
+  // A detected system-PATH pi is shown and used as-is; the expanded details
+  // still offer the managed, version-pinned download as an explicit opt-in.
+  const piModeControls =
+    piInfo?.installed && piInfo.source === "EXTERNAL" && !isPiInstalling
+      ? [{ label: "Install managed pi", mode: "MANAGED" }]
+      : undefined;
+
   return (
     <Flex direction="column" gap="2" data-testid={ElementIds.ONBOARDING_INSTALLATION_STEP}>
       <Text className={styles.titleText}>Let&apos;s get you set up</Text>
@@ -440,37 +534,41 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
         />
       </Flex>
 
-      {/* Optional CLI for cloning from GitHub. Hidden in web-remote mode since
-          the user can't install binaries on the backend host. */}
-      {canInstallOptionalClis && (
-        <>
-          <Text size="2" mt="2" color="gray">
-            Recommended for{" "}
-            <Tooltip
-              content={
-                <Flex direction="column" gap="2" style={{ maxWidth: 280 }}>
-                  <Text size="2" weight="medium">
-                    Sculptor uses gh (GitHub CLI) to:
-                  </Text>
-                  <Flex direction="column" gap="1">
-                    <Text size="1">• Create projects from your GitHub repos</Text>
-                    <Text size="1">• Create workspaces from your remote branches</Text>
-                    <Text size="1">• Warn when local and remote diverge</Text>
+      {/* Optional dependencies — onboarding continues without them. */}
+      <Text size="2" mt="2" color="gray" data-testid={ElementIds.ONBOARDING_OPTIONAL_DEPENDENCIES_HEADER}>
+        Optional
+      </Text>
+      <Flex direction="column" gap="3">
+        {/* Optional CLI for cloning from GitHub. Hidden in web-remote mode since
+            the user can't install binaries on the backend host. */}
+        {canInstallOptionalClis && (
+          <Flex direction="column" gap="1">
+            <Text size="1" color="gray">
+              Recommended for{" "}
+              <Tooltip
+                content={
+                  <Flex direction="column" gap="2" style={{ maxWidth: 280 }}>
+                    <Text size="2" weight="medium">
+                      Sculptor uses gh (GitHub CLI) to:
+                    </Text>
+                    <Flex direction="column" gap="1">
+                      <Text size="1">• Create projects from your GitHub repos</Text>
+                      <Text size="1">• Create workspaces from your remote branches</Text>
+                      <Text size="1">• Warn when local and remote diverge</Text>
+                    </Flex>
+                    <Button asChild size="1" variant="surface" mt="1">
+                      <a href="https://github.com/cli/cli#installation" target="_blank" rel="noreferrer">
+                        Read GitHub CLI docs
+                      </a>
+                    </Button>
                   </Flex>
-                  <Button asChild size="1" variant="surface" mt="1">
-                    <a href="https://github.com/cli/cli#installation" target="_blank" rel="noreferrer">
-                      Read GitHub CLI docs
-                    </a>
-                  </Button>
-                </Flex>
-              }
-            >
-              <Link href="https://github.com/cli/cli#installation" target="_blank" className={styles.inlineLink}>
-                GitHub
-              </Link>
-            </Tooltip>
-          </Text>
-          <Flex direction="column" gap="3">
+                }
+              >
+                <Link href="https://github.com/cli/cli#installation" target="_blank" className={styles.inlineLink}>
+                  GitHub
+                </Link>
+              </Tooltip>
+            </Text>
             <DependencyCard
               name="GitHub CLI"
               cliName="gh"
@@ -486,8 +584,32 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
               authError={displayedGhAuthError}
             />
           </Flex>
-        </>
-      )}
+        )}
+
+        {/* pi, Sculptor's optional second harness. A pi already on the PATH is
+            used as-is; Install downloads Sculptor's managed, version-pinned copy. */}
+        <Flex direction="column" gap="1">
+          <Text size="1" color="gray">
+            For the{" "}
+            <Link href="https://github.com/earendil-works/pi" target="_blank" className={styles.inlineLink}>
+              Pi
+            </Link>{" "}
+            harness — an alternative harness supporting many model providers
+          </Text>
+          <DependencyCard
+            name="Pi"
+            cliName="pi"
+            optional
+            status={piStatus}
+            installUrl="https://github.com/earendil-works/pi"
+            onInstall={() => void triggerPiInstall()}
+            onApplyOverride={(path) => handleOverride("pi", path)}
+            onModeSwitch={() => void triggerPiInstall()}
+            modeControls={piModeControls}
+            installProgress={dependencies?.pi?.installProgress ?? null}
+          />
+        </Flex>
+      </Flex>
 
       {error && (
         <Text size="2" color={dangerColor} className={styles.error}>

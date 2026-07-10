@@ -371,9 +371,9 @@ def parse_claude_code_json_lines(
         else:
             return None
 
-    # Skip system status messages (e.g. permission mode changes) that _simple doesn't handle.
-    # Allow background-task subtypes through for tracking; task_progress is silently
-    # dropped by the parser for now but must pass this filter to avoid noisy warnings.
+    # Skip system status messages (e.g. permission mode changes) that _simple
+    # doesn't handle. Background-task subtypes must pass this filter — they
+    # drive the background-task lifecycle and workflow progress tracking.
     if (
         isinstance(data, dict)
         and data.get("type") == "system"

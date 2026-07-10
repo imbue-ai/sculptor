@@ -42,6 +42,7 @@ import os
 import random
 import re
 import time
+from collections.abc import Callable
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -247,20 +248,14 @@ The user's request follows:
 # (ChatInput.tsx `wsTimeout`) so a wedged `new_session` fails rather than hanging the UI.
 _CLEAR_CONTEXT_TIMEOUT_SECONDS: float = 10.0
 
-# After a background/sub-agent completion, the extension wakes the agent with
-# `sendUserMessage`; Sculptor keeps the idle-drain alive this long to consume the
-# resulting reaction turn. Bounds the wait so a reaction that never arrives (the
-# wake-up errored) cannot keep the drain polling forever.
-_REACTION_WINDOW_SECONDS: float = 120.0
-
 # How long each blocking read of pi's stdout queue waits before the drain loop
 # re-checks shutdown / process-exit; small so an exit is noticed promptly.
 _STDOUT_QUEUE_POLL_SECONDS: float = 0.1
 
-# Input-queue wait between turns. While async tasks/reactions are pending, poll
-# briefly so their out-of-band completions surface promptly; when idle, wait
-# longer to avoid busy-polling (a new user message wakes the queue immediately
-# either way, and the longer wait bounds shutdown latency).
+# Input-queue wait between turns. While async tasks are pending, poll briefly so
+# their out-of-band completions surface promptly; when idle, wait longer to
+# avoid busy-polling (a new user message wakes the queue immediately either way,
+# and the longer wait bounds shutdown latency).
 _TASK_POLL_SECONDS: float = 0.1
 _IDLE_WAIT_SECONDS: float = 1.0
 
@@ -555,6 +550,22 @@ class _PiTransientTurnError(Exception):
         self.reason = reason
 
 
+@dataclass
+class _ReactionWakeMessage:
+    """A Sculptor-initiated reaction to a completed sub-agent / background task.
+
+    Enqueued on `_input_agent_messages` when a completion is surfaced, and
+    serviced by `_run_wake_turn` as an ordinary prompt turn. Deliberately NOT a
+    `Message` union member: the wake is internal scheduling, not user chat, and
+    it must never reach pi through any channel but this FIFO — Sculptor is the
+    only turn-initiator. A pi-side wake-up (`sendUserMessage`) queues into an
+    in-flight run and defers `agent_end`, the wrapper's sole turn boundary,
+    starving queued user messages (SCU-1776).
+    """
+
+    text: str
+
+
 class PiAgent(DefaultAgentWrapper):
     # Narrows the inherited `harness: Harness` field — the registry owns
     # construction, so no agent↔harness import cycle exists.
@@ -562,12 +573,25 @@ class PiAgent(DefaultAgentWrapper):
     harness: PiHarness
     config: PiAgentConfig
     git_hash: str
-    # Carries chat turns AND between-turns control messages (context reset,
-    # model switch) through one FIFO so each runs strictly after any in-flight
-    # turn — the sole-reader window where the control RPCs' responses can be
-    # consumed safely (see _process_message_queue).
+    # The switcher's persisted value at construction (`AgentTaskStateV2.current_model`).
+    # A user can switch models before the first message — before this pi process
+    # exists — so the switch lands only in task state, not in pi's session. `start()`
+    # adopts it (`_adopt_preselected_model`) so pi runs the selected model from the
+    # first turn and the switcher does not flicker back to pi's own default. None when
+    # the switcher has no persisted selection yet (pi's default is used).
+    preselected_model: ModelOption | None = None
+    # Carries chat turns, between-turns control messages (context reset, model
+    # switch), AND Sculptor-initiated reaction wakes through one FIFO so each
+    # runs strictly after any in-flight turn — the sole-reader window where the
+    # control RPCs' responses can be consumed safely (see
+    # _process_message_queue). One FIFO is the SCU-1776 serialization guarantee:
+    # a user message queued before a completion's wake is serviced first.
     _input_agent_messages: Queue[
-        ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage | RefreshModelsUserMessage
+        ChatInputUserMessage
+        | ClearContextUserMessage
+        | SetModelUserMessage
+        | RefreshModelsUserMessage
+        | _ReactionWakeMessage
     ] = PrivateAttr(default_factory=Queue)
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
     _message_processing_thread: ObservableThread | None = PrivateAttr(default=None)
@@ -640,12 +664,6 @@ class PiAgent(DefaultAgentWrapper):
     # protects both task dicts).
     _subagent_tasks: dict[str, tuple[int, ...]] = PrivateAttr(default_factory=dict)
     _background_tasks_lock: Lock = PrivateAttr(default_factory=Lock)
-    # Count of surfaced completions whose auto-resume reaction turn (the
-    # extension's `sendUserMessage`) has not yet been consumed, with a deadline.
-    # Keeps the idle-drain alive to catch the reaction. Mutated only on the
-    # message-processing thread.
-    _awaiting_reaction_count: int = PrivateAttr(default=0)
-    _awaiting_reaction_deadline: float = PrivateAttr(default=0.0)
     # The curated model catalog surfaced at start (`_fetch_models_into_state`),
     # cached so a `set_model` switch can re-emit it with the new current model in
     # its `ModelsAvailableAgentMessage` carrier. Set and read on the
@@ -802,6 +820,7 @@ class PiAgent(DefaultAgentWrapper):
                     request_id=message.for_user_message_id,
                     error=None,
                     interrupted=True,
+                    turn_abandoned=True,
                 )
             )
             return True
@@ -1170,14 +1189,18 @@ class PiAgent(DefaultAgentWrapper):
 
     def _reselect_unauthenticated_current_model(
         self, current_model: ModelOption, curated: list[ModelOption], authenticated: set[str]
-    ) -> ModelOption:
+    ) -> ModelOption | None:
         """Switch off a current model whose provider is no longer authenticated.
 
         pi's catalog gates on credential presence, so disconnecting a provider can
         leave the agent pointed at a model it can no longer run — and because the
         current model is retained in `curated`, the switcher otherwise stays stuck on
         it. If an authenticated model is available, switch to the first (newest-first)
-        one so the user is not stranded. Best-effort: a failed switch leaves the
+        one so the user is not stranded. If none is available (the user disconnected
+        their only provider), return `None` to drop the selection: the catalog then
+        curates to `[]` and the switcher reaches its "no usable model" empty state
+        rather than offering a single model that cannot run — the composer's send-guard
+        routes the user to authenticate. Best-effort: a failed switch leaves the
         current model unchanged. Only call when `current_model.provider` is already
         known to be unauthenticated, and only after a successful catalog fetch (so pi
         is proven responsive and the `set_model` write will not block).
@@ -1185,10 +1208,10 @@ class PiAgent(DefaultAgentWrapper):
         replacement = next((option for option in curated if option.provider in authenticated), None)
         if replacement is None:
             logger.info(
-                "PiAgent current model {} is no longer authenticated and no authenticated model is available to switch to",
+                "PiAgent current model {} is no longer authenticated and no authenticated model is available; dropping the selection so the switcher shows the empty state",
                 current_model.model_id,
             )
-            return current_model
+            return None
         new_model = self._request_set_model_blocking(replacement.provider, replacement.model_id)
         if new_model is None:
             logger.info(
@@ -1202,6 +1225,43 @@ class PiAgent(DefaultAgentWrapper):
         )
         return new_model
 
+    def _adopt_preselected_model(
+        self, pi_default: ModelOption | None, options: list[ModelOption], authenticated: set[str]
+    ) -> ModelOption | None:
+        """Adopt the persisted `preselected_model` onto pi at start, returning the model
+        to surface as current.
+
+        Applied before the catalog is surfaced so pi runs the selection from the first
+        turn without the switcher flickering through pi's default. Only a selection pi
+        still offers and whose provider is authenticated is adopted (via `set_model`);
+        otherwise — a disconnected provider, or a failed switch — pi's own default is
+        kept rather than a model that cannot run.
+        """
+        preselected = self.preselected_model
+        if preselected is None:
+            return pi_default
+        if (
+            pi_default is not None
+            and preselected.provider == pi_default.provider
+            and preselected.model_id == pi_default.model_id
+        ):
+            return pi_default
+        if preselected.provider not in authenticated:
+            return pi_default
+        if not any(
+            option.provider == preselected.provider and option.model_id == preselected.model_id for option in options
+        ):
+            return pi_default
+        adopted = self._request_set_model_blocking(
+            preselected.provider, preselected.model_id, _MODEL_FETCH_TIMEOUT_SECONDS
+        )
+        if adopted is None:
+            logger.info(
+                "PiAgent could not adopt preselected model {} at start; using pi default", preselected.model_id
+            )
+            return pi_default
+        return adopted
+
     def _fetch_models_into_state(self) -> None:
         """Fetch pi's model catalog + current model and surface them onto task state.
 
@@ -1209,8 +1269,9 @@ class PiAgent(DefaultAgentWrapper):
         queue, before the message thread starts), maps the raw Model dicts to
         `ModelOption`s, curates them (`_curate_models`), and emits a
         `ModelsAvailableAgentMessage` the run-agent handler maps onto
-        `AgentTaskStateV2.available_models` / `current_model`. Best-effort: an empty
-        catalog leaves the switcher to the frontend's built-in fallback list.
+        `AgentTaskStateV2.available_models` / `current_model`. An empty catalog (no
+        authenticated providers) is emitted as `[]`, driving the pi switcher's
+        "no usable model" empty state — not the built-in Claude fallback list.
         """
         raw_models = self._request_available_models_blocking()
         state = self._request_state_blocking()
@@ -1222,6 +1283,7 @@ class PiAgent(DefaultAgentWrapper):
             if option is not None:
                 options.append(option)
         authenticated = compute_authenticated_provider_ids()
+        current_model = self._adopt_preselected_model(current_model, options, authenticated)
         curated = _curate_models(options, current_model, authenticated)
         # Don't strand the agent on a model whose provider was just deauthorized
         # (e.g. the user disconnected it): switch to an authenticated model and
@@ -1230,11 +1292,10 @@ class PiAgent(DefaultAgentWrapper):
         if current_model is not None and current_model.provider not in authenticated:
             current_model = self._reselect_unauthenticated_current_model(current_model, curated, authenticated)
             curated = _curate_models(options, current_model, authenticated)
-        if not curated and current_model is None:
-            logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
-            return
-        # Cache the catalog so a later set_model can re-emit it with the new
-        # current model.
+        # Cache the catalog so a later set_model can re-emit it with the new current
+        # model. An empty catalog (no authenticated providers) is emitted too, so the
+        # pi switcher reaches its "no usable model" empty state instead of falling back
+        # to the built-in Claude list — and a live credential-change refresh updates it.
         self._available_models = tuple(curated)
         self._output_messages.put(
             ModelsAvailableAgentMessage(
@@ -1331,9 +1392,21 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model, compute_authenticated_provider_ids())
+        authenticated = compute_authenticated_provider_ids()
+        # Drop a selected model whose provider is no longer authenticated when nothing
+        # authenticated remains to fall back to: the switcher must reach its empty
+        # "no usable model" state, not offer a single model that cannot run. (When an
+        # authenticated model does remain, the read-only probe leaves the switch to the
+        # start-time reselect in `_fetch_models_into_state`, which can `set_model`.)
+        if (
+            current_model is not None
+            and current_model.provider not in authenticated
+            and not any(option.provider in authenticated for option in options)
+        ):
+            current_model = None
+        curated = _curate_models(options, current_model, authenticated)
         if not curated and current_model is None:
-            logger.info("PiAgent model probe found no usable models; switcher will fall back to defaults")
+            logger.info("PiAgent model probe found no usable models; switcher shows the empty state")
             return [], None
         logger.info(
             "PiAgent model probe fetched {} model(s); current model={}",
@@ -1502,32 +1575,17 @@ class PiAgent(DefaultAgentWrapper):
                 # _handle_refresh_models).
                 self._handle_refresh_models(message)
                 continue
+            if isinstance(message, _ReactionWakeMessage):
+                # A completion's Sculptor-initiated reaction: an ordinary prompt
+                # turn in its own request cycle, FIFO-serialized behind any
+                # user message queued before it (see _ReactionWakeMessage).
+                self._run_wake_turn(message)
+                continue
             self._run_prompt_turn(message)
 
     def _has_background_tasks(self) -> bool:
         with self._background_tasks_lock:
-            if self._background_tasks or self._subagent_tasks:
-                return True
-        return self._is_awaiting_reaction()
-
-    def _is_awaiting_reaction(self) -> bool:
-        """True while a completion's auto-resume reaction turn is still expected.
-
-        Bounded by a deadline so a reaction that never arrives (the wake-up
-        errored) cannot keep the idle-drain polling forever.
-        """
-        if self._awaiting_reaction_count <= 0:
-            return False
-        if time.monotonic() >= self._awaiting_reaction_deadline:
-            self._awaiting_reaction_count = 0
-            return False
-        return True
-
-    def _note_awaiting_reaction(self) -> None:
-        """Record a surfaced completion so the idle-drain stays alive to consume the
-        reaction turn the extension triggers via `sendUserMessage`."""
-        self._awaiting_reaction_count += 1
-        self._awaiting_reaction_deadline = time.monotonic() + _REACTION_WINDOW_SECONDS
+            return bool(self._background_tasks or self._subagent_tasks)
 
     def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
         # Track this turn's request id so an interrupt arriving with no turn in
@@ -1538,34 +1596,72 @@ class PiAgent(DefaultAgentWrapper):
         self._update_plan_mode_from_message(message)
         self._ensure_diff_baseline()
         with self._handle_user_message(message):
-            # A fresh turn starts un-interrupted: clear interrupt state left by an
-            # interrupt that raced in with no turn in flight, which would otherwise
-            # mis-mark this turn as interrupted.
+            self._drive_turn(lambda prompt_id: self._build_prompt_payload(prompt_id, message))
+
+    def _run_wake_turn(self, wake: _ReactionWakeMessage) -> None:
+        """Run a completion's Sculptor-initiated reaction as its own request cycle.
+
+        The wake is an ordinary prompt turn through the SAME lifecycle as a user
+        turn (`_drive_turn`), so interrupts and transient retries behave
+        identically. It differs only in its payload (the bare wake text) and its
+        failure policy: the wake is not a reply to any user message, so a
+        turn-level failure (`PiCrashError` / exhausted-retry
+        `AgentTransientError`) is logged and resolves the cycle
+        `interrupted=True` instead of tearing down the agent.
+        """
+        request_id = AgentMessageID()
+        self._in_flight_request_id = request_id
+        self._ensure_diff_baseline()
+        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
+        turn_failed = False
+        try:
+            self._drive_turn(lambda prompt_id: {"type": "prompt", "id": prompt_id, "message": wake.text})
+        except (PiCrashError, AgentTransientError) as error:
+            logger.info("PiAgent reaction wake turn failed: {}", error)
+            turn_failed = True
+        finally:
+            was_interrupted = self._was_interrupted.is_set()
             self._was_interrupted.clear()
+            self._output_messages.put(
+                RequestSuccessAgentMessage(
+                    message_id=AgentMessageID(),
+                    request_id=request_id,
+                    interrupted=turn_failed or was_interrupted,
+                )
+            )
+
+    def _drive_turn(self, build_payload: Callable[[str], dict[str, Any]]) -> None:
+        """One turn lifecycle, shared by user turns and reaction wake turns.
+
+        Owns the interrupt-state machine around a single prompt→agent_end cycle:
+        a fresh turn starts un-interrupted (clearing state left by an interrupt
+        that raced in with no turn in flight, which would otherwise mis-mark this
+        turn as interrupted), `_turn_in_flight` gates the interrupt escalation,
+        and on exit — success or failure — escalation stands down and any
+        backchannel answer delivered mid-turn is finalized (its RequestSuccess
+        was deferred so the post-answer content reached the frontend first;
+        mirrors Claude).
+        """
+        self._was_interrupted.clear()
+        self._interrupt_pending.clear()
+        self._cancel_interrupt_escalation()
+        self._turn_in_flight.set()
+        turn_failed = False
+        try:
+            self._consume_turn_with_transient_retry(build_payload)
+        except BaseException:
+            turn_failed = True
+            raise
+        finally:
+            # Turn over: stand down escalation and drop interrupt-pending so a
+            # late grace-window thread can't SIGTERM the next turn's pi.
+            self._turn_in_flight.clear()
             self._interrupt_pending.clear()
             self._cancel_interrupt_escalation()
-            self._turn_in_flight.set()
-            turn_failed = False
-            try:
-                self._consume_turn_with_transient_retry(message)
-            except BaseException:
-                turn_failed = True
-                raise
-            finally:
-                # Turn over: stand down escalation and drop interrupt-pending so a
-                # late grace-window thread can't SIGTERM the next turn's pi.
-                self._turn_in_flight.clear()
-                self._interrupt_pending.clear()
-                self._cancel_interrupt_escalation()
-                # Finalize any backchannel answer delivered mid-turn (its
-                # RequestSuccess was deferred to here so the post-answer content
-                # reached the frontend first). Runs on the failure path too, so the
-                # answer's request resolves instead of pinning the frontend
-                # "thinking" (mirrors Claude).
-                self._finalize_pending_answers(interrupted=turn_failed)
+            self._finalize_pending_answers(interrupted=turn_failed)
 
-    def _consume_turn_with_transient_retry(self, message: ChatInputUserMessage) -> None:
-        """Drive one user turn, retrying KNOWN-TRANSIENT provider failures with backoff.
+    def _consume_turn_with_transient_retry(self, build_payload: Callable[[str], dict[str, Any]]) -> None:
+        """Drive one turn, retrying KNOWN-TRANSIENT provider failures with backoff.
 
         A turn whose assistant run ends in a transient provider error
         (`_PiTransientTurnError` — overloaded / rate-limit / 5xx / timeout) is
@@ -1578,7 +1674,7 @@ class PiAgent(DefaultAgentWrapper):
         instead of `PiCrashError`. A non-transient error still raises `PiCrashError`
         from the dispatcher and is not retried here.
         """
-        payload = self._build_prompt_payload(generate_id(), message)
+        payload = build_payload(generate_id())
         attempt = 0
         while True:
             self._send_rpc(payload)
@@ -1766,9 +1862,11 @@ class PiAgent(DefaultAgentWrapper):
         session-level and persists for later turns. On success pi returns the new
         Model; we re-emit a `ModelsAvailableAgentMessage` carrier (same catalog,
         new current model) so the persisted current model and the switcher's
-        selection follow. A `success:false` response (e.g. `Model not found`) or
-        no acknowledgement is raised as `PiSetModelError`, leaving the current
-        model unchanged.
+        selection follow. A `success:false` response (e.g. `Model not found`) is
+        raised as `PiSetModelError` after rolling the switcher back to pi's real
+        current model (the endpoint wrote the requested model optimistically); an
+        unacknowledged switch (pi unreachable) is raised without a rollback, since pi
+        cannot be queried for its state.
         """
         with self._handle_user_message(message):
             command_id = generate_id()
@@ -1783,6 +1881,7 @@ class PiAgent(DefaultAgentWrapper):
                     "pi did not acknowledge set_model within the timeout", exit_code=None, metadata=None
                 )
             if not response.success:
+                self._emit_current_model_rollback()
                 raise PiSetModelError(
                     response.error or f"pi rejected set_model for {message.provider}/{message.model_id}",
                     exit_code=None,
@@ -1809,6 +1908,31 @@ class PiAgent(DefaultAgentWrapper):
                 )
             )
 
+    def _emit_current_model_rollback(self) -> None:
+        """Re-emit the model pi is actually on, undoing an optimistically-written switch.
+
+        The set-model endpoint writes the requested model onto task state before pi
+        confirms it, so a rejected switch would otherwise leave the switcher showing a
+        model pi never adopted. Query pi's real current model and re-emit the cached
+        catalog with it so the switcher rolls back. Best-effort: only runs with a
+        cached catalog, and skips when pi reports no current model — the switch
+        failure itself is surfaced separately as a RequestFailure.
+        """
+        if not self._available_models:
+            return
+        state = self._request_state_blocking()
+        current_raw = state.get("model") if isinstance(state, dict) else None
+        current_model = _model_option_from_pi(current_raw) if isinstance(current_raw, dict) else None
+        if current_model is None:
+            return
+        self._output_messages.put(
+            ModelsAvailableAgentMessage(
+                message_id=AgentMessageID(),
+                available_models=self._available_models,
+                current_model=current_model,
+            )
+        )
+
     def _handle_refresh_models(self, message: RefreshModelsUserMessage) -> None:
         """Re-fetch pi's catalog and re-emit it after a global credential change.
 
@@ -1816,8 +1940,9 @@ class PiAgent(DefaultAgentWrapper):
         where `get_available_models` / `get_state` are safe. Reuses
         `_fetch_models_into_state` so the authenticated-set filter applied inside
         that shared path applies here for free. Best-effort and fire-and-forget: a
-        re-fetch that finds nothing leaves the cached catalog as-is rather than
-        blanking it.
+        re-fetch that finds no usable model (e.g. the user disconnected their last
+        provider) emits an empty catalog, so the switcher reaches its empty state
+        live rather than clinging to a now-unusable model.
         """
         del message
         self._fetch_models_into_state()
@@ -2331,6 +2456,10 @@ class PiAgent(DefaultAgentWrapper):
                 summary=_format_subagent_completion(completion),
             )
         )
+        # Schedule the Sculptor-initiated reaction turn: same rendering as the
+        # notification (one completion fact, one presentation), FIFO-serialized
+        # behind any user message queued before this completion (SCU-1776).
+        self._input_agent_messages.put(_ReactionWakeMessage(text=_format_subagent_completion(completion)))
 
     def _emit_subagent_completion_out_of_band(self, completion: SubagentCompletion) -> None:
         """Surface a sub-agent completion that arrived between turns, live.
@@ -2418,6 +2547,10 @@ class PiAgent(DefaultAgentWrapper):
                 content=summary_blocks,
             )
         )
+        # Schedule the Sculptor-initiated reaction turn: same rendering as the
+        # summary block above (one completion fact, one presentation),
+        # FIFO-serialized behind any queued user message (SCU-1776).
+        self._input_agent_messages.put(_ReactionWakeMessage(text=_format_background_completion(completion)))
 
     def _emit_background_completion_out_of_band(self, completion: BackgroundTaskCompletion) -> None:
         """Surface a background completion that arrived between turns, live.
@@ -2437,15 +2570,19 @@ class PiAgent(DefaultAgentWrapper):
             )
 
     def _drain_idle_background_events(self) -> None:
-        """Between turns, surface task completions and consume any auto-resume turn.
+        """Between turns, surface task completions from pi's stdout.
 
         Sculptor drains pi's stdout only during a turn, so a completion `notify`
-        (and the reaction turn the extension triggers via `sendUserMessage`) firing
-        while the user is idle would otherwise sit unseen. While a task is in flight
-        — or a completion is awaiting its reaction turn — `_process_message_queue`
-        calls this between user messages: a completion is surfaced out-of-band, and a
-        pi-initiated turn (the auto-resume reaction) is consumed in its own request
-        cycle. Runs on the message-processing thread (the sole stdout reader).
+        firing while the user is idle would otherwise sit unseen. While a task is
+        in flight, `_process_message_queue` calls this between user messages: a
+        completion is surfaced out-of-band, and its `_handle_*_completion` seam
+        enqueues the Sculptor-initiated reaction wake on the input FIFO. Runs on
+        the message-processing thread (the sole stdout reader).
+
+        Pi never self-starts a run: Sculptor is the only turn-initiator (the
+        extensions report completions via notify only, and `--no-extensions -e
+        <pinned>` keeps foreign extensions out), so an `agent_start` seen here is
+        a protocol violation — logged loud, not consumed.
         """
         process = self._process
         if process is None:
@@ -2469,44 +2606,16 @@ class PiAgent(DefaultAgentWrapper):
                 continue
             parsed = parse_rpc_message(event)
             if isinstance(parsed, ParsedAgentStart):
-                # The extension woke the agent (`sendUserMessage`) after a completion;
-                # consume its reaction turn in its own request cycle.
-                self._awaiting_reaction_count = max(0, self._awaiting_reaction_count - 1)
-                self._consume_reaction_turn()
+                logger.error("PiAgent saw a pi-initiated agent_start between turns — protocol violation")
                 continue
             if isinstance(parsed, ExtensionUiRequest) and parsed.method == "notify":
                 completion = parse_background_completion(parsed.message)
                 if completion is not None:
                     self._emit_background_completion_out_of_band(completion)
-                    self._note_awaiting_reaction()
                     continue
                 sub_completion = parse_subagent_completion(parsed.message)
                 if sub_completion is not None:
                     self._emit_subagent_completion_out_of_band(sub_completion)
-                    self._note_awaiting_reaction()
-
-    def _consume_reaction_turn(self) -> None:
-        """Consume a pi-initiated turn — the auto-resume reaction the extension
-        triggered via `sendUserMessage` on completion — in its own request cycle so
-        it renders as a standalone assistant turn. The triggering `agent_start` has
-        already been read; `_consume_until_turn_end` consumes the rest through
-        `agent_end`. A turn-level failure is logged, not raised: an auto-resume
-        reaction must not tear down the session.
-        """
-        request_id = AgentMessageID()
-        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
-        self._turn_in_flight.set()
-        interrupted = False
-        try:
-            self._consume_until_turn_end()
-        except PiCrashError as error:
-            logger.info("PiAgent auto-resume reaction turn failed: {}", error)
-            interrupted = True
-        finally:
-            self._turn_in_flight.clear()
-            self._output_messages.put(
-                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=interrupted)
-            )
 
     def _cancel_all_background_tasks(self) -> None:
         """SIGTERM every still-running background and sub-agent child by signalling its process group.
@@ -2718,15 +2827,14 @@ class PiAgent(DefaultAgentWrapper):
             completion = parse_background_completion(parsed.message)
             if completion is not None:
                 # A task that completes while a user turn is in flight is reconciled
-                # into that turn; the reaction the extension triggers (deliverAs
-                # "followUp") runs after this turn and is consumed by the idle-drain.
+                # into that turn; the completion seam enqueues the Sculptor-initiated
+                # reaction wake, serviced from the FIFO after this turn (and any
+                # earlier-queued user messages).
                 self._handle_background_completion(completion)
-                self._note_awaiting_reaction()
                 return
             sub_completion = parse_subagent_completion(parsed.message)
             if sub_completion is not None:
                 self._handle_subagent_completion(sub_completion)
-                self._note_awaiting_reaction()
                 return
             logger.debug("PiAgent ignoring non-task notify extension_ui_request")
             return

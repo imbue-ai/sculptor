@@ -389,6 +389,32 @@ def scroll_alpha_chat_by(page: Page, delta: int) -> None:
     )
 
 
+def scroll_test_id_into_chat_viewport(page: Page, test_id: str, *, top_margin: int = 120) -> None:
+    """Scroll the alpha chat so the first element with ``test_id`` sits
+    ``top_margin`` px below the scroll container's top edge.
+
+    This positions the element fully inside the viewport for a subsequent
+    :func:`click_visible_in_chat_viewport` (which refuses to scroll-into-view),
+    without assuming anything about how tall the surrounding content renders — a
+    fixed pixel delta from the bottom is not robust to content whose height
+    varies (e.g. tables that wrap vs. scroll). Fires a ``scroll`` event so the
+    chat's scroll listeners run, mirroring a real user scroll.
+    """
+    page.evaluate(
+        f"""({{ testId, topMargin }}) => {{
+        const container = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        const el = container && container.querySelector('[data-testid="' + testId + '"]');
+        if (!container || !el) throw new Error("cannot scroll " + testId + " into view: not found");
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        container.dispatchEvent(new Event('wheel'));
+        container.scrollTop += (eRect.top - cRect.top) - topMargin;
+        container.dispatchEvent(new Event('scroll'));
+    }}""",
+        {"testId": test_id, "topMargin": top_margin},
+    )
+
+
 def click_visible_in_chat_viewport(page: Page, test_id: str) -> None:
     """Dispatch a synthetic click on the first element with ``test_id`` that is
     fully inside the alpha chat scroll viewport.
@@ -417,26 +443,6 @@ def click_visible_in_chat_viewport(page: Page, test_id: str) -> None:
     )
 
 
-class PlaywrightDebugChatViewElement(PlaywrightIntegrationTestElement):
-    """Page Object Model for the debug chat view."""
-
-    def get_blocks(self) -> Locator:
-        """Get all block entries in the debug view."""
-        return self.get_by_test_id(ElementIDs.DEBUG_CHAT_BLOCK)
-
-
-def switch_to_debug_view(page: Page, agent_tab_name: str = "Claude 1") -> None:
-    """Toggle debug view on for an agent via the tab context menu.
-
-    Right-clicks the agent tab, opens the Diagnostics submenu, and clicks
-    the Debug View toggle.
-    """
-    tab = page.get_by_role("tab", name=agent_tab_name)
-    tab.click(button="right")
-    page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DIAGNOSTICS).click()
-    page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DEBUG_VIEW).click()
-
-
 def get_intro_bottom_offset(page: Page) -> float:
     """Return the intro block's bottom edge relative to the scroll container's top.
 
@@ -456,9 +462,3 @@ def get_alpha_chat_view(page: Page) -> PlaywrightAlphaChatViewElement:
     """Get the alpha chat view element from the page."""
     locator = page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)
     return PlaywrightAlphaChatViewElement(locator=locator, page=page)
-
-
-def get_debug_chat_view(page: Page) -> PlaywrightDebugChatViewElement:
-    """Get the debug chat view element from the page."""
-    locator = page.get_by_test_id(ElementIDs.DEBUG_CHAT_VIEW)
-    return PlaywrightDebugChatViewElement(locator=locator, page=page)

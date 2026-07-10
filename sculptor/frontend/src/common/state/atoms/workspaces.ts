@@ -1,12 +1,18 @@
 import type { Atom, PrimitiveAtom } from "jotai";
 import { atom } from "jotai";
-import { atomFamily, atomWithStorage, createJSONStorage } from "jotai/utils";
+import { atomFamily, atomWithStorage, createJSONStorage, selectAtom } from "jotai/utils";
+import { isEqual } from "lodash";
 
 import type { Workspace } from "../../../api";
 import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../../../api";
+import type { WorkspaceDotStatus } from "../../../components/statusDot/statusUtils.ts";
+import { computeWorkspaceDotStatus } from "../../../components/statusDot/statusUtils.ts";
 import { ToastType } from "../../../components/Toast.tsx";
 import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../../queryClient.ts";
+import { tasksArrayAtom } from "./tasks.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
+import { getAgentDotStatusWithUnreadOverride } from "./unreadOverrides.ts";
+import { viewedAgentIdAtom } from "./viewedAgent.ts";
 import type { SetupStatusSnapshot } from "./workspaceSetupStatus";
 import { workspaceSetupStatusAtomFamily } from "./workspaceSetupStatus";
 
@@ -15,6 +21,16 @@ export const workspaceAtomFamily = atomFamily<string, PrimitiveAtom<Workspace | 
 );
 
 export const workspaceIdsAtom = atom<ReadonlyArray<string> | undefined>(undefined);
+
+/**
+ * Whether this session has ever seen a non-empty workspace list. Latched by
+ * `updateWorkspacesAtom` (its only writer) and never cleared. Gates the home
+ * page's first-run create offer: the offer is an onboarding affordance for a
+ * boot with zero workspaces, so once any workspace has existed this session,
+ * emptying the list again (deleting the last workspace) must not re-open the
+ * dialog over Home.
+ */
+export const hasEverHadWorkspacesAtom = atom<boolean>(false);
 
 /**
  * Tracks workspace IDs that have been optimistically deleted in the current
@@ -35,6 +51,56 @@ export const workspacesArrayAtom = atom<ReadonlyArray<Workspace> | undefined>((g
 });
 
 /**
+ * Whether `workspaceId` is present in the loaded workspace list — `undefined`
+ * while the first workspace snapshot hasn't arrived. Returns a primitive so
+ * subscribers (e.g. the workspace page's stale-workspace redirect) are not
+ * re-rendered when the ids array is rebuilt with the same membership.
+ */
+export const isWorkspaceKnownAtomFamily = atomFamily<string, Atom<boolean | undefined>>((workspaceId) =>
+  atom((get) => {
+    const ids = get(workspaceIdsAtom);
+    return ids === undefined ? undefined : ids.includes(workspaceId);
+  }),
+);
+
+const areWorkspaceDotStatusesEqual = (a: WorkspaceDotStatus, b: WorkspaceDotStatus): boolean =>
+  a.hasError === b.hasError &&
+  a.hasWaiting === b.hasWaiting &&
+  a.hasRunning === b.hasRunning &&
+  a.isAllError === b.isAllError &&
+  a.hasUnread === b.hasUnread;
+
+/**
+ * The aggregated status-dot state of one workspace's agent tasks.
+ * `tasksArrayAtom` rebuilds its array on EVERY per-task update (streaming
+ * ticks included), so the slice is equality-guarded: subscribers — one
+ * sidebar workspace row each — re-render only when their workspace's
+ * aggregate flags actually flip.
+ */
+export const workspaceDotStatusAtomFamily = atomFamily((workspaceId: string) =>
+  selectAtom(
+    // Pair the tasks with the viewed agent id so the aggregate re-derives when
+    // either changes. viewedAgentIdAtom resolves to a primitive, so layout
+    // writes that don't change WHICH agent is viewed never reach the selector,
+    // and the equality guard below still stops propagation unless a flag flips.
+    atom((get) => ({ tasks: get(tasksArrayAtom), viewedAgentId: get(viewedAgentIdAtom) })),
+    ({ tasks, viewedAgentId }): WorkspaceDotStatus =>
+      computeWorkspaceDotStatus(
+        (tasks ?? []).filter((task) => task.workspaceId === workspaceId),
+        // Override-aware per-task resolution so a manual "Mark as unread"
+        // lights the workspace row exactly like the agent's panel tab. The
+        // viewed agent — necessarily one of the ACTIVE workspace's tasks, so
+        // the id match scopes it for free — counts as focused: its content is
+        // on screen, so it must not light the row as unread while the debounced
+        // mark-read lags (an explicit mark-unread override still wins inside
+        // the helper).
+        (task) => getAgentDotStatusWithUnreadOverride(task.id, task, task.id === viewedAgentId),
+      ),
+    areWorkspaceDotStatusesEqual,
+  ),
+);
+
+/**
  * IDs of workspaces the backend considers open, derived from workspace models.
  * This is the source of truth for the open/closed SET — the backend owns it.
  */
@@ -44,7 +110,7 @@ const openWorkspaceIdsAtom = atom<ReadonlyArray<string>>((get) => {
   return workspaces.filter((ws) => ws.isOpen !== false).map((ws) => ws.objectId);
 });
 
-/** Sentinel `activeIndex` meaning "no MRU pointer" — rootLoader sends user to /ws/new. */
+/** Sentinel `activeIndex` meaning "no MRU pointer" — rootLoader falls back to /home. */
 export const INVALID_ACTIVE_INDEX = -1;
 
 export type TabEntry = { tabId: string; agentId: string | null };
@@ -153,10 +219,7 @@ const hasHydratedWorkspaceTabsAtom = atom<boolean>(false);
 
 /** Check whether a tab ID is a pseudo-tab (not a real workspace ID). */
 const isPseudoTabId = (id: string): boolean =>
-  id === "__settings__" ||
-  id === "__component_gallery__" ||
-  id === "__home__" ||
-  id.startsWith(NEW_WORKSPACE_TAB_PREFIX);
+  id === "__settings__" || id === "__home__" || id.startsWith(NEW_WORKSPACE_TAB_PREFIX);
 
 const applyClose = (state: TabsState, tabId: string): TabsState => {
   const removedIndex = state.order.findIndex((e) => e.tabId === tabId);
@@ -167,8 +230,8 @@ const applyClose = (state: TabsState, tabId: string): TabsState => {
     // The active tab was closed. Land on the neighbor that shifted into its
     // slot (or the new last tab if we removed the end) so the persisted state
     // never points past the end — order[INVALID_ACTIVE_INDEX] is undefined, and
-    // on reload rootLoader reads that as "no MRU pointer" and bounces to
-    // /ws/new even though tabs survive. A subsequent navigation may refine this
+    // on reload rootLoader reads that as "no MRU pointer" and falls back to
+    // /home even though tabs survive. A subsequent navigation may refine this
     // to an MRU target; this only guarantees the pointer is always valid.
     // Only when nothing survives do we fall back to the sentinel.
     activeIndex = order.length > 0 ? Math.min(removedIndex, order.length - 1) : INVALID_ACTIVE_INDEX;
@@ -248,8 +311,8 @@ export const clearDraftCreatingAtom = atom(null, (get, set, draftId: string): vo
  *   - Stale WebSocket snapshots arriving after the close (e.g. from a slower,
  *     earlier open PATCH whose response is reordered behind the close ack)
  *     can't revert the workspace back to open.
- *   - The "Closed" pill stays stable instead of flickering as out-of-order
- *     SUs land.
+ *   - The workspace's closed state stays stable — it doesn't flicker back
+ *     into the open-tab set as out-of-order snapshot updates land.
  *
  * `updateWorkspacesAtom` consults this set and forces incoming `isOpen=true`
  * snapshots to `false` for any workspace in here. Entries are cleared by:
@@ -340,24 +403,6 @@ export const effectiveOpenTabIdsAtom = atom<Array<string>>((get) => {
 });
 
 /**
- * IDs of workspaces that exist but are closed (is_open=false on the backend),
- * plus any with a close request in flight. Including pending-close IDs makes
- * the ClosedWorkspacesPill appear instantly on close and stay stable through
- * any stale isOpen=true snapshot that arrives before the ack (SCU-455).
- */
-export const closedWorkspaceIdsAtom = atom<Array<string>>((get) => {
-  const workspaces = get(workspacesArrayAtom);
-  if (workspaces === undefined) {
-    return [];
-  }
-  const pendingClose = get(pendingCloseWorkspaceIdsAtom);
-  const pendingOpen = get(pendingOpenWorkspaceIdsAtom);
-  return workspaces
-    .filter((ws) => !pendingOpen.has(ws.objectId) && (ws.isOpen === false || pendingClose.has(ws.objectId)))
-    .map((ws) => ws.objectId);
-});
-
-/**
  * Close a workspace tab.
  * - For pseudo-tabs (Home, Settings, etc.): remove from tab order locally.
  * - For real workspace IDs: record the close intent in pendingClose so the tab
@@ -432,49 +477,6 @@ export const openWorkspaceTabAtom = atom(null, (get, set, workspaceId: string): 
   });
 });
 
-/** Close all workspace tabs via batch endpoint. */
-export const closeAllWorkspaceTabsAtom = atom(null, (get, set): void => {
-  const openIds = get(openWorkspaceIdsAtom);
-  if (openIds.length === 0) return;
-  set(clearPendingOpenAtom, openIds);
-  set(markPendingCloseAtom, openIds);
-  for (const id of openIds) {
-    removeWorkspaceQueriesCache(id);
-    workspaceSetupStatusAtomFamily.remove(id);
-  }
-  batchUpdateOpenState({ body: { workspaceIds: [...openIds], isOpen: false } }).catch(() => {
-    set(clearPendingCloseAtom, openIds);
-    set(workspaceOpenCloseErrorToastAtom, {
-      title: "Failed to close workspaces",
-      description: "Try again or check your connection.",
-      type: ToastType.ERROR_PROMINENT,
-      action: null,
-    });
-  });
-});
-
-/** Close all workspace tabs except the specified one. */
-export const closeOtherWorkspaceTabsAtom = atom(null, (get, set, keepWorkspaceId: string): void => {
-  const openIds = get(openWorkspaceIdsAtom);
-  const toClose = openIds.filter((id) => id !== keepWorkspaceId);
-  if (toClose.length === 0) return;
-  set(clearPendingOpenAtom, toClose);
-  set(markPendingCloseAtom, toClose);
-  for (const id of toClose) {
-    removeWorkspaceQueriesCache(id);
-    workspaceSetupStatusAtomFamily.remove(id);
-  }
-  batchUpdateOpenState({ body: { workspaceIds: toClose, isOpen: false } }).catch(() => {
-    set(clearPendingCloseAtom, toClose);
-    set(workspaceOpenCloseErrorToastAtom, {
-      title: "Failed to close workspaces",
-      description: "Try again or check your connection.",
-      type: ToastType.ERROR_PROMINENT,
-      action: null,
-    });
-  });
-});
-
 export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyArray<Workspace>) => {
   const currentWorkspaceIds = new Set(get(workspaceIdsAtom) ?? []);
   const isHydrated = get(hasHydratedWorkspaceTabsAtom);
@@ -519,7 +521,14 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
       invalidateWorkspaceGitQueries(workspace.objectId);
     }
 
-    set(workspaceAtomFamily(workspace.objectId), workspace);
+    // Skip the write when nothing changed: every stream frame carries fresh
+    // Workspace objects, and an unconditional write would re-render each
+    // workspace's subscribers (sidebar row, header, peek) per frame. Deep
+    // equality rather than a hand-picked field list, so a new backend field
+    // can never be silently dropped from the comparison.
+    if (previous === null || !isEqual(previous, workspace)) {
+      set(workspaceAtomFamily(workspace.objectId), workspace);
+    }
     const isNew = !currentWorkspaceIds.has(workspace.objectId);
     currentWorkspaceIds.add(workspace.objectId);
 
@@ -557,7 +566,19 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     }
   });
 
-  set(workspaceIdsAtom, Array.from(currentWorkspaceIds));
+  // Same skip-unchanged rule as the per-workspace writes: the id LIST is
+  // subscribed by list-shaped consumers (sidebar grouping, the loaded gate),
+  // so only write when membership actually changed. First frame always writes
+  // (undefined → array marks the list loaded, even when empty).
+  const previousIds = get(workspaceIdsAtom);
+  const nextIds = Array.from(currentWorkspaceIds);
+  if (previousIds === undefined || !isEqual([...previousIds].sort(), [...nextIds].sort())) {
+    set(workspaceIdsAtom, nextIds);
+  }
+
+  if (nextIds.length > 0 && !get(hasEverHadWorkspacesAtom)) {
+    set(hasEverHadWorkspacesAtom, true);
+  }
 
   // Propagate stream-driven deletions to deletedWorkspaceIdsAtom so that
   // components with their own workspace lists (e.g. RecentWorkspaces) can
@@ -644,7 +665,8 @@ export const optimisticDeleteWorkspaceAtom = atom(null, (get, set, workspaceId: 
   // Remove from tab order so the tab disappears immediately. When the deleted
   // workspace was the active tab, applyClose lands activeIndex on a surviving
   // neighbor so the persisted state never points past the end (which would make
-  // a reload bounce to /ws/new); a following navigation may refine it further.
+  // a reload fall back to /home instead of restoring the last-viewed
+  // workspace); a following navigation may refine it further.
   set(tabsAtom, applyClose(get(tabsAtom), workspaceId));
   // Track the deletion so components with their own workspace lists
   // (e.g. RecentWorkspaces) can filter it out without a page reload.
@@ -696,12 +718,6 @@ export const openNewWorkspaceTabIdsAtom = atom<Array<string>>((get) => {
 export const openNewWorkspaceTabAtom = atom(null, (get, set, draftId: string): void => {
   const tabId = newWorkspaceTabId(draftId);
   set(tabsAtom, applyOpen(get(tabsAtom), { tabId, agentId: null }, { setActive: false }));
-});
-
-/** Close a new-workspace tab (remove pseudo-tab ID from the unified tab list). */
-export const closeNewWorkspaceTabAtom = atom(null, (get, set, draftId: string): void => {
-  const tabId = newWorkspaceTabId(draftId);
-  set(tabsAtom, applyClose(get(tabsAtom), tabId));
 });
 
 /**
@@ -810,21 +826,6 @@ export const setAgentForWorkspaceAtom = atom(
 /** Append a pseudo-tab to the tab order if it isn't already present. */
 export const ensurePseudoTabAtom = atom(null, (get, set, tabId: string): void => {
   set(tabsAtom, applyOpen(get(tabsAtom), { tabId, agentId: null }, { setActive: false }));
-});
-
-/** Replace the entire tab list with a single entry, preserving its existing agentId. */
-export const keepOnlyTabAtom = atom(null, (get, set, tabId: string): void => {
-  const current = get(tabsAtom);
-  const existing = current.order.find((e) => e.tabId === tabId);
-  set(tabsAtom, {
-    order: [{ tabId, agentId: existing?.agentId ?? null }],
-    activeIndex: 0,
-  });
-});
-
-/** Clear all tabs and reset activeIndex to its sentinel. */
-export const clearAllTabsAtom = atom(null, (_get, set): void => {
-  set(tabsAtom, { order: [], activeIndex: INVALID_ACTIVE_INDEX });
 });
 
 /** Reorder tabs to match `newTabIds`, preserving each entry's agentId and active selection. */

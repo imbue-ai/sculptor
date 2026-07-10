@@ -1,3 +1,11 @@
+<!--
+This file is also available as AGENTS.md, and the .claude/ directory as
+.agents/, via symlinks (AGENTS.md -> CLAUDE.md, .agents -> .claude). The
+CLAUDE.md file and .claude/ directory are the real, canonical paths; the
+AGENTS-named entries are aliases so agent tools that follow the AGENTS.md
+convention read the same content. Edit CLAUDE.md and .claude/, not the aliases.
+-->
+
 # Interaction Guidelines
 
 - When the user asks a question, answer the question directly. Do not treat questions as requests for code changes or other work.
@@ -65,6 +73,7 @@ When fixing lint errors, be careful with some common gotchas:
 ## Frontend UI guidelines
 
 - When placing `IconButton` components in a `Flex`, use `gap="2"` because Radix icon buttons apply negative margins on hover to display the hover background.
+- Frontend state follows the **state ownership** rule — one written store per server fact; optimistic writes must have a real failure path (the WS only heals *successful* mutations). Before writing state code, read "State ownership" in `docs/development/style/frontend.md` and copy from `src/common/state/mutations/`, not from older call sites.
 
 ## Frontend type generation
 

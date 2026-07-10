@@ -14,8 +14,8 @@ test drives a deterministic, network-free state:
   ``version-<pin>/pi/pi`` before the backend starts. Startup auto-install then
   sees an installed+in-range binary and skips the download entirely (no
   network); FakePi answers ``--version`` for the activation gate.
-- CUSTOM / banner states: a CUSTOM pi value never triggers auto-install, so the
-  backend stays offline.
+- CUSTOM state: a CUSTOM pi value never triggers auto-install, so the backend
+  stays offline.
 - Install *failure*: start in CUSTOM (no startup auto-install), switch to MANAGED
   in the UI to reveal the Install button, and intercept the install POST at the
   browser so the click exercises the ``install_managed(PI)`` wiring and surfaces
@@ -31,14 +31,18 @@ from pathlib import Path
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.services.dependency_management_service import DEPENDENCIES_DIR_NAME
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.dependency_management_service import _VERSION_DIR_PREFIX
 from sculptor.services.user_config.user_config import load_config
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.chat_panel import send_chat_message
+from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
@@ -55,7 +59,7 @@ def _factory_sculptor_folder(factory: SculptorInstanceFactory) -> Path:
     return factory._delegate.sculptor_folder
 
 
-def _set_pi_config(factory: SculptorInstanceFactory, pi_value: str, enable_pi_agent: bool = False) -> None:
+def _set_pi_config(factory: SculptorInstanceFactory, pi_value: str) -> None:
     """Rewrite the factory's pre-created config to a given pi binary-source value.
 
     Preserves the factory's healthy claude setup (resolved from the default stub
@@ -65,10 +69,7 @@ def _set_pi_config(factory: SculptorInstanceFactory, pi_value: str, enable_pi_ag
     config_path = _factory_sculptor_folder(factory) / "internal" / "config.toml"
     config = load_config(config_path)
     new_dependency_paths = config.dependency_paths.model_copy(update={"pi": pi_value})
-    updates: dict[str, object] = {"dependency_paths": new_dependency_paths}
-    if enable_pi_agent:
-        updates["enable_pi_agent"] = True
-    save_config(config.model_copy(update=updates), config_path)
+    save_config(config.model_copy(update={"dependency_paths": new_dependency_paths}), config_path)
 
 
 def _stage_fake_pi_managed_binary(factory: SculptorInstanceFactory) -> None:
@@ -139,22 +140,6 @@ def test_pi_settings_custom_shows_binary_path_and_manual_install(
         expect(pi_section.get_install_commands_block()).to_be_visible()
 
 
-@user_story("to configure pi from Settings even before enabling the experimental harness")
-def test_pi_settings_section_visible_with_pi_agent_disabled(
-    sculptor_instance_factory_: SculptorInstanceFactory,
-) -> None:
-    """With enable_pi_agent OFF (the default) the section is still usable —
-    it shows the disabled banner alongside the working Binary-Source selector."""
-    _set_pi_config(sculptor_instance_factory_, "CUSTOM")
-
-    with sculptor_instance_factory_.spawn_instance() as instance:
-        settings_page = navigate_to_settings_page(page=instance.page)
-        pi_section = settings_page.click_on_pi()
-
-        expect(pi_section.get_disabled_banner()).to_be_visible()
-        expect(pi_section.get_mode_selector()).to_be_visible()
-
-
 @user_story("to retry a managed pi install after a checksum failure")
 def test_pi_settings_install_button_invokes_managed_install_and_surfaces_error(
     sculptor_instance_factory_: SculptorInstanceFactory,
@@ -212,34 +197,77 @@ def test_pi_settings_install_button_invokes_managed_install_and_surfaces_error(
         )
 
 
-@user_story("to see a clear error when running a pi workspace before pi is available")
-def test_pi_workspace_surfaces_structured_failure_when_pi_unavailable(
+@user_story("to be steered to Settings → Pi when picking pi while it is not installed")
+def test_pi_unavailable_picker_offers_install_pi_and_routes_to_settings(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Running a pi workspace with no resolvable pi binary surfaces the existing
-    structured failure in chat (FAIL-3) rather than blocking workspace creation."""
-    # CUSTOM with no path resolves to nothing and triggers no auto-install, so pi
-    # is deterministically unavailable without any network access.
+    """With no resolvable pi binary the new-workspace picker's pi entry reads
+    "Install Pi", and choosing it opens Settings → Pi instead of selecting a
+    harness that cannot launch."""
+    # CUSTOM with no path resolves to nothing, so pi is deterministically
+    # unavailable without any network access.
     _set_pi_config(sculptor_instance_factory_, "CUSTOM")
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        # start_task_and_wait_for_ready enables the pi-agent picker for us.
+        page = instance.page
+        # A fresh instance has no workspaces; bring up the new-workspace
+        # dialog, which hosts the AgentTypeSelect.
+        open_new_workspace_form(page)
+        dialog = PlaywrightNewWorkspaceDialog(page)
+        dialog.get_agent_type_select().click()
+
+        pi_option = dialog.get_agent_type_option_pi()
+        expect(pi_option).to_have_text("Install Pi")
+        pi_option.click()
+
+        # Choosing "Install Pi" lands on Settings → Pi (the Binary-Source
+        # selector is that section's control entry point).
+        expect(page.get_by_test_id(ElementIDs.PI_MODE_SELECTOR)).to_be_visible()
+
+
+@user_story("to see a clear error when pi stops being available before its first message")
+def test_pi_workspace_surfaces_structured_failure_when_pi_becomes_unavailable(
+    sculptor_instance_factory_: SculptorInstanceFactory,
+) -> None:
+    """The agent pickers refuse to select pi while it is unavailable, so the
+    runtime safety net is driven by breaking pi *after* creation: the workspace
+    is created while pi resolves (the pre-staged managed FakePi), pi's binary
+    source is then switched to a pathless CUSTOM in Settings, and the first
+    message drives PiAgent.start, which resolves no binary and surfaces the
+    structured failure in chat (FAIL-3, mirrors test_missing_claude_binary)."""
+    _set_pi_config(sculptor_instance_factory_, "MANAGED")
+    _stage_fake_pi_managed_binary(sculptor_instance_factory_)
+
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        page = instance.page
         task_page = start_task_and_wait_for_ready(
-            sculptor_page=instance.page,
+            sculptor_page=page,
             workspace_name="Pi Not Ready",
             model_name=None,
             agent_type="pi",
         )
-        chat_panel = task_page.get_chat_panel()
 
-        # An empty-prompt workspace leaves the agent waiting, so the pi process is
-        # not spawned until the first message; sending one drives PiAgent.start,
-        # which resolves no binary and raises the structured failure (mirrors
-        # test_missing_claude_binary).
+        # Break pi's binary source: a pathless CUSTOM resolves to nothing. The
+        # pi process is only spawned on the first message, so the agent hits
+        # the missing binary at start.
+        settings_page = navigate_to_settings_page(page=page)
+        pi_section = settings_page.click_on_pi()
+        mode_selector = pi_section.get_mode_selector()
+        expect(mode_selector).to_be_visible()
+        mode_selector.click()
+        custom_option = pi_section.get_mode_option_custom()
+        expect(custom_option).to_be_visible()
+        custom_option.click()
+        # The binary-path field is CUSTOM-only, so its appearance confirms the
+        # switch settled before we leave Settings.
+        expect(pi_section.get_binary_path_input()).to_be_visible()
+
+        # Back to the workspace, then drive the pi start.
+        navigate_to_workspace(page, "Pi Not Ready")
+        chat_panel = task_page.get_chat_panel()
         send_chat_message(chat_panel, "hello pi")
 
-        # The workspace is created (not blocked); the pi start failure surfaces as
-        # a structured error block in the chat.
+        # The pi start failure surfaces as a structured error block in the chat.
         error_block = chat_panel.get_error_block()
         expect(error_block).to_be_visible(timeout=60_000)
         expect(error_block).to_contain_text("Pi binary not found")

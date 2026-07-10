@@ -686,6 +686,18 @@ class BinaryMode(UpperCaseStrEnum):
     CUSTOM = auto()
 
 
+class BinarySource(UpperCaseStrEnum):
+    """Where a dependency's active binary was resolved from.
+
+    Distinct from :class:`BinaryMode`, which is the *configured intent*: pi in
+    MANAGED mode falls back to a system-PATH binary when no managed copy has
+    been downloaded, so its mode can be MANAGED while its source is EXTERNAL.
+    """
+
+    MANAGED = auto()
+    EXTERNAL = auto()
+
+
 class DependencyInfo(SerializableModel):
     """Rich status information for a single dependency binary."""
 
@@ -694,6 +706,10 @@ class DependencyInfo(SerializableModel):
     version: str | None = None
     is_override: bool = False
     mode: BinaryMode | None = None
+    # Where the active binary came from: Sculptor's downloaded, version-pinned
+    # copy (MANAGED) or a user-provided one — custom path or system PATH
+    # (EXTERNAL). None when not installed, and for tools with no managed mode.
+    source: BinarySource | None = None
     version_range: VersionRangeInfo | None = None
     is_version_in_range: bool | None = None
     managed_version: str | None = None
@@ -862,28 +878,28 @@ class WebviewCommandUiAction(SerializableModel):
     url: str | None = None
 
 
-PluginCommandOp = Literal["load", "reload", "unload", "inspect", "list"]
+ExtensionCommandOp = Literal["load", "reload", "unload", "inspect", "list"]
 
 
-class PluginCommandUiAction(SerializableModel):
-    """A command broadcast to renderers to act on the frontend plugin system.
+class ExtensionCommandUiAction(SerializableModel):
+    """A command broadcast to renderers to act on the extension system.
 
-    Emitted when an agent runs a `sculpt plugin` command. ``correlation_id``
+    Emitted when an agent runs a `sculpt extension` command. ``correlation_id``
     lets each renderer's reply be matched back to the originating CLI request
-    (see ``sculptor.web.plugin_command_bus``); ``workspace_id`` is the workspace
+    (see ``sculptor.web.extension_command_bus``); ``workspace_id`` is the workspace
     the agent's CLI is running in, and routes the action through the same
     per-user WebSocket fan-out as the other UI actions.
 
     Field meaning by ``op``: ``load`` uses ``source`` (a served manifest URL or
-    a remote URL); ``reload``/``unload``/``inspect`` use ``plugin_id``;
+    a remote URL); ``reload``/``unload``/``inspect`` use ``extension_id``;
     ``reload`` may carry ``cache_bust`` to force a fresh fetch; ``list`` ignores
-    both and asks for every plugin.
+    both and asks for every extension.
     """
 
     workspace_id: WorkspaceID
     correlation_id: str
-    op: PluginCommandOp
-    plugin_id: str | None = None
+    op: ExtensionCommandOp
+    extension_id: str | None = None
     source: str | None = None
     cache_bust: str | None = None
 
@@ -894,90 +910,98 @@ class RendererIdentity(SerializableModel):
     ``environment`` comes from the renderer's own ``isElectron()`` check, not
     from sniffing the WebSocket handshake. ``origin`` is ``window.location``'s
     origin, which determines the localStorage domain — two renderers on
-    different origins can legitimately hold different plugin state.
+    different origins can legitimately hold different extension state.
+
+    ``base`` is the bundle's base path within that origin ("/" for the deployed
+    app; the OpenHost preview front serves dev bundles under "/proxy/<port>/").
+    Origin alone cannot distinguish those windows — sharing an origin is exactly
+    what makes the preview setup work — so tooling needs the base to tell a
+    preview window from the deployed app. Optional: bundles built before this
+    field simply don't report it.
     """
 
     renderer_id: str
     environment: Literal["electron", "browser"]
     origin: str
+    base: str | None = None
 
 
-class PluginRegistrations(SerializableModel):
-    """Names-only summary of what a plugin registered in a renderer."""
+class ExtensionRegistrations(SerializableModel):
+    """Names-only summary of what an extension registered in a renderer."""
 
     panels: list[str] = []
     has_settings: bool = False
     overlays: list[str] = []
 
 
-class PluginSnapshot(SerializableModel):
-    """A redacted, per-plugin view a renderer assembles for ``inspect``/``list``.
+class ExtensionSnapshot(SerializableModel):
+    """A redacted, per-extension view a renderer assembles for ``inspect``/``list``.
 
     ``config_keys`` lists the persisted setting key names only — never their
-    values, which may be credentials (e.g. a plugin's API key).
+    values, which may be credentials (e.g. an extension's API key).
     """
 
-    plugin_id: str
+    extension_id: str
     source: str
     status: Literal["loading", "loaded", "error", "disabled", "shadowed", "missing"]
     origin: Literal["dev", "installed", "url", "builtin"]
     error_phase: str | None = None
     error_message: str | None = None
     active_source: str | None = None
-    registrations: PluginRegistrations | None = None
+    registrations: ExtensionRegistrations | None = None
     config_keys: list[str] = []
 
 
-class PluginCommandResult(SerializableModel):
-    """One renderer's reply to a ``PluginCommandUiAction``."""
+class ExtensionCommandResult(SerializableModel):
+    """One renderer's reply to an ``ExtensionCommandUiAction``."""
 
     correlation_id: str
     renderer: RendererIdentity
     op: str
     ok: bool
     error: str | None = None
-    plugins: list[PluginSnapshot] = []
+    extensions: list[ExtensionSnapshot] = []
 
 
-class PluginCommandRequest(SerializableModel):
-    """Body for ``POST /api/v1/workspaces/{workspace_id}/plugins/command``."""
+class ExtensionCommandRequest(SerializableModel):
+    """Body for ``POST /api/v1/workspaces/{workspace_id}/extensions/command``."""
 
-    op: PluginCommandOp
-    plugin_id: str | None = None
+    op: ExtensionCommandOp
+    extension_id: str | None = None
     source: str | None = None
     cache_bust: str | None = None
 
 
-class PluginCommandResponse(SerializableModel):
+class ExtensionCommandResponse(SerializableModel):
     """Aggregated per-renderer replies the command endpoint returns to the CLI."""
 
     correlation_id: str
-    results: list[PluginCommandResult] = []
+    results: list[ExtensionCommandResult] = []
 
 
-class PluginFile(SerializableModel):
-    """One file of a packaged plugin, base64-encoded for transport."""
+class ExtensionFile(SerializableModel):
+    """One file of a packaged extension, base64-encoded for transport."""
 
     path: str
     content_base64: str
 
 
-class InstallPluginRequest(SerializableModel):
-    """Body for ``POST /api/v1/workspaces/{workspace_id}/plugins/install``.
+class InstallExtensionRequest(SerializableModel):
+    """Body for ``POST /api/v1/workspaces/{workspace_id}/extensions/install``.
 
     ``persist`` selects the destination: ``False`` (default) writes a dev
-    install under the reserved ``dev/<workspace_id>/<plugin_id>/`` tree;
-    ``True`` writes a permanent install at the top-level ``<plugin_id>/``.
+    install under the reserved ``dev/<workspace_id>/<extension_id>/`` tree;
+    ``True`` writes a permanent install at the top-level ``<extension_id>/``.
     """
 
-    plugin_id: str
-    files: list[PluginFile]
+    extension_id: str
+    files: list[ExtensionFile]
     persist: bool = False
 
 
-class InstallPluginResponse(SerializableModel):
+class InstallExtensionResponse(SerializableModel):
     manifest_url: str
-    plugin_dir: str
+    extension_dir: str
 
 
 # Generic system dependency models for unified frontend rendering
@@ -1006,5 +1030,5 @@ StreamingUpdateSourceTypes = (
     | BtwUpdate
     | OpenFileUiAction
     | WebviewCommandUiAction
-    | PluginCommandUiAction
+    | ExtensionCommandUiAction
 )

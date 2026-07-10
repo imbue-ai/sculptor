@@ -21,7 +21,7 @@ See the [justfile](../../justfile).
 - [Tracing](tracing.md) — distributed tracing and instrumentation
 - [PostHog](posthog.md) — product analytics
 - [Code review rules](review/) — review categories for [Sculptor](review/sculptor.md),
-  [React](review/react.md), and [integration tests](review/integration_tests.md)
+  [React](review/react.md), [design](review/design.md), and [integration tests](review/integration_tests.md)
 
 ## Expectations
 

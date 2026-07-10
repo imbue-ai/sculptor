@@ -1,9 +1,0 @@
-.content {
-  min-height: 0;
-}
-
-// Sits on top of the panel edge so a fetch indicator doesn't shift any of
-// the panel content. `z-index` keeps it above the tab bar's bottom border.
-.progressOverlay {
-  z-index: 1;
-}

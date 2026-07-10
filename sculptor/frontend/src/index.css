@@ -17,6 +17,16 @@
   --app-height: calc(100vh - var(--tsqd-bottom-dock-height, 0px));
 }
 
+/* The app's page background must live on <html> too: during a window resize
+   (and any paint lag) the browser shows the root element's background where
+   content hasn't rendered yet, and an unstyled <html> flashes white in dark
+   mode. ThemeProvider mirrors the appearance class ("dark"/"light") onto
+   <html>, so the Radix token scales resolve here; the fallback covers the
+   pre-mount frame in light mode. */
+html {
+  background: var(--color-background, #fff);
+}
+
 body {
   margin: 0;
   height: 100vh;

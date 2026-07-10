@@ -150,6 +150,13 @@ class PlaywrightInstallationStepElement(PlaywrightIntegrationTestElement):
     def get_git_card(self) -> PlaywrightDependencyCardElement:
         return self.get_dependency_card("git")
 
+    def get_pi_card(self) -> PlaywrightDependencyCardElement:
+        return self.get_dependency_card("pi")
+
+    def get_optional_header(self) -> Locator:
+        """Get the 'Optional' header above the gh + pi dependency cards."""
+        return self.get_by_test_id(ElementIDs.ONBOARDING_OPTIONAL_DEPENDENCIES_HEADER)
+
     def get_complete_button(self) -> Locator:
         """Get the onboarding complete button."""
         return self.get_by_test_id(ElementIDs.ONBOARDING_COMPLETE_BUTTON)
@@ -167,7 +174,7 @@ class PlaywrightAddRepoStepElement(PlaywrightIntegrationTestElement):
     """Element representing the add-repo step of onboarding."""
 
     def get_local_source_card(self) -> Locator:
-        """Get the 'Local Folder' source radio card."""
+        """Get the 'Local folder' source radio card."""
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_LOCAL)
 
     def get_path_input(self) -> Locator:
@@ -179,8 +186,10 @@ class PlaywrightAddRepoStepElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_SUBMIT_BUTTON)
 
     def select_local_source(self) -> None:
-        """Select the Local Folder source. Required before entering a path since
-        the step defaults to GitHub (the path input is hidden in remote modes).
+        """Select the Local folder source. Local is the step's default, so on a
+        fresh step this is an idempotent radio click — kept explicit so the
+        path input's visibility doesn't silently depend on the default (the
+        input is hidden in remote modes).
         """
         self.get_local_source_card().click()
 

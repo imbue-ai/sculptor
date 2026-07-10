@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 import pytest
 
+from sculptor.agents.pi_agent import agent_wrapper as agent_wrapper_module
 from sculptor.agents.pi_agent.agent_wrapper import PI_PROBE_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
@@ -30,6 +31,8 @@ from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_BASE_DELA
 from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS
 from sculptor.agents.pi_agent.agent_wrapper import _TurnState
 from sculptor.agents.pi_agent.agent_wrapper import _curate_models
+from sculptor.agents.pi_agent.agent_wrapper import _format_background_completion
+from sculptor.agents.pi_agent.agent_wrapper import _format_subagent_completion
 from sculptor.agents.pi_agent.agent_wrapper import _model_option_from_pi
 from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
 from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
@@ -38,6 +41,7 @@ from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_HEADER
 from sculptor.agents.pi_agent.background import BACKGROUND_NOTIFY_MARKER
 from sculptor.agents.pi_agent.background import BACKGROUND_PAYLOAD_VERSION
+from sculptor.agents.pi_agent.background import parse_background_completion
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedAgentEnd
@@ -45,6 +49,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.subagent import SUBAGENT_NOTIFY_MARKER
+from sculptor.agents.pi_agent.subagent import parse_subagent_completion
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
@@ -86,13 +91,13 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 
-
 _PROMPT_ID = "prompt-1"
 
 
 def _make_agent(
     environment: AgentExecutionEnvironment | None = None,
     on_diff_needed: Callable[[], None] | None = None,
+    preselected_model: ModelOption | None = None,
 ) -> PiAgent:
     env = environment if environment is not None else MagicMock(spec=AgentExecutionEnvironment)
     return PiAgent(
@@ -103,6 +108,7 @@ def _make_agent(
         system_prompt="",
         git_hash="deadbeef",
         on_diff_needed=on_diff_needed,
+        preselected_model=preselected_model,
     )
 
 
@@ -478,16 +484,6 @@ def _subagent_launch_events() -> list:
         _event(_tool_execution_start(_SA_TOOL_CALL_ID, "subagent", {"task": "investigate"})),
         _event(_tool_execution_end(_SA_TOOL_CALL_ID, "subagent", result=_subagent_start_result())),
         _event({"type": "agent_end", "messages": [], "willRetry": False}),
-    ]
-
-
-def _reaction_turn_events(ack: str) -> list:
-    """A pi-initiated reaction turn (the extension's `sendUserMessage` wake-up):
-    `agent_start` with NO preceding `response` ack, then the assistant reaction."""
-    return [
-        _event({"type": "agent_start"}),
-        _event({"type": "message_end", "message": _assistant_msg(ack)}),
-        _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
     ]
 
 
@@ -2096,6 +2092,7 @@ class TestPushMessageDispatch:
         assert isinstance(emitted, RequestSuccessAgentMessage)
         assert emitted.request_id == stuck_id
         assert emitted.interrupted is True
+        assert emitted.turn_abandoned is True
 
     def test_push_message_enqueues_clear_context_returns_true(self) -> None:
         """A ClearContextUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""
@@ -2299,10 +2296,20 @@ class TestSetModel:
         assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
         assert not any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
 
-    def test_set_model_failure_on_success_false_surfaces_error_without_mutation(self) -> None:
-        """set_model success:false → RequestFailure, no current-model carrier, handler does not raise."""
+    def test_set_model_failure_on_success_false_surfaces_error_and_rolls_back(self) -> None:
+        """set_model success:false → RequestFailure AND a corrective carrier restoring the
+        switcher to pi's actual current model, without the handler raising out.
+
+        The set-model endpoint writes the requested model onto task state before the
+        switch is confirmed (so the switcher responds immediately), so a rejected
+        switch must roll the switcher back to the model pi is really on rather than
+        leave it stranded on the model that did not take."""
         agent = _make_agent()
-        agent._available_models = (ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Opus"),)
+        agent._available_models = (
+            ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Opus"),
+            ModelOption(provider="anthropic", model_id="claude-haiku-4-5", display_name="Haiku"),
+        )
+        actual = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
         agent._process = _make_process(
             [
                 _event(
@@ -2313,10 +2320,11 @@ class TestSetModel:
                         "id": "cmd-set",
                         "error": "Model not found: anthropic/claude-nope",
                     }
-                )
+                ),
+                _state_response_with_model(actual),
             ]
         )
-        with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set", "cmd-state"]):
             # Must NOT raise out of the handler — the AgentClientError path reports and continues.
             agent._handle_set_model(
                 SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-nope")
@@ -2326,8 +2334,11 @@ class TestSetModel:
         assert len(failures) == 1
         # The failure carries pi's error so the frontend can toast it.
         assert "Model not found" in str(failures[0].error.args[0])
-        # No current-model mutation on failure.
-        assert not any(isinstance(m, ModelsAvailableAgentMessage) for m in emitted)
+        # The switcher is rolled back to pi's real current model, undoing the optimistic write.
+        carriers = [m for m in emitted if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(carriers) == 1
+        assert carriers[0].current_model is not None
+        assert carriers[0].current_model.model_id == "claude-opus-4-8"
 
     def test_set_model_failure_on_no_response_surfaces_error(self) -> None:
         """No set_model ack (process exited / timeout) → failed request, no carrier, no crash."""
@@ -3023,53 +3034,28 @@ class TestSubagents:
         _assert_killed_pgid(agent, 777)
         _assert_killed_pgid(agent, 888)
 
-    def test_subagent_completion_triggers_auto_resume_reaction(self) -> None:
-        """After a sub-agent completion the extension wakes the agent (sendUserMessage);
-        the idle-drain consumes the pi-initiated reaction turn out-of-band so the agent's
-        reaction renders, and the await-reaction guard clears."""
+    def test_idle_drain_rejects_pi_initiated_agent_start(self) -> None:
+        """Pi never self-starts a run (Sculptor is the only turn-initiator — the
+        SCU-1776 invariant), so an `agent_start` between turns is a protocol
+        violation: logged loud, not consumed as a turn. The completion before it
+        still surfaces normally and its wake still enqueues."""
         agent = _make_agent()
         agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
-        ack = "Acknowledged: my sub-agent finished — continuing the work."
         agent._process = _make_process(
-            [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
-            + _reaction_turn_events(ack)
+            [
+                _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+                _event({"type": "agent_start"}),
+            ]
         )
-        agent._drain_idle_background_events()
+        with expect_exact_logged_errors(["PiAgent saw a pi-initiated agent_start between turns"]):
+            agent._drain_idle_background_events()
         emitted = _drain(agent._output_messages)
 
         assert len(_bg_notifications(emitted)) == 1
-        assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
+        # Exactly the completion's own request cycle — no reaction turn was consumed.
         types = [type(m).__name__ for m in emitted]
-        assert "RequestStartedAgentMessage" in types and "RequestSuccessAgentMessage" in types
-        assert agent._awaiting_reaction_count == 0
-
-
-class TestAutoResumeReaction:
-    """Auto-resume reaction turns after task completion."""
-
-    def test_background_completion_triggers_auto_resume_reaction(self) -> None:
-        """After a background-task completion the extension wakes the agent; the idle-drain
-        consumes the pi-initiated reaction turn so the agent's reaction renders."""
-        agent = _make_agent()
-        agent._background_tasks[_BG_TASK_ID] = _BG_PGID
-        ack = "Acknowledged: my background task finished — continuing the work."
-        agent._process = _make_process([_event(_background_notify())] + _reaction_turn_events(ack))
-        agent._drain_idle_background_events()
-        emitted = _drain(agent._output_messages)
-
-        assert len(_bg_notifications(emitted)) == 1
-        assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
-        assert agent._awaiting_reaction_count == 0
-
-    def test_idle_drain_gives_up_awaiting_reaction_past_deadline(self) -> None:
-        """A completion whose reaction never arrives must not keep the drain awaiting
-        forever: once the window elapses, `_has_background_tasks` reports no work."""
-        agent = _make_agent()
-        agent._note_awaiting_reaction()
-        assert agent._has_background_tasks() is True
-        agent._awaiting_reaction_deadline = 0.0  # force the window to have elapsed
-        assert agent._has_background_tasks() is False
-        assert agent._awaiting_reaction_count == 0
+        assert types.count("RequestStartedAgentMessage") == 1
+        assert types.count("RequestSuccessAgentMessage") == 1
 
 
 class TestBackgroundTasks:
@@ -3302,9 +3288,11 @@ class TestModelCatalogFetch:
         # The unusable openrouter model is no longer offered in the switcher.
         assert "openai/gpt-4o" not in {option.model_id for option in message.available_models}
 
-    def test_fetch_models_into_state_keeps_unauthenticated_current_when_no_alternative(self) -> None:
-        """When the disconnected provider was the only one, the current model is retained
-        (nothing to switch to) rather than blanking the switcher — and no set_model is sent."""
+    def test_fetch_models_into_state_drops_unauthenticated_current_when_no_alternative(self) -> None:
+        """When the disconnected provider was the only one, the now-unusable current model
+        is dropped and an empty catalog is emitted (driving the switcher's empty state).
+        No set_model is sent — there is nothing authenticated to switch to (the process is
+        primed with only the models + state responses, so a set_model call would error)."""
         agent = _make_agent()
         raw = [{"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}]
         current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
@@ -3317,16 +3305,102 @@ class TestModelCatalogFetch:
 
         emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
         assert len(emitted) == 1
-        assert emitted[0].current_model is not None
-        assert emitted[0].current_model.model_id == "openai/gpt-4o"
+        assert emitted[0].current_model is None
+        assert list(emitted[0].available_models) == []
 
-    def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models(self) -> None:
-        """No catalog + no current model → no carrier message (switcher falls back to defaults)."""
+    def test_fetch_models_into_state_emits_empty_catalog_when_pi_lists_no_models(self) -> None:
+        """No catalog + no current model (no authenticated providers) → an empty catalog is
+        emitted, so the pi switcher shows its 'no usable model' empty state rather than
+        falling back to the built-in Claude list."""
         agent = _make_agent()
         agent._process = _make_process([_models_response([]), _state_response_with_model(None)])
         with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
             agent._fetch_models_into_state()
-        assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(emitted) == 1
+        assert list(emitted[0].available_models) == []
+        assert emitted[0].current_model is None
+
+    def test_fetch_models_into_state_adopts_preselected_model_over_pi_default(self) -> None:
+        """A model the user selected before the agent went live (preselected_model)
+        is applied to pi at start and surfaced as current, instead of pi's own default.
+
+        Without this, a pre-message switch would flicker back to pi's default the
+        moment the first turn starts the agent, then re-apply on the queued switch.
+        """
+        preselected = ModelOption(provider="anthropic", model_id="claude-sonnet-4-6", display_name="Claude Sonnet 4.6")
+        agent = _make_agent(preselected_model=preselected)
+        pi_default = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+        adopted = {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "provider": "anthropic"}
+        process = _make_process(
+            [_models_response(_RAW_PI_MODELS), _state_response_with_model(pi_default), _set_model_response(adopted)]
+        )
+        agent._process = process
+        with (
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+                side_effect=["cmd-models", "cmd-state", "cmd-setmodel"],
+            ),
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}
+            ),
+        ):
+            agent._fetch_models_into_state()
+
+        # A set_model RPC adopted the preselected model on pi's side.
+        writes = [call.args[0] for call in process.write_stdin.call_args_list]
+        assert any('"type":"set_model"' in w and '"claude-sonnet-4-6"' in w for w in writes)
+
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(emitted) == 1
+        assert emitted[0].current_model is not None
+        assert emitted[0].current_model.model_id == "claude-sonnet-4-6"
+
+    def test_fetch_models_into_state_ignores_preselected_model_absent_from_catalog(self) -> None:
+        """A preselected model pi no longer offers (e.g. its provider was deauthorized)
+        is not adopted — the switcher falls back to pi's default rather than a model
+        that cannot run. No set_model RPC is sent for the unavailable model."""
+        preselected = ModelOption(provider="openrouter", model_id="openai/gpt-4o", display_name="GPT-4o")
+        agent = _make_agent(preselected_model=preselected)
+        pi_default = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+        process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(pi_default)])
+        agent._process = process
+        with (
+            patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}
+            ),
+        ):
+            agent._fetch_models_into_state()
+
+        writes = [call.args[0] for call in process.write_stdin.call_args_list]
+        assert not any('"type":"set_model"' in w for w in writes)
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert len(emitted) == 1
+        assert emitted[0].current_model is not None
+        assert emitted[0].current_model.model_id == "claude-opus-4-8"
+
+    def test_fetch_models_into_state_skips_set_model_when_preselected_is_pi_default(self) -> None:
+        """When the preselected model already matches pi's default, no redundant
+        set_model RPC is sent — the default is surfaced directly."""
+        preselected = ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8")
+        agent = _make_agent(preselected_model=preselected)
+        pi_default = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+        process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(pi_default)])
+        agent._process = process
+        with (
+            patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}
+            ),
+        ):
+            agent._fetch_models_into_state()
+
+        writes = [call.args[0] for call in process.write_stdin.call_args_list]
+        assert not any('"type":"set_model"' in w for w in writes)
+        emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+        assert emitted[0].current_model is not None
+        assert emitted[0].current_model.model_id == "claude-opus-4-8"
 
     def test_handle_refresh_models_re_fetches_and_re_emits_catalog(self) -> None:
         """A delivered refresh re-runs the fetch between turns and re-emits the catalog.
@@ -3447,6 +3521,24 @@ class TestModelProbe:
         probe_process.terminate.assert_called_once()
         assert agent._process is None
 
+    def test_fetch_available_models_probe_drops_unauthenticated_current_when_no_alternative(self) -> None:
+        """A selected model whose only provider is now unauthenticated is dropped by the
+        probe (nothing authenticated to fall back to), so the switcher reaches its empty
+        state instead of offering a single unusable model — the deleted-auth.json case."""
+        raw = [{"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}]
+        current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
+        probe_process = _make_process([_models_response(raw), _state_response_with_model(current_openrouter)])
+        env = _make_probe_env(probe_process)
+        agent = _make_agent(env)
+        with (
+            patch(
+                "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+                side_effect=["probe-sess", "cmd-models", "cmd-state"],
+            ),
+            patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value=set()),
+        ):
+            assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+
 
 class TestTurnFooterMetrics:
     """Per-turn footer metrics (TurnMetricsAgentMessage at agent_end)."""
@@ -3550,3 +3642,161 @@ class TestTurnFooterMetrics:
         assert first is not None
         assert agent._diff_tracker is first
         tracker_cls.assert_called_once_with(agent.environment)
+
+
+class TestSculptorInitiatedWake:
+    """SCU-1776: completion wake-ups are Sculptor-initiated, serialized on the input FIFO.
+
+    The extensions' pi-side `sendUserMessage(deliverAs:"followUp")` wake-up raced
+    Sculptor's prompt pump: landing mid-run it spliced reaction turns into the run,
+    deferring `agent_end` (the wrapper's only turn boundary) indefinitely — queued
+    user messages starved and Stop escalated to SIGTERM. The fix makes Sculptor the
+    only turn-initiator: surfacing a completion enqueues a `_ReactionWakeMessage`
+    onto the same FIFO as user messages, and servicing it drives an ordinary
+    prompt turn in its own request cycle.
+
+    `_ReactionWakeMessage` / `_run_wake_turn` are resolved via `getattr` so that,
+    before the fix exists, exactly these tests fail with AttributeError at
+    runtime — a static reference would fail module collection and `just
+    typecheck` for the whole file on the failing-test commit.
+    """
+
+    @staticmethod
+    def _wake_message(text: str) -> Any:
+        wake_cls = getattr(agent_wrapper_module, "_ReactionWakeMessage")  # noqa: B009
+        return wake_cls(text=text)
+
+    @staticmethod
+    def _is_wake(message: Any) -> bool:
+        return type(message).__name__ == "_ReactionWakeMessage"
+
+    def test_subagent_completion_from_idle_drain_enqueues_wake_on_input_fifo(self) -> None:
+        """A sub-agent completion surfaced by the idle-drain enqueues one wake message
+        on the input FIFO, carrying the same summary text the completion notification
+        renders (one completion fact, one rendering)."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        notify = _subagent_notify([_subagent_child("c0", "done", _read_child_events())])
+        agent._process = _make_process([_event(notify)])
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        wakes = [m for m in queued if self._is_wake(m)]
+        assert len(wakes) == 1
+        completion = parse_subagent_completion(notify["message"])
+        assert completion is not None
+        assert wakes[0].text == _format_subagent_completion(completion)
+
+    def test_subagent_completion_in_turn_enqueues_wake_on_input_fifo(self) -> None:
+        """A completion that reconciles into an in-flight turn also enqueues the wake:
+        it is serviced from the FIFO after this turn (and any earlier-queued user
+        messages), never spliced into the current run."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+                _event({"type": "agent_end", "messages": [_assistant_msg("done")], "willRetry": False}),
+            ]
+        )
+
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+        queued = _drain(agent._input_agent_messages)
+        assert len(queued) == 1 and self._is_wake(queued[0]), queued
+
+    def test_background_completion_enqueues_wake_on_input_fifo(self) -> None:
+        """A background-task completion enqueues a wake whose text is the notification
+        summary (which carries the output tail), mirroring the sub-agent contract."""
+        agent = _make_agent()
+        agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+        notify = _background_notify()
+        agent._process = _make_process([_event(notify)])
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        wakes = [m for m in queued if self._is_wake(m)]
+        assert len(wakes) == 1
+        completion = parse_background_completion(notify["message"])
+        assert completion is not None
+        assert wakes[0].text == _format_background_completion(completion)
+
+    def test_wake_enqueues_behind_already_queued_user_message(self) -> None:
+        """FIFO serialization is the fix's core guarantee: a user message queued before
+        the completion is serviced FIRST; the wake lands behind it (the old pi-side
+        followUp ran reaction turns ahead of queued user messages — the bug)."""
+        agent = _make_agent()
+        agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+        user_message = ChatInputUserMessage(text="answer me first")
+        assert agent._push_message(user_message) is True
+        agent._process = _make_process(
+            [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
+        )
+
+        agent._drain_idle_background_events()
+
+        queued = _drain(agent._input_agent_messages)
+        assert len(queued) == 2, queued
+        assert queued[0] is user_message
+        assert self._is_wake(queued[1])
+
+    def test_wake_turn_sends_prompt_in_own_request_cycle(self) -> None:
+        """Servicing a wake sends its text verbatim as an ordinary `prompt` RPC and
+        brackets the consumed turn in its own RequestStarted → RequestSuccess cycle
+        (a fresh request id — the wake is not a reply to any user message)."""
+        agent = _make_agent()
+        ack = "Both sub-agents finished; continuing."
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(_text_delta_update(ack, ack)),
+                _event({"type": "message_end", "message": _assistant_msg(ack)}),
+                _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
+            ]
+        )
+        wake = self._wake_message("Sub-agents completed: 1 done, 0 failed (of 1).")
+
+        getattr(agent, "_run_wake_turn")(wake)  # noqa: B009
+
+        sent = [json.loads(call.args[0]) for call in agent._process.write_stdin.call_args_list]
+        prompts = [payload for payload in sent if payload.get("type") == "prompt"]
+        assert len(prompts) == 1
+        assert prompts[0]["message"] == wake.text
+
+        emitted = _drain(agent._output_messages)
+        assert isinstance(emitted[0], RequestStartedAgentMessage)
+        assert isinstance(emitted[-1], RequestSuccessAgentMessage)
+        assert emitted[-1].request_id == emitted[0].request_id
+        assert emitted[-1].interrupted is False
+        assert any(ack in text for text in _main_agent_texts(emitted))
+
+    def test_wake_turn_pi_crash_is_nonfatal(self) -> None:
+        """A wake turn that fails (PiCrashError) must not tear down the agent: the
+        failure is logged and its request cycle resolves interrupted=True, so the
+        message-processing loop lives on to serve the next user message."""
+        agent = _make_agent()
+        # An unexpected stopReason:"aborted" (no interrupt pending) raises
+        # PiCrashError inside the consume loop — the crash shape from the field.
+        agent._process = _make_process(
+            [
+                _event({"type": "agent_start"}),
+                _event(
+                    {
+                        "type": "agent_end",
+                        "messages": [_assistant_msg("boom", stop_reason="aborted")],
+                        "willRetry": False,
+                    }
+                ),
+            ]
+        )
+        wake = self._wake_message("Background task completed (exit code 0).")
+
+        getattr(agent, "_run_wake_turn")(wake)  # must NOT raise  # noqa: B009
+
+        emitted = _drain(agent._output_messages)
+        assert isinstance(emitted[0], RequestStartedAgentMessage)
+        assert isinstance(emitted[-1], RequestSuccessAgentMessage)
+        assert emitted[-1].interrupted is True

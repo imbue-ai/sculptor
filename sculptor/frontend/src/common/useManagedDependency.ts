@@ -170,7 +170,11 @@ export const useManagedDependency = ({
   // Clear stale error/installing state once the atom confirms the binary is healthy
   // (e.g. the backend finished after the frontend timed out or errored). Adjusting
   // during render avoids the extra render cycle an effect would introduce.
-  const isBinaryHealthy = Boolean(info?.installed && info?.isVersionInRange);
+  // "Healthy" means the binary the configured mode intends: pi's MANAGED mode
+  // resolves a system-PATH fallback while no managed copy is downloaded, and that
+  // fallback being fine must not clear the state of an in-flight managed install.
+  const isIntendedBinaryActive = mode !== "MANAGED" || info?.source === "MANAGED";
+  const isBinaryHealthy = Boolean(info?.installed && info?.isVersionInRange && isIntendedBinaryActive);
   if (isBinaryHealthy && (installError !== null || isInstalling)) {
     setInstallError(null);
     setIsInstalling(false);
@@ -182,7 +186,9 @@ export const useManagedDependency = ({
       ? Math.round((installProgress.bytesDownloaded / installProgress.totalBytes) * 100)
       : null;
 
-  const isManagedUpToDate = Boolean(mode === "MANAGED" && info?.installed && info?.isVersionInRange);
+  // The managed install is only up to date when the *managed* copy is the active
+  // binary — an in-range PATH-fallback pi doesn't count.
+  const isManagedUpToDate = Boolean(mode === "MANAGED" && info?.source === "MANAGED" && info?.isVersionInRange);
 
   // Fold the backend status's install error in with the local one, but ignore it once
   // the binary is up to date (the backend error persists for the process lifetime).

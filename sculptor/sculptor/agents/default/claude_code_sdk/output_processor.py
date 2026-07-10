@@ -7,6 +7,7 @@ from queue import Queue
 from threading import Event
 from typing import Any
 from typing import Callable
+from typing import NamedTuple
 
 from loguru import logger
 
@@ -39,6 +40,7 @@ from sculptor.interfaces.agents.agent import TaskID
 from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.agent import WarningAgentMessage
+from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import AgentTransientError
@@ -61,6 +63,7 @@ from sculptor.state.claude_state import ParsedEndResponse
 from sculptor.state.claude_state import ParsedInitResponse
 from sculptor.state.claude_state import ParsedStreamEvent
 from sculptor.state.claude_state import ParsedTaskNotificationResponse
+from sculptor.state.claude_state import ParsedTaskProgressResponse
 from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import ParsedTaskUpdatedResponse
 from sculptor.state.claude_state import ParsedToolResultResponse
@@ -71,6 +74,10 @@ from sculptor.state.claude_state import ToolInputDeltaEvent
 from sculptor.state.claude_state import extract_media_tags_from_text
 from sculptor.state.claude_state import split_text_and_media
 from sculptor.state.messages import AssistantMessageID
+from sculptor.state.workflow_state import WORKFLOW_TASK_TYPE
+from sculptor.state.workflow_state import WorkflowProgressEntryTypes
+from sculptor.state.workflow_state import WorkflowUsage
+from sculptor.state.workflow_state import merge_workflow_progress_entries
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.ui_actions import publish_ui_action
 
@@ -81,11 +88,43 @@ from sculptor.web.ui_actions import publish_ui_action
 _RE_TRAILING_MEDIA_TAG = re.compile(r"<(?:img|video)\b[^>]*$", re.IGNORECASE)
 
 # Tools whose task_updated{completed} cleanup must be delayed by one turn.
-# Monitor emits a follow-up event-delivery turn after task_updated, so clearing
-# the task at the current turn's result/success would drop that delivery turn.
-# Bash run_in_background does NOT do this — its task_updated indicates the bash
-# subprocess is genuinely done, with no further turns coming.
-_DEFERRED_COMPLETION_TOOLS: frozenset[str] = frozenset({"Monitor"})
+# Monitor emits a follow-up event-delivery turn after task_updated, and Workflow
+# completion is delivered to the agent as a follow-up <task-notification> turn,
+# so clearing the task at the current turn's result/success would drop that
+# delivery turn. Bash run_in_background does NOT do this — its task_updated
+# indicates the bash subprocess is genuinely done, with no further turns coming.
+_DEFERRED_COMPLETION_TOOLS: frozenset[str] = frozenset({"Monitor", "Workflow"})
+
+# Minimum intervals between WorkflowTaskProgressAgentMessage emissions for a
+# task. The CLI batches task_progress at ~16ms, and each emitted message
+# triggers a full message-conversion pass plus a stream fan-out carrying the
+# whole accumulated tree, so emissions are rate-limited per task: pure token
+# ticks at most once per second, and tree changes coalesced within a short
+# window so a burst of agent state flips (up to the tool's concurrency cap)
+# becomes a handful of snapshots instead of one per flip. A tree change inside
+# the window is deferred, not dropped — the task is marked pending and
+# _flush_due_workflow_progress emits the accumulated tree once the window
+# elapses.
+_WORKFLOW_PROGRESS_MIN_EMIT_INTERVAL_SECONDS: float = 1.0
+_WORKFLOW_PROGRESS_TREE_MIN_EMIT_INTERVAL_SECONDS: float = 0.2
+
+
+class _PendingWorkflowProgress(NamedTuple):
+    """Result-scoped fields retained for a deferred workflow progress emission."""
+
+    tool_use_id: str
+    last_tool_name: str | None
+    summary: str
+
+
+# task_started ``task_type`` values that denote a subagent launched via the
+# Task/Agent tool (as opposed to a ``local_bash`` background command). Like
+# Monitor, a subagent emits a follow-up task_notification and synthesis turn
+# AFTER a terminal task_updated (in which the main agent processes the
+# subagent's result), so its cleanup must be deferred to keep the turn alive
+# for that delivery. Covers the current CLI value (``local_agent``) and the
+# older ``agent``.
+_SUBAGENT_TASK_TYPES: frozenset[str] = frozenset({"local_agent", "agent"})
 
 # Grace period for the deferred cleanup. If no follow-up turn arrives within
 # this window after task_updated{completed} for a deferred tool, the loop
@@ -93,6 +132,16 @@ _DEFERRED_COMPLETION_TOOLS: frozenset[str] = frozenset({"Monitor"})
 # drops both task_notification AND the follow-up event-delivery turn (observed
 # when Monitor completes while a foreground tool is also executing).
 _DEFERRED_CLEANUP_GRACE_SECONDS: float = 5.0
+
+# Grace period for a subagent's deferred cleanup. Larger than Monitor's because
+# a subagent's follow-up task_notification can be queued behind another
+# subagent's synthesis turn, arriving several seconds after its task_updated
+# (observed in SCU-1669). Sized to the CLI's own CLAUDE_CODE_STREAM_CLOSE_TIMEOUT
+# default (60s) — its budget for completing close/handshake delivery. This
+# bounds only idle time (the loop exits the instant the real notification/init
+# arrives), so it is a worst-case ceiling, not added latency, and it preserves
+# the anti-hang guarantee if the notification is truly dropped.
+_SUBAGENT_COMPLETION_GRACE_SECONDS: float = 60.0
 
 # Interval between diagnostic logs emitted while the output loop waits, after the
 # final message, for still-pending background tasks or a scheduled wakeup turn.
@@ -278,9 +327,10 @@ class ClaudeOutputProcessor:
         # cleared to prevent the output loop from waiting forever.
         self._completed_via_task_updated: set[str] = set()
         # Tasks whose task_updated{completed} cleanup is deferred by one turn.
-        # Used for Monitor, which emits a follow-up event-delivery turn after
-        # the task_updated; clearing immediately at the current turn's result
-        # cuts off that delivery turn before the agent can react. Promoted to
+        # Used for Monitor and for subagents (task_type in _SUBAGENT_TASK_TYPES),
+        # both of which emit a follow-up event-delivery turn after the
+        # task_updated; clearing immediately at the current turn's result cuts
+        # off that delivery turn before the agent can react. Promoted to
         # _completed_via_task_updated when the next ``system/init`` arrives.
         self._completed_pending_deferred: set[str] = set()
         # Wall-clock deadline for the deferred cleanup. If no follow-up turn
@@ -292,6 +342,25 @@ class ClaudeOutputProcessor:
         # at task_started time so task_updated handling can distinguish tools
         # that need deferred cleanup (Monitor) from those that don't (Bash).
         self._task_id_to_tool_name: dict[str, str] = {}
+        # task_id -> task_type reported at task_started (e.g. "local_bash",
+        # "local_agent", "local_workflow"). task_updated does not carry the
+        # type, so record it here to route subagent completions to deferred
+        # cleanup (see SCU-1669) and to gate workflow progress handling.
+        self._task_id_to_task_type: dict[str, str] = {}
+        # Per-task Workflow state, keyed by task_id. The CLI's
+        # workflow_progress payloads are deltas (and absent on pure
+        # token-tick batches), so the accumulated tree lives here and is
+        # carried on every emitted progress message; the notification
+        # handler attaches it as the final tree.
+        self._task_id_to_workflow_name: dict[str, str] = {}
+        self._last_workflow_entries: dict[str, tuple[WorkflowProgressEntryTypes, ...]] = {}
+        self._last_workflow_usage: dict[str, WorkflowUsage] = {}
+        self._last_workflow_progress_emit: dict[str, float] = {}
+        # Tasks with a tree change deferred by the coalescing window, mapped to
+        # the result-scoped fields the eventual emission needs. The tree itself
+        # is not stored here — it lives in _last_workflow_entries and keeps
+        # accumulating until the flush.
+        self._pending_workflow_progress: dict[str, _PendingWorkflowProgress] = {}
         # Timestamp when found_final_message was set. Used for diagnostic
         # logging when waiting for background task notifications.
         self._final_message_time: float | None = None
@@ -302,6 +371,26 @@ class ClaudeOutputProcessor:
         # for the wakeup turn (a second init → assistant → result cycle) to
         # arrive from the CLI.
         self._pending_wakeup: bool = False
+        # SCU-1660: when a Monitor background task completes at the instant a
+        # new prompt is dispatched, the CLI delivers the pending
+        # ``<task-notification>`` as a full turn (init → assistant → result)
+        # *before* it processes the user's message — all in the single CLI
+        # process spawned for that prompt. That notification turn's ``result``
+        # must NOT end the loop, or the process manager tears the CLI down while
+        # the user's real request has run at most one tool call.
+        #
+        # ``_awaiting_notification_turn_init`` is armed when a task-notification
+        # arrives before the user's turn has ended (found_final_message still
+        # False). It is only *confirmed* as a separate turn if a new
+        # ``system/init`` (a fresh request cycle) then arrives — that is what
+        # distinguishes a notification delivered as its own turn (this bug)
+        # from an inline mid-turn notification that does not start a new cycle
+        # (SCU-267). On confirmation the flag is promoted into
+        # ``_pending_notification_turn_results``: a count of notification-turn
+        # results still to be skipped so the loop stays open for the user's own
+        # turn.
+        self._awaiting_notification_turn_init: bool = False
+        self._pending_notification_turn_results: int = 0
         # Last time we received any stdout line from the CLI. Used to detect
         # hangs where the CLI stops producing output after an interrupt.
         self._last_output_time: float = time.monotonic()
@@ -413,6 +502,7 @@ class ClaudeOutputProcessor:
             try:
                 line, is_stdout = self.queue.get(timeout=0.1)
             except Empty:
+                self._flush_due_workflow_progress()
                 now = time.monotonic()
                 if not self.found_final_message:
                     # Detect hung CLI after interrupt: if we sent an interrupt
@@ -446,8 +536,7 @@ class ClaudeOutputProcessor:
                         and now >= self._completed_pending_deferred_deadline
                     ):
                         logger.info(
-                            "Deferred-completion grace period expired ({:.1f}s); force-clearing {} task(s): {}",
-                            _DEFERRED_CLEANUP_GRACE_SECONDS,
+                            "Deferred-completion grace period expired; force-clearing {} task(s): {}",
                             len(self._completed_pending_deferred),
                             self._completed_pending_deferred,
                         )
@@ -476,6 +565,7 @@ class ClaudeOutputProcessor:
                 continue
 
             self._last_output_time = time.monotonic()
+            self._flush_due_workflow_progress()
 
             if not line.strip():
                 continue
@@ -563,14 +653,24 @@ class ClaudeOutputProcessor:
                     self.tool_use_map,
                     self.diff_tracker,
                 )
-            except json.JSONDecodeError as e:
-                # Non-JSON lines can appear when the Anthropic API returns
-                # malformed data or the CLI emits unexpected debug output.
-                # Rather than crashing the agent, skip the bad line and surface
-                # a warning so the user knows something went wrong.
+            except Exception as e:
+                # Two failure modes are contained here so one bad line degrades
+                # to a visible warning instead of killing the whole turn (an
+                # uncaught exception here escapes the worker thread and ends the
+                # turn):
+                #   - JSONDecodeError: the line is not valid JSON (the Anthropic
+                #     API returned malformed data or the CLI emitted debug output).
+                #   - anything else (TypeError/KeyError/IndexError/...): the line
+                #     is valid JSON but has a message shape the parser cannot
+                #     handle. The parser normalizes the shapes we know about; this
+                #     is the backstop for the next unknown one.
                 truncated_line = line[:200] + ("..." if len(line) > 200 else "")
+                if isinstance(e, json.JSONDecodeError):
+                    detail = "non-JSON line"
+                else:
+                    detail = "unexpected message shape"
                 warning = get_warning_message(
-                    message=f"Received malformed output from Claude CLI (non-JSON line): {truncated_line}",
+                    message=f"Received malformed output from Claude CLI ({detail}): {truncated_line}",
                     error=e,
                     task_id=self.task_id,
                 )
@@ -653,6 +753,9 @@ class ClaudeOutputProcessor:
                 tool_use_info = self.tool_use_map.get(result.tool_use_id)
                 if tool_use_info is not None:
                     self._task_id_to_tool_name[result.task_id] = tool_use_info[0]
+                self._task_id_to_task_type[result.task_id] = result.task_type
+                if result.workflow_name:
+                    self._task_id_to_workflow_name[result.task_id] = result.workflow_name
                 self.output_message_queue.put(
                     BackgroundTaskStartedAgentMessage(
                         message_id=AgentMessageID(),
@@ -660,8 +763,12 @@ class ClaudeOutputProcessor:
                         tool_use_id=result.tool_use_id,
                         description=result.description,
                         task_type=result.task_type,
+                        workflow_name=result.workflow_name,
                     )
                 )
+
+            elif isinstance(result, ParsedTaskProgressResponse):
+                self._handle_task_progress_response(result)
 
             elif isinstance(result, ParsedTaskNotificationResponse):
                 logger.debug("Background task completed: task_id={} status={}", result.task_id, result.status)
@@ -674,11 +781,34 @@ class ClaudeOutputProcessor:
                 if not self._completed_pending_deferred:
                     self._completed_pending_deferred_deadline = None
                 # A new turn (init → assistant → result) always follows a
-                # task_notification, so reset found_final_message to keep the
-                # loop open for it.  Without this, the loop exits immediately
-                # after the last pending task is cleared — before reading the
-                # post-notification assistant response.
-                self.found_final_message = False
+                # task_notification. Keep the loop open for it — but the way we
+                # do that depends on whether the user's own message turn has
+                # already ended:
+                #
+                #  - found_final_message is True: the common ordering — the
+                #    user's turn finished, THEN the background task completed.
+                #    The notification's follow-up turn is the LAST turn, so
+                #    clearing found_final_message here (and letting the
+                #    follow-up's result set it again) is exactly right.
+                #
+                #  - found_final_message is False: the notification arrived
+                #    BEFORE the user's turn produced a result. Either the CLI is
+                #    delivering it ahead of the user's prompt as its own turn
+                #    (SCU-1660), or it is an inline mid-turn notification with no
+                #    new request cycle (SCU-267). We cannot yet tell which, so
+                #    arm the flag; _parse_init_response confirms the former if a
+                #    fresh init follows, and _parse_stream_end_response drops it
+                #    for the latter.
+                if self.found_final_message:
+                    self.found_final_message = False
+                else:
+                    self._awaiting_notification_turn_init = True
+                # final_workflow_entries doubles as the workflow marker on the
+                # persisted notification: an empty tuple (not None) for a
+                # workflow that never reported a tree, so history replay can
+                # still tell workflow completions apart from other background
+                # tasks.
+                is_workflow_task = self._task_id_to_task_type.get(result.task_id) == WORKFLOW_TASK_TYPE
                 self.output_message_queue.put(
                     BackgroundTaskNotificationAgentMessage(
                         message_id=AgentMessageID(),
@@ -687,8 +817,21 @@ class ClaudeOutputProcessor:
                         status=result.status,
                         summary=result.summary,
                         duration_seconds=(result.duration_ms / 1000.0) if result.duration_ms is not None else None,
+                        workflow_name=self._task_id_to_workflow_name.get(result.task_id, ""),
+                        final_workflow_entries=self._last_workflow_entries.get(result.task_id, ())
+                        if is_workflow_task
+                        else None,
+                        workflow_usage=self._last_workflow_usage.get(result.task_id),
                     )
                 )
+                self._task_id_to_task_type.pop(result.task_id, None)
+                self._task_id_to_workflow_name.pop(result.task_id, None)
+                self._last_workflow_entries.pop(result.task_id, None)
+                self._last_workflow_usage.pop(result.task_id, None)
+                self._last_workflow_progress_emit.pop(result.task_id, None)
+                # A deferred progress flush must not fire after the final
+                # notification — it would resurrect the task as running.
+                self._pending_workflow_progress.pop(result.task_id, None)
                 # Note: we intentionally do NOT reset _first_response_message_id
                 # here.  The notification is an out-of-band status signal and must
                 # not disturb the streaming state of the current turn.  The reset
@@ -702,11 +845,15 @@ class ClaudeOutputProcessor:
                 # task_notification in this case. Record the completion so
                 # _parse_stream_end_response can clear it at result time.
                 #
-                # Exception: for tools in _DEFERRED_COMPLETION_TOOLS (Monitor),
-                # the CLI emits a follow-up event-delivery turn AFTER
-                # task_updated. Clearing at the current turn's result/success
-                # would drop that delivery turn. Defer cleanup until the next
-                # init promotes the entry, or the grace period expires.
+                # Exception: Monitor and subagents (task_type in
+                # _SUBAGENT_TASK_TYPES) emit a follow-up event-delivery turn
+                # AFTER task_updated — Monitor its event delivery, a subagent its
+                # task_notification + the main agent's synthesis turn. Clearing
+                # at the current turn's result/success would drop that delivery
+                # turn (SCU-1669). Defer cleanup until the next init promotes the
+                # entry, or the grace period expires. Subagents get a longer
+                # grace because their notification can be queued behind another
+                # subagent's synthesis turn.
                 if result.status in ("completed", "failed", "stopped"):
                     logger.info(
                         "Background task updated: task_id={} status={}",
@@ -714,11 +861,23 @@ class ClaudeOutputProcessor:
                         result.status,
                     )
                     tool_name = self._task_id_to_tool_name.get(result.task_id, "")
+                    task_type = self._task_id_to_task_type.get(result.task_id, "")
+                    deferral_grace: float | None = None
                     if tool_name in _DEFERRED_COMPLETION_TOOLS:
+                        deferral_grace = _DEFERRED_CLEANUP_GRACE_SECONDS
+                    elif task_type in _SUBAGENT_TASK_TYPES:
+                        deferral_grace = _SUBAGENT_COMPLETION_GRACE_SECONDS
+                    if deferral_grace is not None:
                         self._completed_pending_deferred.add(result.task_id)
+                        deadline = time.monotonic() + deferral_grace
+                        # The deadline is shared across deferred tasks; keep the
+                        # latest so a subagent's longer grace is not cut short by
+                        # a concurrently-deferred Monitor's shorter one.
                         if self._completed_pending_deferred_deadline is None:
-                            self._completed_pending_deferred_deadline = (
-                                time.monotonic() + _DEFERRED_CLEANUP_GRACE_SECONDS
+                            self._completed_pending_deferred_deadline = deadline
+                        else:
+                            self._completed_pending_deferred_deadline = max(
+                                self._completed_pending_deferred_deadline, deadline
                             )
                     else:
                         self._completed_via_task_updated.add(result.task_id)
@@ -813,6 +972,101 @@ class ClaudeOutputProcessor:
         logger.info("Usage limit reached (rate_limit_event status=rejected): {}", message)
         raise AgentTransientError(message, exit_code=self.process.returncode)
 
+    def _handle_task_progress_response(self, result: ParsedTaskProgressResponse) -> None:
+        """Emit a WorkflowTaskProgressAgentMessage for a Workflow task's progress tick.
+
+        Non-workflow task_progress (e.g. background Agent tasks) is dropped.
+        A progress event carrying a tree identifies its task as a workflow even
+        when it arrives before task_started. Progress is a pure side-channel:
+        it must not touch found_final_message, the pending-task set, or
+        streaming state.
+        """
+        is_workflow_task = self._task_id_to_task_type.get(result.task_id) == WORKFLOW_TASK_TYPE
+        if not is_workflow_task and result.workflow_progress is None:
+            return
+        if not is_workflow_task:
+            self._task_id_to_task_type[result.task_id] = WORKFLOW_TASK_TYPE
+
+        # Truthiness matters: a payload whose entries were all filtered out
+        # (e.g. only workflow_log lines) parses to an empty tuple and must be
+        # throttled like a token tick, not treated as a tree change.
+        has_tree_delta = bool(result.workflow_progress)
+        if has_tree_delta:
+            # The CLI emits deltas (only entries whose state changed), so
+            # accumulate into the retained tree instead of replacing it.
+            self._last_workflow_entries[result.task_id] = merge_workflow_progress_entries(
+                self._last_workflow_entries.get(result.task_id, ()),
+                result.workflow_progress or (),
+            )
+        if result.usage is not None:
+            self._last_workflow_usage[result.task_id] = result.usage
+
+        now = time.monotonic()
+        last_emit = self._last_workflow_progress_emit.get(result.task_id)
+        min_interval = (
+            _WORKFLOW_PROGRESS_TREE_MIN_EMIT_INTERVAL_SECONDS
+            if has_tree_delta
+            else _WORKFLOW_PROGRESS_MIN_EMIT_INTERVAL_SECONDS
+        )
+        if last_emit is not None and now - last_emit < min_interval:
+            if has_tree_delta:
+                # Defer rather than drop: the delta is already merged into the
+                # retained tree, so marking the task pending is enough for the
+                # flush to emit it once the coalescing window elapses.
+                self._pending_workflow_progress[result.task_id] = _PendingWorkflowProgress(
+                    tool_use_id=result.tool_use_id,
+                    last_tool_name=result.last_tool_name,
+                    summary=result.summary,
+                )
+            return
+        self._emit_workflow_progress(
+            task_id=result.task_id,
+            tool_use_id=result.tool_use_id,
+            last_tool_name=result.last_tool_name,
+            summary=result.summary,
+            now=now,
+        )
+
+    def _emit_workflow_progress(
+        self, task_id: str, tool_use_id: str, last_tool_name: str | None, summary: str, now: float
+    ) -> None:
+        """Emit the retained progress tree for a workflow task and reset its throttle."""
+        self._pending_workflow_progress.pop(task_id, None)
+        self._last_workflow_progress_emit[task_id] = now
+        self.output_message_queue.put(
+            WorkflowTaskProgressAgentMessage(
+                message_id=AgentMessageID(),
+                background_task_id=task_id,
+                tool_use_id=tool_use_id,
+                workflow_name=self._task_id_to_workflow_name.get(task_id, ""),
+                entries=self._last_workflow_entries.get(task_id, ()),
+                usage=self._last_workflow_usage.get(task_id),
+                last_tool_name=last_tool_name,
+                summary=summary,
+            )
+        )
+
+    def _flush_due_workflow_progress(self) -> None:
+        """Emit deferred workflow progress whose coalescing window has elapsed.
+
+        Runs on every processed line and on queue-idle ticks, so a deferred
+        state flip becomes visible even when its task goes quiet right after
+        a burst.
+        """
+        if not self._pending_workflow_progress:
+            return
+        now = time.monotonic()
+        for task_id, pending in list(self._pending_workflow_progress.items()):
+            last_emit = self._last_workflow_progress_emit.get(task_id)
+            if last_emit is None or now - last_emit >= _WORKFLOW_PROGRESS_TREE_MIN_EMIT_INTERVAL_SECONDS:
+                self._emit_workflow_progress(
+                    task_id=task_id,
+                    tool_use_id=pending.tool_use_id,
+                    last_tool_name=pending.last_tool_name,
+                    summary=pending.summary,
+                    now=now,
+                )
+
     def _parse_init_response(self, result: ParsedInitResponse) -> None:
         session_id = result.session_id
         self._session_id = session_id
@@ -820,6 +1074,16 @@ class ClaudeOutputProcessor:
         self.environment.write_file(str(session_file_path), session_id)
         self.session_id_written_event.set()
         logger.info("Stored session_id: {}", session_id)
+
+        # A task-notification that arrived before the user's turn ended armed
+        # _awaiting_notification_turn_init. This init is a fresh request cycle,
+        # which confirms the notification was delivered as its own turn ahead
+        # of the user's prompt (SCU-1660) rather than inline mid-turn. Promote
+        # it to a pending notification-turn result so _parse_stream_end_response
+        # skips that turn's result and keeps the loop open for the user's turn.
+        if self._awaiting_notification_turn_init:
+            self._awaiting_notification_turn_init = False
+            self._pending_notification_turn_results += 1
 
         # A ScheduleWakeup fires as a second init message on the same session.
         # When the wakeup init arrives, reset found_final_message so the loop
@@ -899,7 +1163,17 @@ class ClaudeOutputProcessor:
         if result.is_error:
             if self._interrupted_event is not None and self._interrupted_event.is_set():
                 logger.info("Suppressing error end response because agent was interrupted: {}", result.result)
+            elif result.api_error_status is not None:
+                # The CLI reports the HTTP status of the failing API call directly, so classify
+                # from that rather than parsing result text — the latter breaks silently if the
+                # CLI rewords its error messages.
+                logger.info("API Error: stdout={}, stderr={}", self.process.read_stdout(), self.process.read_stderr())
+                if result.api_error_status in TRANSIENT_ERROR_CODES:
+                    raise AgentTransientError(result.result, exit_code=self.process.returncode)
+                raise ClaudeAPIError(result.result, exit_code=self.process.returncode)
             elif result.result.startswith("API Error"):
+                # Fallback for CLIs that predate the structured api_error_status field: recover
+                # the status by matching the "API Error: <code> ..." text prefix.
                 logger.info("API Error: stdout={}, stderr={}", self.process.read_stdout(), self.process.read_stderr())
                 if any(result.result.startswith(f"API Error: {code}") for code in TRANSIENT_ERROR_CODES):
                     raise AgentTransientError(result.result, exit_code=self.process.returncode)
@@ -920,6 +1194,19 @@ class ClaudeOutputProcessor:
 
         self.found_final_message = True
         self._final_message_time = time.monotonic()
+
+        # SCU-1660: if this result terminates a task-notification turn the CLI
+        # delivered ahead of the user's own message turn, it is not the end of
+        # the invocation — the user's real turn still has to run. Re-open the
+        # loop so it is not torn down after its first tool result.
+        if self._pending_notification_turn_results > 0:
+            self._pending_notification_turn_results -= 1
+            self.found_final_message = False
+        # A notification that never started a fresh request cycle before this
+        # result was an inline mid-turn notification (SCU-267), not a separate
+        # turn — drop the pending classification so it doesn't leak into a later
+        # turn's result.
+        self._awaiting_notification_turn_init = False
 
         # Clear pending background tasks that already completed via task_updated.
         # The CLI emits task_updated(status=completed) when a background task
@@ -1165,7 +1452,7 @@ class ClaudeOutputProcessor:
             )
         )
         if self._mcp_server is not None:
-            self._mcp_server.register_tool_use_id(tool_block.id, ask_tool_fqn)
+            self._mcp_server.register_tool_use_id(tool_block.id, ask_tool_fqn, tool_input=tool_block.input)
         return True
 
     def _maybe_record_plan_file_write(self, tool_block: ToolUseBlock) -> None:
@@ -1220,7 +1507,7 @@ class ClaudeOutputProcessor:
         # doesn't re-publish the stale path.
         self._recent_plan_file_path = None
         if self._mcp_server is not None:
-            self._mcp_server.register_tool_use_id(tool_block.id, exit_plan_mode_tool_fqn)
+            self._mcp_server.register_tool_use_id(tool_block.id, exit_plan_mode_tool_fqn, tool_input=tool_block.input)
         return True
 
     def _maybe_handle_enter_plan_mode(self, tool_block: ToolUseBlock) -> bool:

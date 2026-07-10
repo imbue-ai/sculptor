@@ -1,8 +1,10 @@
 """Integration tests for branch-name collision detection.
 
-Verifies the dual-layer collision check (debounced inline error +
-authoritative backend re-check returning 409) in both WORKTREE
-(default) and CLONE (opt-in) modes.
+Verifies the collision handling in both WORKTREE (default) and CLONE
+(opt-in) modes: the debounced inline check surfaces an error and disables
+Create, so a colliding name can never be submitted. (The authoritative
+backend re-check returning 409 remains as a race safety net, but is not
+reachable through the UI once the inline check has resolved.)
 """
 
 import re
@@ -16,9 +18,10 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+from sculptor.testing.utils import get_playwright_modifier_key
 
 COLLIDING_BRANCH = "alice/conflicting"
 
@@ -55,7 +58,7 @@ def test_worktree_mode_collision_blocks_creation(sculptor_instance_: SculptorIns
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
     # Worktree is the default — no mode-selector interaction needed.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page.get_workspace_name_input().fill("test")
 
     branch_input = add_ws_page.get_branch_name_input()
@@ -68,14 +71,16 @@ def test_worktree_mode_collision_blocks_creation(sculptor_instance_: SculptorIns
     expect(collision_error).to_contain_text(colliding_branch)
     expect(collision_error).to_contain_text("already exists")
 
-    add_ws_page.get_submit_button().click()
+    # The inline collision disables Create; a keyboard submit attempt is a
+    # guarded no-op — no workspace is created and we stay on the create surface.
+    expect(add_ws_page.get_submit_button()).to_be_disabled()
+    page.keyboard.press(f"{get_playwright_modifier_key()}+Enter")
 
-    # Submit should fail — the chat panel should NOT appear (we stay on Add Workspace).
     chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
     expect(chat_panel).not_to_be_visible()
 
     assert _no_new_worktree_metadata(sculptor_instance_.project_path), (
-        "failed submit should not leave a stale worktree metadata entry"
+        "blocked submit should not leave a stale worktree metadata entry"
     )
 
 
@@ -87,7 +92,7 @@ def test_clone_mode_collision_blocks_creation(sculptor_instance_: SculptorInstan
     # Clone is opt-in; enable the flag and pick clone mode explicitly.
     enable_clone_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page.get_workspace_name_input().fill("test")
     add_ws_page.select_mode(ElementIDs.MODE_OPTION_CLONE)
 
@@ -100,7 +105,10 @@ def test_clone_mode_collision_blocks_creation(sculptor_instance_: SculptorInstan
     expect(collision_error).to_be_visible()
     expect(collision_error).to_contain_text(colliding_branch)
 
-    add_ws_page.get_submit_button().click()
+    # Same blocked-create contract as worktree mode: Create disables and a
+    # keyboard submit attempt is a guarded no-op.
+    expect(add_ws_page.get_submit_button()).to_be_disabled()
+    page.keyboard.press(f"{get_playwright_modifier_key()}+Enter")
 
     chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
     expect(chat_panel).not_to_be_visible()

@@ -10,10 +10,8 @@ import {
   SCULPTOR_TABS_STORAGE_KEY,
   WORKSPACE_TAB_ID_PREFIX,
 } from "./common/state/atoms/workspaces.ts";
-import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
-import { PageLayout } from "./layouts/PageLayout";
-import { AddWorkspacePage } from "./pages/add-workspace/AddWorkspacePage.tsx";
-import { ComponentGalleryPage } from "./pages/debug/ComponentGalleryPage.tsx";
+import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
+import { AppShell } from "./layouts/AppShell";
 import { NotFoundErrorPage } from "./pages/error/NotFound.tsx";
 import { RouteErrorPage } from "./pages/error/RouteErrorPage.tsx";
 import { HomePage } from "./pages/home/HomePage.tsx";
@@ -42,9 +40,8 @@ const readSculptorTabs = (): TabsState => {
 const entryToUrl = (entry: TabEntry): string | null => {
   if (entry.tabId === HOME_TAB_ID) return "/home";
   if (entry.tabId === SETTINGS_TAB_ID) return "/settings";
-  if (entry.tabId === COMPONENT_GALLERY_TAB_ID) return "/component-gallery";
   const draftId = parseDraftIdFromTabId(entry.tabId);
-  if (draftId !== null) return `/ws/new/${draftId}`;
+  if (draftId !== null) return null;
   if (entry.tabId.startsWith(WORKSPACE_TAB_ID_PREFIX)) {
     return entry.agentId !== null ? `/ws/${entry.tabId}/agent/${entry.agentId}` : `/ws/${entry.tabId}`;
   }
@@ -54,9 +51,9 @@ const entryToUrl = (entry: TabEntry): string | null => {
 const rootLoader = (): Response => {
   const tabs = readSculptorTabs();
   const entry = tabs.order[tabs.activeIndex];
-  if (!entry) return redirect("/ws/new");
+  if (!entry) return redirect("/home");
   const target = entryToUrl(entry);
-  return redirect(target ?? "/ws/new");
+  return redirect(target ?? "/home");
 };
 
 const router = createHashRouter([
@@ -65,83 +62,34 @@ const router = createHashRouter([
     loader: rootLoader,
     errorElement: <RouteErrorPage />,
   },
+  // The app-wide sidebar shell hosts Home, Settings, and the workspace route, so
+  // the sidebar + chrome stay mounted as the user moves between them.
   {
-    path: "/home",
-    element: <PageLayout />,
+    element: <AppShell />,
     errorElement: <RouteErrorPage />,
     children: [
       {
-        index: true,
+        path: "/home",
         element: <HomePage />,
       },
-    ],
-  },
-  {
-    path: "/ws/new",
-    loader: (): Response => redirect(`/ws/new/${crypto.randomUUID()}`),
-    errorElement: <RouteErrorPage />,
-  },
-  {
-    path: "/ws/new/:draftId",
-    element: <PageLayout />,
-    errorElement: <RouteErrorPage />,
-    children: [
       {
-        index: true,
-        element: <AddWorkspacePage />,
-      },
-    ],
-  },
-  {
-    path: "/ws/:workspaceID",
-    element: <PageLayout showVersionIndicator={false} />,
-    errorElement: <RouteErrorPage />,
-    children: [
-      {
-        index: true,
-        element: <WorkspacePage />,
-      },
-      {
-        path: "agent/:id",
-        element: <WorkspacePage />,
-      },
-    ],
-  },
-  {
-    path: "/settings",
-    element: <PageLayout />,
-    errorElement: <RouteErrorPage />,
-    children: [
-      {
-        index: true,
+        path: "/settings",
         element: <SettingsPage />,
       },
-    ],
-  },
-  {
-    path: "/component-gallery",
-    element: <PageLayout />,
-    errorElement: <RouteErrorPage />,
-    children: [
       {
-        index: true,
-        element: (
-          <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-            <ComponentGalleryPage />
-          </div>
-        ),
+        path: "/ws/:workspaceID",
+        children: [
+          {
+            index: true,
+            element: <WorkspacePage />,
+          },
+          {
+            path: "agent/:id",
+            element: <WorkspacePage />,
+          },
+        ],
       },
     ],
-  },
-  {
-    path: "/debug/components",
-    loader: (): Response => redirect("/debug/components/ws/gallery-demo/agent/demo"),
-    errorElement: <RouteErrorPage />,
-  },
-  {
-    path: "/debug/components/ws/:workspaceID/agent/:id",
-    element: <ComponentGalleryPage />,
-    errorElement: <RouteErrorPage />,
   },
   {
     path: "*",

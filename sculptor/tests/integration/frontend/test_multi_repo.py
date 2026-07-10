@@ -17,10 +17,12 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.test_repo_factory import TestRepoFactory
@@ -55,7 +57,7 @@ def test_create_new_project_from_add_workspace_page(
     _add_repo_via_settings(page, repo.base_path)
 
     # Navigate to the AddWorkspacePage so the UI picks up the new project
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_ws_page.get_submit_button()).to_be_visible()
 
@@ -87,7 +89,7 @@ def test_git_init_dialog_for_non_git_directories(sculptor_instance_: SculptorIns
     page = sculptor_instance_.page
 
     # Navigate to the AddWorkspacePage
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
     # Open the project selector and click "Open New Repo"
@@ -154,30 +156,29 @@ def test_create_workspaces_in_multiple_projects_and_switch(
     _add_repo_via_settings(page, repo_b.base_path)
 
     # Create a workspace in project A
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a)
     task_page_a = start_task_and_wait_for_ready(page, prompt="Alpha task 1", workspace_name="Alpha Workspace")
     chat_panel_a = task_page_a.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=2)
 
     # Create a workspace in project B
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_b)
     task_page_b = start_task_and_wait_for_ready(page, prompt="Beta task 1", workspace_name="Beta Workspace")
     chat_panel_b = task_page_b.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_b, expected_message_count=2)
 
-    # Verify there are 2 workspace tabs
-    workspace_tabs = task_page_b.get_workspace_tabs()
-    expect(workspace_tabs).to_have_count(2)
+    # Verify there are 2 workspace rows
+    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(2)
 
-    # Click the first workspace tab (Alpha) to switch back
-    workspace_tabs.first.click()
+    # Click the Alpha workspace row to switch back (sidebar rows sort by name)
+    navigate_to_workspace(page, "Alpha Workspace")
     task_page = PlaywrightTaskPage(page=page)
     expect(task_page.get_chat_panel()).to_be_visible()
 
-    # Click the second workspace tab (Beta) to switch
-    workspace_tabs.nth(1).click()
+    # Click the Beta workspace row to switch
+    navigate_to_workspace(page, "Beta Workspace")
     expect(task_page.get_chat_panel()).to_be_visible()
 
 
@@ -213,7 +214,7 @@ def test_send_messages_across_multiple_project_workspaces(
     _add_repo_via_settings(page, repo_b.base_path)
 
     # Create workspace in project A
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a)
     task_page_a = start_task_and_wait_for_ready(page, prompt=initial_prompt_a, workspace_name="Alpha Workspace")
     chat_panel_a = task_page_a.get_chat_panel()
@@ -224,7 +225,7 @@ def test_send_messages_across_multiple_project_workspaces(
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=4)
 
     # Create workspace in project B
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_b)
     task_page_b = start_task_and_wait_for_ready(page, prompt=initial_prompt_b, workspace_name="Beta Workspace")
     chat_panel_b = task_page_b.get_chat_panel()
@@ -234,9 +235,8 @@ def test_send_messages_across_multiple_project_workspaces(
     send_chat_message(chat_panel=chat_panel_b, message=follow_up_prompt_b)
     wait_for_completed_message_count(chat_panel=chat_panel_b, expected_message_count=4)
 
-    # Switch back to workspace A via workspace tab
-    workspace_tabs = task_page_b.get_workspace_tabs()
-    workspace_tabs.first.click()
+    # Switch back to workspace A via its sidebar row
+    navigate_to_workspace(page, "Alpha Workspace")
 
     # Re-acquire the chat panel after navigation
     chat_panel_a = PlaywrightTaskPage(page=page).get_chat_panel()
@@ -246,7 +246,7 @@ def test_send_messages_across_multiple_project_workspaces(
     expect(chat_panel_a.get_messages()).to_have_count(4)
 
     # Switch back to workspace B
-    workspace_tabs.nth(1).click()
+    navigate_to_workspace(page, "Beta Workspace")
     chat_panel_b = PlaywrightTaskPage(page=page).get_chat_panel()
     expect(chat_panel_b._locator).to_be_visible()
 
@@ -282,12 +282,12 @@ def test_mru_project_updates_after_creating_workspace(
 
     # Step 2: Create a workspace in the original project A (not B).
     # The project selector should still show A since it's the first project.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a_name)
     start_task_and_wait_for_ready(page, prompt="Alpha task", workspace_name="Alpha Workspace")
 
     # Step 3: Navigate back to the Add Workspace page.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
 
     # Step 4: Verify the project selector shows project A (not B) as the default,
     # because we most recently created a workspace in project A.
@@ -295,7 +295,9 @@ def test_mru_project_updates_after_creating_workspace(
     expect(add_ws_page.get_project_selector()).to_contain_text(project_a_name)
 
 
-@pytest.mark.skip(reason="Duplicate project name disambiguation requires redesign for workspace-tabs UI")
+@pytest.mark.skip(
+    reason="Projects are labeled by bare folder name everywhere (sidebar repo groups, new-workspace repo selector) with no path-based disambiguation, so two repos sharing a leaf name render identically. This placeholder has no behavior to assert until a disambiguation affordance exists."
+)
 @user_story("to distinguish between projects with the same folder name")
 def test_duplicate_project_names() -> None:
     """Test handling of projects with same leaf folder names but different paths."""
@@ -388,3 +390,32 @@ def test_adding_duplicate_repo_shows_error(sculptor_instance_: SculptorInstance)
     validation_dialog = settings_page.get_git_init_dialog()
     expect(validation_dialog).to_be_visible()
     expect(validation_dialog).to_contain_text("already")
+
+
+@user_story("to see a repo I add from the sidebar appear even before it has any workspaces")
+def test_added_repo_without_workspaces_appears_in_sidebar(
+    sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
+) -> None:
+    """A repo added while other workspaces exist shows immediately in the sidebar.
+
+    The sidebar repo groups are seeded from projects (not just workspaces), so a
+    repo with no workspaces renders as its own group with a "No workspaces yet"
+    hint instead of staying invisible until its first workspace is created. This
+    also exercises the sidebar "Add repo" button as the add entry point.
+    """
+    page = sculptor_instance_.page
+
+    # Leave the first-run state by creating a workspace, so the sidebar is in its
+    # normal (non-empty) form rather than the empty first-run page.
+    start_task_and_wait_for_ready(page, prompt="hello", workspace_name="First Workspace")
+
+    empty_repo = test_repo_factory_.create_repo(name="empty_sidebar_repo", branch="main")
+
+    # Add the second repo from the sidebar's "Add repo" button.
+    sidebar = get_workspace_sidebar(page)
+    sidebar.open_add_repo_dialog().add_local_repo(str(empty_repo.base_path.resolve()))
+
+    # Both repos now have a sidebar group; the just-added one carries the hint.
+    expect(sidebar.get_repo_groups()).to_have_count(2)
+    expect(sidebar.get_repo_group_by_name("empty_sidebar_repo")).to_be_visible()
+    expect(sidebar.get_no_workspaces_hint()).to_have_count(1)

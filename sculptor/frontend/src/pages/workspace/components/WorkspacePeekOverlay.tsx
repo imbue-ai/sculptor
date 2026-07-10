@@ -1,13 +1,16 @@
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { useStore } from "jotai";
+import { type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+
+import { ElementIds } from "~/api";
+import { isSidebarDragActiveAtom } from "~/components/nav/navAtoms.ts";
 
 import styles from "./WorkspacePeekOverlay.module.scss";
 import { WorkspacePeekPopover } from "./WorkspacePeekPopover";
 
-const OPEN_DELAY_MS = 600;
+// The peek opens instantly on hover (no hover-intent delay).
+const OPEN_DELAY_MS = 0;
 const CLOSE_DELAY_MS = 80;
-// After closing, re-entering a tab within this window reopens immediately.
-const REOPEN_GRACE_PERIOD_MS = 300;
-// Gap in pixels between the anchoring tab (or dropdown) and the peek overlay.
+// Gap in pixels between the sidebar's edge and the peek overlay.
 const PEEK_OFFSET_PX = 4;
 
 type OverlayPosition = {
@@ -40,7 +43,13 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   // Track visibility in a ref so event listeners don't need to be re-registered
   // when visibility changes (which would cause missed mouseout events).
   const isVisibleRef = useRef(false);
-  const lastClosedAtRef = useRef(0);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  // Sorting a sidebar row/group sweeps the pointer across other rows; keep the
+  // peek closed for the whole drag. Tracked in a ref (same reason as
+  // isVisibleRef, and the overlay needn't re-render on drag start/end) — the
+  // effect below keeps it in sync via a store subscription.
+  const isSidebarDragActiveRef = useRef(false);
+  const store = useStore();
 
   const clearTimers = useCallback((): void => {
     if (openTimerRef.current) {
@@ -55,22 +64,21 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   }, []);
 
   const updatePosition = useCallback((tabElement: Element): void => {
-    // When the tab is inside a dropdown menu (overflow), position the peek to
-    // the right of the dropdown so it doesn't overlap the menu.
-    const dropdownContent = tabElement.closest("[role='menu']");
-    if (dropdownContent) {
-      const menuRect = dropdownContent.getBoundingClientRect();
-      setPosition({ x: menuRect.right + PEEK_OFFSET_PX, y: menuRect.top });
-    } else {
-      const rect = tabElement.getBoundingClientRect();
-      setPosition({ x: rect.left, y: rect.bottom + PEEK_OFFSET_PX });
-    }
+    // Workspace rows live in the left sidebar, so the peek anchors just past the
+    // sidebar's right edge (level with the hovered row's top) rather than below
+    // it. Anchor to the sidebar container, not the row itself: the row's right
+    // edge shifts inward as its hover-action icons appear/hide, and the sidebar
+    // is resizable — deriving x from the sidebar edge keeps the peek flush
+    // against it no matter the width.
+    const rowRect = tabElement.getBoundingClientRect();
+    const sidebar = tabElement.closest(`[data-testid="${ElementIds.WORKSPACE_SIDEBAR}"]`);
+    const anchorRight = sidebar ? sidebar.getBoundingClientRect().right : rowRect.right;
+    setPosition({ x: anchorRight + PEEK_OFFSET_PX, y: rowRect.top });
   }, []);
 
   const dismiss = useCallback((): void => {
     clearTimers();
     isVisibleRef.current = false;
-    lastClosedAtRef.current = Date.now();
     setIsVisible(false);
     setHoveredWorkspaceId(null);
     setHasAnimated(false);
@@ -100,6 +108,7 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   // changes, which would cause missed mouseout events.
   useEffect((): (() => void) => {
     const handleMouseOver = (e: MouseEvent): void => {
+      if (isSidebarDragActiveRef.current) return;
       const workspaceId = getWorkspaceTabId(e.target);
       if (!workspaceId) return;
 
@@ -115,18 +124,16 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
         updatePosition(tab);
         activeTabIdRef.current = workspaceId;
       } else if (!isVisibleRef.current) {
-        // Not visible — open immediately if within grace period, otherwise delay
+        // Not visible — schedule the open.
         activeTabIdRef.current = workspaceId;
         updatePosition(tab);
-        const timeSinceClose = Date.now() - lastClosedAtRef.current;
-        const delay = timeSinceClose < REOPEN_GRACE_PERIOD_MS ? 0 : OPEN_DELAY_MS;
         openTimerRef.current = setTimeout(() => {
           setHoveredWorkspaceId(workspaceId);
           isVisibleRef.current = true;
           setIsVisible(true);
           // Enable transitions only after initial position is set
           requestAnimationFrame(() => setHasAnimated(true));
-        }, delay);
+        }, OPEN_DELAY_MS);
       }
     };
 
@@ -148,20 +155,48 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
       }
     };
 
+    // A drag starting dismisses an already-open peek; handleMouseOver keeps it
+    // closed for the rest of the drag via the ref.
+    isSidebarDragActiveRef.current = store.get(isSidebarDragActiveAtom);
+    const unsubscribeDrag = store.sub(isSidebarDragActiveAtom, () => {
+      isSidebarDragActiveRef.current = store.get(isSidebarDragActiveAtom);
+      if (isSidebarDragActiveRef.current) {
+        dismiss();
+      }
+    });
+
     document.addEventListener("mouseover", handleMouseOver);
     document.addEventListener("mouseout", handleMouseOut);
     document.addEventListener("click", handleClick, true);
     document.addEventListener("auxclick", handleClick, true);
     return (): void => {
+      unsubscribeDrag();
       document.removeEventListener("mouseover", handleMouseOver);
       document.removeEventListener("mouseout", handleMouseOut);
       document.removeEventListener("click", handleClick, true);
       document.removeEventListener("auxclick", handleClick, true);
     };
-  }, [clearTimers, scheduleClose, dismiss, getWorkspaceTabId, updatePosition]);
+  }, [clearTimers, scheduleClose, dismiss, getWorkspaceTabId, updatePosition, store]);
 
   // Cleanup timers on unmount
   useEffect(() => clearTimers, [clearTimers]);
+
+  // Clamp the overlay so a row hovered low in the sidebar doesn't push the
+  // popover past the viewport bottom. `position.y` anchors to the hovered
+  // row's top; measuring the rendered height (which depends on the popover's
+  // content, up to its max-height) lets us shift a tall popover up just enough
+  // to keep it fully on screen. Runs in a layout effect so the correction lands
+  // before paint, and only writes back when clamping actually moves it so the
+  // measure/clamp loop settles after one adjustment.
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const maxY = window.innerHeight - overlay.offsetHeight - PEEK_OFFSET_PX;
+    const clampedY = Math.max(PEEK_OFFSET_PX, Math.min(position.y, maxY));
+    if (clampedY !== position.y) {
+      setPosition((prev) => ({ ...prev, y: clampedY }));
+    }
+  }, [position.y]);
 
   const handlePopoverMouseEnter = useCallback((): void => {
     isOverPopoverRef.current = true;
@@ -177,6 +212,7 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
 
   return (
     <div
+      ref={overlayRef}
       className={`${styles.overlay} ${hasAnimated ? styles.animated : ""}`}
       style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
       onMouseEnter={handlePopoverMouseEnter}

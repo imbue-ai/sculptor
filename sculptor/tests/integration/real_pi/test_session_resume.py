@@ -19,7 +19,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -67,10 +67,9 @@ def test_real_pi_recalls_sentinel_across_restart(
     # workspace re-runs the agent, which resumes the persisted session; the
     # recall must surface the pre-restart codeword.
     with sculptor_instance_factory_.spawn_instance() as instance:
-        layout = PlaywrightProjectLayoutPage(page=instance.page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        workspace_row = get_workspace_sidebar(instance.page).get_workspace_rows().first
+        expect(workspace_row).to_be_visible()
+        workspace_row.click()
         task_page = PlaywrightTaskPage(page=instance.page)
         chat_panel = task_page.get_chat_panel()
         expect(chat_panel).to_be_visible()

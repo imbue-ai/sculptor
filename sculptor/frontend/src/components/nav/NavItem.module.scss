@@ -1,0 +1,48 @@
+.navItem {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  width: 100%;
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}
+
+.navItemActive {
+  background: var(--accent-a3);
+  color: var(--accent-11);
+
+  // Hold the accent pill while hovering. The base `.navItem:hover` rule sets the
+  // plain gray hover background at equal specificity, so re-assert the accent here
+  // (later in source order) to keep the active state from dimming under the cursor.
+  &:hover {
+    background: var(--accent-a3);
+  }
+}
+
+.navIcon {
+  color: var(--gray-11);
+  flex-shrink: 0;
+}
+
+// Tint the leading icon with the accent color when the row is selected, matching
+// the accent label. The icon sets an explicit color (rather than inheriting
+// currentColor), so the active state has to restate it here.
+.navItemActive .navIcon {
+  color: var(--accent-11);
+}
+
+.navLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

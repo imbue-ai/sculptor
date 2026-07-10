@@ -1,17 +1,25 @@
-import { useSetAtom } from "jotai";
+import { useSetAtom, useStore } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 
-import { deleteWorkspaceAgent } from "../../../api";
+import type { CodingAgentTaskView } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../NavigateUtils.ts";
-import { optimisticDeleteTaskAtom, rollbackDeleteTaskAtom } from "../atoms/tasks";
+import { queryClient, taskQueryKey } from "../../queryClient.ts";
 import { deleteErrorToastAtom } from "../atoms/toasts";
+import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atoms/workspaces.ts";
+import { applyOptimisticTaskDelete, useDeleteTaskMutation } from "../mutations";
 
 type UseOptimisticTaskDeleteInputs = {
   workspaceId: string;
-  /** Custom navigation after optimistic removal. If omitted, navigates to root when the deleted agent is active. */
-  onNavigateAfterDelete?: (taskId: string) => void;
+  /**
+   * Custom navigation after optimistic removal. If omitted, navigates to root when the
+   * deleted agent is active. Receives the deleted task's pre-delete snapshot because the
+   * optimistic removal has already dropped the task from the store by the time this runs —
+   * callbacks that need the deleted task's data (e.g. its position among siblings) must
+   * read it from the snapshot, not the store.
+   */
+  onNavigateAfterDelete?: (taskId: string, deletedTask: CodingAgentTaskView) => void;
 };
 
 type UseOptimisticTaskDeleteResult = {
@@ -20,12 +28,13 @@ type UseOptimisticTaskDeleteResult = {
 
 export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): UseOptimisticTaskDeleteResult => {
   const { workspaceId, onNavigateAfterDelete } = inputs;
-  const setOptimisticDelete = useSetAtom(optimisticDeleteTaskAtom);
-  const setRollbackDelete = useSetAtom(rollbackDeleteTaskAtom);
+  const store = useStore();
   const setDeleteErrorToast = useSetAtom(deleteErrorToastAtom);
+  const setAgentForWorkspace = useSetAtom(setAgentForWorkspaceAtom);
   const { navigateToRoot } = useImbueNavigate();
   const { isAgentRoute } = useImbueLocation();
   const { taskID } = useImbueParams();
+  const { mutateAsync: deleteTask } = useDeleteTaskMutation();
   // The Retry action re-invokes execute. Reach it through a ref (kept current
   // by the effect below) so the callback doesn't reference itself before it is
   // declared.
@@ -33,13 +42,27 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
 
   const execute = useCallback(
     (taskId: string, taskTitle: string): void => {
-      const snapshot = setOptimisticDelete(taskId);
-      if (snapshot === null) {
+      const snapshot = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(taskId));
+      if (!snapshot) {
         return;
       }
 
+      // Tombstone the task and drop it from the ids list *now*, before the
+      // navigation callbacks run: the mirror projects the removal into the
+      // Jotai atoms synchronously, so the callbacks below already see the task
+      // gone from every store. The mutation's onError rolls this back on
+      // failure using the returned context.
+      const deleteContext = applyOptimisticTaskDelete(taskId);
+
+      // A deleted agent must not linger as the workspace's saved agent, or the next
+      // cold-start redirect targets a dead route. Left cleared on a failed delete —
+      // the mapping re-saves on the next agent visit.
+      if (store.get(agentIdForWorkspaceAtomFamily(workspaceId)) === taskId) {
+        setAgentForWorkspace({ wsId: workspaceId, agentId: null });
+      }
+
       if (onNavigateAfterDelete) {
-        onNavigateAfterDelete(taskId);
+        onNavigateAfterDelete(taskId, snapshot);
       } else if (isAgentRoute && taskID === taskId) {
         navigateToRoot();
       }
@@ -49,11 +72,9 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
         agent_id: taskId,
       });
 
-      void deleteWorkspaceAgent({
-        path: { workspace_id: workspaceId, agent_id: taskId },
-        meta: { skipWsAck: true },
-      }).catch(() => {
-        setRollbackDelete({ taskId, snapshot });
+      // The mutation owns the rollback (onError, so it survives an unmount); the
+      // rejection here only drives the client-state toast.
+      deleteTask({ workspaceId, agentId: taskId, deleteContext }).catch(() => {
         setDeleteErrorToast({
           title: `Failed to delete "${taskTitle}"`,
           description: "The agent has been restored. Try again or check your connection.",
@@ -69,15 +90,17 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
       });
     },
     [
-      setOptimisticDelete,
-      setRollbackDelete,
+      store,
       setDeleteErrorToast,
+      setAgentForWorkspace,
       onNavigateAfterDelete,
       isAgentRoute,
       taskID,
       navigateToRoot,
       workspaceId,
+      deleteTask,
     ],
+    // deleteTask (mutateAsync) is referentially stable across renders.
   );
 
   useEffect(() => {

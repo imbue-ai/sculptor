@@ -1,0 +1,69 @@
+@use "scrollbar" as *;
+
+// Styles for the sidebar frame itself. Nav-row styling lives in
+// NavItem.module.scss and repo-group/workspace-row styling in
+// SidebarRepoGroup.module.scss.
+
+.sidebar {
+  background: var(--gray-2);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+  // Width is driven inline by the resize handle (sidebarWidthAtom); the handle
+  // lives at the right edge via the relative positioning context below and draws
+  // the 1px divider itself — a separate border-right here would stack into a
+  // visually ~2px-thick edge, so the sidebar has no border of its own.
+  position: relative;
+}
+
+.windowControls {
+  align-items: center;
+  app-region: drag;
+  display: flex;
+  flex-shrink: 0;
+  height: var(--titlebar-height);
+  justify-content: flex-end;
+  padding-right: var(--space-2);
+}
+
+.noDrag {
+  app-region: no-drag;
+}
+
+.topActions,
+.bottomActions {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: var(--space-2);
+}
+
+.repoList {
+  // Horizontal padding so the row hover pills are inset (and never touch the
+  // sidebar edges), matching the top-action nav items.
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-2);
+
+  @include thin-scrollbar(vertical);
+}
+
+.spacer {
+  flex-grow: 1;
+  flex-shrink: 0;
+}
+
+// Version string beneath the nav items, inset to align with their labels,
+// with an optional dev-source indicator trailing it on the same line.
+.versionRow {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+}

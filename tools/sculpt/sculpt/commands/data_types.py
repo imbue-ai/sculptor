@@ -192,3 +192,7 @@ class ErrorOutput(BaseModel):
 
     error: str = Field(description="Error message")
     detail: str = Field(description="Additional detail (may be empty)")
+    code: str | None = Field(
+        default=None,
+        description="Machine-readable error code when the failure has one (e.g. from the backend), else null",
+    )

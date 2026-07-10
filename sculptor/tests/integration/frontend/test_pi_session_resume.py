@@ -17,8 +17,8 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.fake_pi import install_fake_pi_binary
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
@@ -49,10 +49,7 @@ def test_pi_session_resumes_prior_context_across_restart(
     # --session-id; `fake_pi:recall` then reproduces the pre-restart codeword.
     with sculptor_instance_factory_.spawn_instance() as instance:
         install_fake_pi_binary(instance.fake_bin_dir)
-        layout = PlaywrightProjectLayoutPage(page=instance.page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        navigate_to_workspace(instance.page)
         task_page = PlaywrightTaskPage(page=instance.page)
         chat_panel = task_page.get_chat_panel()
         expect(chat_panel).to_be_visible()

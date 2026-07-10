@@ -1,4 +1,4 @@
-import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
+import { Button, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ListChecks, Plus } from "lucide-react";
@@ -37,7 +37,8 @@ import {
   setWorkspaceAgentModel,
 } from "../../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
-import { useImbueNavigate, useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
+import { hasNoUsableModel } from "../../../common/modelConstants.ts";
+import { useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
 import { shouldHandleKeybinding, useModifiedEnter } from "../../../common/ShortcutUtils.ts";
 import { closeBtwPopupAtom, openBtwPopupAtom } from "../../../common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "../../../common/state/atoms/chatActions.ts";
@@ -56,10 +57,12 @@ import {
 } from "../../../common/state/atoms/userConfig.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
+import { useOpenSettings } from "../../../common/state/hooks/useOpenSettings.ts";
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
 import { useTaskDetailWithDefaults } from "../../../common/state/hooks/useTaskDetail";
 import {
   useTaskAvailableModels,
+  useTaskConfigurationSettingsSection,
   useTaskModel,
   useTaskSelectedModelId,
   useTaskSourcesBackendModels,
@@ -76,7 +79,6 @@ import type { FileUploadHandle } from "../../../components/FileUpload.tsx";
 import { FileUpload } from "../../../components/FileUpload.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
-import { SettingsSection } from "../../settings/sections.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
 
@@ -118,6 +120,15 @@ type ChatInputProps = {
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
   showPromptNavHint?: boolean;
+  // The agent + workspace this input drives. Supplied by the owning panel so the
+  // input keys its per-agent draft state (model / fast-mode / effort / prompt
+  // draft) on the PANEL's agent, not the route's agent. In the section shell the
+  // active center tab can differ from the route (switching tabs activates a panel
+  // without navigating), so reading the route here would bind the wrong agent and
+  // leak one agent's settings into another (effort/fast-mode/model isolation).
+  // Falls back to the route params when omitted to keep older callers working.
+  taskId?: string;
+  workspaceId?: string;
 };
 
 export const ChatInput = ({
@@ -128,13 +139,17 @@ export const ChatInput = ({
   insertSkillRef,
   editorRef: externalEditorRef,
   showPromptNavHint = false,
+  taskId: taskIdProp,
+  workspaceId: workspaceIdProp,
 }: ChatInputProps): ReactElement => {
   const internalEditorRef = useRef<TipTapEditor | null>(null);
   const editorRef = externalEditorRef ?? internalEditorRef;
   const dragCounterRef = useRef<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
-  const { navigateToGlobalSettings } = useImbueNavigate();
+  const { workspaceID: workspaceIDFromRoute, agentID: agentIDFromRoute } = useWorkspacePageParams();
+  const taskID = taskIdProp ?? agentIDFromRoute;
+  const workspaceID = workspaceIdProp ?? workspaceIDFromRoute;
+  const openSettings = useOpenSettings();
   const taskModel = useTaskModel(taskID ?? "");
   // Harness-supplied model list + selection (pi). hasBackendModelSource
   // distinguishes a pi task from Claude, which falls back to its built-in list
@@ -142,6 +157,11 @@ export const ChatInput = ({
   const backendModels = useTaskAvailableModels(taskID ?? "");
   const selectedModelId = useTaskSelectedModelId(taskID ?? "");
   const hasBackendModelSource = useTaskSourcesBackendModels(taskID ?? "");
+  // No usable model (pi with no authenticated providers): the picker renders disabled
+  // and Send is replaced by a "Go to harness configuration" button routing to the
+  // harness's own settings section (pi -> Pi, else Dependencies).
+  const configurationSettingsSection = useTaskConfigurationSettingsSection(taskID ?? "");
+  const isMissingUsableModel = hasNoUsableModel(hasBackendModelSource, backendModels);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
@@ -435,6 +455,11 @@ export const ChatInput = ({
     // A send is already in flight; ignore the trigger entirely so we neither
     // re-send nor fire the trailing interrupt below for a send that no-ops.
     if (isSendingRef.current) return;
+    // No usable model (pi with no authenticated providers): Send is replaced by the
+    // "Go to harness configuration" CTA, but the modified-Enter send binding still
+    // reaches here — block it so a doomed message can't be posted to a harness that
+    // cannot service it.
+    if (isMissingUsableModel) return;
     const isBtwDraft = draftIsBypassCommand(promptDraft);
     if (isDisabled && !isBtwDraft) return;
     await sendMessage();
@@ -448,16 +473,26 @@ export const ChatInput = ({
     if (!isBtwDraft && isAlwaysInterruptAndSend && isAgentBusy && taskID) {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
-  }, [isDisabled, promptDraft, sendMessage, isAlwaysInterruptAndSend, isAgentBusy, taskID, workspaceID]);
+  }, [
+    isDisabled,
+    promptDraft,
+    sendMessage,
+    isAlwaysInterruptAndSend,
+    isAgentBusy,
+    taskID,
+    workspaceID,
+    isMissingUsableModel,
+  ]);
 
   const handleInterruptAndSend = useCallback(async (): Promise<void> => {
     if (isSendingRef.current) return;
+    if (isMissingUsableModel) return;
     if (!promptDraft?.trim() || !taskID) return;
     await sendMessage();
     if (isAgentBusy) {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
-  }, [promptDraft, taskID, sendMessage, isAgentBusy, workspaceID]);
+  }, [promptDraft, taskID, sendMessage, isAgentBusy, workspaceID, isMissingUsableModel]);
 
   // Out-of-band model switch for a harness with a backend model list (pi). The
   // value stays server-driven (selectedModelId), so on success the persisted
@@ -483,10 +518,11 @@ export const ChatInput = ({
     [taskID, workspaceID],
   );
 
-  // The no-providers prompt sends the user to pi settings to authenticate a provider.
-  const handleAuthenticate = useCallback((): void => {
-    navigateToGlobalSettings(SettingsSection.PI);
-  }, [navigateToGlobalSettings]);
+  // Route the no-usable-model composer CTA to the harness's own configuration section
+  // (pi -> Pi, else Dependencies) via the canonical settings navigator.
+  const handleGoToHarnessConfig = useCallback((): void => {
+    openSettings(configurationSettingsSection);
+  }, [openSettings, configurationSettingsSection]);
 
   const handleMentionPicker = useCallback((): void => {
     if (!editorRef.current) return;
@@ -726,6 +762,10 @@ export const ChatInput = ({
                 <Plus size={16} />
               </TooltipIconButton>
             </Flex>
+            {/* Parallel copy of AgentSettingsControls' toolbar block, extended with
+                capability-gated disabled states and a backend-model selector this live
+                chat needs. Keep the shared tooltip strings, aria-labels, testids, and
+                styling in sync with AgentSettingsControls. */}
             <Flex align="center" flexShrink="0">
               <CapabilityGate
                 capabilityValue={canEnterPlanMode}
@@ -763,18 +803,30 @@ export const ChatInput = ({
                   selectedModelId={selectedModelId}
                   onBackendModelChange={handleBackendModelChange}
                   sourcesBackendModels={hasBackendModelSource}
-                  onAuthenticate={handleAuthenticate}
                 />
               </Flex>
-              <SendButton
-                onClick={handleSend}
-                disabled={isSending || (isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
-                loading={shouldShowSendSpinner}
-                tooltip={`${sendHint} to send message`}
-                ariaLabel="Send message"
-                testId={ElementIds.SEND_BUTTON}
-                lastSendError={lastSendError}
-              />
+              {isMissingUsableModel ? (
+                <Tooltip content="Authenticate a provider before you can send messages">
+                  <Button
+                    size="1"
+                    onClick={handleGoToHarnessConfig}
+                    data-testid={ElementIds.HARNESS_CONFIG_CTA}
+                    aria-label="Go to harness configuration"
+                  >
+                    Go to harness configuration
+                  </Button>
+                </Tooltip>
+              ) : (
+                <SendButton
+                  onClick={handleSend}
+                  disabled={isSending || (isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
+                  loading={shouldShowSendSpinner}
+                  tooltip={`${sendHint} to send message`}
+                  ariaLabel="Send message"
+                  testId={ElementIds.SEND_BUTTON}
+                  lastSendError={lastSendError}
+                />
+              )}
             </Flex>
           </Flex>
           {isDragging && (

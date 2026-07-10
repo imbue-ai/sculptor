@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { IconButton, Spinner, Tooltip, VisuallyHidden } from "@radix-ui/themes";
 import { Command } from "cmdk";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useStore } from "jotai";
 import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-react";
 import type { KeyboardEvent, ReactElement } from "react";
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -11,6 +11,7 @@ import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
 import { formatShortcutForDisplay, shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
 import { commandPaletteOpenAtom, commandPalettePendingAtom, commandPaletteSearchAtom } from "./atoms.ts";
 import styles from "./CommandPalette.module.scss";
+import { agentRenameTargetAtom, palettePendingRenameAtom, renamingWorkspaceIdAtom } from "./contextActions/atoms.ts";
 import { buildItemValue, makePaletteFilter, ROW_VALUE_SEP } from "./filter.ts";
 import { groupCommands } from "./groupCommands.ts";
 import { groupHeading } from "./groups.ts";
@@ -157,6 +158,7 @@ export const CommandPalette = (): ReactElement => {
   const pendingCommandId = useAtomValue(commandPalettePendingAtom);
 
   const { close, popPage, pushPage } = useCommandPalette();
+  const store = useStore();
   const ctx = usePaletteContext();
   const allCommands = useVisibleCommands(ctx);
   const runCommand = useRunCommand();
@@ -451,7 +453,7 @@ export const CommandPalette = (): ReactElement => {
   // them against every visible command's `shortcut`. A match closes the
   // palette and runs the command — so `Cmd+T` (toggle theme) fires its
   // command directly, instead of being swallowed by the overlay
-  // suppression in `usePageLayoutKeyboardShortcuts`.
+  // suppression in `useGlobalKeyboardShortcuts`.
   //
   // We use the capture phase so we run BEFORE that suppression handler
   // (which is registered on `window` in bubble phase). cmdk's own input
@@ -549,6 +551,25 @@ export const CommandPalette = (): ReactElement => {
           if (inputRef.current != null && inputRef.current.value !== "") {
             e.preventDefault();
             setSearch("");
+          }
+        }}
+        // Flush a stashed rename handoff now that the dialog — and its focus trap —
+        // is gone (see palettePendingRenameAtom). Suppressing the default focus
+        // restore matters as much as the deferral: restoring focus to the element
+        // focused before the palette opened would blur — and cancel — the inline
+        // rename input the deferred write mounts. Every other close reason keeps
+        // the normal focus return.
+        onCloseAutoFocus={(e): void => {
+          const pendingRename = store.get(palettePendingRenameAtom);
+          if (pendingRename === null) {
+            return;
+          }
+          store.set(palettePendingRenameAtom, null);
+          e.preventDefault();
+          if (pendingRename.kind === "agent") {
+            store.set(agentRenameTargetAtom, pendingRename.panelId);
+          } else {
+            store.set(renamingWorkspaceIdAtom, pendingRename.workspaceId);
           }
         }}
       >

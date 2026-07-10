@@ -2,7 +2,7 @@ import typer
 
 from sculpt.commands.agent import agent_app
 from sculpt.commands.debug import debug_app
-from sculpt.commands.plugin import plugin_app
+from sculpt.commands.extension import extension_app
 from sculpt.commands.repo import repo_app
 from sculpt.commands.run import run_cmd
 from sculpt.commands.schema import schema_app
@@ -18,7 +18,10 @@ app = typer.Typer(
 app.add_typer(workspace_app, name="workspace")
 app.add_typer(workspace_app, name="ws", hidden=True)
 app.add_typer(agent_app, name="agent")
-app.add_typer(plugin_app, name="plugin")
+app.add_typer(extension_app, name="extension")
+# Hidden compatibility alias: in-flight agent sessions and older skill copies
+# still invoke `sculpt plugin`; it runs the same group as `sculpt extension`.
+app.add_typer(extension_app, name="plugin", hidden=True)
 app.add_typer(repo_app, name="repo")
 app.add_typer(schema_app, name="schema")
 app.add_typer(signal_app, name="signal")

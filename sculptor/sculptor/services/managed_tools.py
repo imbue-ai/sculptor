@@ -113,6 +113,11 @@ class ManagedTool(ABC):
     # known per tool, so the offline binary-resolution read path can find a staged
     # binary without resolving a (possibly network-bound) distribution.
     binary_subpath: str
+    # Whether startup auto-install may download this tool when no managed copy exists
+    # yet. A required tool (Claude) bootstraps itself on first run; an optional one
+    # (pi) is first installed only by explicit user action, and startup merely
+    # refreshes an already-downloaded copy that has fallen out of the pinned range.
+    installs_on_startup_when_missing: bool
 
     @abstractmethod
     def resolve_distribution(self) -> ResolvedDistribution:
@@ -193,6 +198,9 @@ class PiManagedTool(ManagedTool):
     retention_keep = 1
     # pi keeps its whole extracted tree and runs from ``pi/pi``.
     binary_subpath = "pi/pi"
+    # pi is an optional harness: its managed copy is downloaded only when the user
+    # asks for it (onboarding or Settings), never by startup.
+    installs_on_startup_when_missing = False
 
     def resolve_distribution(self) -> ResolvedDistribution:
         platform_key = _current_pi_platform_key()
@@ -232,9 +240,16 @@ _CLAUDE_MANIFEST_FETCH_TIMEOUT_SECONDS = 30.0
 # the existing service -> managed_tools edge, which would be an import cycle. The
 # service re-imports this constant for its status / version-range logic.
 CLAUDE_VERSION_RANGE = VersionRange(
-    min_version="2.1.195",
+    # Floor is 2.1.202: earlier releases mishandle a session resume that carries
+    # `stopped` background-task notifications (left over from tasks killed by a
+    # prior interrupt). The CLI can deliver such a notification so that the user
+    # turn being awaited never emits its own terminating `result`, which wedges
+    # the chat in a perpetual "streaming" state. The resume-of-background-tasks
+    # path was reworked in 2.1.198; 2.1.202 is the earliest release validated
+    # against this failure. Do not lower this without re-validating that case.
+    min_version="2.1.202",
     max_version="2.99.99",
-    recommended_version="2.1.195",
+    recommended_version="2.1.202",
     # Blocked versions create background tool invocations that are missing events
     # describing them.
     blocked_versions=(BlockedVersionRange(min_version="2.1.101", max_version="2.1.101"),),
@@ -292,6 +307,8 @@ class ClaudeManagedTool(ManagedTool):
     retention_keep = 2
     # Claude's single binary sits directly at ``claude`` in the version dir.
     binary_subpath = "claude"
+    # Claude is required, so a missing MANAGED binary is installed on startup.
+    installs_on_startup_when_missing = True
 
     def resolve_distribution(self) -> ResolvedDistribution:
         platform_key = _current_claude_platform_key()

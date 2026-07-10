@@ -10,6 +10,7 @@ from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_in_place_workspaces
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -47,8 +48,10 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     assert branch_a in all_branches, f"Branch {branch_a} not found in repo. Available branches: {all_branches}"
     assert branch_b in all_branches, f"Branch {branch_b} not found in repo. Available branches: {all_branches}"
 
-    # We should already be on the Add Workspace page (cleanup deletes all workspaces).
+    # Bring up the new-workspace form (per-test cleanup deletes all workspaces
+    # and dismisses the first-run offer, so nothing is open yet).
     # The default mode is Clone, so the branch selector should be editable.
+    open_new_workspace_form(page)
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)
     submit_button = add_workspace_page.get_submit_button()
     expect(submit_button).to_be_visible()
@@ -59,7 +62,12 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     # Select branch B via the branch selector on the New Workspace page
     add_workspace_page.select_branch(branch_b)
 
-    # Submit to create the workspace (no prompt on the Add Workspace page)
+    # Keep the first agent promptless — a prefilled prompt (e.g. the first-run
+    # onboarding text) would run an extra turn on the default model and the
+    # message-count assertion below would see 4 messages instead of 2.
+    add_workspace_page.get_task_input().fill("")
+
+    # Submit to create the workspace
     expect(submit_button).to_be_enabled()
     submit_button.click()
 
@@ -86,7 +94,9 @@ def test_in_place_mode_displayed_correctly(sculptor_instance_: SculptorInstance)
     # Enable the experimental in-place workspaces flag so the mode selector is visible.
     enable_in_place_workspaces(page)
 
-    # We should already be on the Add Workspace page (cleanup deletes all workspaces).
+    # Bring up the new-workspace form (per-test cleanup deletes all workspaces
+    # and dismisses the first-run offer, so nothing is open yet).
+    open_new_workspace_form(page)
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)
     submit_button = add_workspace_page.get_submit_button()
     expect(submit_button).to_be_visible()
@@ -97,7 +107,12 @@ def test_in_place_mode_displayed_correctly(sculptor_instance_: SculptorInstance)
     # Switch to in-place mode via the mode selector dropdown.
     add_workspace_page.select_mode(ElementIDs.MODE_OPTION_IN_PLACE)
 
-    # Submit to create the workspace (no prompt on the Add Workspace page)
+    # Keep the first agent promptless — a prefilled prompt (e.g. the first-run
+    # onboarding text) would run an extra turn on the default model and the
+    # message-count assertion below would see 4 messages instead of 2.
+    add_workspace_page.get_task_input().fill("")
+
+    # Submit to create the workspace
     expect(submit_button).to_be_enabled()
     submit_button.click()
 

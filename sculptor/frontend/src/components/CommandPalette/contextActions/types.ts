@@ -56,7 +56,7 @@ export type ContextActionShared = {
   paletteKeywords?: ReadonlyArray<string>;
   /**
    * Keybinding registry id whose binding should render alongside the
-   * palette row. Surfaces the close-workspace shortcut on the close row,
+   * palette row. Surfaces the delete-workspace shortcut on the Delete row,
    * for example.
    */
   paletteShortcut?: KeybindingId;
@@ -71,9 +71,9 @@ export type ContextActionShared = {
 export type WorkspaceAction = ContextActionShared & {
   /**
    * Hide the action for this workspace. Returning false omits the row in
-   * BOTH the right-click menu and the palette. Used e.g. for "Close
-   * others" with only one workspace open — the row would never apply,
-   * so it should disappear entirely.
+   * BOTH the right-click menu and the palette. Use for actions that can
+   * never apply to a given workspace, so the row disappears entirely
+   * rather than sitting there disabled.
    */
   visible?: (workspace: Workspace) => boolean;
   /**
@@ -130,12 +130,7 @@ export type AgentAction = ContextActionShared & {
  */
 export type WorkspaceActionRuntime = {
   beginRename: (workspace: Workspace) => void;
-  closeWorkspace: (workspace: Workspace) => void;
-  closeOtherWorkspaces: (workspace: Workspace) => void;
-  closeAllWorkspaces: () => void;
   beginDelete: (workspace: Workspace) => void;
-  /** True when there is more than one workspace tab open. */
-  canCloseOthers: () => boolean;
 
   /** Send the user's commit prompt to chat for the active agent. */
   commitChanges: (workspace: Workspace) => void;
@@ -159,7 +154,7 @@ export type WorkspaceActionRuntime = {
 };
 
 export type AgentActionRuntime = {
-  beginRename: (agent: Agent) => void;
   markUnread: (agent: Agent) => void;
+  beginRename: (agent: Agent) => void;
   beginDelete: (agent: Agent) => void;
 };

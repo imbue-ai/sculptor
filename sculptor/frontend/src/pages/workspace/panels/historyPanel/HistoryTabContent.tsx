@@ -17,9 +17,20 @@ import { TerminusIndicator } from "./TerminusIndicator.tsx";
 type HistoryTabContentProps = {
   workspaceId: string;
   viewMode?: ViewMode;
+  /**
+   * When set, a commit-file click calls this instead of opening a global
+   * commit-diff tab. The CommitsPanel passes its own selection setter so its
+   * embedded viewer is driven by per-panel state rather than the shared
+   * diff-panel tab list.
+   */
+  onSelectCommitFile?: (commitHash: string, filePath: string) => void;
 };
 
-export const HistoryTabContent = ({ workspaceId, viewMode = "flat" }: HistoryTabContentProps): ReactElement => {
+export const HistoryTabContent = ({
+  workspaceId,
+  viewMode = "flat",
+  onSelectCommitFile,
+}: HistoryTabContentProps): ReactElement => {
   const { data, isPending } = useWorkspaceCommits(workspaceId);
   const expandedCommits = useAtomValue(expandedCommitsAtomFamily(workspaceId));
   const toggleExpanded = useSetAtom(toggleCommitExpandedAtom);
@@ -28,9 +39,13 @@ export const HistoryTabContent = ({ workspaceId, viewMode = "flat" }: HistoryTab
 
   const handleFileClick = useCallback(
     (commitHash: string, filePath: string): void => {
+      if (onSelectCommitFile) {
+        onSelectCommitFile(commitHash, filePath);
+        return;
+      }
       openCommitDiffTab({ workspaceId, commitHash, filePath });
     },
-    [workspaceId, openCommitDiffTab],
+    [workspaceId, onSelectCommitFile, openCommitDiffTab],
   );
 
   return (

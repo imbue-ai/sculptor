@@ -7,12 +7,11 @@ import type { Command } from "../types.ts";
  * Top-level navigation entries are *curated*, not registry-driven.
  *
  * The router (`Router.tsx`) owns several top-level paths — `/`, `/home`,
- * `/settings`, `/ws/:workspaceID`, `/component-gallery`, `/debug/*`, and
- * the new-workspace flow. Most of those deliberately do NOT get a Cmd+K
- * row: workspace and agent routes are surfaced by dynamic providers,
- * /component-gallery and /debug/* are dev-only, and the new-workspace
- * flow is reached through `nav.new_workspace` below rather than a
- * separate "Open new workspace" entry.
+ * `/settings`, `/ws/:workspaceID`, and the new-workspace flow. Most of
+ * those deliberately do NOT get a Cmd+K row: workspace and agent routes
+ * are surfaced by dynamic providers, and the new-workspace flow is
+ * reached through `nav.new_workspace` below rather than a separate
+ * "Open new workspace" entry.
  *
  * That means there is no useful "every route has a palette command"
  * drift test — a test like that would either be wrong (forcing palette
@@ -67,13 +66,16 @@ export const buildNavigationCommands = (runtime: CommandRuntime): Array<Command>
     shortcut: "new_workspace",
     primary: true,
     order: 10,
-    perform: () => runtime.navigate.toAddWorkspace(),
+    // Opens the global new-workspace dialog rather than navigating to the
+    // legacy `/ws/new` page — the dialog is the sanctioned create surface.
+    perform: () => runtime.openNewWorkspaceModal(),
   },
   {
     // Agent analog of nav.new_workspace: creates an agent in the current
     // workspace (inheriting the active agent's model) and navigates to it.
-    // The action lives in `AgentTabs` (shared with the `+` button and the
-    // `new_agent` keybinding) and is reached via `runtime.ui.createAgent`.
+    // The action is registered by `useWorkspaceShellBootstrap` (shared with the
+    // add-panel `+` and the `new_agent` keybinding) and is reached via
+    // `runtime.ui.createAgent`.
     // Gated on `activeWorkspaceId` because there's no workspace to add an
     // agent to on Home / Settings / the new-workspace flow.
     id: "nav.new_agent",

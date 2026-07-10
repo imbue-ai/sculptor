@@ -17,13 +17,14 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_last_turn_footer_viewport_gaps
+from sculptor.testing.elements.alpha_chat_view import get_max_following_tail_gap
 from sculptor.testing.elements.alpha_chat_view import read_scroll_top_sampler
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.elements.alpha_chat_view import start_scroll_top_sampler
 from sculptor.testing.elements.alpha_chat_view import wait_for_stable_following_tail_gap
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.panels import close_bottom_panel
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -39,11 +40,15 @@ _LOREM_STREAM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
 # The visible gap the pin keeps between the last message's bottom and the viewport
 # bottom while following — mirrors PIN_BOTTOM_GAP in chat-alpha/scroll/geometry.ts.
 _PIN_BOTTOM_GAP_PX = 64
-# Slop around the pin gap for message margins and sub-pixel rounding. The band it
-# defines separates the two regressions this guards against: hugging the viewport
-# bottom flush (~0px, no breathing room under the newest line) and parking deep in
-# the paddingEnd gap (>= the 128px streaming padding floor, no slack for the
-# turn-end shrink).
+# Slop around the pin gap for message margins, sub-pixel rounding, and mid-growth
+# sampling. While `following`, the pin corrects in BOTH directions (see pinToBottom),
+# so the sampled gap stays tight to PIN_BOTTOM_GAP under any runner pacing. The band's
+# upper edge deliberately sits below one text line past the gap (64 + ~21px): a pin
+# stranded past the target by a single collapsed line must read as a failure, not
+# slop. It also separates the two coarser regressions this guards against: hugging
+# the viewport bottom flush (~0px, no breathing room under the newest line) and
+# parking deep in the paddingEnd gap (>= the 128px streaming padding floor, no slack
+# for the turn-end shrink).
 _PIN_GAP_TOLERANCE_PX = 24
 
 # The view must not scroll UP across the turn boundary. A tiny settle for the turn
@@ -67,7 +72,7 @@ def test_following_keeps_pin_gap_below_last_message(sculptor_instance_: Sculptor
         prompt=f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # A bit of history so the follow-on user message scrolls off the top and we
@@ -112,6 +117,60 @@ def test_following_keeps_pin_gap_below_last_message(sculptor_instance_: Sculptor
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=60_000)
 
 
+@user_story("to have the pin gap in place from the moment the chat starts following the stream")
+def test_entering_following_lands_at_the_pin_gap(sculptor_instance_: SculptorInstance) -> None:
+    """Entering `following` must already satisfy the pin invariant.
+
+    The anchoring→following handoff pins to the bottom on entry. If that entry
+    pin cannot land on the target — a handoff fired above the pin, or a tail
+    shrink around the handoff that a down-only pin refuses to chase — the view
+    parks with the last message floating deeper than the designed gap until the
+    stream grows through the leftover slack: a plateau long enough on CI
+    hardware for the sibling test's stability-polled sample to certify it as
+    the resting gap. Sampling the very first window after the phase flips
+    checks the entry geometry directly: the max across the window IS the entry
+    gap even when convergence lands mid-window.
+    """
+    page = sculptor_instance_.page
+
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        prompt=f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`',
+    )
+    chat_panel = task_page.get_chat_panel()
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+
+    # History so the follow-on user message anchors a genuine new turn whose
+    # streamed reply overflows — the anchoring→following handoff path.
+    send_chat_message(chat_panel, f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`')
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
+
+    view = get_alpha_chat_view(page)
+    expect(view).to_be_visible()
+
+    send_chat_message(
+        chat_panel,
+        f'fake_claude:stream_text `{{"text": "{_STREAM_TEXT}", "chunk_size": 50, "delay_seconds": 0.1}}`',
+    )
+
+    expect(view).to_have_attribute("data-scroll-phase", "following", timeout=30_000)
+    entry_gap = get_max_following_tail_gap(page)
+
+    assert entry_gap is not None, "alpha chat view or its messages not found at following-entry"
+    # Only the upper bound: a parked-above-the-pin entry is the regression this
+    # guards. Transient growth-lag dips below the gap are erased by the window
+    # max, and the steady-state band is the sibling test's job.
+    assert entry_gap <= _PIN_BOTTOM_GAP_PX + _PIN_GAP_TOLERANCE_PX, (
+        f"entering following left the last message {entry_gap}px above the viewport bottom "
+        + f"(expected <= {_PIN_BOTTOM_GAP_PX + _PIN_GAP_TOLERANCE_PX}px); the anchoring→following "
+        + "handoff parked above the pin instead of landing on it"
+    )
+
+    # Let the turn finish cleanly before the test ends.
+    expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=60_000)
+
+
 @user_story("to not have a prior scroll position dragged back when a later turn ends")
 def test_turn_end_does_not_restore_a_stale_reading_anchor(sculptor_instance_: SculptorInstance) -> None:
     """A reading anchor captured by an earlier user scroll must not be restored when a
@@ -132,7 +191,7 @@ def test_turn_end_does_not_restore_a_stale_reading_anchor(sculptor_instance_: Sc
         prompt=f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
     send_chat_message(chat_panel, f'fake_claude:text `{{"text": "{_LONG_TEXT}"}}`')
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
@@ -189,7 +248,7 @@ def test_turn_end_scrolls_turn_footer_into_view_when_following(sculptor_instance
         prompt='fake_claude:text `{"text": "Ready."}`',
     )
     chat_panel = task_page.get_chat_panel()
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     view = get_alpha_chat_view(page)

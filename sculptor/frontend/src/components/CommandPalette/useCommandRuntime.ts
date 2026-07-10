@@ -14,7 +14,12 @@ import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
-import { useFocusMode, usePanelActions, useSideToggle, useZenMode } from "../panels/hooks.ts";
+import { sidebarCollapsedAtom } from "../layout/sidebarAtoms.ts";
+import { newWorkspaceModalAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
+import { toggleSectionAtom } from "../sections/sectionActions.ts";
+import { workspaceLayoutAtom } from "../sections/sectionAtoms.ts";
+import { toSection } from "../sections/sectionTypes.ts";
+import { maximizedSectionAtom } from "../sections/transientAtoms.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
 import type { AppStore, CommandRuntime } from "./runtime.ts";
 
@@ -70,12 +75,7 @@ export const useCommandRuntime = (): CommandRuntime => {
 
   const { toggleHelpDialog } = useHelpDialog();
   const { toggleDevPanel } = useDevPanel();
-  const { toggleFocusMode } = useFocusMode();
-  const { toggleZenMode } = useZenMode();
-  const { toggle: toggleLeftPanel } = useSideToggle("left");
-  const { toggle: toggleBottomPanel } = useSideToggle("bottom");
-  const { toggle: toggleRightPanel } = useSideToggle("right");
-  const { togglePanel } = usePanelActions();
+  const toggleSection = useSetAtom(toggleSectionAtom);
 
   const setThemeSettings = useSetAtom(themeBuilderSettingsAtom);
   const setChatSearchVisible = useSetAtom(chatSearchVisibleAtom);
@@ -96,7 +96,6 @@ export const useCommandRuntime = (): CommandRuntime => {
   // useOpenSettings adds SETTINGS_TAB to tabOrderAtom in addition to
   // navigating, so the user gets a closeable Settings tab.
   const toSettings = useEvent((section?: string): void => openSettings(section));
-  const toAddWorkspace = useEvent((): void => navigate.navigateToAddWorkspace());
   // The palette previously only updated the URL — the tab strip never
   // learned about the navigation, so the user landed on a workspace
   // that wasn't represented as a tab. Open the tab first (idempotent:
@@ -110,15 +109,26 @@ export const useCommandRuntime = (): CommandRuntime => {
     openWorkspaceTab(workspaceId);
     navigate.navigateToAgent(workspaceId, agentId);
   });
+  // Write through the already-captured `store` rather than pulling in another
+  // useSetAtom hook for this single write.
+  const openNewWorkspaceModal = useEvent((): void => store.set(newWorkspaceModalAtom, { open: true }));
 
   const uiToggleHelpDialog = useEvent((): void => toggleHelpDialog());
   const uiToggleDevPanel = useEvent((): void => toggleDevPanel());
-  const uiToggleZenMode = useEvent((): void => toggleZenMode());
-  const uiToggleFocusMode = useEvent((): void => toggleFocusMode());
-  const uiToggleLeftPanel = useEvent((): void => toggleLeftPanel());
-  const uiToggleBottomPanel = useEvent((): void => toggleBottomPanel());
-  const uiToggleRightPanel = useEvent((): void => toggleRightPanel());
-  const uiTogglePanel = useEvent((panelId: string): void => togglePanel(panelId));
+  const uiToggleLeftPanel = useEvent((): void => toggleSection({ section: "left" }));
+  const uiToggleBottomPanel = useEvent((): void => toggleSection({ section: "bottom" }));
+  const uiToggleRightPanel = useEvent((): void => toggleSection({ section: "right" }));
+  const uiToggleSidebar = useEvent((): void => store.set(sidebarCollapsedAtom, !store.get(sidebarCollapsedAtom)));
+  // Maximize the active section, or restore if one is already maximized — mirrors the
+  // maximize_section keybinding (useWorkspaceShortcuts).
+  const uiToggleMaximizeSection = useEvent((): void => {
+    if (store.get(maximizedSectionAtom) !== null) {
+      store.set(maximizedSectionAtom, null);
+      return;
+    }
+    const layout = store.get(workspaceLayoutAtom);
+    store.set(maximizedSectionAtom, toSection(layout.activeSubSection ?? "center"));
+  });
   const setTheme = useEvent((mode: AppearanceMode): void => {
     setThemeSettings((prev) => ({ ...prev, appearance: mode }));
   });
@@ -158,16 +168,16 @@ export const useCommandRuntime = (): CommandRuntime => {
       // renders, so capturing it here is fine — commands that need it
       // call `runtime.store.get(atom)`.
       store,
-      navigate: { toHome, toSettings, toAddWorkspace, toWorkspace, toAgent },
+      navigate: { toHome, toSettings, toWorkspace, toAgent },
+      openNewWorkspaceModal,
       ui: {
         toggleHelpDialog: uiToggleHelpDialog,
         toggleDevPanel: uiToggleDevPanel,
-        toggleZenMode: uiToggleZenMode,
-        toggleFocusMode: uiToggleFocusMode,
         toggleLeftPanel: uiToggleLeftPanel,
         toggleBottomPanel: uiToggleBottomPanel,
         toggleRightPanel: uiToggleRightPanel,
-        togglePanel: uiTogglePanel,
+        toggleSidebar: uiToggleSidebar,
+        toggleMaximizeSection: uiToggleMaximizeSection,
         setTheme,
         focusChatInput: uiFocusChatInput,
         showChatSearch,
@@ -187,17 +197,16 @@ export const useCommandRuntime = (): CommandRuntime => {
       store,
       toHome,
       toSettings,
-      toAddWorkspace,
       toWorkspace,
       toAgent,
+      openNewWorkspaceModal,
       uiToggleHelpDialog,
       uiToggleDevPanel,
-      uiToggleZenMode,
-      uiToggleFocusMode,
       uiToggleLeftPanel,
       uiToggleBottomPanel,
       uiToggleRightPanel,
-      uiTogglePanel,
+      uiToggleSidebar,
+      uiToggleMaximizeSection,
       setTheme,
       uiFocusChatInput,
       showChatSearch,

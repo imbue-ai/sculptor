@@ -15,8 +15,8 @@ import { isMac } from "../../../electron/utils.ts";
 /**
  * Slice of `WorkspaceActionRuntime` covering the git / external-app
  * actions added in the Cmd+K + right-click expansion. Lives in its own
- * hook because both consumers (WorkspaceTabs and CommandRegistrations)
- * build their own runtime objects with subtly different close handlers,
+ * hook because both consumers (WorkspaceSidebar and CommandRegistrations)
+ * build their own runtime objects with different rename/delete handlers,
  * but share these atom-driven methods verbatim.
  */
 export type GitAndOpenInRuntime = {

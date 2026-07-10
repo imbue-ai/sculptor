@@ -3,7 +3,6 @@ import { useMemo } from "react";
 
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { isToolUseBlock } from "~/common/Guards";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import {
   useTaskSupportsInteractiveBackchannel,
   useTaskSupportsSubAgents,
@@ -16,8 +15,21 @@ import { AlphaAskUserQuestionBlock } from "./AlphaAskUserQuestionBlock.tsx";
 import { AlphaExitPlanModeBlock } from "./AlphaExitPlanModeBlock.tsx";
 import { AlphaSubagentPill } from "./AlphaSubagentPill.tsx";
 import { CompletedToolLine, ToolLine } from "./AlphaToolLines.tsx";
+import { AlphaWorkflowPill } from "./AlphaWorkflowPill.tsx";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import { renderToolSegments } from "./renderToolSegments.tsx";
 import { ToolNavigationProvider } from "./ToolNavigationContext.tsx";
+
+const WORKFLOW_TOOL_NAME = "Workflow";
+
+// The Workflow tool renders as its own subagent-style pill. Both block
+// shapes must route there: the live tool_use, and the bare tool_result left
+// behind when a finalized streamed message result-replaces the tool_use.
+type WorkflowBlockRef = {
+  toolUseId: string;
+  block?: ToolUseBlock;
+  result?: ToolResultBlock;
+};
 
 const getToolName = (block: ToolUseBlock | ToolResultBlock): string =>
   block.type === "tool_use" ? block.name : (block as ToolResultBlock).toolName;
@@ -55,16 +67,19 @@ export const ToolBlockGroup = ({
   inProgressMessageId?: string | null;
   isActive: boolean;
 }): ReactElement => {
-  const { agentID: taskID } = useWorkspacePageParams();
+  // The owning chat panel's agent — the capability gates below must reflect
+  // the harness whose transcript this panel renders, not the route's agent.
+  const { taskId: taskID } = useChatTask();
   // Per-harness gates centralized here so the leaf components stay test-isolated:
   //   `supportsSubAgents` hides the AlphaSubagentPill
   //   `supportsInteractiveBackchannel` hides AlphaAskUserQuestionBlock + AlphaExitPlanModeBlock
   // `?? true` preserves existing Claude behavior while the task is still loading.
-  const canRenderSubAgents = useTaskSupportsSubAgents(taskID ?? "") ?? true;
-  const canRenderInteractiveBackchannel = useTaskSupportsInteractiveBackchannel(taskID ?? "") ?? true;
-  // Separate blocks into subagent, top-level, special, and regular categories
-  const { subagentBlocks, topLevelBlocks, specialBlocks, regularBlocks } = useMemo(() => {
+  const canRenderSubAgents = useTaskSupportsSubAgents(taskID) ?? true;
+  const canRenderInteractiveBackchannel = useTaskSupportsInteractiveBackchannel(taskID) ?? true;
+  // Separate blocks into subagent, workflow, top-level, special, and regular categories
+  const { subagentBlocks, workflowBlocks, topLevelBlocks, specialBlocks, regularBlocks } = useMemo(() => {
     const subagent: Array<ToolUseBlock> = [];
+    const workflowByToolUseId = new Map<string, WorkflowBlockRef>();
     const topLevel: Array<ToolUseBlock | ToolResultBlock> = [];
     const special: Array<ToolUseBlock> = [];
     const regular: Array<ToolUseBlock | ToolResultBlock> = [];
@@ -75,7 +90,9 @@ export const ToolBlockGroup = ({
 
       if (isToolUseBlock(block)) {
         const children = node.children.get(block.id);
-        if (SUBAGENT_TOOL_NAMES.has(block.name) || (children && children.length > 0)) {
+        if (block.name === WORKFLOW_TOOL_NAME) {
+          workflowByToolUseId.set(block.id, { ...workflowByToolUseId.get(block.id), toolUseId: block.id, block });
+        } else if (SUBAGENT_TOOL_NAMES.has(block.name) || (children && children.length > 0)) {
           subagent.push(block);
         } else if (isSpecialToolUse(block)) {
           special.push(block);
@@ -92,6 +109,11 @@ export const ToolBlockGroup = ({
         // Check both tree structure and tool name so results are hidden
         // even when the ToolResultBlock is in a different message.
         if (SUBAGENT_TOOL_NAMES.has(block.toolName)) continue;
+        if (block.toolName === WORKFLOW_TOOL_NAME) {
+          const existing = workflowByToolUseId.get(block.toolUseId);
+          workflowByToolUseId.set(block.toolUseId, { ...existing, toolUseId: block.toolUseId, result: block });
+          continue;
+        }
         const toolUseId = block.toolUseId;
         const children = toolUseId ? node.children.get(toolUseId) : undefined;
         if (children && children.length > 0) continue;
@@ -100,7 +122,13 @@ export const ToolBlockGroup = ({
       }
     }
 
-    return { subagentBlocks: subagent, topLevelBlocks: topLevel, specialBlocks: special, regularBlocks: regular };
+    return {
+      subagentBlocks: subagent,
+      workflowBlocks: Array.from(workflowByToolUseId.values()),
+      topLevelBlocks: topLevel,
+      specialBlocks: special,
+      regularBlocks: regular,
+    };
   }, [blocks, node.children]);
 
   return (
@@ -119,6 +147,15 @@ export const ToolBlockGroup = ({
             />
           );
         })}
+      {workflowBlocks.map((workflow, index) => (
+        <AlphaWorkflowPill
+          key={workflow.toolUseId}
+          rowIndex={subagentBlocks.length + index}
+          toolUseId={workflow.toolUseId}
+          block={workflow.block}
+          result={workflow.result ?? toolResultMap.get(workflow.toolUseId)}
+        />
+      ))}
       {canRenderInteractiveBackchannel &&
         specialBlocks.map((block) => {
           if (block.interactiveRole === "ask_user_question") {
@@ -142,10 +179,10 @@ export const ToolBlockGroup = ({
       {renderToolSegments(regularBlocks, toolResultMap, {
         isActive,
         inProgressMessageId: inProgressMessageId ?? null,
-        // Only subagent pills above register with the nav context (one row each);
-        // top-level/special blocks render inline and don't participate in
-        // arrow-key navigation, so they don't shift the row offset.
-        rowIndexOffset: subagentBlocks.length,
+        // Only subagent and workflow pills above register with the nav context
+        // (one row each); top-level/special blocks render inline and don't
+        // participate in arrow-key navigation, so they don't shift the offset.
+        rowIndexOffset: subagentBlocks.length + workflowBlocks.length,
       })}
     </ToolNavigationProvider>
   );

@@ -51,15 +51,16 @@ def truncate(text: str, max_length: int = 50) -> str:
     return text[: max_length - len(_ELLIPSIS)] + _ELLIPSIS
 
 
-def json_error(error: str, detail: str = "") -> str:
+def json_error(error: str, detail: str = "", code: str | None = None) -> str:
     """Return a JSON-formatted error string."""
-    return ErrorOutput(error=error, detail=detail).model_dump_json()
+    return ErrorOutput(error=error, detail=detail, code=code).model_dump_json()
 
 
 def cli_error(
     message: str,
     *,
     detail: str = "",
+    code: str | None = None,
     json_output: bool = False,
     exit_code: int = 1,
 ) -> NoReturn:
@@ -68,11 +69,15 @@ def cli_error(
     When json_output is True, writes structured JSON to stderr.
     Otherwise writes human-readable text to stderr.
 
+    ``code`` carries a machine-readable error code (usually straight from the
+    backend's structured error detail) so ``--json`` consumers can branch on it
+    instead of pattern-matching prose. It appears in the JSON output only.
+
     The exit_code keyword lets specific commands surface category-distinct
     exit codes that an agent's tool harness can pattern-match on.
     """
     if json_output:
-        typer.echo(json_error(message, detail), err=True)
+        typer.echo(json_error(message, detail, code), err=True)
     else:
         typer.echo(f"Error: {message}", err=True)
         if detail:

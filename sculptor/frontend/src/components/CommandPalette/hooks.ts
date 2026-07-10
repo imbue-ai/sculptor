@@ -1,16 +1,15 @@
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import {
-  chatPanelMountedAtom,
-  panelRegistryAtom,
-  terminalPanelMountedAtom,
-  zenModeActiveAtom,
-} from "~/components/panels/atoms.ts";
+import { recentAgentTypeAtom } from "~/components/sections/addPanelCore.ts";
+import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
+import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
+import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
+import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 
 import {
   commandPaletteInitialPageAtom,
@@ -19,7 +18,11 @@ import {
   commandPalettePendingAtom,
   commandPaletteSearchAtom,
 } from "./atoms.ts";
-import { agentActionsTargetAtom, workspaceActionsTargetAtom } from "./contextActions/atoms.ts";
+import {
+  addPanelTargetSubSectionAtom,
+  agentActionsTargetAtom,
+  workspaceActionsTargetAtom,
+} from "./contextActions/atoms.ts";
 import { isValidPageId, popPageStack, pushPageStack } from "./pages.ts";
 import { useCommandRegistry } from "./registryContext.tsx";
 import type { Command, DynamicProvider, PageId, PaletteContext } from "./types.ts";
@@ -36,17 +39,18 @@ const COMMAND_TIMEOUT_MS = 30_000;
 /**
  * Build the palette context. Re-runs whenever the React Router location
  * changes (`useImbueLocation` re-renders consumers on every navigation),
- * the zen-mode atom changes, the chat panel mounts/unmounts, or the page
+ * the section-maximize atom changes, the chat panel mounts/unmounts, or the page
  * stack changes. Each ctx field is keyed on a primitive so the returned
  * object is reference-stable across unrelated renders.
  */
 export const usePaletteContext = (): PaletteContext => {
   const loc = useImbueLocation();
-  const isZen = useAtomValue(zenModeActiveAtom);
-  // Reactive read: `chatPanelMountedAtom` is flipped by the chat panel
-  // component on mount/unmount, so this updates without poking the DOM.
-  const hasChatPanel = useAtomValue(chatPanelMountedAtom);
-  const hasTerminalPanel = useAtomValue(terminalPanelMountedAtom);
+  // Reactive read: the panel components maintain these mount counters on
+  // mount/unmount, so this updates without poking the DOM. `> 0` means at
+  // least one such panel is currently mounted.
+  const hasChatPanel = useAtomValue(chatPanelMountedAtom) > 0;
+  const hasTerminalPanel = useAtomValue(terminalPanelMountedAtom) > 0;
+  const isSectionMaximized = useAtomValue(maximizedSectionAtom) !== null;
   const pages = useAtomValue(commandPalettePagesAtom);
   const page = pages.length === 0 ? null : (pages[pages.length - 1] ?? null);
 
@@ -62,27 +66,25 @@ export const usePaletteContext = (): PaletteContext => {
         isHome: loc.isHomeRoute,
         isWorkspace,
         isSettings: loc.isSettingsRoute,
-        isAddWorkspace: loc.isAddWorkspaceRoute,
         isAgent: loc.isAgentRoute,
       },
       activeWorkspaceId,
       activeAgentId,
       hasChatPanel,
       hasTerminalPanel,
-      isZenMode: isZen,
+      isSectionMaximized,
       page,
     }),
     [
       loc.isHomeRoute,
       loc.isSettingsRoute,
-      loc.isAddWorkspaceRoute,
       loc.isAgentRoute,
       isWorkspace,
       activeWorkspaceId,
       activeAgentId,
       hasChatPanel,
       hasTerminalPanel,
-      isZen,
+      isSectionMaximized,
       page,
     ],
   );
@@ -195,39 +197,69 @@ const useRegistrySize = (): number => {
 };
 
 /**
+ * The atoms that dynamic providers (and their action runtimes) read
+ * imperatively via `runtime.store.get(atom)` inside `produce()`, bundled into
+ * one derived value and gated on the palette being open.
+ *
+ * Two jobs:
+ *  - While OPEN, the bundle's identity changes whenever any input changes,
+ *    which forces the visible-set memo to recompute and re-invoke every
+ *    provider's `produce`. Without these subscriptions, providers would see
+ *    stale data after the user edits state outside the palette (e.g. closing
+ *    a tab while the palette is open would leave "Close others" stale until
+ *    the palette reopens).
+ *  - While CLOSED, the read function returns before touching any input, so
+ *    the only tracked dependency is `commandPaletteOpenAtom`. The palette
+ *    host stays mounted for the whole session and several inputs churn
+ *    constantly (every task streaming tick rebuilds `tasksArrayAtom`, every
+ *    layout write bumps `workspaceLayoutAtom`) — the gate keeps that churn
+ *    from re-rendering the host. First-open contents stay correct because
+ *    the open transition itself recomputes this atom from current state.
+ *
+ * INVARIANT: any atom a dynamic provider or its action runtime reads through
+ * `runtime.store.get(...)` MUST appear here. The static builtin commands
+ * don't need this — their `when` predicates already re-evaluate on every
+ * `ctx` change inside `registry.list()`.
+ */
+const dynamicProviderInputsAtom = atom((get) => {
+  if (!get(commandPaletteOpenAtom)) {
+    return null;
+  }
+  return {
+    workspaces: get(workspacesArrayAtom),
+    tasks: get(tasksArrayAtom),
+    openTabIds: get(effectiveOpenTabIdsAtom),
+    panelRegistry: get(panelRegistryAtom),
+    // The panel-toggle provider reads the layout's placement to list only
+    // actively-placed panels; the add-panel location page reads it via
+    // listAvailableLocations.
+    workspaceLayout: get(workspaceLayoutAtom),
+    // The add-panel provider reads this to build the panel page for the
+    // chosen section; without it, picking a section wouldn't recompute the
+    // list and the panel page would show "No commands here".
+    addPanelTarget: get(addPanelTargetSubSectionAtom),
+    // The add-panel provider builds the "New {recent} agent" row title from the
+    // normalized last-used agent type; tracking it keeps that title in sync when a
+    // userConfig frame or the pi flag lands while the palette is open.
+    recentAgentType: get(recentAgentTypeAtom),
+  };
+});
+
+/**
  * The list of visible commands for the current ctx, with `when` and
  * `onPage` already applied. Sorting + grouping is done in the component.
  *
- * Subscribes to the workspace and task atoms so that dynamic providers
- * which read those atoms via `getDefaultStore()` re-evaluate when their
- * inputs change. Without this, opening the palette and then navigating
- * (or having a workspace added in the background) would leave the list
- * stale.
- *
- * Short-circuits when the palette is closed so we don't pay the
- * `commandRegistry.list()` cost on every render.
+ * While the palette is closed, the dynamic-provider inputs are not
+ * subscribed at all (see `dynamicProviderInputsAtom`) and the memo
+ * short-circuits, so the always-mounted host neither re-renders on
+ * unrelated state churn nor pays the `commandRegistry.list()` cost.
  */
 export const useVisibleCommands = (ctx: PaletteContext): Array<Command> => {
   const registry = useCommandRegistry();
   const isOpen = useAtomValue(commandPaletteOpenAtom);
   const search = useAtomValue(commandPaletteSearchAtom);
   const size = useRegistrySize();
-  // Subscriptions to atoms that dynamic providers read imperatively
-  // (`runtime.store.get(atom)` inside `produce()`). Listing them here
-  // forces the visible-set memo to recompute when any of them changes,
-  // which in turn re-invokes every provider's `produce`. Without these
-  // subscriptions, providers see stale data after the user edits state
-  // outside the palette (e.g. closing a tab while the palette is open
-  // would leave "Close others" stale until the palette reopens).
-  //
-  // INVARIANT: any atom a dynamic provider or its action runtime reads
-  // through `runtime.store.get(...)` MUST appear here. The static
-  // builtin commands don't need this — their `when` predicates already
-  // re-evaluate on every `ctx` change inside `registry.list()`.
-  const workspaces = useAtomValue(workspacesArrayAtom);
-  const tasks = useAtomValue(tasksArrayAtom);
-  const openTabIds = useAtomValue(effectiveOpenTabIdsAtom);
-  const panelRegistry = useAtomValue(panelRegistryAtom);
+  const dynamicInputs = useAtomValue(dynamicProviderInputsAtom);
   const hasQuery = search.trim().length > 0;
   return useMemo(() => {
     if (!isOpen) return [];
@@ -235,14 +267,11 @@ export const useVisibleCommands = (ctx: PaletteContext): Array<Command> => {
     // ESLint flagging them as unused. The actual data is consumed by
     // dynamic providers via `runtime.store.get(...)`.
     void size;
-    void workspaces;
-    void tasks;
-    void openTabIds;
-    void panelRegistry;
+    void dynamicInputs;
     // While the user is typing at the root, surface page-scoped commands
     // too so fuzzy search can land them on sub-page items directly.
     return registry.list(ctx, { includeAllPages: hasQuery });
-  }, [registry, isOpen, ctx, hasQuery, size, workspaces, tasks, openTabIds, panelRegistry]);
+  }, [registry, isOpen, ctx, hasQuery, size, dynamicInputs]);
 };
 
 /**
@@ -366,6 +395,7 @@ export const useResetOnOpenChange = (): void => {
   const setInitialPage = useSetAtom(commandPaletteInitialPageAtom);
   const setWorkspaceActionsTarget = useSetAtom(workspaceActionsTargetAtom);
   const setAgentActionsTarget = useSetAtom(agentActionsTargetAtom);
+  const setAddPanelTarget = useSetAtom(addPanelTargetSubSectionAtom);
   const prevOpenRef = useRef(false);
   // Layout effect (not plain effect) so the reset commits BEFORE paint.
   // A caller that batches `setSearch("x"); setIsOpen(true)` would
@@ -397,6 +427,16 @@ export const useResetOnOpenChange = (): void => {
       }
       setWorkspaceActionsTarget(null);
       setAgentActionsTarget(null);
+      setAddPanelTarget(null);
     }
-  }, [isOpen, initialPage, setSearch, setPages, setInitialPage, setWorkspaceActionsTarget, setAgentActionsTarget]);
+  }, [
+    isOpen,
+    initialPage,
+    setSearch,
+    setPages,
+    setInitialPage,
+    setWorkspaceActionsTarget,
+    setAgentActionsTarget,
+    setAddPanelTarget,
+  ]);
 };

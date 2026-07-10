@@ -7,18 +7,21 @@ export type StaticKeybindingId =
   | "settings"
   | "new_workspace"
   | "open_workspace"
-  | "close_workspace"
   | "delete_workspace"
   | "next_tab"
   | "previous_tab"
   | "send_message"
   | "interrupt_agent"
   | "toggle_theme"
-  | "focus_mode"
-  | "zen_mode"
   | "toggle_left_panel"
   | "toggle_bottom_panel"
   | "toggle_right_panel"
+  | "toggle_sidebar"
+  | "maximize_section"
+  | "next_section"
+  | "previous_section"
+  | "next_panel"
+  | "previous_panel"
   | "next_agent"
   | "previous_agent"
   | "new_agent"
@@ -27,9 +30,7 @@ export type StaticKeybindingId =
   | "toggle_tool_density"
   | "clear_terminal";
 
-export type PanelKeybindingId = `panel_${string}`;
-
-export type KeybindingId = StaticKeybindingId | PanelKeybindingId;
+export type KeybindingId = StaticKeybindingId;
 
 export type KeybindingCategory = "general" | "workspaces" | "chat" | "navigation" | "panels" | "terminal";
 

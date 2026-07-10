@@ -76,40 +76,32 @@ done
 
 ### Step 3: Dismiss onboarding (if visible)
 
-A fresh Sculptor instance shows an onboarding modal that blocks the home
-page. Take a screenshot first — if you see the onboarding modal, dismiss it:
+A fresh instance opens an onboarding modal that advances through a few steps —
+an email step and/or an installation check, depending on the build. Loop until
+it's gone: fill the email if shown, click whichever advance button is present,
+and stop after the final complete button:
 
 ```bash
-# Check if onboarding is visible
-RESULT=$(curl -s -X POST http://127.0.0.1:$PORT/execute \
-  -d '{"action": "locate", "selector": "[data-testid=ONBOARDING_WELCOME_STEP]"}')
-ELEMENTS=$(echo "$RESULT" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('elements',[])))")
+loc() { curl -s -X POST http://127.0.0.1:$PORT/execute \
+  -d "{\"action\": \"locate\", \"selector\": \"[data-testid=$1]\"}" \
+  | python3 -c "import json,sys; e=json.load(sys.stdin).get('elements',[]); print(f\"{e[0]['x']} {e[0]['y']}\" if e else '')"; }
+click() { curl -s -X POST http://127.0.0.1:$PORT/execute -d "{\"action\": \"click\", \"x\": ${1% *}, \"y\": ${1#* }}" >/dev/null; }
 
-if [ "$ELEMENTS" -gt 0 ]; then
-  # Click through: email input -> submit -> complete
-  curl -s -X POST http://127.0.0.1:$PORT/execute \
-    -d '{"action": "locate", "selector": "[data-testid=ONBOARDING_EMAIL_INPUT]"}'
-  # Click the email input and type a test email
-  curl -s -X POST http://127.0.0.1:$PORT/execute \
-    -d '{"action": "click", "x": <x>, "y": <y>}'
-  curl -s -X POST http://127.0.0.1:$PORT/execute \
-    -d '{"action": "type", "text": "test@test.com"}'
-  # Locate and click "Get Started"
-  curl -s -X POST http://127.0.0.1:$PORT/execute \
-    -d '{"action": "locate", "selector": "[data-testid=ONBOARDING_EMAIL_SUBMIT]"}'
-  curl -s -X POST http://127.0.0.1:$PORT/execute \
-    -d '{"action": "click", "x": <x>, "y": <y>}'
-  # Locate and click the final complete button
-  curl -s -X POST http://127.0.0.1:$PORT/execute \
-    -d '{"action": "locate", "selector": "[data-testid=ONBOARDING_COMPLETE_BUTTON]"}'
-  curl -s -X POST http://127.0.0.1:$PORT/execute \
-    -d '{"action": "click", "x": <x>, "y": <y>}'
-  echo "Onboarding dismissed"
-fi
+for i in $(seq 1 8); do
+  [ -n "$(loc ONBOARDING_EMAIL_INPUT)" ] && curl -s -X POST http://127.0.0.1:$PORT/execute \
+    -d '{"action": "fill", "id": "ONBOARDING_EMAIL_INPUT", "text": "test@test.com"}' >/dev/null
+  CLICKED=0
+  for id in ONBOARDING_EMAIL_SUBMIT ONBOARDING_COMPLETE_BUTTON; do
+    COORD=$(loc $id); [ -n "$COORD" ] && { click "$COORD"; CLICKED=1; }
+  done
+  # No advance button on screen means the modal is gone — the flow has several
+  # steps (email and/or an installation check), so keep going until none remain.
+  [ "$CLICKED" -eq 0 ] && { echo "Onboarding dismissed"; break; }
+  sleep 1
+done
 ```
 
-Replace `<x>` and `<y>` with coordinates from each `locate` response.
-If no onboarding modal appears, skip this step.
+If no onboarding modal appears, this loop no-ops — skip to the next step.
 
 ### Step 4: Interact with the browser
 
@@ -197,18 +189,67 @@ curl -s -X POST http://127.0.0.1:$PORT/execute \
 
 ### Type text
 
-Types into whatever element currently has focus:
+Types into whatever element currently has focus. **This does not choose where
+the text goes** — on a workspace page the agent terminal grabs focus on load, so
+a bare `type` (or `click`-then-`type`) can land in the terminal instead of the
+chat box. To type into a specific field, use `fill` (below); to send a chat
+message, use `send_message`.
 
 ```bash
 curl -s -X POST http://127.0.0.1:$PORT/execute \
   -d '{"action": "type", "text": "Hello world"}'
 ```
 
+### Fill a field (focus + type into a named element)
+
+Focuses a named element and types into it, replacing any existing contents.
+This targets the element directly, so it can't miss because another surface
+holds focus or the click landed on a non-editable container. Works for plain
+inputs and for the chat input (a ProseMirror rich editor). Identify the element
+by `id` (data-testid) or `selector`:
+
+```bash
+curl -s -X POST http://127.0.0.1:$PORT/execute \
+  -d '{"action": "fill", "id": "CHAT_INPUT", "text": "Summarize the README"}'
+```
+
+### Send a chat message
+
+Types a prompt into the chat input and submits it. This is the reliable way to
+send a message: it clicks the send button (the real-user path), which sidesteps
+the platform send keybinding — **plain Enter does not send** (it inserts a
+newline; the default send binding is Cmd/Ctrl+Enter), and the send button stays
+disabled until the draft is non-empty. Pass no `text` to submit whatever is
+already in the box.
+
+```bash
+curl -s -X POST http://127.0.0.1:$PORT/execute \
+  -d '{"action": "send_message", "text": "What does this repo do?"}'
+```
+
+### Focus a named element
+
+Moves keyboard focus to an element (by `id` or `selector`) so a subsequent
+`type` lands there. Use `fill`/`send_message` for text fields; reach for bare
+`focus` only when you specifically want `type`/`press` to follow.
+
+```bash
+curl -s -X POST http://127.0.0.1:$PORT/execute \
+  -d '{"action": "focus", "id": "CHAT_INPUT"}'
+```
+
 ### Press a key
+
+Accepts modifier combos joined with `+`. Use `ControlOrMeta` for the platform
+command key (Cmd on macOS, Ctrl elsewhere):
 
 ```bash
 curl -s -X POST http://127.0.0.1:$PORT/execute \
   -d '{"action": "press", "key": "Enter"}'
+
+# Send a chat message via the keybinding instead of the button:
+curl -s -X POST http://127.0.0.1:$PORT/execute \
+  -d '{"action": "press", "key": "ControlOrMeta+Enter"}'
 ```
 
 ### Hover
@@ -504,19 +545,19 @@ management"):
 <img src="/path/to/screenshots/0001_get.png" alt="Home page - no workspaces">
 
 **Step 1: Home page (empty state)**
-The home page shows "No workspaces yet" with a folder icon. The top bar has
-the home icon (active), "+" button, and right-side icons (search, settings,
-help). Layout is centered and clean.
+The home page shows "No workspaces yet" with a folder icon. The left sidebar
+shows the repo group, a "New workspace" button, and the footer links
+(settings, help). Layout is centered and clean.
 
-**Next:** I'll locate and click the "+" button to create a new workspace.
+**Next:** I'll locate and click the "New workspace" button in the sidebar.
 ```
 
-**Step 2:** Locate the "+" button and click it.
+**Step 2:** Locate the "New workspace" button and click it.
 
 ```bash
 # Find the button's coordinates
 curl -s -X POST http://127.0.0.1:$PORT/execute \
-  -d '{"action": "locate", "selector": "[data-testid=ADD_WORKSPACE_BUTTON]"}'
+  -d '{"action": "locate", "selector": "[data-testid=SIDEBAR_NEW_WORKSPACE_BUTTON]"}'
 # Click at the returned coordinates
 curl -s -X POST http://127.0.0.1:$PORT/execute \
   -d '{"action": "click", "x": 72, "y": 52}'
@@ -587,18 +628,19 @@ Use `locate` to find coordinates, then `click` to interact:
 
 | Test ID | Element |
 |---------|---------|
-| `TASK_BUTTON` | Task item in the sidebar |
 | `TASK_INPUT` | New task prompt input on home page |
-| `START_TASK_BUTTON` | Create task button |
 | `WORKSPACE_NAME_INPUT` | Workspace name input field |
 | `CHAT_INPUT` | Message input in chat |
 | `SEND_BUTTON` | Send message button |
 | `CHAT_PANEL` | The chat message area |
-| `ADD_WORKSPACE_BUTTON` | "+" button to create new workspace |
-| `WORKSPACE_TAB` | Workspace tab in tab bar |
+| `WORKSPACE_SIDEBAR` | The workspace sidebar |
+| `SIDEBAR_NEW_WORKSPACE_BUTTON` | "New workspace" button in the sidebar |
+| `SIDEBAR_WORKSPACE_ROW` | Workspace row in the sidebar |
+| `SIDEBAR_HOME_LINK` | Home link in the sidebar |
+| `NEW_WORKSPACE_PROMPT_TEXTAREA` | Prompt input on the new-workspace form |
+| `NEW_WORKSPACE_CREATE_BUTTON` | Create button on the new-workspace form |
 | `WORKSPACE_ROW` | Workspace row in home list |
 | `MODEL_SELECTOR` | Model dropdown selector |
-| `HOME_BUTTON` | Home navigation button |
 | `SETTINGS_SIDEBAR` | Settings page sidebar |
 | `COMPACTION_BAR` | Context remaining bar at bottom |
 | `COMPACTION_PANEL` | The popover from the context bar |
@@ -623,6 +665,15 @@ By default the server creates a small test git repository. Pass
 `--project-path` to point Sculptor at a real repository instead.
 
 ## Gotchas
+
+- **Typing into the chat input**: On a workspace page, the agent terminal grabs
+  keyboard focus on load, so a bare `type` — or `click`-then-`type` at the chat
+  box's center, which hits the toolbar/padding rather than the editable region —
+  lands in the terminal instead. Use `fill` with `id: CHAT_INPUT` to type into
+  the chat box, and `send_message` to submit. Plain Enter inserts a newline (the
+  default send binding is Cmd/Ctrl+Enter, i.e. `ControlOrMeta+Enter`), and the
+  send button stays disabled until the draft is non-empty — so a send-button
+  click does nothing while the box is empty.
 
 - **Use real Claude, not Fake Claude**: The manual test server passes through
   your local API keys, so real Claude models work out of the box. Use whatever

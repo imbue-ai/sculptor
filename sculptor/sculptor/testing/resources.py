@@ -113,6 +113,36 @@ def sculptor_instance_(
     instance._post_test(request)
 
 
+@pytest.fixture
+def sculptor_instance_empty_first_run_(
+    sculptor_instance_: SculptorInstance,
+) -> SculptorInstance:
+    """Shared instance settled on the first-run auto-opened new-workspace dialog.
+
+    The shared ``sculptor_instance_``'s per-test reset ends settled on Home
+    with one repo and zero workspaces, having already waited out and dismissed
+    the first-run offer so ordinary tests never race its modal overlay. The
+    offer fires whenever Home mounts over an empty (loaded) workspace list on
+    a boot that has never had a workspace — this reset's fresh boot is exactly
+    that, and its dismissal spent this mount's offer — so remount Home by
+    hopping through Settings and back. The hops are hash-only navigations
+    within the running SPA (no reboot — a full reload would re-race the whole
+    boot path for nothing; and it must not create a workspace first, which
+    would latch the offer off for the session), and the workspace list is
+    already loaded and empty, so returning to Home re-offers the dialog
+    immediately with the ``/sculptor:help`` onboarding prompt prefilled.
+    """
+    page = sculptor_instance_.page
+    page.evaluate("window.location.hash = '/settings'")
+    # Wait for Settings to render before hopping back: two back-to-back hash
+    # assignments can coalesce into one router update, which would leave Home
+    # mounted throughout and never re-fire its offer.
+    expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible()
+    page.evaluate("window.location.hash = '/home'")
+    expect(page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_be_visible(timeout=45_000)
+    return sculptor_instance_
+
+
 def _get_packaged_binary_path(config: pytest.Config) -> Path:
     """Return the verified ``--packaged-binary-path`` from the pytest config.
 
@@ -278,9 +308,12 @@ def _get_or_create_shared_instance(
     # Use a longer timeout than the default 30s for this initial check to
     # allow headroom for cold Electron starts on CI.
     t2 = time.monotonic()
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    # The sidebar rail is rendered by AppShell on every in-app destination, but
+    # not by the onboarding wizard — so it is the universal
+    # "app rendered, not onboarding" signal in the new shell.
+    app_ready = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
     try:
-        expect_app_not_onboarding(page, add_ws_button, timeout=_INITIAL_RENDER_TIMEOUT_MS)
+        expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
         logger.warning("[timing] SPA render failed after {:.2f}s", time.monotonic() - t2)
         if electron_frontend is not None:
@@ -430,10 +463,10 @@ def _create_packaged_instance(
     page.goto(base_url, wait_until="networkidle")
 
     # Wait for the SPA to render — raise if onboarding shows instead of the main app.
-    logger.info("Waiting for SPA to render (checking for ADD_WORKSPACE_BUTTON or onboarding)")
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    logger.info("Waiting for SPA to render (checking for the sidebar rail or onboarding)")
+    app_ready = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
     try:
-        expect_app_not_onboarding(page, add_ws_button, timeout=_INITIAL_RENDER_TIMEOUT_MS)
+        expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
         logger.error("SPA render failed. Page URL: {}", page.url)
         logger.error("Page content preview: {}", page.content()[:2000])
@@ -455,6 +488,13 @@ def _create_packaged_instance(
         is_electron=is_electron,
         default_timeout_ms=default_timeout_ms,
         forwarder=None,
+        # Packaged-electron enforces the session token, so page.request cleanup and
+        # test-body API calls authenticate via the x-session-token cookie set above.
+        # _reset_browser_state clears all cookies before every test and relies on
+        # _restore_session_cookie to re-add this one — which no-ops unless the token
+        # is threaded in here. Without it the cookie is gone for the whole test body
+        # and every page.request 403s.
+        session_token=packaged_frontend.session_token,
     )
 
     setattr(config, "_sculptor_instance", instance)
@@ -542,11 +582,10 @@ def _create_custom_command_instance(
         ]
     )
 
-    # Wait for the React SPA to render.
+    # Wait for the React SPA to render (the sidebar rail is the new shell's universal
+    # "app rendered" signal — present on every in-app route).
     try:
-        expect(
-            page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))
-        ).to_be_visible()
+        expect(page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)).to_be_visible()
     except Exception:
         electron_frontend.__exit__(None, None, None)
         raise
@@ -721,7 +760,7 @@ def _make_test_user_config(claude_path: str = "claude") -> UserConfig:
         is_session_recording_enabled=True,
         is_privacy_policy_consented=True,
         is_telemetry_level_set=True,
-        # Managed pi has no fake-on-PATH path, so integration tests pin pi=CUSTOM (bare "pi") to resolve the FakePi stub on PATH.
+        # Pin pi to CUSTOM (bare "pi") so it resolves the FakePi stub on PATH without touching the managed-copy directory.
         dependency_paths=DependencyPaths(claude=claude_path, pi="pi"),
     )
 

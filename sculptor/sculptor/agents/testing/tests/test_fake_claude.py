@@ -1,5 +1,6 @@
 """Unit tests for FakeClaude script."""
 
+import io
 import json
 import os
 import subprocess
@@ -10,6 +11,7 @@ from uuid import uuid4
 import pytest
 
 from sculptor.agents.testing.fake_claude import _parse_prompt
+from sculptor.agents.testing.fake_claude import _read_prompt_from_stream_json_stdin
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_response_text
 from sculptor.agents.testing.fake_claude_commands import handle_ask_user_question
 from sculptor.agents.testing.fake_claude_commands import handle_background_task_notification
@@ -34,6 +36,7 @@ from sculptor.agents.testing.fake_claude_jsonl import make_task_started_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
+from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.claude_state import ParsedAssistantResponse
@@ -102,6 +105,51 @@ def test_task_notification_message_roundtrip() -> None:
     assert parsed.tool_use_id == "toolu-456"
     assert parsed.status == "completed"
     assert parsed.summary == "Tests passed"
+
+
+def test_task_notification_message_without_tool_use_id_parses() -> None:
+    """A task_notification missing tool_use_id must parse, not raise KeyError.
+
+    The CLI omits tool_use_id when a background task orphaned by a process exit
+    is reported as failed on resume (see SCU-1666). Parsing must degrade to an
+    empty tool_use_id instead of crashing the agent's output-processing thread.
+    """
+    msg = make_task_notification_message(
+        task_id="task-123",
+        tool_use_id=None,
+        status="failed",
+        summary="Background task did not complete",
+    )
+    assert "tool_use_id" not in msg
+    result = parse_claude_code_json_lines_simple(json.dumps(msg))
+    assert result is not None
+    _msg_type, parsed = result
+    assert isinstance(parsed, ParsedTaskNotificationResponse)
+    assert parsed.task_id == "task-123"
+    assert parsed.tool_use_id == ""
+    assert parsed.status == "failed"
+
+
+def test_task_started_message_without_tool_use_id_parses() -> None:
+    """task_started tolerates a missing tool_use_id too (parity with task_notification).
+
+    The notification handler is where the orphaned-on-restart payload actually
+    drops the key, but task_started reads it the same defensive way, so a variant
+    payload there must degrade to an empty id rather than crashing the agent.
+    """
+    msg = make_task_started_message(
+        task_id="task-123",
+        tool_use_id="toolu-456",
+        description="Run tests",
+        task_type="local_bash",
+    )
+    del msg["tool_use_id"]
+    result = parse_claude_code_json_lines_simple(json.dumps(msg))
+    assert result is not None
+    _msg_type, parsed = result
+    assert isinstance(parsed, ParsedTaskStartedResponse)
+    assert parsed.task_id == "task-123"
+    assert parsed.tool_use_id == ""
 
 
 def test_assistant_text_message_roundtrip() -> None:
@@ -676,6 +724,223 @@ def test_end_to_end_unknown_command_exits_with_error() -> None:
         cwd=str(Path(__file__).parents[3]),
     )
     assert result.returncode == 1
+
+
+# --- Multi-turn (borrowing-model) FakeClaude, driven directly over stdin ---
+#
+# The multi-turn contract is a property of FakeClaude itself, independent of
+# whether a caller sends one frame per process or many. These tests assert it
+# directly by feeding stdin the way a lingering CLI is fed, rather than routing
+# through the process manager.
+
+
+def _user_frame(content: str) -> str:
+    """Build one stream-json user frame line, matching the wrapper's stdin shape."""
+    message = {
+        "type": "user",
+        "session_id": "",
+        "message": {"role": "user", "content": content},
+        "parent_tool_use_id": None,
+    }
+    return json.dumps(message) + "\n"
+
+
+def _run_fake_claude_stream_json(
+    stdin_text: str,
+    *,
+    include_partial: bool = False,
+    append_system_prompt: str | None = None,
+    home: Path | None = None,
+    timeout: float = 30.0,
+) -> subprocess.CompletedProcess[str]:
+    """Run FakeClaude in stream-json input mode, feeding ``stdin_text`` then EOF.
+
+    ``subprocess.run(input=...)`` closes stdin after writing, so this exercises
+    the exit-on-EOF path once all frames are consumed. ``home`` pins ``$HOME``
+    so a test can inspect (or assert the absence of) the on-disk session file.
+    """
+    argv = [
+        sys.executable,
+        "-m",
+        "sculptor.agents.testing.fake_claude",
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--input-format",
+        "stream-json",
+    ]
+    if include_partial:
+        argv.append("--include-partial-messages")
+    if append_system_prompt is not None:
+        argv.extend(["--append-system-prompt", append_system_prompt])
+    env = {**os.environ, "HOME": str(home)} if home is not None else None
+    return subprocess.run(
+        argv,
+        input=stdin_text,
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).parents[3]),
+        env=env,
+        timeout=timeout,
+    )
+
+
+def _top_level_events(stdout: str) -> list[dict]:
+    """Parse stdout JSONL, dropping streaming stream_event lines."""
+    events = [json.loads(line) for line in stdout.splitlines() if line.strip()]
+    return [e for e in events if e.get("type") != "stream_event"]
+
+
+@pytest.mark.parametrize("include_partial", [False, True])
+def test_stream_json_hosts_multiple_turns_in_one_process(include_partial: bool) -> None:
+    """Three user frames on one stdin drive three scripted cycles in one process,
+    each bracketed by its own init/result and honoring its own frame's directive."""
+    frames = [
+        _user_frame('fake_claude:text `{"text": "First turn."}`'),
+        _user_frame('fake_claude:text `{"text": "Second turn."}`'),
+        _user_frame('fake_claude:text `{"text": "Third turn."}`'),
+    ]
+    result = _run_fake_claude_stream_json("".join(frames), include_partial=include_partial)
+    assert result.returncode == 0, result.stderr
+
+    events = _top_level_events(result.stdout)
+    kinds = [(e.get("type"), e.get("subtype", "")) for e in events]
+    # Exactly one init → assistant → result bracket per cycle, three cycles.
+    assert (
+        kinds
+        == [
+            ("system", "init"),
+            ("assistant", ""),
+            ("result", "success"),
+        ]
+        * 3
+    )
+
+    # Each cycle honored its own frame's directive, in order.
+    assistant_texts = [e["message"]["content"][0]["text"] for e in events if e.get("type") == "assistant"]
+    assert assistant_texts == ["First turn.", "Second turn.", "Third turn."]
+
+    # One session per process: every cycle's init reports the same session id.
+    init_session_ids = {e["session_id"] for e in events if e.get("subtype") == "init"}
+    assert len(init_session_ids) == 1
+
+
+def test_stream_json_single_frame_then_eof_runs_exactly_one_cycle() -> None:
+    """A single frame followed by EOF runs one cycle and nothing more — the loop
+    does not synthesize an extra default-handler turn when stdin closes."""
+    result = _run_fake_claude_stream_json(_user_frame('fake_claude:text `{"text": "Only turn."}`'))
+    assert result.returncode == 0, result.stderr
+
+    events = _top_level_events(result.stdout)
+    assert [e.get("subtype") for e in events if e.get("type") == "system"] == ["init"]
+    assert len([e for e in events if e.get("type") == "result"]) == 1
+    assistant_texts = [e["message"]["content"][0]["text"] for e in events if e.get("type") == "assistant"]
+    assert assistant_texts == ["Only turn."]
+
+
+def test_stream_json_exits_silently_on_immediate_eof() -> None:
+    """With no user frame at all, stdin closing makes FakeClaude exit 0 and emit
+    nothing, instead of synthesizing a default-handler cycle."""
+    result = _run_fake_claude_stream_json("")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ""
+
+
+def test_stream_json_immediate_eof_writes_no_session_file(tmp_path: Path) -> None:
+    """The silent immediate-EOF exit touches no disk: the session history file
+    is deferred until a frame arrives, so a session that emits nothing leaves no
+    orphan file. A single real frame under the same pinned HOME does write one,
+    proving the negative assertion isn't vacuous."""
+    claude_dir = tmp_path / ".claude"
+
+    eof = _run_fake_claude_stream_json("", home=tmp_path)
+    assert eof.returncode == 0, eof.stderr
+    session_files = list(claude_dir.rglob("*.jsonl")) if claude_dir.exists() else []
+    assert session_files == []
+
+    framed = _run_fake_claude_stream_json(_user_frame('fake_claude:text `{"text": "hi"}`'), home=tmp_path)
+    assert framed.returncode == 0, framed.stderr
+    assert list(claude_dir.rglob("*.jsonl"))
+
+
+def test_stream_json_system_prompt_directives_run_once_on_first_cycle() -> None:
+    """fake_claude: directives in --append-system-prompt run on the first cycle
+    only (before that frame's own directives) — an appended system prompt is a
+    launch-time input, not a per-turn one — and do not repeat on later cycles."""
+    frames = [
+        _user_frame('fake_claude:text `{"text": "TURN1"}`'),
+        _user_frame('fake_claude:text `{"text": "TURN2"}`'),
+    ]
+    result = _run_fake_claude_stream_json(
+        "".join(frames),
+        append_system_prompt='fake_claude:text `{"text": "SYSTEM"}`',
+    )
+    assert result.returncode == 0, result.stderr
+
+    events = _top_level_events(result.stdout)
+    assistant_texts = [e["message"]["content"][0]["text"] for e in events if e.get("type") == "assistant"]
+    # SYSTEM runs exactly once, in the first cycle ahead of TURN1; TURN2's cycle has none.
+    assert assistant_texts == ["SYSTEM", "TURN1", "TURN2"]
+
+
+def test_stream_json_interrupt_between_cycles_exits_with_sigterm_code() -> None:
+    """An interrupt control_request arriving while idle between cycles tears the
+    process down gracefully (SIGTERM exit code) after the completed cycle."""
+    interrupt = (
+        json.dumps({"type": "control_request", "request_id": "req_x", "request": {"subtype": "interrupt"}}) + "\n"
+    )
+    result = _run_fake_claude_stream_json(_user_frame('fake_claude:text `{"text": "One turn."}`') + interrupt)
+    assert result.returncode == AGENT_EXIT_CODE_FROM_SIGTERM, result.stderr
+
+    events = _top_level_events(result.stdout)
+    # The first cycle completed before the interrupt was read; no second cycle began.
+    assert len([e for e in events if e.get("subtype") == "init"]) == 1
+    assert len([e for e in events if e.get("type") == "result"]) == 1
+
+
+def test_read_prompt_returns_none_on_eof(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EOF (empty stdin) yields None so the caller exits instead of running the
+    default handler for a turn the user never sent."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    assert _read_prompt_from_stream_json_stdin() is None
+
+
+def test_read_prompt_returns_empty_string_for_empty_content_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit empty-content user frame is distinct from EOF: it returns ""
+    so the default handler still runs for a genuinely empty prompt."""
+    frame = json.dumps({"type": "user", "message": {"role": "user", "content": ""}}) + "\n"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(frame))
+    assert _read_prompt_from_stream_json_stdin() == ""
+
+
+def test_read_prompt_returns_content_for_user_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+    frame = json.dumps({"type": "user", "message": {"role": "user", "content": "hello there"}}) + "\n"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(frame))
+    assert _read_prompt_from_stream_json_stdin() == "hello there"
+
+
+def test_read_prompt_skips_non_user_frames_until_user_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-user frames (control responses, context-usage requests) are ignored
+    while scanning for the next user frame."""
+    lines = (
+        json.dumps({"type": "control_response", "response": {"request_id": "ctx_1"}})
+        + "\n"
+        + json.dumps({"type": "control_request", "request_id": "c", "request": {"subtype": "get_context_usage"}})
+        + "\n"
+        + json.dumps({"type": "user", "message": {"role": "user", "content": "actual prompt"}})
+        + "\n"
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(lines))
+    assert _read_prompt_from_stream_json_stdin() == "actual prompt"
+
+
+def test_read_prompt_exits_on_idle_interrupt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An interrupt control_request read between cycles exits with the SIGTERM code."""
+    frame = json.dumps({"type": "control_request", "request_id": "r", "request": {"subtype": "interrupt"}}) + "\n"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(frame))
+    with pytest.raises(SystemExit) as exc_info:
+        _read_prompt_from_stream_json_stdin()
+    assert exc_info.value.code == AGENT_EXIT_CODE_FROM_SIGTERM
 
 
 def test_determinism_same_output_for_same_input() -> None:

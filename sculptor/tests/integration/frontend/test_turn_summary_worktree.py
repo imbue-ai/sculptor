@@ -24,7 +24,7 @@ from sculptor.testing.elements.chat_panel import wait_for_completed_message_coun
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -34,13 +34,18 @@ def _start_worktree_task(page: Page, prompt: str) -> PlaywrightTaskPage:
 
     Worktree mode is the default; no mode-selector interaction is needed.
     """
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)
     add_workspace_page.get_workspace_name_input().fill("Worktree Bash Test")
 
     branch_input = add_workspace_page.get_branch_name_input()
     expect(branch_input).to_be_visible()
     expect(branch_input).not_to_have_value("")
+
+    # Keep the first agent promptless — a prefilled prompt (e.g. the first-run
+    # onboarding text) would run an extra turn on the default model and the
+    # message-count assertions below would count those extra messages.
+    add_workspace_page.get_task_input().fill("")
 
     add_workspace_page.submit_and_wait_for_chat_panel()
 
