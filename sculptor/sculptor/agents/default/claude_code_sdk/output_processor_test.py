@@ -2171,6 +2171,35 @@ class TestNotificationCoalescingAndIdleBackstop:
         assert processor._pending_notification_turn_results == 0
 
     @pytest.mark.timeout(30)
+    def test_non_json_line_during_silence_does_not_defuse_backstop(self) -> None:
+        """A non-JSON stdout line (CLI debug output) is NOT a stream frame and
+        must not disarm the idle backstop. The loop tolerates such lines as a
+        warning; if one of them defused the backstop, a CLI that periodically
+        logs non-JSON noise faster than the grace period would keep the
+        backstop from ever firing and reintroduce the wait-forever hang."""
+        session_id = "s-noise"
+        frames = [
+            make_task_started_message(
+                task_id="sub-n", tool_use_id="toolu-n", description="N", task_type="local_agent"
+            ),
+            make_assistant_message("msg-main", [make_text_block("Launched.")]),
+            make_end_message(session_id=session_id),
+            make_task_notification_message(
+                task_id="sub-n", tool_use_id="toolu-n", status="completed", summary="N done"
+            ),
+        ]
+        processor, input_queue = self._build_idle_processor(frames, grace_seconds=0.3)
+        # A non-JSON debug line arrives after the notification and then the CLI
+        # goes silent. The backstop must still conclude the invocation.
+        input_queue.put(("Claude CLI debug: still working on it", True))
+
+        completed = processor._process_output()
+
+        assert completed is True
+        assert processor.found_final_message is True
+        assert processor._pending_notification_turn_results == 0
+
+    @pytest.mark.timeout(30)
     def test_inline_notification_mid_followup_turn_does_not_trigger_backstop(self) -> None:
         """An inline notification during an already-started follow-up turn must
         not arm the idle backstop: a long silent tool in that turn would

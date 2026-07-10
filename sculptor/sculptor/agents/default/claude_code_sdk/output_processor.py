@@ -653,16 +653,6 @@ class ClaudeOutputProcessor:
             if self._maybe_handle_control_request(line):
                 continue
 
-            # Any parsed stream frame disarms the notification-followup idle
-            # backstop: whatever follow-up activity the arming reset was
-            # waiting on is arriving (handlers re-arm at the next silent reset
-            # point). Deliberately placed AFTER the control-protocol
-            # short-circuits above — the CLI emits context-usage responses at
-            # turn boundaries without implying a follow-up turn, and such a
-            # frame must not defuse the backstop during the very silence it
-            # exists to detect. (SCU-1770)
-            self._notification_followup_armed_at = None
-
             # Detect the start of compaction from the system/status frame. This
             # fires for both auto-compaction and user-triggered `/compact` (sent
             # as a plain user message). For auto-compaction the PreCompact hook
@@ -746,6 +736,20 @@ class ClaudeOutputProcessor:
                 )
                 self.output_message_queue.put(warning)
                 continue
+
+            # A successfully parsed frame (even one the parser drops to None)
+            # is real CLI activity, so it disarms the notification-followup
+            # idle backstop: the follow-up turn the arming reset was waiting on
+            # is arriving (handlers re-arm at the next silent reset point).
+            # Placed AFTER the parse — a malformed/non-JSON line degrades to a
+            # warning via the except above and must NOT defuse the backstop
+            # during the very silence it exists to detect (recurring CLI debug
+            # output would otherwise keep it from ever firing). Control-protocol
+            # frames (context-usage responses, permission requests) are already
+            # excluded: they short-circuit with their own `continue` above,
+            # since the CLI emits them at turn boundaries without implying a
+            # follow-up turn. (SCU-1770)
+            self._notification_followup_armed_at = None
 
             if result is None:
                 continue
