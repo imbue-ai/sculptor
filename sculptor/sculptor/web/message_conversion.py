@@ -668,7 +668,6 @@ def convert_agent_messages_to_task_update(
             # RequestSuccess. Mirrors the can_finalize gate in the RequestStopped
             # branch below.
             can_finalize = current_request_id is not None and current_request_id == msg.request_id
-            has_pending_replacement = bool(queued_chat_messages)
             if can_finalize:
                 # When the turn was interrupted before any content was streamed, there may
                 # be no in-progress message yet. Create an empty one so the frontend can
@@ -681,6 +680,7 @@ def convert_agent_messages_to_task_update(
                 # Surfacing an empty "Interrupted by user" marker for the replaced
                 # turn would leave a dangling assistant message between the two user
                 # turns.
+                has_pending_replacement = bool(queued_chat_messages)
                 if in_progress_chat_message is None and msg.interrupted and not has_pending_replacement:
                     in_progress_chat_message = _create_empty_assistant_message(
                         chat_message_id=msg.message_id,
@@ -705,10 +705,18 @@ def convert_agent_messages_to_task_update(
                 pending_background_task_ids.clear()
 
         elif isinstance(msg, RequestFailureAgentMessage):
-            in_progress_chat_message = _add_error_to_message(in_progress_chat_message, msg)
-            # Clear any pending AUQs — the agent failed so the questions
-            # are no longer valid and the chat input should reappear.
-            pending_user_questions.clear()
+            # Only surface the failure on the active turn. Lifecycle requests
+            # (e.g. RemoveQueuedMessage) emit their own RequestStarted/Failure
+            # pair when their handler raises; running these side effects for one
+            # of those while a real turn is still open would stamp its error
+            # block onto the in-progress message and reset the live turn's
+            # streaming / background-wait state. See the RequestSuccess branch.
+            can_finalize = current_request_id is not None and current_request_id == msg.request_id
+            if can_finalize:
+                in_progress_chat_message = _add_error_to_message(in_progress_chat_message, msg)
+                # Clear any pending AUQs — the agent failed so the questions
+                # are no longer valid and the chat input should reappear.
+                pending_user_questions.clear()
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -716,8 +724,9 @@ def convert_agent_messages_to_task_update(
                 completed_message_by_id,
                 completed_chat_messages,
             )
-            streaming.reset()
-            pending_background_task_ids.clear()
+            if can_finalize:
+                streaming.reset()
+                pending_background_task_ids.clear()
 
         elif isinstance(msg, RequestStoppedAgentMessage):
             # Only synthesize a stopped message when this stop is for the
@@ -758,10 +767,15 @@ def convert_agent_messages_to_task_update(
                 completed_message_by_id,
                 completed_chat_messages,
             )
-            streaming.reset()
-            pending_background_task_ids.clear()
+            if can_finalize:
+                streaming.reset()
+                pending_background_task_ids.clear()
 
         elif isinstance(msg, RequestSkippedAgentMessage):
+            # A skipped request that isn't the active turn (e.g. the agent skips
+            # an already-removed queued message) must not reset the live turn's
+            # streaming / background-wait state. See the RequestSuccess branch.
+            can_finalize = current_request_id is not None and current_request_id == msg.request_id
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -769,8 +783,9 @@ def convert_agent_messages_to_task_update(
                 completed_message_by_id,
                 completed_chat_messages,
             )
-            streaming.reset()
-            pending_background_task_ids.clear()
+            if can_finalize:
+                streaming.reset()
+                pending_background_task_ids.clear()
 
         elif isinstance(msg, ERROR_MESSAGE_TYPES):
             # Add error block to assistant message
