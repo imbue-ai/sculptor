@@ -17,18 +17,18 @@ import { DndContext } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
-import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useCallback, useEffect, useRef } from "react";
 
 import type { Workspace } from "~/api";
-import { ElementIds, updateWorkspace } from "~/api";
+import { ElementIds } from "~/api";
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
-import { workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
-import { workspaceAtomFamily, workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
 import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import {
   type OpenInRuntime,
@@ -39,7 +39,6 @@ import type { WorkspaceAction } from "~/components/CommandPalette/contextActions
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { WorkspaceStatusDots } from "~/components/statusDot";
-import { ToastType } from "~/components/Toast.tsx";
 
 import { adjustSidebarDragCountAtom, collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
 import { sidebarCollisionDetection, sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
@@ -271,12 +270,11 @@ export const SidebarRepoGroup = ({
   // External atoms
   const isRepoCollapsed = useAtomValue(isRepoCollapsedAtomFamily(group.projectId));
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
-  const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
   const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
   const reorderWorkspace = useSetAtom(reorderSidebarWorkspaceAtom);
-  const store = useStore();
+  const renameWorkspace = useWorkspaceRename();
 
   // Whether the in-flight sidebar drag was started by THIS group's row context.
   // Every drag context adjusts the shared drag count, so end/cancel/cleanup must
@@ -377,35 +375,15 @@ export const SidebarRepoGroup = ({
   );
 
   // Reference-stable (the rows are memoized on their props): the rename
-  // callbacks depend only on reference-stable atom setters and the store.
+  // callbacks depend only on reference-stable atom setters and hooks.
+  // Optimistic write + rollback + error toast live in the shared
+  // useWorkspaceRename, the ONE rename path for every surface.
   const handleRenameCommit = useCallback(
     (workspaceId: string, newName: string): void => {
       setRenamingWorkspaceId(null);
-      const workspaceAtom = workspaceAtomFamily(workspaceId);
-      const previous = store.get(workspaceAtom);
-      // Optimistically show the new name and let the WebSocket frame reconcile
-      // with the server-authoritative value; roll back and surface a toast if the
-      // write is rejected so the rename never fails silently.
-      if (previous !== null) {
-        store.set(workspaceAtom, { ...previous, description: newName });
-      }
-      updateWorkspace({
-        path: { workspace_id: workspaceId },
-        body: { description: newName },
-      }).catch((error: unknown) => {
-        console.error("Failed to rename workspace:", error);
-        if (previous !== null) {
-          store.set(workspaceAtom, previous);
-        }
-        setRenameErrorToast({
-          title: `Failed to rename "${previous?.description ?? "workspace"}"`,
-          description: "The name has been restored. Try again or check your connection.",
-          type: ToastType.ERROR_PROMINENT,
-          action: null,
-        });
-      });
+      renameWorkspace(workspaceId, newName);
     },
-    [setRenamingWorkspaceId, setRenameErrorToast, store],
+    [setRenamingWorkspaceId, renameWorkspace],
   );
 
   const handleRenameCancel = useCallback((): void => {
