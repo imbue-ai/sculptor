@@ -237,10 +237,18 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
   }, []);
 
   const [positionRaw, setPositionRaw] = useExtensionSetting("position");
-  const [position, setPosition] = useState<Position | null>(() => parsePosition(positionRaw));
+  // The "home" spot — where the user last dropped the overlay. Only a drag
+  // release writes it; the transient viewport clamping below never does.
+  const homePosition = useMemo((): Position | null => parsePosition(positionRaw), [positionRaw]);
+  // The rendered spot: home, temporarily shifted while the overlay doesn't
+  // fit beside it (e.g. the expanded panel near a viewport edge), or
+  // following the pointer mid-drag. Re-derived from home whenever the
+  // overlay's size changes, so collapsing a shifted panel returns the pill
+  // to its exact spot.
+  const [displayPosition, setDisplayPosition] = useState<Position | null>(homePosition);
   const [isDragging, setIsDragging] = useState(false);
-  const positionRef = useRef(position);
-  positionRef.current = position;
+  const displayPositionRef = useRef(displayPosition);
+  displayPositionRef.current = displayPosition;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const wasDraggedRef = useRef(false);
 
@@ -262,15 +270,17 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
         if (!wasDraggedRef.current && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
         wasDraggedRef.current = true;
         setIsDragging(true);
-        setPosition(clampPosition({ x: rect.left + deltaX, y: rect.top + deltaY }, rect.width, rect.height));
+        setDisplayPosition(clampPosition({ x: rect.left + deltaX, y: rect.top + deltaY }, rect.width, rect.height));
       };
       const onEnd = (): void => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onEnd);
         window.removeEventListener("pointercancel", onEnd);
         setIsDragging(false);
-        // Persist once per drag, on release — not on every move.
-        if (wasDraggedRef.current && positionRef.current !== null) setPositionRaw(JSON.stringify(positionRef.current));
+        // The drop spot becomes the new home, once per drag — not per move.
+        if (wasDraggedRef.current && displayPositionRef.current !== null) {
+          setPositionRaw(JSON.stringify(displayPositionRef.current));
+        }
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onEnd);
@@ -286,23 +296,18 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
     event.stopPropagation();
   }, []);
 
-  // Pull a dragged overlay back into view when the viewport or the overlay's
+  // Re-derive the rendered spot from home when the viewport or the overlay's
   // own size changes (expand/collapse, rows appearing as the scan finds
-  // previews) — this also rescues a spot persisted on a larger viewport. The
-  // corrected spot is persisted so storage stays valid. The never-dragged
+  // previews): an overlay that doesn't fit beside its home slides into view,
+  // and slides back the moment it fits again — a shift is never persisted, so
+  // a spot saved on a larger viewport also just re-fits. The never-dragged
   // anchored placement needs none of this: bottom/left CSS tracks the
   // viewport by itself.
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (box === null) return undefined;
     const fit = (): void => {
-      const current = positionRef.current;
-      if (current === null) return;
-      const next = clampPosition(current, box.offsetWidth, box.offsetHeight);
-      if (next.x !== current.x || next.y !== current.y) {
-        setPosition(next);
-        setPositionRaw(JSON.stringify(next));
-      }
+      setDisplayPosition(homePosition === null ? null : clampPosition(homePosition, box.offsetWidth, box.offsetHeight));
     };
     fit();
     const observer = new ResizeObserver(fit);
@@ -312,7 +317,7 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
       observer.disconnect();
       window.removeEventListener("resize", fit);
     };
-  }, [isOnOpenhostFront, setPositionRaw]);
+  }, [homePosition, isOnOpenhostFront]);
 
   if (!isOnOpenhostFront) return null;
 
@@ -324,7 +329,7 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
   // keeping boxRef stable for the fit observer).
   const containerProps = {
     ref: boxRef,
-    style: containerStyle(position, isDragging),
+    style: containerStyle(displayPosition, isDragging),
     onPointerDown: onOverlayPointerDown,
     onClickCapture: onOverlayClickCapture,
   };
