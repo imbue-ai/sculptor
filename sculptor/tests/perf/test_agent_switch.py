@@ -101,7 +101,7 @@ def blend_long_history(page: Page) -> None:
     "blend",
     [
         pytest.param(blend_default, id="default"),
-        pytest.param(blend_long_history, id="long_history"),
+        pytest.param(blend_long_history, id="long_history", marks=pytest.mark.perf_heavy),
     ],
 )
 @user_story("perf: switching between agents in the same workspace should not over-fetch or over-render")

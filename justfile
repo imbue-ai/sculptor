@@ -1687,6 +1687,20 @@ test-offload-perf *args="":
     ulimit -n 8192
     offload run -c offload-perf.toml --trace {{args}} || [ $? -eq 2 ]
 
+# Fast perf subset on offload (per-PR lane): deselects the perf_heavy scenarios
+# (long_history, with_diff_and_files, long_chat_scrolled) so PRs get quick
+# signal from the cheap default blends; main/nightly runs the full matrix via
+# test-offload-perf. The fast config is derived from offload-perf.toml (single
+# source of truth) rather than committed separately, so the two can't drift.
+[group("test")]
+test-offload-perf-fast *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    python3 tools/perf/make_fast_config.py
+    offload run -c offload-perf-fast.toml --trace {{args}} || [ $? -eq 2 ]
+
 # -------- Sculptor Release Commands --------
 
 # Runs the dev command to create a branch bumping the version

@@ -108,18 +108,23 @@ jobs:
             shared/modal/MODAL_TOKEN_ID
             shared/modal/MODAL_TOKEN_SECRET
 
-      # TODO(SCU-1294): scenario subset. The design calls for fast `default`
-      # blends on every PR and the heavy blends (with_diff_and_files,
-      # long_history) on main/nightly only. That needs a lever offload actually
-      # forwards to pytest (a `-k`/env passthrough or a second group) — confirm
-      # the offload arg model on a real run before wiring it. For now the full
-      # matrix runs in both contexts (~8 min); it's a non-gating job.
+      # Scenario subset: PRs run the fast subset (cheap default blends) for quick
+      # signal; main records the full matrix (including perf_heavy scenarios) so
+      # its baseline note covers every scenario a PR might later diff against.
+      # offload has no CLI marker override, so the fast lane runs a config derived
+      # from offload-perf.toml (test-offload-perf-fast); see the just recipes.
       - name: Run perf scenarios on offload
         id: tests
         run: |
           ulimit -n 8192
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PERF_RECIPE=test-offload-perf-fast
+          else
+            PERF_RECIPE=test-offload-perf
+          fi
+          echo "perf recipe: $PERF_RECIPE"
           set +e
-          just test-offload-perf --ci 2>&1 | tee offload-out.log
+          just "$PERF_RECIPE" --ci 2>&1 | tee offload-out.log
           OFFLOAD_EXIT=${PIPESTATUS[0]}
           set -e
           pkill -TERM -f 'python3.*modal' 2>/dev/null || true
@@ -176,6 +181,12 @@ jobs:
           retention-days: 30
 
       # --- main push: record this commit's measurements as its baseline note ---
+      # Main runs the full matrix, so the note covers every scenario (including
+      # perf_heavy ones the per-PR fast lane skips). PRs diff their fast subset
+      # against this note (--intersect-head). NOTE: heavy scenarios are therefore
+      # recorded but never auto-diffed — a heavy regression shows only in the
+      # main-over-main note trend, not on a PR. A nightly (or main-vs-previous
+      # note) diff to alert on those is a follow-up.
       - name: Record baseline note (main only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.agg.outputs.rows != '0'
         run: |
@@ -214,10 +225,12 @@ jobs:
         id: render
         run: |
           if [ -n "${{ steps.baseline.outputs.base_sha }}" ]; then
+            # --intersect-head: a PR runs the fast subset, so the full-matrix
+            # baseline's heavy scenarios would otherwise show as "removed".
             python3 tools/perf/comment.py \
               --base perf-out/base.jsonl --head perf-out/head.jsonl \
               --base-sha "${{ steps.baseline.outputs.base_sha }}" \
-              --format github --observational > perf-out/comment.md
+              --format github --observational --intersect-head > perf-out/comment.md
             # Full table always goes to the step summary.
             cat perf-out/comment.md >> "$GITHUB_STEP_SUMMARY"
             # Comment only when something is non-green (regression/improvement/

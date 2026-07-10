@@ -236,7 +236,11 @@ def compare(base_idx: dict, head_idx: dict, dupes: tuple[list, list]) -> Report:
         c_status, c_text = _classify_count(b["commits"], h["commits"], COMMIT_PCT, COMMIT_ABS)
         d_status, d_text = _classify_count(b["dom_mutations"], h["dom_mutations"], DOM_PCT, DOM_ABS)
         # Informational only.
-        bg_text = f"{b['bg_requests']}→{h['bg_requests']}" if b["bg_requests"] != h["bg_requests"] else f"{h['bg_requests']} (=)"
+        bg_text = (
+            f"{b['bg_requests']}→{h['bg_requests']}"
+            if b["bg_requests"] != h["bg_requests"]
+            else f"{h['bg_requests']} (=)"
+        )
         dur_text = f"{b['duration_ms']:.0f}→{h['duration_ms']:.0f}ms"
 
         rr.cells = [
@@ -268,6 +272,7 @@ def compare(base_idx: dict, head_idx: dict, dupes: tuple[list, list]) -> Report:
 # --------------------------------------------------------------------------- #
 # Rendering
 # --------------------------------------------------------------------------- #
+
 
 def _cell(cell: Cell) -> str:
     """Render one table cell: status emoji + delta text."""
@@ -389,7 +394,9 @@ def render_term(report: Report, base_sha: str | None) -> str:
     lines = [_verdict(report)]
     if base_sha:
         lines.append(f"baseline: {base_sha}")
-    lines.append(f"regressed={c['regressed']} improved={c['improved']} unchanged={c['unchanged']} new={c['new']} removed={c['removed']}")
+    lines.append(
+        f"regressed={c['regressed']} improved={c['improved']} unchanged={c['unchanged']} new={c['new']} removed={c['removed']}"
+    )
     lines.append("")
     for r in report.rows:
         if r.state != "compared":
@@ -423,6 +430,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-sha", default=None, help="baseline commit SHA, named in the comment")
     p.add_argument("--format", choices=["github", "term"], default="term")
     p.add_argument("--observational", action="store_true", help="label the comment as calibration-phase")
+    p.add_argument(
+        "--intersect-head",
+        action="store_true",
+        help="only diff scenarios present in --head; drop base-only rows instead of "
+        + "reporting them 'removed'. For the per-PR fast subset vs a full-matrix baseline, "
+        + "where the heavy scenarios the PR skipped would otherwise look deleted.",
+    )
     p.add_argument("--fail-on-regression", action="store_true", help="exit 1 if any regression (off in CI for now)")
     args = p.parse_args(argv)
 
@@ -441,6 +455,8 @@ def main(argv: list[str] | None = None) -> int:
 
     base_idx, base_dupes = _index(base_rows)
     head_idx, head_dupes = _index(head_rows)
+    if args.intersect_head:
+        base_idx = {k: v for k, v in base_idx.items() if k in head_idx}
     report = compare(base_idx, head_idx, (base_dupes, head_dupes))
     if args.format == "github":
         sys.stdout.write(render_markdown(report, args.base_sha, args.observational) + "\n")

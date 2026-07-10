@@ -123,6 +123,31 @@ def test_head_only_renders_absolute_numbers() -> None:
     assert "commits=66" in term and "dom=169" in term
 
 
+def test_main_intersect_head_drops_base_only_scenarios() -> None:
+    # PR fast-subset (head) vs full-matrix baseline (base): the heavy scenario
+    # only in base must NOT show as "removed" under --intersect-head.
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d) / "base.jsonl"
+        head = Path(d) / "head.jsonl"
+        base.write_text(
+            comment.json.dumps(_row("workspace_switch", "default-warm", commits=25))
+            + "\n"
+            + comment.json.dumps(_row("workspace_switch", "long_chat_scrolled", commits=25))
+            + "\n",
+            encoding="utf-8",
+        )
+        # Head ran only the fast variant.
+        head.write_text(
+            comment.json.dumps(_row("workspace_switch", "default-warm", commits=25)) + "\n", encoding="utf-8"
+        )
+        for flag, expect_removed in ((["--intersect-head"], False), ([], True)):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                comment.main(["--base", str(base), "--head", str(head), "--format", "github", *flag])
+            out = buf.getvalue()
+            assert ("removed" in out) is expect_removed, f"flag={flag}: unexpected removed rendering"
+
+
 def test_main_head_only_when_base_absent() -> None:
     # No pytest fixtures: this module also runs as a plain script (see __main__),
     # where every test_* is called with no arguments.
