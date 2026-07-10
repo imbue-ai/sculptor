@@ -1697,6 +1697,33 @@ test-unit-offload *args="":
     ulimit -n 8192
     offload run -c offload-unit.toml --trace --show-estimated-cost {{args}} || [ $? -eq 2 ]
 
+# Run the perf scenario suite (sculptor/tests/perf/) on Offload (Modal); see
+# offload-perf.toml. Each sandbox writes measurements to test-results-perf/ as
+# perf-measurements-<token>.jsonl; concatenate them for the compare step
+# (tools/perf/comment.py). retry_count=0 there keeps measurements un-duplicated.
+[group("test")]
+test-offload-perf *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    offload run -c offload-perf.toml --trace {{args}} || [ $? -eq 2 ]
+
+# Fast perf subset on offload (default per-PR lane): deselects the perf_heavy
+# scenarios (long_history ~6.5 min, long_chat_scrolled ~3+ min) that would set
+# the parallel tail; PRs get quick signal (~5-6 min job) from everything else.
+# main — and PRs labeled "performance" — run the full matrix via
+# test-offload-perf. The fast config is derived from offload-perf.toml (single
+# source of truth) rather than committed separately, so the two can't drift.
+[group("test")]
+test-offload-perf-fast *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    python3 tools/perf/make_fast_config.py
+    offload run -c offload-perf-fast.toml --trace {{args}} || [ $? -eq 2 ]
+
 # -------- Sculptor Release Commands --------
 
 # Runs the dev command to create a branch bumping the version

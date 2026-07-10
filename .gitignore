@@ -334,3 +334,6 @@ scan-reports/
 
 # auto-qa-changes / manual-test harness screenshot + pid artifacts
 .claude/skills/attachments/
+
+# Generated per-PR perf config (derived from offload-perf.toml by tools/perf/make_fast_config.py)
+offload-perf-fast.toml

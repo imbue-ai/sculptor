@@ -1,0 +1,304 @@
+name: perf
+
+# Perf scenario suite (sculptor/tests/perf/) on offload. Comment-only, not a
+# gate (SCU-1294). On main pushes it records each commit's measurements as a
+# git note on refs/notes/perf; on PRs it diffs against the merge-base commit's
+# note and posts/updates an observational comment. See
+# docs/development/scu-1294-perf-ci-notes.md for the design.
+
+on:
+  # ``labeled`` so adding the "performance" label re-runs and picks up the full
+  # matrix (see the recipe-selection step); the default types cover the rest.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  merge_group:
+  push:
+    branches: [main]
+
+# Like checks.yml: PR runs (refs/pull/N/merge) cancel on new pushes; main runs
+# (refs/heads/main) queue — never cancel — so each merged commit's baseline note
+# gets written. Do NOT key on head_ref (empty on push -> main never queues).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  OFFLOAD_VERSION: "0.9.10"
+
+permissions:
+  # contents: write -> push refs/notes/perf on main. pull-requests: write ->
+  # upsert the PR comment. Pinned explicitly; a read-only default would 403 the
+  # note push and the comment.
+  contents: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  perf:
+    name: perf scenarios
+    # No PR to comment on in the merge queue, and comment-only adds no gating
+    # value there — skip it.
+    if: >-
+      github.event_name != 'merge_group' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    # SECURITY: self-hosted runner — same fork gate as offload.yml. Forked PRs
+    # never reach here (guarded above), so the comment/notes steps always have a
+    # writable token.
+    runs-on: offload-runner
+    timeout-minutes: 60
+    env:
+      JUST_VERBOSE: "1"
+      SCIENCE_FILESYSTEM_ROOT: /tmp/science
+      VAULT_AUTH_ROLE: sculptor_test_gh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history: offload checkpoint resolution + merge-base + notes.
+          fetch-depth: 0
+
+      - name: Configure git identity for note writes
+        run: |
+          git config user.email "dev@imbue.com"
+          git config user.name "imbue-dev"
+
+      - name: Install system packages
+        run: |
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq ca-certificates
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache offload binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/offload
+          key: cargo-offload-${{ env.OFFLOAD_VERSION }}-${{ runner.os }}
+
+      - name: Install offload
+        run: |
+          if ! command -v offload >/dev/null || ! offload --version | grep -qF "$OFFLOAD_VERSION"; then
+            cargo install offload@"$OFFLOAD_VERSION" --force
+          fi
+          offload --version
+
+      - name: Fetch git notes (offload image cache + perf baselines)
+        run: git fetch origin 'refs/notes/*:refs/notes/*' || true
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Export Modal credentials
+        uses: imbue-ai/use-vault-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            shared/modal/MODAL_TOKEN_ID
+            shared/modal/MODAL_TOKEN_SECRET
+
+      # Scenario subset: PRs run the fast subset (~5-6 min) for quick signal;
+      # main records the full matrix (including perf_heavy scenarios like the
+      # ~6.5 min long_history) so its baseline note covers every scenario a PR
+      # might later diff against. A PR labeled "performance" opts into the full
+      # matrix too — for changes that touch a heavy scenario's surface (e.g. chat
+      # scroll). offload has no CLI marker override, so the fast lane runs a
+      # config derived from offload-perf.toml (test-offload-perf-fast); see the
+      # just recipes.
+      - name: Run perf scenarios on offload
+        id: tests
+        env:
+          PERF_LABELED: ${{ contains(github.event.pull_request.labels.*.name, 'performance') }}
+        run: |
+          ulimit -n 8192
+          # Full matrix on non-PR events (main push) or when the PR carries the
+          # "performance" label; the fast subset otherwise.
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "$PERF_LABELED" = "true" ]; then
+            PERF_RECIPE=test-offload-perf
+          else
+            PERF_RECIPE=test-offload-perf-fast
+          fi
+          echo "perf recipe: $PERF_RECIPE (event=${{ github.event_name }}, performance-label=$PERF_LABELED)"
+          set +e
+          just "$PERF_RECIPE" --ci 2>&1 | tee offload-out.log
+          OFFLOAD_EXIT=${PIPESTATUS[0]}
+          set -e
+          pkill -TERM -f 'python3.*modal' 2>/dev/null || true
+          sleep 3
+          pkill -KILL -f 'python3.*modal' 2>/dev/null || true
+          echo "offload wrapper exit: $OFFLOAD_EXIT"
+          # Trust offload's own end-of-run summary, not the exit code: the code
+          # for "some tests failed" varies across offload versions and the recipe
+          # swallows one of them, so a scenario failure can surface as several
+          # different non-zero codes. "Failed:  N" is printed once at the end; it
+          # is absent only when offload never produced a summary (a genuine infra
+          # failure), which then surfaces as zero rows in the aggregate step.
+          FAILED=$(grep -oE '^[[:space:]]*Failed:[[:space:]]*[0-9]+' offload-out.log | grep -oE '[0-9]+' | tail -1)
+          echo "tests_failed=${FAILED:-0}" >> "$GITHUB_OUTPUT"
+          # Never fail the step here: partial measurements are still worth
+          # reporting. Infra failure -> zero rows -> aggregate goes red; a
+          # scenario failure -> surfaced red by the final step, after the
+          # comment/summary have posted.
+
+      - name: Aggregate per-sandbox measurements
+        id: agg
+        if: always()
+        run: |
+          # Each sandbox wrote perf-measurements-<token>.jsonl; concatenate into
+          # one head file for the compare + note steps.
+          mkdir -p perf-out
+          find test-results-perf -name 'perf-measurements-*.jsonl' -exec cat {} + > perf-out/head.jsonl || true
+          # Keep the merged JUnit next to the payload so the uploaded artifact
+          # carries per-scenario pass/fail detail (used to identify a flaky
+          # scenario without re-running the suite).
+          find test-results-perf -name 'junit-perf.xml' -exec cp {} perf-out/ \; 2>/dev/null || true
+          COUNT=$(wc -l < perf-out/head.jsonl | tr -d ' ')
+          echo "rows=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Aggregated $COUNT measurement rows."
+          # Fail red on zero rows. This lane is non-gating for perf *regressions*
+          # (those are comment-only), but zero measurements after the suite ran
+          # means the plumbing is broken (bad download_globs, unset
+          # SCULPTOR_PERF_OUTPUT_PATH, collector not flushing) — a tooling failure
+          # that must be visible, not a hollow green that masks itself. The
+          # measurements artifact still uploads (always()) for debugging.
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No perf measurements were produced — the suite ran but no JSONL came back. Check offload download_globs and SCULPTOR_PERF_OUTPUT_PATH."
+            exit 1
+          fi
+
+      - name: Upload measurements artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-measurements
+          # Whole dir: head.jsonl (the payload) + junit-perf.xml (pass/fail detail).
+          path: perf-out/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # --- main push: record this commit's measurements as its baseline note ---
+      # Main runs the full matrix, so the note covers every scenario (including
+      # perf_heavy ones the per-PR fast lane skips). PRs diff their fast subset
+      # against this note (--intersect-head). NOTE: heavy scenarios are therefore
+      # recorded but never auto-diffed — a heavy regression shows only in the
+      # main-over-main note trend, not on a PR. A nightly (or main-vs-previous
+      # note) diff to alert on those is a follow-up.
+      - name: Record baseline note (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.agg.outputs.rows != '0'
+        run: |
+          git notes --ref=perf add -f -F perf-out/head.jsonl HEAD
+          # Retry-safe push; a concurrent main run is serialized by the
+          # concurrency group, so a straight push is normally fine.
+          git push origin refs/notes/perf
+
+      # --- PR: diff against merge-base note, write summary, upsert comment ---
+      - name: Resolve baseline (PR only)
+        if: github.event_name == 'pull_request' && steps.agg.outputs.rows != '0'
+        id: baseline
+        run: |
+          MB=$(git merge-base HEAD origin/main)
+          echo "Merge-base: $MB"
+          # Walk first-parent ancestors until one has a perf note (a skipped or
+          # failed main run leaves gaps).
+          SHA="$MB"
+          FOUND=""
+          for _ in $(seq 1 50); do
+            if git notes --ref=perf show "$SHA" > perf-out/base.jsonl 2>/dev/null; then
+              FOUND="$SHA"; break
+            fi
+            SHA=$(git rev-parse "$SHA^" 2>/dev/null) || break
+          done
+          if [ -n "$FOUND" ]; then
+            echo "base_sha=$FOUND" >> "$GITHUB_OUTPUT"
+            echo "Baseline note found at $FOUND"
+          else
+            echo "base_sha=" >> "$GITHUB_OUTPUT"
+            echo "No baseline note within 50 ancestors of $MB."
+          fi
+
+      - name: Render step summary + comment body (PR only)
+        if: github.event_name == 'pull_request' && steps.agg.outputs.rows != '0'
+        id: render
+        run: |
+          if [ -n "${{ steps.baseline.outputs.base_sha }}" ]; then
+            # --intersect-head: a PR runs the fast subset, so the full-matrix
+            # baseline's heavy scenarios would otherwise show as "removed".
+            python3 tools/perf/comment.py \
+              --base perf-out/base.jsonl --head perf-out/head.jsonl \
+              --base-sha "${{ steps.baseline.outputs.base_sha }}" \
+              --format github --observational --intersect-head > perf-out/comment.md
+            # Full table always goes to the step summary.
+            cat perf-out/comment.md >> "$GITHUB_STEP_SUMMARY"
+            # Comment only when something is non-green (regression/improvement/
+            # new/removed). Grep the verdict line the renderer emits.
+            if grep -q "no perf change" perf-out/comment.md; then
+              echo "should_comment=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_comment=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # No baseline note yet: render the absolute head numbers so the PR's
+            # perf profile is visible now (deltas begin once a main run seeds a
+            # note). Step summary only — nothing to diff, so no PR comment.
+            python3 tools/perf/comment.py --head perf-out/head.jsonl \
+              --format github --observational >> "$GITHUB_STEP_SUMMARY"
+            echo "should_comment=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upsert PR comment
+        if: github.event_name == 'pull_request' && steps.render.outputs.should_comment == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          MARKER="<!-- perf-bot:scu-1294 -->"
+          BODY_FILE=perf-out/comment.md
+          # Find an existing bot comment by the hidden marker.
+          EXISTING=$(gh pr view "$PR" --json comments \
+            --jq ".comments[] | select(.body | contains(\"$MARKER\")) | .url" | head -1)
+          if [ -n "$EXISTING" ]; then
+            # Comment URLs end in #issuecomment-<id>; PATCH that comment. If the
+            # human deleted it (PATCH 404s), fall back to creating a fresh one.
+            CID="${EXISTING##*issuecomment-}"
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$CID" \
+              -f body="$(cat "$BODY_FILE")" >/dev/null \
+              && echo "Updated existing perf comment." \
+              || gh pr comment "$PR" --body-file "$BODY_FILE"
+          else
+            gh pr comment "$PR" --body-file "$BODY_FILE"
+            echo "Posted new perf comment."
+          fi
+
+      # Surface scenario failures red — but only after the measurements have been
+      # aggregated, summarized, and (on PRs) commented, so a single flaky
+      # scenario never discards the results of the others. retry_count=0 means a
+      # flaky perf test is itself signal; this lane is non-gating (not a required
+      # check), so a red X is visible without blocking merges.
+      - name: Surface scenario failures
+        if: always() && steps.tests.outputs.tests_failed != '' && steps.tests.outputs.tests_failed != '0'
+        run: |
+          N="${{ steps.tests.outputs.tests_failed }}"
+          {
+            echo "### ❌ perf scenarios: $N scenario(s) failed"
+            echo ""
+            echo "Measurements from the scenarios that passed were still aggregated and rendered above."
+            echo "The failing case's detail is in the uploaded \`perf-measurements\` artifact (\`junit-perf.xml\`)."
+            echo ""
+            echo "This lane is observational (non-gating), but a failing scenario means the suite isn't reliably measurable — failing red so it stays visible."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::$N perf scenario(s) failed — see the perf-measurements artifact (junit-perf.xml)."
+          exit 1
