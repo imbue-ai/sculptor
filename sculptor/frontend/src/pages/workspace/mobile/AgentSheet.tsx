@@ -86,7 +86,7 @@ const AgentRow = ({
         <span className={styles.info}>
           <InlineRenameInput
             value={agent.title ?? ""}
-            onCommit={(newName) => void handleRenameCommit(newName)}
+            onCommit={handleRenameCommit}
             onCancel={() => setIsRenaming(false)}
             isEditing={true}
             className={styles.renameInput}
@@ -103,7 +103,17 @@ const AgentRow = ({
         <DropdownMenu.Trigger>
           <span className={styles.menuAnchor} aria-hidden="true" />
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" side="bottom" variant="soft" className="mobileTheme">
+        {/* Rename starts from an onSelect, and InlineRenameInput takes focus
+            synchronously — suppress the menu's close-time focus restore or it
+            steals focus back and the resulting blur cancels the rename
+            (InlineRenameInput's documented contract). */}
+        <DropdownMenu.Content
+          align="start"
+          side="bottom"
+          variant="soft"
+          className="mobileTheme"
+          onCloseAutoFocus={(e): void => e.preventDefault()}
+        >
           <DropdownMenu.Item onSelect={() => setIsRenaming(true)} data-testid={ElementIds.MOBILE_ROW_RENAME_ACTION}>
             <Pencil size={16} /> Rename
           </DropdownMenu.Item>

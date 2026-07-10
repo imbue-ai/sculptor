@@ -35,6 +35,7 @@ import {
   ElementIds,
   interruptWorkspaceAgent,
   LlmModel,
+  ModelCatalogState,
   type ModelOption,
   sendWorkspaceAgentMessages,
   setWorkspaceAgentModel,
@@ -184,6 +185,16 @@ export const ChatInput = ({
   const [storedModel, setStoredModel] = useAtom(modelAtomFamily(taskID ?? ""));
   const setLastUsedModel = useSetAtom(lastUsedModelAtom);
   const localModel = storedModel ?? (taskModel as LlmModel) ?? LlmModel.CLAUDE_4_OPUS_200K;
+  // The mobile settings menu renders the model picker itself (desktop delegates
+  // to ModelSelector), so it needs the same catalog handling: the fetched pi
+  // list when the harness sources backend models, the built-in Claude list
+  // otherwise, and a loading/empty placeholder while there is nothing to pick.
+  const backendModelOptions = Array.isArray(backendModels) ? backendModels : [];
+  const selectedBackendLabel =
+    backendModelOptions.find((option) => option.modelId === selectedModelId)?.displayName ?? selectedModelId;
+  const mobileModelLabel = hasBackendModelSource
+    ? (selectedBackendLabel ?? "Select model")
+    : getModelShortName(localModel);
   const [isPlanFirst, setIsPlanFirst] = useState<boolean>(false);
 
   // Per-task fast-mode and effort preference, persisted in localStorage,
@@ -889,19 +900,49 @@ export const ChatInput = ({
                     </DropdownMenu.Item>
                     <DropdownMenu.Sub>
                       <DropdownMenu.SubTrigger data-testid={ElementIds.MOBILE_CHAT_INPUT_MODEL_SUBMENU}>
-                        <Bot size={16} /> {getModelShortName(localModel)}
+                        <Bot size={16} /> {mobileModelLabel}
                       </DropdownMenu.SubTrigger>
                       <DropdownMenu.SubContent className="mobileTheme">
-                        <DropdownMenu.RadioGroup
-                          value={localModel}
-                          onValueChange={(value) => setStoredModel(value as LlmModel)}
-                        >
-                          {PRODUCTION_MODELS.map((modelValue) => (
-                            <DropdownMenu.RadioItem key={modelValue} value={modelValue}>
-                              {getModelShortName(modelValue)}
-                            </DropdownMenu.RadioItem>
-                          ))}
-                        </DropdownMenu.RadioGroup>
+                        {hasBackendModelSource ? (
+                          // A pi task: the catalog is server-sourced and selection is
+                          // server-driven — the same out-of-band apply the desktop
+                          // ModelSelector uses (selectedModelId stays authoritative
+                          // until the endpoint confirms).
+                          backendModelOptions.length === 0 ? (
+                            <DropdownMenu.Item disabled>
+                              {backendModels === ModelCatalogState.NOT_FETCHED_YET
+                                ? "Loading models…"
+                                : "No models available"}
+                            </DropdownMenu.Item>
+                          ) : (
+                            <DropdownMenu.RadioGroup
+                              value={selectedModelId ?? ""}
+                              onValueChange={(modelId) => {
+                                const option = backendModelOptions.find((o) => o.modelId === modelId);
+                                if (option) void handleBackendModelChange(option);
+                              }}
+                            >
+                              {backendModelOptions.map((option) => (
+                                <DropdownMenu.RadioItem key={option.modelId} value={option.modelId}>
+                                  {option.displayName ?? option.modelId}
+                                </DropdownMenu.RadioItem>
+                              ))}
+                            </DropdownMenu.RadioGroup>
+                          )
+                        ) : (
+                          // Claude: per-turn selection through handleModelChange, which
+                          // also records the MRU model (same as the desktop path).
+                          <DropdownMenu.RadioGroup
+                            value={localModel}
+                            onValueChange={(value) => handleModelChange(value as LlmModel)}
+                          >
+                            {PRODUCTION_MODELS.map((modelValue) => (
+                              <DropdownMenu.RadioItem key={modelValue} value={modelValue}>
+                                {getModelShortName(modelValue)}
+                              </DropdownMenu.RadioItem>
+                            ))}
+                          </DropdownMenu.RadioGroup>
+                        )}
                       </DropdownMenu.SubContent>
                     </DropdownMenu.Sub>
                     <DropdownMenu.Sub>

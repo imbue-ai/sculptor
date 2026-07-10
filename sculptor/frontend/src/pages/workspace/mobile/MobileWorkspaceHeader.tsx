@@ -3,9 +3,10 @@ import { Ellipsis, Layers, Pencil, Plus, Settings, SquareMenu, Terminal } from "
 import type { ReactElement } from "react";
 import { useState } from "react";
 
-import { ElementIds, updateWorkspace } from "~/api";
+import { ElementIds } from "~/api";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
+import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
 
 import styles from "./MobileWorkspaceHeader.module.scss";
 import { useCreateAgent } from "./useCreateAgent.ts";
@@ -43,15 +44,14 @@ export const MobileWorkspaceHeader = ({
     setIsRenameOpen(true);
   };
 
-  const handleRenameSave = async (): Promise<void> => {
+  // The shared optimistic rename (same path as the desktop sidebar): the new
+  // name shows immediately; a rejected write rolls back and toasts.
+  const renameWorkspace = useWorkspaceRename();
+  const handleRenameSave = (): void => {
     const trimmed = renameValue.trim();
     setIsRenameOpen(false);
     if (!workspaceID || !trimmed || trimmed === workspace?.description) return;
-    try {
-      await updateWorkspace({ path: { workspace_id: workspaceID }, body: { description: trimmed } });
-    } catch (error) {
-      console.error("Failed to rename workspace:", error);
-    }
+    renameWorkspace(workspaceID, trimmed);
   };
 
   return (

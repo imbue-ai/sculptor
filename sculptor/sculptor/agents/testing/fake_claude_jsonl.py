@@ -3,19 +3,28 @@
 import itertools
 import json
 import os
+import secrets
 from collections.abc import Sequence
 from pathlib import Path
 
 from sculptor.agents.default.claude_code_sdk.harness import compute_claude_jsonl_directory
 
 _id_counter = itertools.count(1)
+# Process-unique suffix mixed into every generated id so multiple FakeClaude
+# subprocess invocations within a single test run don't collide on, e.g.,
+# ``msg_fakeclaude_001`` (the module-level counter resets each subprocess).
+# Real Claude assigns globally-unique ids; downstream consumers (the
+# SavedAgentMessage path, message-history dedup, etc.) treat colliding
+# upstream ids as duplicates, which can manifest as the assistant message
+# silently failing to land on subsequent turns. See SCU-1324.
+_PROCESS_NONCE = f"{os.getpid():d}{secrets.token_hex(2)}"
 
 _LAST_SESSION_ID: str | None = None
 
 
 def generate_id(prefix: str = "msg") -> str:
-    """Return a unique ID string like 'msg_fakeclaude_001'."""
-    return f"{prefix}_fakeclaude_{next(_id_counter):03d}"
+    """Return a unique ID string like 'msg_fakeclaude_<nonce>_001'."""
+    return f"{prefix}_fakeclaude_{_PROCESS_NONCE}_{next(_id_counter):03d}"
 
 
 def get_last_session_id() -> str | None:

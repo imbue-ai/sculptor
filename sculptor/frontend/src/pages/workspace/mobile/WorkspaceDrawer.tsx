@@ -4,7 +4,7 @@ import { ChevronDown, Folder, FolderPlus, House, Pencil, Plus, Settings, Trash2 
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
-import { ElementIds, updateWorkspace, type Workspace } from "~/api";
+import { ElementIds, type Workspace } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { userEmailAtom } from "~/common/state/atoms/userConfig.ts";
@@ -12,6 +12,7 @@ import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
+import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
@@ -60,13 +61,12 @@ const DrawerWorkspaceRow = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { handlers: longPress, consumeClick } = useLongPress(() => setIsMenuOpen(true));
 
-  const handleRenameCommit = async (newName: string): Promise<void> => {
+  // The shared optimistic rename (same path as the desktop sidebar): the new
+  // name shows immediately; a rejected write rolls back and toasts.
+  const renameWorkspace = useWorkspaceRename();
+  const handleRenameCommit = (newName: string): void => {
     setIsRenaming(false);
-    try {
-      await updateWorkspace({ path: { workspace_id: workspace.objectId }, body: { description: newName } });
-    } catch (error) {
-      console.error("Failed to rename workspace:", error);
-    }
+    renameWorkspace(workspace.objectId, newName);
   };
 
   const handleClick = (): void => {
@@ -89,7 +89,7 @@ const DrawerWorkspaceRow = ({
         <span className={styles.workspaceInfo}>
           <InlineRenameInput
             value={workspace.description ?? ""}
-            onCommit={(newName) => void handleRenameCommit(newName)}
+            onCommit={handleRenameCommit}
             onCancel={() => setIsRenaming(false)}
             isEditing={true}
             className={styles.renameInput}
@@ -109,7 +109,17 @@ const DrawerWorkspaceRow = ({
         <DropdownMenu.Trigger>
           <span className={styles.menuAnchor} aria-hidden="true" />
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" side="bottom" variant="soft" className="mobileTheme">
+        {/* Rename starts from an onSelect, and InlineRenameInput takes focus
+            synchronously — suppress the menu's close-time focus restore or it
+            steals focus back and the resulting blur cancels the rename
+            (InlineRenameInput's documented contract). */}
+        <DropdownMenu.Content
+          align="start"
+          side="bottom"
+          variant="soft"
+          className="mobileTheme"
+          onCloseAutoFocus={(e): void => e.preventDefault()}
+        >
           <DropdownMenu.Item onSelect={() => setIsRenaming(true)} data-testid={ElementIds.MOBILE_ROW_RENAME_ACTION}>
             <Pencil size={16} /> Rename
           </DropdownMenu.Item>
