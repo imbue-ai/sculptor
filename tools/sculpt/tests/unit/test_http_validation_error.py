@@ -32,8 +32,8 @@ def test_from_dict_parses_list_detail() -> None:
 
 
 def test_from_dict_tolerates_object_detail() -> None:
-    detail = {"code": "agent_plugin_loading_disabled", "message": "Agent plugin loading is disabled."}
+    # Some endpoints raise `HTTPException(422, detail={...})`, so a `detail`
+    # object must surface its content rather than crash the client.
+    result = HTTPValidationError.from_dict({"detail": {"error": "no setup command configured"}})
 
-    result = HTTPValidationError.from_dict({"detail": detail})
-
-    assert result.detail == detail
+    assert "no setup command configured" in str(result)

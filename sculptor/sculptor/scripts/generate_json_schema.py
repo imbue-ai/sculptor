@@ -13,21 +13,23 @@ from sculptor.web.app import APP
 
 
 def _widen_http_validation_error_detail(json_schema: dict[str, Any]) -> None:
-    """Allow a plain-string `detail` on the 422 error schema, not just a list.
+    """Allow a non-list `detail` on the 422 error schema, not just a list.
 
     FastAPI documents every 422 response with `HTTPValidationError`, whose
     `detail` is a list of structured request-validation errors. But a
-    hand-raised `HTTPException(422, detail="...")` serializes `detail` as a
-    plain string, which does not match that schema. Widening `detail` to
-    `string | list[ValidationError]` makes the generated client parse both
-    shapes and surface the message instead of crashing on the string.
+    hand-raised `HTTPException` can pass any JSON value: endpoints here raise
+    `detail="..."` (a plain string) and `detail={...}` (an object), neither of
+    which matches that schema. Widening `detail` to
+    `list[ValidationError] | string | object` makes the generated client parse
+    all three shapes and surface the value instead of crashing on the string
+    (it iterates a bare string per-character) or on the object.
     """
     schema = json_schema.get("components", {}).get("schemas", {}).get("HTTPValidationError")
     if schema is None:
         return
     detail = schema["properties"]["detail"]
     schema["properties"]["detail"] = {
-        "anyOf": [detail, {"type": "string"}],
+        "anyOf": [detail, {"type": "string"}, {"type": "object"}],
         "title": detail.get("title", "Detail"),
     }
 
