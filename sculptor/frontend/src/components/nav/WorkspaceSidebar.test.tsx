@@ -1,5 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -148,5 +149,21 @@ describe("WorkspaceSidebar repo groups", () => {
     renderWithProviders(<Sidebar />, { store });
 
     expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_ADD_WORKSPACE)).toBeVisible();
+  });
+
+  it("enters inline rename mode when a workspace row is double-clicked", async () => {
+    // user.dblClick fires the real click → click → dblclick sequence, so the
+    // clicks that precede a dblclick are exercised and shown not to block the row
+    // from entering rename mode.
+    const user = userEvent.setup();
+    seedProject(store, "p1");
+    seedWorkspaces(store, ["w1"]);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.queryByTestId(ElementIds.INLINE_RENAME_INPUT)).toBeNull();
+
+    await user.dblClick(screen.getByTestId(ElementIds.SIDEBAR_WORKSPACE_ROW));
+
+    expect(await screen.findByTestId(ElementIds.INLINE_RENAME_INPUT)).toBeVisible();
   });
 });
