@@ -8,8 +8,7 @@ import styles from "./RegisteredAgentLabel.module.scss";
  * configuration rather than a built-in harness (Claude / pi / Terminal). The
  * registration's display name is user-controlled and carries no origin marker,
  * so every picker that lists registered agents beside the built-ins renders
- * through this one component — keeping the marker identical across the tab-bar
- * `+` sub-menu, the new-workspace picker, and the CI babysitter select.
+ * through this one component, keeping the marker identical across surfaces.
  *
  * The tag is a plain <span> so it inherits the surrounding font size (these
  * pickers render at different sizes — the size-1 new-workspace trigger vs. the
