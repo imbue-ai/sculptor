@@ -52,11 +52,13 @@
   margin-left: var(--space-4);
 }
 
-// On narrow / touch viewports the "Remove repo & agents" button + Configure link
-// are too wide to share a row with the repo name+path, squeezing the text into a
-// cramped, badly-wrapping column. Stack the actions below the info instead.
-// Desktop (wider than 767px, fine pointer) keeps the side-by-side row.
-@media (pointer: coarse), (width <= 767px) {
+// On the mobile surface the "Remove repo & agents" button + Configure link
+// are too wide to share a row with the repo name+path, squeezing the text into
+// a cramped, badly-wrapping column. Stack the actions below the info instead.
+// Gated on html.mobileUx (the app's single mobile/desktop verdict, never set
+// in the Electron renderer — see index.css / useLayoutMode.ts); desktop keeps
+// the side-by-side row.
+:global(html.mobileUx) {
   .repoRowHeader {
     align-items: stretch;
     flex-direction: column;

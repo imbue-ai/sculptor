@@ -51,11 +51,12 @@ button {
    send button) clipped off-screen. Force >= 16px for focusable text inputs on
    the mobile surface so focusing them never triggers the zoom.
 
-   Gate: coarse pointer (real phones, incl. landscape) OR a viewport <= 767px
-   (matches the app's own mobile breakpoint NARROW_QUERY in useLayoutMode.ts,
-   and — unlike `pointer: coarse` alone — also matches the iOS Simulator, which
-   is driven by a mouse and may report `pointer: fine`). A normal-width desktop
-   window is unaffected; a narrow desktop window is already in the mobile layout.
+   Gate: `html.mobileUx`, the class useLayoutMode mirrors from the app's single
+   mobile/desktop verdict — never set in the Electron renderer, and covering
+   both mobile triggers (narrow viewport, real phone at any width). Mobile-only
+   rules key off this class rather than their own media queries so CSS and JS
+   can never disagree. `:where()` keeps the selector list's own specificity at
+   zero, like the bare selectors it replaces.
 
    16px is the platform threshold (an absolute CSS px), so we can't use
    --font-size-3: it scales with --scaling and can fall below 16px. This catches
@@ -63,14 +64,8 @@ button {
    and any class-less native inputs; inputs that set a smaller font-size via
    their own class are bumped in their component module, and the TipTap chat
    editor (contenteditable) is handled in Editor.module.scss. */
-@media (pointer: coarse), (width <= 767px) {
-  input,
-  textarea,
-  select,
-  .rt-TextFieldInput,
-  .rt-TextAreaInput {
-    font-size: 16px;
-  }
+html.mobileUx :where(input, textarea, select, .rt-TextFieldInput, .rt-TextAreaInput) {
+  font-size: 16px;
 }
 
 /* While a panel resize drag is active, route every pointer event back to the

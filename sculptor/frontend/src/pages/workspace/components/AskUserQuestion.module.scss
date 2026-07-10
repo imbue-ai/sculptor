@@ -212,8 +212,10 @@
 // page scroll, so the lower options and the submit button end up unreachable
 // below the fold — the user can't answer without switching to desktop. Cap the
 // card and let the options list scroll inside it, keeping the footer (submit +
-// nav dots) pinned and reachable. Desktop is unaffected.
-@media (pointer: coarse), (width <= 767px) {
+// nav dots) pinned and reachable. Gated on html.mobileUx (the app's single
+// mobile/desktop verdict, never set in the Electron renderer — see index.css /
+// useLayoutMode.ts); desktop is unaffected.
+:global(html.mobileUx) {
   .card {
     max-height: 70dvh; // stylelint-disable-line sculptor/no-hardcoded-values
   }

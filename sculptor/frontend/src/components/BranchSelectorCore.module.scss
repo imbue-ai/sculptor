@@ -35,10 +35,10 @@
 
   // iOS Safari auto-zooms a focused input whose font-size is < 16px, and in
   // standalone (home-screen) mode the user can't pinch back out. This branch
-  // picker portals outside the mobile shell, so gate on the media query (which
-  // also matches the iOS Simulator; see index.css for rationale) rather than a
-  // .mobileTheme ancestor.
-  @media (pointer: coarse), (width <= 767px) {
+  // picker portals outside the mobile shell, so gate on html.mobileUx (the
+  // app's single mobile/desktop verdict, never set in the Electron renderer —
+  // see index.css / useLayoutMode.ts) rather than a .mobileTheme ancestor.
+  :global(html.mobileUx) & {
     // stylelint-disable-next-line sculptor/no-hardcoded-values -- iOS auto-zoom threshold is an absolute 16px; font-size tokens scale with --scaling and aren't guaranteed >= 16px
     font-size: 16px;
   }
