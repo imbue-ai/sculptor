@@ -13,6 +13,7 @@ import {
   RUNAWAY_BUFFER_CHARS,
   snapToWordBoundary,
   updateDeliveryIntervalEma,
+  WORD_BOUNDARY_LOOKAHEAD_CHARS,
 } from "./smoothStreamingDrain.ts";
 
 describe("resolveBaseDrainWindowMs", () => {
@@ -106,6 +107,22 @@ describe("snapToWordBoundary", () => {
     // is the previous boundary. Forward has no boundary within lookahead, so it
     // rounds down to the space, making progress of 2 chars.
     expect(snapToWordBoundary(text, 0, 8)).toBe(2);
+  });
+
+  it("scans forward over the full lookahead window (symmetric with backward)", () => {
+    // Put the only boundary exactly WORD_BOUNDARY_LOOKAHEAD_CHARS characters
+    // ahead of the target (the far edge of the intended window), with no
+    // boundary behind within range. The forward scan must include the full
+    // lookahead distance to find it; a scan that stopped one char short (the
+    // prior off-by-one, asymmetric with the backward scan) would miss it and
+    // fall back to the raw value.
+    const currentOffset = 0;
+    const targetOffset = 1;
+    const boundaryIndex = targetOffset + WORD_BOUNDARY_LOOKAHEAD_CHARS;
+    const chars = Array<string>(boundaryIndex + 2).fill("a");
+    chars[boundaryIndex] = " ";
+    const text = chars.join("");
+    expect(snapToWordBoundary(text, currentOffset, targetOffset)).toBe(boundaryIndex);
   });
 
   it("never regresses past the current offset", () => {

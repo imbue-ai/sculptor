@@ -168,18 +168,19 @@ export const snapToWordBoundary = (text: string, currentOffset: number, rawChars
     return rawCharsToReveal;
   }
 
-  // Look forward for the next boundary.
+  // Look forward for the next boundary, up to and including the full lookahead
+  // distance (last index is text.length - 1).
   let forwardOffset: number | null = null;
-  const forwardLimit = Math.min(targetOffset + WORD_BOUNDARY_LOOKAHEAD_CHARS, text.length);
-  for (let i = targetOffset + 1; i < forwardLimit; i += 1) {
+  const forwardLimit = Math.min(targetOffset + WORD_BOUNDARY_LOOKAHEAD_CHARS, text.length - 1);
+  for (let i = targetOffset + 1; i <= forwardLimit; i += 1) {
     if (WORD_BOUNDARY_PATTERN.test(text[i])) {
       forwardOffset = i;
       break;
     }
   }
 
-  // Look backward for the previous boundary (but never regress past the cursor,
-  // and always make at least 1 char of progress).
+  // Look backward for the previous boundary, over the same distance (but never
+  // regress past the cursor, and always make at least 1 char of progress).
   let backwardOffset: number | null = null;
   const backwardLimit = Math.max(currentOffset + 1, targetOffset - WORD_BOUNDARY_LOOKAHEAD_CHARS);
   for (let i = targetOffset - 1; i >= backwardLimit; i -= 1) {
