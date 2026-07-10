@@ -96,6 +96,11 @@ def test_send_message(
         w.checkpoint("input_cleared", wait_for=lambda: expect(chat_input).to_have_text(""))
         w.checkpoint(
             "user_bubble_attached",
-            wait_for=lambda: expect(messages).to_have_count(expected_after_send),
+            # Wait for the just-sent user bubble itself (the message appended at
+            # index pre_send_message_count), not an exact total count: Fake
+            # Claude can attach the assistant bubble before this checkpoint
+            # polls, bumping the count past ``expected_after_send`` so an
+            # exact-count wait never settles.
+            wait_for=lambda: expect(messages.nth(pre_send_message_count)).to_be_visible(),
         )
         w.checkpoint("agent_acknowledged", wait_for=lambda: expect(agent_acknowledged).to_be_visible())

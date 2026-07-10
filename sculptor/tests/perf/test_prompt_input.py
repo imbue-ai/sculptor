@@ -3,9 +3,9 @@
 Unlike the switch/send scenarios, the measured action is *typing* — a burst
 of individual keystrokes into the Tiptap editor. The invariant this guards is
 that keystrokes cost ~O(1), not O(N): the input toolbar should not re-render
-once per character. (See maciek/frontend-chat-perf, which makes ChatInput
-*write* the draft atom without *subscribing* to it so typing stops re-rendering
-the toolbar — this scenario measures exactly that surface.)
+once per character. The optimization this guards makes ChatInput *write* the
+draft atom without *subscribing* to it, so typing updates the draft without
+re-rendering the toolbar — this scenario measures exactly that surface.
 
 Pure frontend: no Fake Claude round-trip, no network in the window. Fast and
 deterministic — a good candidate for a fast, run-on-every-PR lane.

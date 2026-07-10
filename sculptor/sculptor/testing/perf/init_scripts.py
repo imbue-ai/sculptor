@@ -5,8 +5,9 @@ Two callers use these today:
 - The SCU-1294 perf-test fixture in ``sculptor/tests/perf/`` injects
   :data:`PERF_INIT_SCRIPT` via ``page.add_init_script`` to record fiber
   commits, DOM mutations, and HTTP requests for a measurement window.
-- The ``perf-compare`` skill (``.claude/skills/perf-compare/scripts/``)
-  injects :data:`DEVTOOLS_HOOK_STUB_JS` before React loads, then evaluates
+- The ``measure-react-renders`` skill
+  (``.claude/skills/measure-react-renders/scripts/``) injects
+  :data:`DEVTOOLS_HOOK_STUB_JS` before React loads, then evaluates
   :data:`RENDER_COUNTER_SCRIPT` once React has booted to attribute fiber
   commits to component names.
 
@@ -92,9 +93,13 @@ window.__RENDER_COUNTS__ = {};
 # Gated on a localStorage flag so non-perf tests sharing the same Page are
 # unaffected.  Reset / snapshot is driven from Python via ``page.evaluate``.
 PERF_INIT_SCRIPT = (
+    # The gate key is interpolated from PERF_GATE_LOCALSTORAGE_KEY (the same
+    # constant Python flips) so the two never drift.
     """
 (function() {
-    if (localStorage.getItem('__sculptor_perf_enabled') !== 'true') {
+    if (localStorage.getItem('"""
+    + PERF_GATE_LOCALSTORAGE_KEY
+    + """') !== 'true') {
         return;
     }
 """
