@@ -8,6 +8,7 @@ object rather than juggling multiple fixtures.
 from __future__ import annotations
 
 import errno
+import re
 import shutil
 import subprocess
 import time
@@ -25,6 +26,7 @@ from playwright.sync_api import Browser
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Page
 from playwright.sync_api import Playwright
+from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
@@ -35,6 +37,7 @@ from sculptor.testing.packaged_electron_frontend import PackagedElectronFactory
 from sculptor.testing.playwright_utils import delete_all_workspaces_via_ui
 from sculptor.testing.playwright_utils import delete_project_via_settings
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
+from sculptor.testing.playwright_utils import settle_first_run_offer
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
 from sculptor.testing.server_utils import SculptorFactory
@@ -316,17 +319,35 @@ class SculptorInstance:
 
         # Wait for the app shell to render — raise if onboarding shows instead (no
         # shared-instance test should trigger onboarding). The sidebar rail is the
-        # universal "app rendered" signal in the new shell (present whether this lands on
-        # the add-workspace form, the empty-first-run page, or a workspace).
+        # universal "app rendered" signal in the new shell (present on every
+        # in-app route).
         app_ready = self.page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
         expect_app_not_onboarding(self.page, app_ready)
+
+        # `#/ws/new` names no real workspace, so once the first workspace
+        # snapshot arrives WorkspacePage drops the unknown id and falls back to
+        # Home. Wait for that hop rather than returning mid-flight — it is also
+        # the signal that the snapshot has landed, so the row check below reads
+        # real data instead of the pre-snapshot empty sidebar.
+        expect(self.page).to_have_url(re.compile(r"#/home$"), timeout=30_000)
 
         # Workspace cleanup is API-based (_delete_all_workspaces_via_api in _pre_test); this
         # is only a belt-and-suspenders leak check for any row that lingered in the sidebar.
         workspace_rows = self.page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
         if workspace_rows.count() > 0:
             logger.debug("Stale workspace row(s) after reset — deleting via UI")
+            # Return without settle_first_run_offer: this boot's first snapshot
+            # had rows, so the boot-only offer never fires on it and the settle
+            # below would time out. (A test that needs the offer after a leaked
+            # reset — sculptor_instance_empty_first_run_ — fails loudly on its
+            # own wait; the leak itself is the bug to chase then.)
             delete_all_workspaces_via_ui(self.page)
+            return
+
+        # Settle and dismiss the first-run offer so it can't pop mid-test and
+        # swallow a click. Tests that want the offer itself re-trigger it
+        # deliberately (see ``sculptor_instance_empty_first_run_``).
+        settle_first_run_offer(self.page)
 
     # Hard upper bound on _pre_test duration.  If cleanup takes longer than
     # this, something is stuck and we should fail fast rather than hang the

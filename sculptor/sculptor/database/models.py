@@ -192,7 +192,6 @@ class AgentTaskStateV2(BaseTaskState):
     """
 
     object_type: str = "AgentTaskStateV2"
-    last_processed_message_id: AgentMessageID | None = None
     title: str | None = None
     workspace_id: WorkspaceID
     # Terminal agents only: the session id the registered program last
@@ -207,7 +206,7 @@ class AgentTaskStateV2(BaseTaskState):
     # get_available_models so the chat switcher offers pi's real models. Defaults
     # to NOT_FETCHED_YET (the probe has not run) — distinct from a fetched-but-
     # empty [] (authenticated, no providers), so the switcher can tell a loading
-    # catalog from a genuinely empty one instead of flashing the login CTA.
+    # catalog from a genuinely empty one instead of flashing the empty state.
     available_models: ModelCatalog = NOT_FETCHED_YET
     # pi agents only: the model pi reported as current at start (get_state.model),
     # surfaced by the pi harness's get_selected_model_id as the switcher's value.

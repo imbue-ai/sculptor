@@ -12,12 +12,18 @@ import { activePanelIdInSubSectionAtom, activeWorkspaceIdAtom, workspaceLayoutAt
 import { SectionHeader } from "./SectionHeader.tsx";
 import { maximizedSectionAtom } from "./transientAtoms.ts";
 
-// The add-panel dropdown pulls in the agent-type registrations + keybinding hooks
-// (deep deps we don't need here). We only care about where its trigger button lands in
-// the header, so render it as its bare trigger.
-vi.mock("./AddPanelDropdown.tsx", () => ({
-  AddPanelDropdown: ({ trigger }: { trigger: ReactElement }): ReactElement => trigger,
-}));
+// The add-panel "+" control pulls in the add-panel actions + agent-type registrations +
+// keybinding hooks (deep deps, incl. router, we don't need here). We only care about
+// where its "+" lands in the header, so render a bare element carrying the same testid
+// and className.
+vi.mock("./SectionAddPanelControl.tsx", async () => {
+  const { ElementIds } = await import("~/api");
+  return {
+    SectionAddPanelControl: ({ subSection, className }: { subSection: string; className?: string }): ReactElement => (
+      <div className={className} data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`} />
+    ),
+  };
+});
 
 afterEach(cleanup);
 

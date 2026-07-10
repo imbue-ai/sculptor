@@ -1,5 +1,5 @@
 import type { DragEndEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext } from "@dnd-kit/core";
+import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
@@ -23,7 +23,7 @@ import { buildWorkspaceActions } from "~/components/CommandPalette/contextAction
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { DevModeIndicator } from "~/components/DevModeIndicator.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
-import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
@@ -37,9 +37,14 @@ import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeek
 import { adjustSidebarDragCountAtom, isSidebarDragActiveAtom } from "./navAtoms.ts";
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
-import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
+import { sidebarCollisionDetection, sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
+import { SidebarLoadingSkeleton } from "./SidebarLoadingSkeleton.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
-import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
+import {
+  isSidebarLoadingAtom,
+  reorderSidebarRepoGroupAtom,
+  sidebarWorkspaceGroupsAtom,
+} from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
@@ -64,15 +69,17 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // workspaces yet), shared with keyboard workspace cycling so the two can't
   // drift (see sidebarWorkspaceOrder).
   const repoGroups = useAtomValue(sidebarWorkspaceGroupsAtom);
+  // True only while the first workspace snapshot is still in flight. Lets the
+  // repo list show a skeleton instead of a blank rail during that window
+  // (notably after a hard refresh), without conflating it with a genuinely
+  // empty list.
+  const isLoading = useAtomValue(isSidebarLoadingAtom);
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   // The workspace→last-agent map is only consulted inside the click handler, so
   // read it lazily from the store rather than subscribing: the whole sidebar
   // would otherwise re-render (and churn the click callbacks) on every agent-id
   // change, with no visual effect.
   const store = useStore();
-  // Gates the disabled state of the "Commands" and "New Workspace" buttons: both
-  // are inert until the first workspace exists (see their NavItems below).
-  const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
 
   // Internal state — the add-repo dialog opened from the "Add repo" nav button
   // (and its toast).
@@ -273,65 +280,58 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             onClick={handleOpenHome}
             testId={ElementIds.SIDEBAR_HOME_LINK}
           />
-          {/* Commands (Cmd+K) and New Workspace are inert until the first
-            workspace exists: the palette open-path is gated by
-            `areGlobalShortcutsDisabledAtom` and the new-workspace modal isn't
-            mounted on the first-run page. Reflect that with a real disabled
-            state + tooltip rather than a silent no-op — the inline first-run
-            form is the create affordance while the list is empty. */}
           <NavItem
             icon={Command}
             label="Commands"
-            disabled={isWorkspaceListEmpty}
-            disabledTooltip="Create a workspace to enable commands"
             onClick={toggleCommandPalette}
             testId={ElementIds.SIDEBAR_CMDK_LINK}
           />
           {/* Opens the new-workspace dialog; the per-repo "+" in the repo groups
-            below is the direct-create affordance. Disabled on first run, but with
-            no tooltip: the inline first-run form is the obvious create affordance,
-            so a tooltip pointing back at the sidebar row would just float detached
-            beside the centered form. */}
+            below is the direct-create affordance. */}
           <NavItem
             icon={Plus}
             label="New Workspace"
-            disabled={isWorkspaceListEmpty}
             onClick={() => setNewWorkspaceModal({ open: true })}
             testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
           />
         </nav>
 
         <div className={styles.repoList}>
+          {/* While the first workspace snapshot is still in flight, show a
+            skeleton rather than a blank rail — the list can't yet tell "loading"
+            from "loaded and empty", so a bare empty map would read as "you have
+            nothing" during the reconnect window (e.g. after a hard refresh). */}
+          {isLoading && <SidebarLoadingSkeleton />}
           {/* One group per repo, including repos with no workspaces yet (they show
             a "No workspaces yet" hint). Empty until the first repo is added via the
             "Add repo" button in the bottom actions. */}
-          <DndContext
-            sensors={groupDndSensors}
-            collisionDetection={closestCenter}
-            modifiers={sidebarDndModifiers}
-            onDragStart={beginOwnedDrag}
-            onDragEnd={handleGroupDragEnd}
-            onDragCancel={endOwnedDrag}
-          >
-            <SortableContext items={repoGroups.map((group) => group.projectId)} strategy={verticalListSortingStrategy}>
-              {repoGroups.map((group) => (
-                <SidebarRepoGroup
-                  key={group.projectId}
-                  group={group}
-                  actions={workspaceActions}
-                  openInRuntime={openInRuntime}
-                  // On first run the per-repo settings/"+" actions are hidden: the
-                  // first-run page doesn't mount AppShell, so the "+"'s dialog
-                  // fallback and error toast would silently no-op there (same reason
-                  // New Workspace/Commands are disabled above).
-                  showActions={!isWorkspaceListEmpty}
-                  onWorkspaceClick={handleWorkspaceClick}
-                  onWorkspaceHover={handleWorkspaceHover}
-                  onBeginDelete={setDeleteTarget}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
+          {!isLoading && (
+            <DndContext
+              sensors={groupDndSensors}
+              collisionDetection={sidebarCollisionDetection}
+              modifiers={sidebarDndModifiers}
+              onDragStart={beginOwnedDrag}
+              onDragEnd={handleGroupDragEnd}
+              onDragCancel={endOwnedDrag}
+            >
+              <SortableContext
+                items={repoGroups.map((group) => group.projectId)}
+                strategy={verticalListSortingStrategy}
+              >
+                {repoGroups.map((group) => (
+                  <SidebarRepoGroup
+                    key={group.projectId}
+                    group={group}
+                    actions={workspaceActions}
+                    openInRuntime={openInRuntime}
+                    onWorkspaceClick={handleWorkspaceClick}
+                    onWorkspaceHover={handleWorkspaceHover}
+                    onBeginDelete={setDeleteTarget}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
 
         <div className={styles.spacer} />

@@ -26,7 +26,9 @@ def _mock_session(base_url: str = _BASE_URL) -> None:
 def test_trace_start_prints_output_path(runner: CliRunner) -> None:
     _mock_session()
     route = respx.post(f"{_BASE_URL}/api/v1/trace/start").mock(
-        return_value=Response(200, json={"enabled": True, "outputPath": "/logs/traces/t.json", "bufferedExternalEvents": 0})
+        return_value=Response(
+            200, json={"enabled": True, "outputPath": "/logs/traces/t.json", "bufferedExternalEvents": 0}
+        )
     )
 
     result = runner.invoke(app, ["debug", "trace", "start"])

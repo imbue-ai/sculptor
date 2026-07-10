@@ -15,9 +15,10 @@ const HELP_PROMPT_PREFILL: string = `${
 } ${ONBOARDING_QUESTION}`;
 
 /**
- * The prompt the empty first-run form starts with. For real (packaged) users and
- * in tests this is the `/sculptor:help` onboarding prompt, which lands a brand-new
- * user's very first workspace in the help flow with context about who is asking.
+ * The prompt the first-run auto-opened new-workspace dialog starts with. For
+ * real (packaged) users and in tests this is the `/sculptor:help` onboarding
+ * prompt, which lands a brand-new user's very first workspace in the help flow
+ * with context about who is asking.
  *
  * The from-source dev app starts it empty instead so QA can type immediately:
  * `just frontend` sets `SCULPTOR_EMPTY_FIRST_RUN_PROMPT`, which Vite exposes here

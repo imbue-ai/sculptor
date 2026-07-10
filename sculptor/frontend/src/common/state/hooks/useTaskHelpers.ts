@@ -56,6 +56,11 @@ export const useTaskSelectedModelId = (taskId: string): string | undefined =>
 export const useTaskSourcesBackendModels = (taskId: string): boolean =>
   useTaskField(taskId, (task) => task?.sourcesBackendModels ?? false);
 
+/** Subscribe to the Settings section the composer's "Go to harness configuration" CTA
+ * opens when this harness has no usable model (harness-owned: pi -> Pi, else Dependencies). */
+export const useTaskConfigurationSettingsSection = (taskId: string): string | undefined =>
+  useTaskField(taskId, (task) => task?.configurationSettingsSection);
+
 export const useTaskIsAutoCompacting = (taskId: string): boolean =>
   useTaskField(taskId, (task) => task?.isAutoCompacting ?? false);
 

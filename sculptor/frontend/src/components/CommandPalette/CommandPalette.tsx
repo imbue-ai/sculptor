@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { IconButton, Spinner, Tooltip, VisuallyHidden } from "@radix-ui/themes";
+import { Badge, IconButton, Spinner, Tooltip, VisuallyHidden } from "@radix-ui/themes";
 import { Command } from "cmdk";
 import { useAtom, useAtomValue, useStore } from "jotai";
 import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-react";
@@ -108,6 +108,10 @@ const PaletteRow = ({
       <div className={styles.itemBody}>
         <span className={styles.itemTitle}>{displayTitle}</span>
         {displaySubtitle ? <span className={styles.itemSubtitle}>{displaySubtitle}</span> : null}
+        {/* The visible trailing badge lives in an aria-hidden slot, so surface
+            the same project context to assistive tech here — otherwise two
+            same-named workspaces in different projects are indistinguishable. */}
+        {command.trailingBadge ? <VisuallyHidden>{`Project: ${command.trailingBadge}`}</VisuallyHidden> : null}
       </div>
       {/* Trailing slot is fixed-min-width so swapping spinner <-> shortcut
           / kind label doesn't cause a layout shift. Shortcut hint takes
@@ -118,6 +122,11 @@ const PaletteRow = ({
           <Spinner size="1" />
         ) : (
           <>
+            {command.trailingBadge ? (
+              <Badge variant="soft" color="gray" size="1" className={styles.itemBadge}>
+                {command.trailingBadge}
+              </Badge>
+            ) : null}
             {binding ? (
               <ShortcutHint binding={binding} />
             ) : kind ? (

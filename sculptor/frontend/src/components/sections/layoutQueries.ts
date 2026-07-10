@@ -88,7 +88,7 @@ export type AvailableStaticPanel = {
 };
 
 // Single-instance static panels not currently open anywhere — the re-add list.
-// Sourced from the live registry (not STATIC_PANEL_METADATA) so plugin-contributed
+// Sourced from the live registry (not STATIC_PANEL_METADATA) so extension-contributed
 // panels — also kind "static" — are offered too; the multi-instance agent/terminal
 // panels are excluded by the kind filter.
 export function listAvailableStaticPanels(

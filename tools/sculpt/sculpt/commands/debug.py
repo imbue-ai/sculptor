@@ -64,7 +64,9 @@ def heap(
         help="Start tracemalloc in the backend (captures allocation sites from now on). Reproduce growth, then re-run plain.",
     ),
     stop_trace: bool = typer.Option(False, "--stop-trace", help="Stop tracemalloc in the backend."),
-    trace_frames: int = typer.Option(10, "--trace-frames", help="Frames per allocation captured when starting tracemalloc."),
+    trace_frames: int = typer.Option(
+        10, "--trace-frames", help="Frames per allocation captured when starting tracemalloc."
+    ),
     top: int = typer.Option(30, "--top", help="How many types / allocation sites to show."),
     limit: int = typer.Option(
         5_000_000,

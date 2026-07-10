@@ -13,22 +13,22 @@
 // cross-repo drops structurally impossible rather than merely rejected.
 
 import type { DragEndEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext } from "@dnd-kit/core";
+import { DndContext } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
-import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useCallback, useEffect, useRef } from "react";
 
 import type { Workspace } from "~/api";
-import { ElementIds, updateWorkspace } from "~/api";
+import { ElementIds } from "~/api";
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
-import { workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
-import { workspaceAtomFamily, workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
 import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import {
   type OpenInRuntime,
@@ -39,10 +39,9 @@ import type { WorkspaceAction } from "~/components/CommandPalette/contextActions
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { WorkspaceStatusDots } from "~/components/statusDot";
-import { ToastType } from "~/components/Toast.tsx";
 
 import { adjustSidebarDragCountAtom, collapsedRepoGroupsAtom, isRepoCollapsedAtomFamily } from "./navAtoms.ts";
-import { sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
+import { sidebarCollisionDetection, sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import styles from "./SidebarRepoGroup.module.scss";
 import type { RepoGroup } from "./sidebarWorkspaceOrder.ts";
 import { reorderSidebarWorkspaceAtom } from "./sidebarWorkspaceOrder.ts";
@@ -72,6 +71,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   destructiveColor,
   onNavigate,
   onHover,
+  onBeginRename,
   onRenameCommit,
   onRenameCancel,
   onBeginDelete,
@@ -84,16 +84,32 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   destructiveColor: ReturnType<typeof useThemeDangerColor>;
   onNavigate: (workspaceId: string) => void;
   onHover: (workspaceId: string) => void;
+  onBeginRename: (workspaceId: string) => void;
   onRenameCommit: (workspaceId: string, newName: string) => void;
   onRenameCancel: () => void;
   onBeginDelete: (workspace: Workspace) => void;
 }): ReactElement {
   const status = useAtomValue(workspaceDotStatusAtomFamily(workspace.objectId));
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
-    useSortable({
-      id: workspace.objectId,
-      disabled: isRenaming,
-    });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+    activeIndex,
+    overIndex,
+  } = useSortable({
+    id: workspace.objectId,
+    disabled: isRenaming,
+  });
+
+  // Which edge of this row the dragged row will land against, for the drop-indicator
+  // line: "after" (below) when dragging down onto it, "before" (above) when dragging up.
+  // Only meaningful while this row is the drop target (isOver, and not itself dragged).
+  const dropSide = isOver && !isDragging ? (activeIndex < overIndex ? "after" : "before") : undefined;
 
   // Enter navigates from the keyboard, like a click. Space is deliberately NOT
   // handled here: it falls through to the dnd-kit keyboard sensor's activator
@@ -151,7 +167,15 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               // After the listeners spread so this composed handler REPLACES the
               // sensor's raw onKeyDown (it delegates every non-Enter key back to it).
               onKeyDown={handleKeyDown}
-              onClick={() => onNavigate(workspace.objectId)}
+              // Ignore the second click of a double-click (event.detail > 1) so the
+              // rename gesture doesn't also navigate a second time on its way in.
+              onClick={(event) => {
+                if (event.detail > 1) {
+                  return;
+                }
+                onNavigate(workspace.objectId);
+              }}
+              onDoubleClick={() => onBeginRename(workspace.objectId)}
               onMouseEnter={() => onHover(workspace.objectId)}
               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
               data-workspace-id={workspace.objectId}
@@ -161,6 +185,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               // row whose slot the drag currently targets is marked as the drop target.
               data-sidebar-dragging={isDragging ? "true" : undefined}
               data-sidebar-drop-target={isOver && !isDragging ? "true" : undefined}
+              data-sidebar-drop-side={dropSide}
               data-workspace-tab
               data-tab-id={workspace.objectId}
             >
@@ -227,11 +252,6 @@ type SidebarRepoGroupProps = {
   // WorkspaceSidebar so every group and the command palette agree on the entries.
   actions: ReadonlyArray<WorkspaceAction>;
   openInRuntime: OpenInRuntime;
-  // Whether to render the per-repo header actions (settings gear + direct-create
-  // "+"). Suppressed on the first-run page: that page doesn't mount AppShell, so
-  // the "+"'s dialog fallback and its error toast wouldn't render — the inline
-  // first-run form is the only create affordance while the workspace list is empty.
-  showActions: boolean;
   onWorkspaceClick: (workspaceId: string) => void;
   onWorkspaceHover: (workspaceId: string) => void;
   // Delete is confirmed by a dialog owned by WorkspaceSidebar (shared across
@@ -243,7 +263,6 @@ export const SidebarRepoGroup = ({
   group,
   actions,
   openInRuntime,
-  showActions,
   onWorkspaceClick,
   onWorkspaceHover,
   onBeginDelete,
@@ -251,12 +270,11 @@ export const SidebarRepoGroup = ({
   // External atoms
   const isRepoCollapsed = useAtomValue(isRepoCollapsedAtomFamily(group.projectId));
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
-  const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
   const adjustDragCount = useSetAtom(adjustSidebarDragCountAtom);
   const reorderWorkspace = useSetAtom(reorderSidebarWorkspaceAtom);
-  const store = useStore();
+  const renameWorkspace = useWorkspaceRename();
 
   // Whether the in-flight sidebar drag was started by THIS group's row context.
   // Every drag context adjusts the shared drag count, so end/cancel/cleanup must
@@ -293,7 +311,14 @@ export const SidebarRepoGroup = ({
     transition: groupTransition,
     isDragging: isGroupDragging,
     isOver: isGroupOver,
+    activeIndex: groupActiveIndex,
+    overIndex: groupOverIndex,
   } = useSortable({ id: group.projectId });
+
+  // Which edge of this group the dragged group will land against, for the drop-indicator
+  // line (see the row's dropSide). Only meaningful while this group is the drop target.
+  const groupDropSide =
+    isGroupOver && !isGroupDragging ? (groupActiveIndex < groupOverIndex ? "after" : "before") : undefined;
 
   // The rows' own drag context; see the module comment for why it lives per group.
   const rowDndSensors = useSidebarDndSensors();
@@ -342,36 +367,23 @@ export const SidebarRepoGroup = ({
     return endOwnedDrag;
   }, [isRepoCollapsed, endOwnedDrag]);
 
+  const handleBeginRename = useCallback(
+    (workspaceId: string): void => {
+      setRenamingWorkspaceId(workspaceId);
+    },
+    [setRenamingWorkspaceId],
+  );
+
   // Reference-stable (the rows are memoized on their props): the rename
-  // callbacks depend only on reference-stable atom setters and the store.
+  // callbacks depend only on reference-stable atom setters and hooks.
+  // Optimistic write + rollback + error toast live in the shared
+  // useWorkspaceRename, the ONE rename path for every surface.
   const handleRenameCommit = useCallback(
     (workspaceId: string, newName: string): void => {
       setRenamingWorkspaceId(null);
-      const workspaceAtom = workspaceAtomFamily(workspaceId);
-      const previous = store.get(workspaceAtom);
-      // Optimistically show the new name and let the WebSocket frame reconcile
-      // with the server-authoritative value; roll back and surface a toast if the
-      // write is rejected so the rename never fails silently.
-      if (previous !== null) {
-        store.set(workspaceAtom, { ...previous, description: newName });
-      }
-      updateWorkspace({
-        path: { workspace_id: workspaceId },
-        body: { description: newName },
-      }).catch((error: unknown) => {
-        console.error("Failed to rename workspace:", error);
-        if (previous !== null) {
-          store.set(workspaceAtom, previous);
-        }
-        setRenameErrorToast({
-          title: `Failed to rename "${previous?.description ?? "workspace"}"`,
-          description: "The name has been restored. Try again or check your connection.",
-          type: ToastType.ERROR_PROMINENT,
-          action: null,
-        });
-      });
+      renameWorkspace(workspaceId, newName);
     },
-    [setRenamingWorkspaceId, setRenameErrorToast, store],
+    [setRenamingWorkspaceId, renameWorkspace],
   );
 
   const handleRenameCancel = useCallback((): void => {
@@ -402,61 +414,60 @@ export const SidebarRepoGroup = ({
           data-project-id={group.projectId}
           data-sidebar-dragging={isGroupDragging ? "true" : undefined}
           data-sidebar-drop-target={isGroupOver && !isGroupDragging ? "true" : undefined}
+          data-sidebar-group-drop-side={groupDropSide}
         >
           <Chevron size={16} className={styles.repoChevron} />
           <Text className={styles.repoName} truncate>
             {group.name}
           </Text>
         </button>
-        {showActions && (
-          <Flex className={styles.rowActions}>
-            <DropdownMenu.Root>
-              <Tooltip content="Repository actions" side="bottom">
-                <DropdownMenu.Trigger>
-                  <IconButton
-                    variant="ghost"
-                    size="1"
-                    color="gray"
-                    className={`${styles.rowActionButton} ${styles.hoverReveal}`}
-                    aria-label="Repository actions"
-                    data-testid={ElementIds.SIDEBAR_REPO_MENU}
-                    data-project-id={group.projectId}
-                  >
-                    <MoreHorizontal size={12} />
-                  </IconButton>
-                </DropdownMenu.Trigger>
-              </Tooltip>
-              <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
-                <DropdownMenu.Item
-                  onSelect={() => openSettings("REPOSITORIES", group.projectId)}
-                  data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
+        <Flex className={styles.rowActions}>
+          <DropdownMenu.Root>
+            <Tooltip content="Repository actions" side="bottom">
+              <DropdownMenu.Trigger>
+                <IconButton
+                  variant="ghost"
+                  size="1"
+                  color="gray"
+                  className={`${styles.rowActionButton} ${styles.hoverReveal}`}
+                  aria-label="Repository actions"
+                  data-testid={ElementIds.SIDEBAR_REPO_MENU}
                   data-project-id={group.projectId}
                 >
-                  Configure repo
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-            <Tooltip content="New workspace in this repo" side="right">
-              {/* Direct-create in THIS repo (fresh auto branch, last-used or
+                  <MoreHorizontal size={12} />
+                </IconButton>
+              </DropdownMenu.Trigger>
+            </Tooltip>
+            <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+              <DropdownMenu.Item
+                onSelect={() => openSettings("REPOSITORIES", group.projectId)}
+                data-testid={ElementIds.SIDEBAR_REPO_SETTINGS}
+                data-project-id={group.projectId}
+              >
+                Configure repo
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+          <Tooltip content="New workspace in this repo" side="right">
+            {/* Direct-create in THIS repo (fresh auto branch, last-used or
                   default settings); failures fall back to the dialog
                   pre-selecting the repo. The nav "New Workspace" above is the
                   open-the-dialog affordance. */}
-              <IconButton
-                variant="ghost"
-                size="1"
-                color="gray"
-                className={styles.rowActionButton}
-                disabled={isCreating}
-                onClick={() => void createFromSidebar(group.projectId)}
-                aria-label="New workspace in this repo"
-                data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
-                data-project-id={group.projectId}
-              >
-                <Plus size={12} />
-              </IconButton>
-            </Tooltip>
-          </Flex>
-        )}
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              className={styles.rowActionButton}
+              disabled={isCreating}
+              onClick={() => void createFromSidebar(group.projectId)}
+              aria-label="New workspace in this repo"
+              data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
+              data-project-id={group.projectId}
+            >
+              <Plus size={12} />
+            </IconButton>
+          </Tooltip>
+        </Flex>
       </div>
       {!isRepoCollapsed && group.workspaces.length === 0 && (
         <Text className={styles.noWorkspacesHint} data-testid={ElementIds.SIDEBAR_NO_WORKSPACES_HINT}>
@@ -471,7 +482,7 @@ export const SidebarRepoGroup = ({
         <div className={styles.repoRows}>
           <DndContext
             sensors={rowDndSensors}
-            collisionDetection={closestCenter}
+            collisionDetection={sidebarCollisionDetection}
             modifiers={sidebarDndModifiers}
             onDragStart={beginOwnedDrag}
             onDragEnd={handleRowDragEnd}
@@ -489,6 +500,7 @@ export const SidebarRepoGroup = ({
                   destructiveColor={dangerColor}
                   onNavigate={onWorkspaceClick}
                   onHover={onWorkspaceHover}
+                  onBeginRename={handleBeginRename}
                   onRenameCommit={handleRenameCommit}
                   onRenameCancel={handleRenameCancel}
                   onBeginDelete={onBeginDelete}

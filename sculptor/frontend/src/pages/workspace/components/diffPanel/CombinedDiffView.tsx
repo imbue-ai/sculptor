@@ -185,6 +185,21 @@ type CombinedDiffViewProps = {
   searchQuery?: string;
   /** Called after the commit button sends its message. */
   onCommit?: () => void;
+  /**
+   * Override the code theme (Shiki syntax + diff surface) instead of following
+   * the global app appearance. The mobile shell forces "light" so the diff body
+   * matches its light "sand" surface — its scoped CSS-var theme re-colors the
+   * surface, but Pierre's Shiki syntax colors come from a JS atom keyed off the
+   * global appearance, which would otherwise stay dark. Desktop omits this.
+   */
+  forceThemeType?: "light" | "dark";
+  /**
+   * Hide the file-navigation / scope / commit toolbar. The mobile review-all
+   * overlay supplies its own header (back + counts) and matches a mock whose
+   * body is just the combined diff, so it opts out of this desktop toolbar
+   * (which also overflows the narrow column). Desktop omits this (toolbar shown).
+   */
+  hideToolbar?: boolean;
 };
 
 export const CombinedDiffView = ({
@@ -194,6 +209,8 @@ export const CombinedDiffView = ({
   contentRef,
   searchQuery = "",
   onCommit,
+  forceThemeType,
+  hideToolbar = false,
 }: CombinedDiffViewProps): ReactElement => {
   const workspace = useWorkspace(workspaceId);
   const hasTargetBranch = workspace?.targetBranch != null;
@@ -201,6 +218,7 @@ export const CombinedDiffView = ({
   const [scope, setScope] = useAtom(diffScopeAtomFamily(workspaceId));
   const overflow = useAtomValue(fileBrowserLineWrappingAtom);
   const appTheme = useAtomValue(appThemeAtom);
+  const effectiveThemeType = forceThemeType ?? appTheme;
   const containerRef = useRef<HTMLDivElement>(null);
 
   const activeDiffString = scope === "vs-target-branch" ? diff?.targetBranchDiff : diff?.uncommittedDiff;
@@ -309,37 +327,35 @@ export const CombinedDiffView = ({
 
   return (
     <div ref={contentRef} className={isActive ? styles.wrapper : styles.wrapperHidden}>
-      <div className={styles.toolbar}>
-        <TooltipIconButton
-          tooltipText="Previous file"
-          size="1"
-          onClick={() => handleNavigate("up")}
-          disabled={!isReady || fileChanges.length <= 1}
-        >
-          <ChevronUp size={14} />
-        </TooltipIconButton>
-        <TooltipIconButton
-          tooltipText="Next file"
-          size="1"
-          onClick={() => handleNavigate("down")}
-          disabled={!isReady || fileChanges.length <= 1}
-        >
-          <ChevronDown size={14} />
-        </TooltipIconButton>
-        <TooltipIconButton
-          tooltipText={areAllCollapsed ? "Expand all files" : "Collapse all files"}
-          size="1"
-          onClick={handleToggleCollapseAll}
-          disabled={!isReady}
-        >
-          {areAllCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
-        </TooltipIconButton>
-        <DiffScopePicker scope={scope} onScopeChange={setScope} hasTargetBranch={hasTargetBranch} />
-        <span className={styles.toolbarSpacer} />
-        {scope === "uncommitted" && (
-          <CommitButton changesCount={isReady ? fileChanges.length : 0} onCommit={onCommit} />
-        )}
-      </div>
+      {!hideToolbar && (
+        <div className={styles.toolbar}>
+          <TooltipIconButton
+            tooltipText="Previous file"
+            size="1"
+            onClick={() => handleNavigate("up")}
+            disabled={!isReady || fileChanges.length <= 1}
+          >
+            <ChevronUp size={14} />
+          </TooltipIconButton>
+          <TooltipIconButton
+            tooltipText="Next file"
+            size="1"
+            onClick={() => handleNavigate("down")}
+            disabled={!isReady || fileChanges.length <= 1}
+          >
+            <ChevronDown size={14} />
+          </TooltipIconButton>
+          <TooltipIconButton
+            tooltipText={areAllCollapsed ? "Expand all files" : "Collapse all files"}
+            size="1"
+            onClick={handleToggleCollapseAll}
+            disabled={!isReady}
+          >
+            {areAllCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+          </TooltipIconButton>
+          <DiffScopePicker scope={scope} onScopeChange={setScope} hasTargetBranch={hasTargetBranch} />
+        </div>
+      )}
       {isActive &&
         (fileChanges.length === 0 ? (
           <Flex align="center" justify="center" flexGrow="1">
@@ -360,7 +376,7 @@ export const CombinedDiffView = ({
                   isCollapsed={collapsedFiles.has(fc.fileNames.referenceFileName)}
                   viewType={viewType}
                   overflow={overflow}
-                  themeType={appTheme}
+                  themeType={effectiveThemeType}
                   scope={scope}
                   mergeBaseRef={mergeBaseRef}
                   onToggleCollapse={toggleCollapse}
@@ -369,6 +385,14 @@ export const CombinedDiffView = ({
             </div>
           </div>
         ))}
+      {/* Commit action pinned as a full-width footer, matching the Changes
+          panel. Keeping it out of the toolbar row avoids colliding with the
+          scope picker (both want the full width) when the panel is narrow. */}
+      {scope === "uncommitted" && (
+        <Flex flexShrink="0" px="3" py="2" className={styles.commitFooter}>
+          <CommitButton changesCount={isReady ? fileChanges.length : 0} onCommit={onCommit} />
+        </Flex>
+      )}
     </div>
   );
 };
