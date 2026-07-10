@@ -323,6 +323,11 @@ export const useAlphaScrollPersistence = (
     let lastHeight = el.scrollHeight;
     let stableFrames = 0;
     let elapsedFrames = 0;
+    // The frame on which the content height last grew — the debug tell below. A
+    // value past ~2 means the content was still growing after the old single
+    // deferred re-assert would have fired, i.e. a case the one-shot restore
+    // would have stranded above the bottom.
+    let lastGrowthFrame = 0;
     let rafId = 0;
     const endConvergence = (): void => {
       isProgrammaticScrollRef.current = false;
@@ -351,11 +356,25 @@ export const useAlphaScrollPersistence = (
       }
 
       const height = container.scrollHeight;
-      stableFrames = height === lastHeight ? stableFrames + 1 : 0;
-      lastHeight = height;
       elapsedFrames += 1;
+      if (height === lastHeight) {
+        stableFrames += 1;
+      } else {
+        stableFrames = 0;
+        lastGrowthFrame = elapsedFrames;
+      }
+      lastHeight = height;
 
       if (stableFrames >= BOTTOM_CONVERGE_STABLE_FRAMES || elapsedFrames >= BOTTOM_CONVERGE_MAX_FRAMES) {
+        const didHitCap = stableFrames < BOTTOM_CONVERGE_STABLE_FRAMES;
+        // Debug: how long the re-pin chased the growing bottom. `lastGrowth`
+        // past ~2 (or a cap hit) flags a restore the old single deferred
+        // re-assert would have settled early and stranded above the bottom.
+        console.log(
+          `[alpha-scroll] bottom restore settled: frames=${elapsedFrames}, lastGrowth=${lastGrowthFrame}` +
+            `${didHitCap ? " (hit frame cap)" : ""}, distanceFromBottom=` +
+            `${Math.round(distanceFromContentBottom(container, virtualizer))}px`,
+        );
         machine.dispatch({ kind: "restoreSettled" });
         endConvergence();
         return;
