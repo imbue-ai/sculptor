@@ -25,6 +25,19 @@ const cancelPendingRafs = (ids: Set<number>): void => {
   ids.clear();
 };
 
+/** A bottom-relative restore re-pins every animation frame while the mounted
+ *  rows replace their cold estimates with real measurements (which grows the
+ *  content height). Convergence is declared once the height holds steady for
+ *  this many consecutive frames. */
+const BOTTOM_CONVERGE_STABLE_FRAMES = 2;
+/** Hard cap on the re-pin chase, so a task whose content never stabilizes for
+ *  two consecutive frames (a live stream, a perpetually reflowing row) still
+ *  hands control back. Real cold-estimate convergence is a handful of frames, so
+ *  this only fires on genuinely never-settling content; kept tight (~0.5s at
+ *  60fps) so `restoring` — which withholds `settled` and suppresses saves — is
+ *  never held long past convergence. */
+const BOTTOM_CONVERGE_MAX_FRAMES = 30;
+
 type MessageRef = { id: string };
 
 export const useAlphaScrollPersistence = (
@@ -259,29 +272,118 @@ export const useAlphaScrollPersistence = (
       setSettleRender((count) => count + 1);
     }
 
-    // Safety-net re-assert after the virtualizer's settle window. The pre-paint
-    // settle already applied against swept measurements, so this is normally a
-    // no-op (writing an equal scrollTop fires no scroll event). It catches what
-    // the sweep cannot: rows whose async re-measurement (images, fonts, late
-    // reflows) lands after the settle render.
-    const id1 = requestAnimationFrame(() => {
-      pendingRafsRef.current.delete(id1);
-      const id2 = requestAnimationFrame(() => {
-        pendingRafsRef.current.delete(id2);
-        // Only re-assert while the machine is still `restoring`. A genuine user
-        // scroll during the restore window flips authority to `userControlled`
-        // (see useScrollStateMachine), so this skips the re-assert rather than
-        // snapping the view back to the saved anchor and clobbering them.
-        if (machine.getState().authority.kind === "restoring") {
-          applyScrollPosition();
-        }
-        // Settle: returns authority to `userControlled` (a no-op if the user
-        // already took over).
-        machine.dispatch({ kind: "restoreSettled" });
+    // Anchor restores land in one shot: the pre-paint sweep already resolved the
+    // anchor against swept measurements, so a single deferred re-assert after
+    // the virtualizer's settle window is enough to catch what the sweep cannot —
+    // rows whose async re-measurement (images, fonts, late reflows) lands after
+    // the settle render. Writing an equal scrollTop fires no scroll event, so
+    // this is normally a no-op.
+    if (resolution === "anchor") {
+      const id1 = requestAnimationFrame(() => {
+        pendingRafsRef.current.delete(id1);
+        const id2 = requestAnimationFrame(() => {
+          pendingRafsRef.current.delete(id2);
+          // Only re-assert while the machine is still `restoring`. A genuine user
+          // scroll during the restore window flips authority to `userControlled`
+          // (see useScrollStateMachine), so this skips the re-assert rather than
+          // snapping the view back to the saved anchor and clobbering them.
+          if (machine.getState().authority.kind === "restoring") {
+            applyScrollPosition();
+          }
+          // Settle: returns authority to `userControlled` (a no-op if the user
+          // already took over).
+          machine.dispatch({ kind: "restoreSettled" });
+        });
+        pendingRafsRef.current.add(id2);
       });
-      pendingRafsRef.current.add(id2);
-    });
-    pendingRafsRef.current.add(id1);
+      pendingRafsRef.current.add(id1);
+      return;
+    }
+
+    // Bottom-relative restores cannot settle in one shot. Their target is the
+    // *content bottom*, which only exists once the mounted rows have replaced
+    // their cold estimates with measured heights — a convergence that unfolds
+    // over several frames (and, on a cold app start, while the rows are still
+    // streaming in). A single deferred re-assert fires mid-convergence and
+    // strands the reader pages above the true bottom, because the content keeps
+    // growing after it settles. So re-pin every frame, re-resolving the bottom
+    // against the now-current geometry, until the content height holds steady
+    // for BOTTOM_CONVERGE_STABLE_FRAMES frames (converged) or the frame cap
+    // elapses (never-settling content) — then hand control back. A genuine user
+    // scroll flips authority out of `restoring` and ends the chase on the next
+    // frame with no final clobbering write. Saves stay suppressed throughout:
+    // the save handler ignores scrolls while authority is `restoring`.
+    //
+    // Each re-pin is a programmatic scrollTop write, so the loop holds
+    // `isProgrammaticScrollRef` for the whole chase — the documented flag every
+    // chat scroll listener reads to tell a restore from a user scroll (like
+    // useAlphaAutoScroll's pinToBottom) — and clears it at every exit, so a
+    // scroll event from a re-pin is never misread and the flag never lingers
+    // past the restore.
+    let lastHeight = el.scrollHeight;
+    let stableFrames = 0;
+    let elapsedFrames = 0;
+    // The frame on which the content height last grew — the debug tell below. A
+    // value past ~2 means the content was still growing after the old single
+    // deferred re-assert would have fired, i.e. a case the one-shot restore
+    // would have stranded above the bottom.
+    let lastGrowthFrame = 0;
+    let rafId = 0;
+    const endConvergence = (): void => {
+      isProgrammaticScrollRef.current = false;
+    };
+
+    const tick = (): void => {
+      pendingRafsRef.current.delete(rafId);
+      const container = scrollContainerRef.current;
+      // The user grabbed the scroll (or the container unmounted): stop chasing
+      // and leave their position untouched. Authority is already userControlled.
+      if (!container || machine.getState().authority.kind !== "restoring") {
+        endConvergence();
+        return;
+      }
+
+      const beforeScrollTop = container.scrollTop;
+      isProgrammaticScrollRef.current = true;
+      applyScrollPosition();
+      // A re-pin that didn't move scrollTop fires no scroll event, so no
+      // listener will consume (and clear) the flag this frame — clear it now,
+      // otherwise it lingers until the next tick and a user scroll in that gap
+      // would be misread as programmatic. A move keeps the flag set for the
+      // scroll event it produces; the scroll handler clears it in a microtask.
+      if (container.scrollTop === beforeScrollTop) {
+        isProgrammaticScrollRef.current = false;
+      }
+
+      const height = container.scrollHeight;
+      elapsedFrames += 1;
+      if (height === lastHeight) {
+        stableFrames += 1;
+      } else {
+        stableFrames = 0;
+        lastGrowthFrame = elapsedFrames;
+      }
+      lastHeight = height;
+
+      if (stableFrames >= BOTTOM_CONVERGE_STABLE_FRAMES || elapsedFrames >= BOTTOM_CONVERGE_MAX_FRAMES) {
+        const didHitCap = stableFrames < BOTTOM_CONVERGE_STABLE_FRAMES;
+        // Debug: how long the re-pin chased the growing bottom. `lastGrowth`
+        // past ~2 (or a cap hit) flags a restore the old single deferred
+        // re-assert would have settled early and stranded above the bottom.
+        console.log(
+          `[alpha-scroll] bottom restore settled: frames=${elapsedFrames}, lastGrowth=${lastGrowthFrame}` +
+            `${didHitCap ? " (hit frame cap)" : ""}, distanceFromBottom=` +
+            `${Math.round(distanceFromContentBottom(container, virtualizer))}px`,
+        );
+        machine.dispatch({ kind: "restoreSettled" });
+        endConvergence();
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+      pendingRafsRef.current.add(rafId);
+    };
+    rafId = requestAnimationFrame(tick);
+    pendingRafsRef.current.add(rafId);
   }, [
     scrollContainerRef,
     virtualizer,
@@ -290,6 +392,7 @@ export const useAlphaScrollPersistence = (
     sweepMountedMeasurements,
     machine,
     taskId,
+    isProgrammaticScrollRef,
   ]);
 
   // Restore scroll position synchronously before paint so the user never

@@ -232,6 +232,34 @@ def get_last_turn_footer_viewport_gaps(page: Page) -> dict | None:
     )
 
 
+def wait_for_last_turn_footer_near_bottom(
+    page: Page, *, max_bottom_gap: int, min_bottom_gap: int = -6, timeout_ms: int = 30_000
+) -> None:
+    """Retry until the last turn footer sits near the viewport bottom.
+
+    An auto-retrying wait (Playwright ``wait_for_function``) rather than a
+    one-shot ``get_last_turn_footer_viewport_gaps`` read, so it can't snapshot a
+    frame before the footer has rendered or the restore has finished landing:
+    it resolves once the footer exists AND its bottom edge is within
+    ``[min_bottom_gap, max_bottom_gap]`` px of the viewport bottom (in view and
+    close to the bottom). ``min_bottom_gap`` defaults to a small negative edge
+    tolerance so a footer flush with the viewport bottom still counts as in view.
+    """
+    page.wait_for_function(
+        f"""({{ maxGap, minGap }}) => {{
+        const view = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        const footers = document.querySelectorAll('[data-testid="{ElementIDs.TURN_FOOTER}"]');
+        if (!view || footers.length === 0) return false;
+        const v = view.getBoundingClientRect();
+        const f = footers[footers.length - 1].getBoundingClientRect();
+        const bottomGap = v.bottom - f.bottom;
+        return bottomGap >= minGap && bottomGap <= maxGap;
+    }}""",
+        arg={"maxGap": max_bottom_gap, "minGap": min_bottom_gap},
+        timeout=timeout_ms,
+    )
+
+
 def get_max_following_tail_gap(page: Page, frames: int = 18) -> float | None:
     """Over a short ``requestAnimationFrame`` burst, the max gap (px) from the last
     message's bottom edge UP to the viewport bottom.
