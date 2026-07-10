@@ -8,11 +8,14 @@ import { SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
 
 const PI_MODELS_QUERY_KEY = [SCULPTOR_QUERY_KEY_PREFIX, "pi", "models"] as const;
 
+// One stable identity for "no catalog", shared by every errored render.
+const EMPTY_PI_CATALOG: PiModelsResponse = { availableModels: [], defaultModel: null };
+
 const fetchPiModels = async (signal: AbortSignal): Promise<PiModelsResponse> => {
   // Plain global read: skip the request tracker's WS-ack wait (this endpoint
   // never publishes a stream update to acknowledge).
   const { data } = await getPiModels({ meta: { signal, skipWsAck: true } });
-  return data ?? { availableModels: [], defaultModel: null };
+  return data;
 };
 
 type UsePiModelsResult = BackendQueryResult<PiModelsResponse | undefined> & {
@@ -33,7 +36,9 @@ type UsePiModelsResult = BackendQueryResult<PiModelsResponse | undefined> & {
  * cache to invalidate, so freshness is client-driven: `staleTime: 0` plus a
  * window-focus refetch means a login round-trip through Settings → Pi is picked
  * up when focus returns, without stranding a stale empty catalog. Best-effort
- * like the endpoint — a probe failure yields an empty catalog, never an error.
+ * like the endpoint — a fetch failure with nothing cached resolves to the empty
+ * catalog (the picker's empty state, not a loading state nothing advances),
+ * while a failed refetch keeps the last-known catalog.
  */
 export const usePiModels = ({ enabled }: { enabled: boolean }): UsePiModelsResult => {
   const query = useQuery({
@@ -44,10 +49,14 @@ export const usePiModels = ({ enabled }: { enabled: boolean }): UsePiModelsResul
     refetchOnWindowFocus: true,
     retry: false,
   });
+  // `data === undefined` means exactly "not resolved yet": TanStack retains the
+  // last-good data across a failed refetch, so the empty-catalog fold engages
+  // only when a fetch fails with nothing cached.
+  const data = query.data ?? (query.isError ? EMPTY_PI_CATALOG : undefined);
   return {
-    data: query.data,
-    availableModels: query.data?.availableModels ?? [],
-    defaultModel: query.data?.defaultModel ?? null,
+    data,
+    availableModels: data?.availableModels ?? [],
+    defaultModel: data?.defaultModel ?? null,
     isPending: query.isPending,
     isFetching: query.isFetching,
     isError: query.isError,
