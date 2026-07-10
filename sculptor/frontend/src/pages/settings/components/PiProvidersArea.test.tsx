@@ -66,4 +66,25 @@ describe("groupProviders", () => {
     ]);
     expect(grouping.available.map((p) => p.displayName)).toEqual(["xAI", "Z.AI"]);
   });
+
+  it("sorts the Session-only group alphabetically by display name", () => {
+    const grouping = groupProviders([
+      makeProvider({
+        providerId: "cloudflare-workers-ai",
+        displayName: "Cloudflare Workers AI",
+        group: ProviderGroup.SESSION_ONLY,
+      }),
+      makeProvider({ providerId: "amazon-bedrock", displayName: "Amazon Bedrock", group: ProviderGroup.SESSION_ONLY }),
+      makeProvider({
+        providerId: "azure-openai-responses",
+        displayName: "Azure OpenAI",
+        group: ProviderGroup.SESSION_ONLY,
+      }),
+    ]);
+    expect(grouping.sessionOnly.map((p) => p.displayName)).toEqual([
+      "Amazon Bedrock",
+      "Azure OpenAI",
+      "Cloudflare Workers AI",
+    ]);
+  });
 });

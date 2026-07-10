@@ -4514,11 +4514,11 @@ def write_pi_provider_key(
 ) -> Response:
     """Merge a single-key provider's api key into auth.json and refresh running pi agents.
 
-    Not exposed in the UI (the login modal is interactive /login only); kept for
-    integration tests that need an out-of-process credential write that fires the
-    models-refresh broadcast. The value is written verbatim (literal / $ENV / !command);
-    session-only and unknown providers are rejected (their config is not expressible as a
-    single auth.json key).
+    Not exposed in the UI (the login modal is interactive /login only); kept for tests —
+    an integration test writes a credential through it to fire the models-refresh
+    broadcast, and app-level tests cover the route directly. The value is written verbatim
+    (literal / $ENV / !command); session-only and unknown providers are rejected (their
+    config is not expressible as a single auth.json key).
     """
     entry = get_provider_entry(paste_key_request.provider_id)
     if entry is None or entry.group is not ProviderGroup.SINGLE_KEY:
