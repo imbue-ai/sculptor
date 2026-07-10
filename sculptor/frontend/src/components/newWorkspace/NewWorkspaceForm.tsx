@@ -305,9 +305,9 @@ export const NewWorkspaceForm = ({
         ) ??
         piModels.defaultModel ??
         piModels.availableModels[0]);
-  // The spec's one submission rule: a pi prompt is submittable only against a
-  // resolved, non-empty catalog with a selection (`piSelection` is set exactly
-  // then); a promptless create never waits on the catalog.
+  // One submission rule: a pi prompt is submittable only against a resolved,
+  // non-empty catalog with a selection (`piSelection` is set exactly then);
+  // a promptless create never waits on the catalog.
   const isPiPromptBlocked = isPiSelected && !isPromptEmpty && piSelection === undefined;
 
   const isSubmitDisabled =

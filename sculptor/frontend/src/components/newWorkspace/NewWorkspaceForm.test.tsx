@@ -50,7 +50,7 @@ const PI_MODEL_OTHER: ModelOption = { provider: "openai", modelId: "gpt", displa
 
 // usePiModels' return shape, one factory per catalog state. Each returns a fresh
 // object; a test hands one to `mockReturnValue` so the reference stays stable
-// across renders (the preselect effect keys on `data` identity).
+// across renders.
 const piModelsResolving = (): unknown => ({
   data: undefined,
   availableModels: [],
@@ -260,7 +260,7 @@ describe("NewWorkspaceForm", () => {
     await waitFor(() => expect(branchInput).toHaveValue("linear/scu-1-fix"));
   });
 
-  // The spec's one rule: a pi prompt is submittable only against a resolved,
+  // The one admission rule: a pi prompt is submittable only against a resolved,
   // non-empty catalog with a selection; a promptless create never waits on it.
   describe("pi model picker admission rule", () => {
     it("renders the pi model picker in place of the Claude controls", async () => {
