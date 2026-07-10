@@ -1,0 +1,73 @@
+// Loading skeleton for the sidebar repo list. Geometry mirrors
+// SidebarRepoGroup's real repo header + workspace rows so the rail doesn't
+// reflow when the actual list swaps in.
+
+.skeleton {
+  // Delayed fade-in so a fast WebSocket reconnect never flashes a skeleton:
+  // `both` fill keeps the group fully transparent through the delay, then it
+  // fades in only if loading is still going after the delay elapses. The real
+  // list, when it arrives sooner, unmounts this before the fade ever starts.
+  animation: sidebar-skeleton-reveal var(--duration-fast) var(--ease-out) var(--duration-normal) both;
+}
+
+@keyframes sidebar-skeleton-reveal {
+  from {
+    opacity: 0%;
+  }
+
+  to {
+    opacity: 100%;
+  }
+}
+
+// Mirrors SidebarRepoGroup .repoGroup: a tight column with the same inter-row
+// gap and inter-group spacing.
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-1);
+}
+
+// Mirrors .repoHeader — same pill height and horizontal padding so the header
+// bar lands where the real repo name does.
+.header {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+}
+
+// Mirrors .workspaceRow — same pill height, indented past the header via the
+// same padding-left so the hierarchy reads while loading.
+.row {
+  align-items: center;
+  display: flex;
+  min-height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-5);
+}
+
+// Stand-in for the repo chevron: a small fixed square matching its 16px glyph.
+.chevron {
+  border-radius: var(--radius-1);
+  flex-shrink: 0;
+  height: 16px;
+  width: 16px;
+}
+
+// A text-line placeholder bar; width is set inline per row for an uneven,
+// content-like silhouette.
+.bar {
+  border-radius: var(--radius-1);
+  height: var(--space-2);
+}
+
+// Honour reduced-motion: skip the fade but keep the anti-flash delay, so the
+// skeleton still only appears once loading has genuinely dragged on. (Radix
+// Skeleton drops its own shimmer under this query independently.)
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation-duration: 0.01ms;
+  }
+}

@@ -38,8 +38,13 @@ import { adjustSidebarDragCountAtom, isSidebarDragActiveAtom } from "./navAtoms.
 import navItemStyles from "./NavItem.module.scss";
 import { NavItem } from "./NavItem.tsx";
 import { sidebarCollisionDetection, sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
+import { SidebarLoadingSkeleton } from "./SidebarLoadingSkeleton.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
-import { reorderSidebarRepoGroupAtom, sidebarWorkspaceGroupsAtom } from "./sidebarWorkspaceOrder.ts";
+import {
+  isSidebarLoadingAtom,
+  reorderSidebarRepoGroupAtom,
+  sidebarWorkspaceGroupsAtom,
+} from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
@@ -64,6 +69,11 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // workspaces yet), shared with keyboard workspace cycling so the two can't
   // drift (see sidebarWorkspaceOrder).
   const repoGroups = useAtomValue(sidebarWorkspaceGroupsAtom);
+  // True only while the first workspace snapshot is still in flight. Lets the
+  // repo list show a skeleton instead of a blank rail during that window
+  // (notably after a hard refresh), without conflating it with a genuinely
+  // empty list.
+  const isLoading = useAtomValue(isSidebarLoadingAtom);
   const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
   // The workspace→last-agent map is only consulted inside the click handler, so
   // read it lazily from the store rather than subscribing: the whole sidebar
@@ -287,31 +297,41 @@ export const WorkspaceSidebar = (): ReactElement | null => {
         </nav>
 
         <div className={styles.repoList}>
+          {/* While the first workspace snapshot is still in flight, show a
+            skeleton rather than a blank rail — the list can't yet tell "loading"
+            from "loaded and empty", so a bare empty map would read as "you have
+            nothing" during the reconnect window (e.g. after a hard refresh). */}
+          {isLoading && <SidebarLoadingSkeleton />}
           {/* One group per repo, including repos with no workspaces yet (they show
             a "No workspaces yet" hint). Empty until the first repo is added via the
             "Add repo" button in the bottom actions. */}
-          <DndContext
-            sensors={groupDndSensors}
-            collisionDetection={sidebarCollisionDetection}
-            modifiers={sidebarDndModifiers}
-            onDragStart={beginOwnedDrag}
-            onDragEnd={handleGroupDragEnd}
-            onDragCancel={endOwnedDrag}
-          >
-            <SortableContext items={repoGroups.map((group) => group.projectId)} strategy={verticalListSortingStrategy}>
-              {repoGroups.map((group) => (
-                <SidebarRepoGroup
-                  key={group.projectId}
-                  group={group}
-                  actions={workspaceActions}
-                  openInRuntime={openInRuntime}
-                  onWorkspaceClick={handleWorkspaceClick}
-                  onWorkspaceHover={handleWorkspaceHover}
-                  onBeginDelete={setDeleteTarget}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
+          {!isLoading && (
+            <DndContext
+              sensors={groupDndSensors}
+              collisionDetection={sidebarCollisionDetection}
+              modifiers={sidebarDndModifiers}
+              onDragStart={beginOwnedDrag}
+              onDragEnd={handleGroupDragEnd}
+              onDragCancel={endOwnedDrag}
+            >
+              <SortableContext
+                items={repoGroups.map((group) => group.projectId)}
+                strategy={verticalListSortingStrategy}
+              >
+                {repoGroups.map((group) => (
+                  <SidebarRepoGroup
+                    key={group.projectId}
+                    group={group}
+                    actions={workspaceActions}
+                    openInRuntime={openInRuntime}
+                    onWorkspaceClick={handleWorkspaceClick}
+                    onWorkspaceHover={handleWorkspaceHover}
+                    onBeginDelete={setDeleteTarget}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
 
         <div className={styles.spacer} />
