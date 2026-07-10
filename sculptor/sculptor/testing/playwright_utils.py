@@ -417,6 +417,7 @@ def start_task_and_wait_for_ready(
     workspace_name: str | None = None,
     mode: str | None = None,
     agent_type: str | None = None,
+    finish_timeout_ms: int | None = None,
 ) -> PlaywrightTaskPage:
     """Create a workspace and agent through the new-workspace UI.
 
@@ -433,6 +434,11 @@ def start_task_and_wait_for_ready(
 
     When *prompt* is empty the agent is created in a waiting state and
     ``wait_for_agent_to_finish`` is ignored.
+
+    ``finish_timeout_ms`` overrides the timeout on the "agent finished
+    outputting" waits (``None`` keeps Playwright's default). Prompts that make
+    the agent do a lot of sequential work — e.g. writing many files — need more
+    headroom than the default, especially on contended CI sandboxes.
 
     Defaults to the Fake Claude model, which returns deterministic responses
     without LLM calls.  Tests that need a real agent should pass an explicit model name.
@@ -588,8 +594,10 @@ def start_task_and_wait_for_ready(
             # assistant message (e.g. auto_compact flows).  Without it, the
             # not_to_be_visible check below can pass trivially during the gap
             # between send-click and the activity indicator rendering.
-            expect(chat_panel.get_messages().nth(1), "agent reply to appear").to_be_attached()
-            expect(chat_panel.get_thinking_indicator(), "to finish outputting data").not_to_be_visible()
+            expect(chat_panel.get_messages().nth(1), "agent reply to appear").to_be_attached(timeout=finish_timeout_ms)
+            expect(chat_panel.get_thinking_indicator(), "to finish outputting data").not_to_be_visible(
+                timeout=finish_timeout_ms
+            )
 
     return task_page
 
