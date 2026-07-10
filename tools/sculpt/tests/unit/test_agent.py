@@ -207,6 +207,14 @@ class TestAgentCreate:
 
         assert result.exit_code == 1
 
+    def test_create_explicit_model_without_prompt_is_rejected(self, runner: CliRunner) -> None:
+        """--model configures the initial prompt's run, so a promptless create
+        rejects it — even when it names the flag's default."""
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "-m", "opus"])
+
+        assert result.exit_code == 1
+        assert "has no effect without --prompt" in result.output + (result.stderr or "")
+
     @respx.mock
     def test_create_connection_error(self, runner: CliRunner) -> None:
         _mock_session()
@@ -234,6 +242,21 @@ class TestAgentCreateHarness:
         assert result.exit_code == 0
         body = json.loads(route.calls.last.request.content)
         assert body["agentType"] == "pi"
+
+    @respx.mock
+    def test_create_with_harness_pi_rejects_explicit_default_model_flag(self, runner: CliRunner) -> None:
+        """--model is rejected for a pi prompt even when it names the flag's
+        default — an explicit choice is never silently ignored."""
+        _mock_session()
+        _mock_workspaces("ws_test123")
+
+        result = runner.invoke(
+            app,
+            ["agent", "create", "-w", "ws_test123", "-p", "Do something", "--harness", "Pi", "--model", "opus"],
+        )
+
+        assert result.exit_code == 1
+        assert "does not apply to the Pi harness" in result.output + (result.stderr or "")
 
     @respx.mock
     def test_create_with_harness_terminal_sends_terminal_agent_type(self, runner: CliRunner) -> None:

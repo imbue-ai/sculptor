@@ -56,8 +56,10 @@ from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.agents.pi_agent.authenticated_providers import PiAuthJsonError
+from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
 from sculptor.agents.pi_agent.authenticated_providers import write_auth_json_entry
+from sculptor.agents.pi_agent.catalog_probe import probe_catalog_on_host
 from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.common.plugin import get_plugin_dirs
@@ -167,6 +169,7 @@ from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ModelOption
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.telemetry import telemetry
@@ -236,6 +239,7 @@ from sculptor.web.data_types import PasteKeyRequest
 from sculptor.web.data_types import PiLoginRequest
 from sculptor.web.data_types import PiLoginResponse
 from sculptor.web.data_types import PiLoginStatusResponse
+from sculptor.web.data_types import PiModelsResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -555,6 +559,70 @@ def set_session_token_cookie(
     )
 
 
+def _validate_prompt_model_selection(
+    agent_type: AgentTypeName,
+    model: LLMModel | None,
+    backend_model: ModelOption | None,
+) -> None:
+    """Enforce the create-time model contract for a prompt-ful create.
+
+    A create names its model on exactly one harness's terms: `model` for
+    Claude's static list, `backend_model` for a backend-sourced catalog (pi).
+    A pi prompt requires a `backend_model` whose provider is authenticated at
+    create time — an instant host-side read sharing
+    `compute_authenticated_provider_ids` with the catalog probe — so a queued
+    first prompt can never name a model that cannot run.
+    """
+    if model is not None and backend_model is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["body", "backend_model"],
+                    "msg": "model and backend_model are mutually exclusive",
+                    "type": "value_error",
+                }
+            ],
+        )
+    if agent_type == AgentTypeName.PI:
+        if backend_model is None:
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": "A pi prompt requires a backend_model selected from pi's catalog",
+                        "type": "value_error.missing",
+                    }
+                ],
+            )
+        if backend_model.provider not in compute_authenticated_provider_ids():
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": (
+                            f"pi provider '{backend_model.provider}' is not authenticated — "
+                            + "connect it under Settings → Pi → Providers and retry"
+                        ),
+                        "type": "value_error",
+                    }
+                ],
+            )
+    elif model is None:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["body", "model"],
+                    "msg": "Model is required when providing a prompt",
+                    "type": "value_error.missing",
+                }
+            ],
+        )
+
+
 @router.post("/api/v1/projects/{project_id}/tasks")
 def start_task(
     project_id: ProjectID,
@@ -637,6 +705,7 @@ def start_task(
             if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
                 raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
             resolved_agent_type, _ = _resolve_requested_agent_type(task_request.agent_type, None, has_prompt=True)
+            _validate_prompt_model_selection(resolved_agent_type, model, task_request.backend_model)
             agent_config = _agent_config_for_request(resolved_agent_type, None)
             if task_request.agent_type is not None:
                 _record_most_recently_used_agent_type(resolved_agent_type, None)
@@ -653,10 +722,13 @@ def start_task(
 
         max_seconds = None
 
-        # Create initial task state with workspace_id
+        # Create initial task state with workspace_id. A validated backend-model
+        # selection (pi) is the task's current model from birth, so the wrapper's
+        # start-time adoption runs the queued prompt under it.
         initial_task_state = AgentTaskStateV2(
             title=task_name,
             workspace_id=workspace.object_id,
+            current_model=task_request.backend_model,
         )
 
         task = Task(
@@ -2211,24 +2283,14 @@ def create_workspace_agent(
         if agent_request.prompt:
             if agent_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
                 raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
-            # Delegate to existing start_task logic
-            model = agent_request.model
-            if model is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail=[
-                        {
-                            "loc": ["body", "model"],
-                            "msg": "Model is required when providing a prompt",
-                            "type": "value_error.missing",
-                        }
-                    ],
-                )
-
+            # Delegate to existing start_task logic, which validates the
+            # model/backend_model pair against the resolved harness
+            # (`_validate_prompt_model_selection`).
             task_request = StartTaskRequest(
                 prompt=agent_request.prompt,
                 interface=agent_request.interface,
-                model=model,
+                model=agent_request.model,
+                backend_model=agent_request.backend_model,
                 files=agent_request.files,
                 name=agent_request.name,
                 workspace_id=validated_workspace_id,
@@ -2246,7 +2308,20 @@ def create_workspace_agent(
                 settings=settings,
             )
 
-        # No prompt — create agent in waiting state
+        # No prompt — create agent in waiting state. There is no turn to run a
+        # backend-model selection under (post-start selection owns that case),
+        # so reject one rather than silently dropping it.
+        if agent_request.backend_model is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": "backend_model requires a prompt — a promptless create selects pi's model after start",
+                        "type": "value_error",
+                    }
+                ],
+            )
         _prevent_action_if_out_of_free_space(services)
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
@@ -4526,6 +4601,26 @@ def get_pi_authenticated_providers(
             for status in get_provider_auth_statuses()
         )
     )
+
+
+@router.get("/api/v1/pi/models")
+def get_pi_models(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiModelsResponse:
+    """Return pi's curated, authenticated-only model catalog, probed on the host.
+
+    Global (no workspace/agent): pre-create surfaces — the New Workspace modal's
+    pi model picker — read this before any execution environment exists. The
+    probe is best-effort like its in-task twin, so a missing binary, version
+    mismatch, or unauthenticated user yields an empty catalog, never an error.
+    """
+    services = get_services_from_request_or_websocket(request)
+    binary = services.dependency_management_service.resolve_binary_path(Dependency.PI)
+    if binary is None:
+        return PiModelsResponse(available_models=(), default_model=None)
+    available_models, default_model = probe_catalog_on_host(binary)
+    return PiModelsResponse(available_models=tuple(available_models), default_model=default_model)
 
 
 @router.post("/api/v1/pi/login")

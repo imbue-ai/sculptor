@@ -17,6 +17,12 @@ type AgentTypeSelectProps = {
   /** The stored agent type (e.g. "claude", "registered:<id>"). */
   value: StoredAgentType;
   onChange: (value: StoredAgentType) => void;
+  /**
+   * Called after the "Install Pi" entry routes to Settings → Pi. A host that
+   * overlays the settings page (the new-workspace dialog) dismisses itself
+   * here so the navigation is actually visible; inline hosts omit it.
+   */
+  onRouteToPiSettings?: () => void;
   className?: string;
 };
 
@@ -26,7 +32,12 @@ type AgentTypeSelectProps = {
  * available; pi is an optional harness, so while no usable pi binary is resolved
  * its entry reads "Install Pi" and choosing it routes to Settings → Pi.
  */
-export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectProps): ReactElement => {
+export const AgentTypeSelect = ({
+  value,
+  onChange,
+  onRouteToPiSettings,
+  className,
+}: AgentTypeSelectProps): ReactElement => {
   // State and hooks
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
   const { isPiAvailable, openPiSettings, refreshPiAvailability } = usePiAgentOption();
@@ -54,6 +65,7 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
         // launch.
         if (next === "pi" && !isPiAvailable) {
           openPiSettings();
+          onRouteToPiSettings?.();
           return;
         }
         onChange(next as StoredAgentType);

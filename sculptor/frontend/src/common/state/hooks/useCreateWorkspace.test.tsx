@@ -176,26 +176,6 @@ describe("useCreateWorkspace agent-type gating", () => {
     expect(body.enterPlanMode).toBe(true);
   });
 
-  it("sends the prompt (and a placeholder model) for a pi agent, but omits effort/fast/plan", async () => {
-    const { result } = renderCreateWorkspaceHook();
-
-    await result.current.createWorkspace(
-      baseArgs({ agentTypeValue: "pi" as StoredAgentType, prompt: "help me get started", enterPlanMode: true }),
-    );
-
-    const body = getAgentRequestBody();
-    expect(body.agentType).toBe("pi");
-    // The prompt the user typed must reach pi, not be silently dropped.
-    expect(body.prompt).toBe("help me get started");
-    // pi ignores the model (it picks from its own in-task catalog), but the
-    // backend requires one alongside a prompt, so a placeholder default rides along.
-    expect(body.model).toBe(LlmModel.CLAUDE_4_OPUS);
-    // These Claude-only per-prompt settings do not apply to a pi create.
-    expect(body.effort).toBeUndefined();
-    expect(body.fastMode).toBeUndefined();
-    expect(body.enterPlanMode).toBeUndefined();
-  });
-
   it("omits the prompt and model for a pi agent when no prompt was typed", async () => {
     const { result } = renderCreateWorkspaceHook();
 
@@ -204,8 +184,34 @@ describe("useCreateWorkspace agent-type gating", () => {
     const body = getAgentRequestBody();
     expect(body.agentType).toBe("pi");
     expect(body.prompt).toBeUndefined();
-    // No prompt → the backend does not require a model, so pi starts on its own default.
+    // No prompt → the backend requires neither `model` nor `backendModel`; pi
+    // starts on its own default and the selection is made post-start.
     expect(body.model).toBeUndefined();
+    expect(body.backendModel).toBeUndefined();
+  });
+
+  it("sends backendModel (and no Claude model) for a pi agent with a prompt", async () => {
+    const { result } = renderCreateWorkspaceHook();
+
+    const piBackendModel: ApiModule.ModelOption = {
+      provider: "anthropic",
+      modelId: "claude-sonnet-4",
+      displayName: "Claude Sonnet 4",
+    };
+    await result.current.createWorkspace(
+      baseArgs({ agentTypeValue: "pi" as StoredAgentType, prompt: "build me a thing", piBackendModel }),
+    );
+
+    const body = getAgentRequestBody();
+    expect(body.agentType).toBe("pi");
+    expect(body.prompt).toBe("build me a thing");
+    // pi names its model on `backendModel` alone — never the Claude placeholder,
+    // and none of the Claude per-prompt settings ride along.
+    expect(body.backendModel).toEqual(piBackendModel);
+    expect(body.model).toBeUndefined();
+    expect(body.effort).toBeUndefined();
+    expect(body.fastMode).toBeUndefined();
+    expect(body.enterPlanMode).toBeUndefined();
   });
 
   it("never sends a prompt or model for a terminal agent", async () => {

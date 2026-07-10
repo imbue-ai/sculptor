@@ -33,7 +33,10 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
     [setModalState],
   );
 
-  const handleCreated = useCallback((): void => {
+  // One close for both form-initiated exits: a completed create (keep-open
+  // off) and a dismissal request (the pi empty-state CTA navigating to
+  // Settings, which lands underneath this dialog).
+  const handleClose = useCallback((): void => {
     setModalState({ open: false });
   }, [setModalState]);
 
@@ -60,7 +63,8 @@ export const NewWorkspaceModal = (): ReactElement | undefined => {
         initialPrompt={modalState.initialPrompt}
         initialBranchName={modalState.initialBranchName}
         onWorkspaceCreated={onWorkspaceCreated}
-        onCreated={handleCreated}
+        onCreated={handleClose}
+        onDismiss={handleClose}
       />
     </PaletteDialog>
   );
