@@ -407,6 +407,73 @@ def _read_mcp_control_responses(expected_request_ids: set[str], timeout_seconds:
     return results
 
 
+def _emit_context_usage_response(request_id: str) -> None:
+    """Answer a Sculptor ``get_context_usage`` control request with a fixed
+    context snapshot, in the envelope shape the output processor expects
+    (``_is_context_usage_response`` / ``_handle_context_usage_response``)."""
+    response = {
+        "type": "control_response",
+        "response": {
+            "request_id": request_id,
+            "response": {
+                "totalTokens": 120000,
+                "maxTokens": 200000,
+                "percentage": 60.0,
+                "autoCompactThreshold": 160000,
+            },
+        },
+    }
+    sys.stdout.write(json.dumps(response) + "\n")
+    sys.stdout.flush()
+
+
+def _answer_context_usage_and_wait_for_sentinel(sentinel: Path, timeout_seconds: float) -> None:
+    """Block until ``sentinel`` exists, answering the ``get_context_usage``
+    control request Sculptor sends after a turn-end while we wait.
+
+    Real Claude answers that request during a background-task wait, which makes
+    the output processor flush the turn's (otherwise-stashed) TurnMetrics
+    mid-hold — so ``TurnMetricsAgentMessage`` is pending in message_conversion
+    while the request is still open. FakeClaude's default background hold never
+    answers it (``_route_mid_cycle_frame`` ignores get_context_usage), so that
+    pending-metrics state — and the bugs it exposes — can't be reproduced
+    end-to-end; this reproduces it.
+
+    Reads stdin through the unified router, so a user frame that lands during
+    the wait is absorbed and an interrupt still exits promptly.
+    """
+    answered = False
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if sentinel.exists():
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(f"background_subagent pause timed out waiting for {sentinel}")
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, 0.05))
+        if frame is _STDIN_TIMEOUT:
+            continue
+        if frame is _STDIN_EOF:
+            # stdin closed (e.g. -p mode) — keep polling the sentinel only.
+            time.sleep(min(remaining, 0.05))
+            continue
+        assert isinstance(frame, dict)
+        request = frame.get("request")
+        if (
+            not answered
+            and frame.get("type") == "control_request"
+            and isinstance(request, dict)
+            and request.get("subtype") == "get_context_usage"
+        ):
+            request_id = frame.get("request_id")
+            if isinstance(request_id, str):
+                _emit_context_usage_response(request_id)
+                answered = True
+                continue
+        # Interrupt exit, user-frame absorption, cross-waiter stashing, etc.
+        _route_mid_cycle_frame(frame)
+
+
 def _extract_mcp_response_text(mcp_response: dict) -> str:
     content = mcp_response.get("result", {}).get("content", [])
     if not content:
@@ -1952,10 +2019,15 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
 
     Args:
         args: Optional: "description", "prompt", "summary_text", "launched_text",
-              "notification_summary", "pause_path".  ("subagent_result" is
-              accepted for backward compatibility with older tests but no
-              longer emitted — real Claude does not stream the subagent's
-              reply to the parent.)
+              "notification_summary", "pause_path", "answer_context_usage".
+              ("subagent_result" is accepted for backward compatibility with
+              older tests but no longer emitted — real Claude does not stream
+              the subagent's reply to the parent.)
+
+              "answer_context_usage" (bool, default False): while paused, answer
+              Sculptor's get_context_usage control request so the turn's metrics
+              flush mid-hold (TurnMetricsAgentMessage pending while the request
+              stays open) — the state needed to reproduce SCU-1820 end-to-end.
     """
     description = args.get("description", "Explore the codebase")
     prompt = args.get("prompt", "Find relevant files")
@@ -1963,6 +2035,11 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     launched_text = args.get("launched_text", "Background subagent launched. Let me continue while it runs.")
     notification_summary = args.get("notification_summary", f'Agent "{description}" completed')
     pause_path: str | None = args.get("pause_path")
+    # When set, answer Sculptor's get_context_usage control request during the
+    # pause so the turn's metrics are flushed (TurnMetricsAgentMessage becomes
+    # pending) while the request is still open — matching real Claude. Off by
+    # default so existing pause-based tests keep their old message stream.
+    answer_context_usage: bool = args.get("answer_context_usage", False)
 
     # IDs
     main_msg_id = generate_id("msg")
@@ -2035,7 +2112,9 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
         _emit_messages_to_stdout(messages)
         messages = []
         sentinel = Path(pause_path)
-        if not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
+        if answer_context_usage:
+            _answer_context_usage_and_wait_for_sentinel(sentinel, timeout_seconds=120)
+        elif not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
             raise RuntimeError(f"background_subagent pause timed out waiting for {sentinel}")
 
     # 5. task_notification — carries only metadata; no subagent content.
