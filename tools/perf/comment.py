@@ -132,11 +132,6 @@ class Report:
     def has_regression(self) -> bool:
         return any(r.status == "regressed" for r in self.rows)
 
-    @property
-    def is_all_green(self) -> bool:
-        c = self.counts()
-        return c["regressed"] == 0 and c["improved"] == 0 and c["new"] == 0 and c["removed"] == 0
-
 
 def _pct(base: float, head: float) -> float:
     if base == 0:
@@ -301,12 +296,22 @@ def render_markdown(report: Report, base_sha: str | None, observational: bool) -
     # verdict heading plus this one counts line (baseline sha folded in). This
     # lane comments on *every* run, so an unchanged run must stay a quiet
     # one-liner — the full table lives one click away inside <details>.
+    # Zero-suppress the counts: this line is the always-visible one-liner on
+    # every PR, so a clean run should read "✅ N unchanged", not lead with a red
+    # "❌ 0 regressed". Only non-zero buckets get a marker; unchanged always
+    # shows as the reassuring green tally.
     out.append("")
-    summary = f"❌ {counts['regressed']} regressed · ⚡ {counts['improved']} improved · ✅ {counts['unchanged']} unchanged"
+    parts = []
+    if counts["regressed"]:
+        parts.append(f"❌ {counts['regressed']} regressed")
+    if counts["improved"]:
+        parts.append(f"⚡ {counts['improved']} improved")
     if counts["new"]:
-        summary += f" · 🆕 {counts['new']} new"
+        parts.append(f"🆕 {counts['new']} new")
     if counts["removed"]:
-        summary += f" · 🗑️ {counts['removed']} removed"
+        parts.append(f"🗑️ {counts['removed']} removed")
+    parts.append(f"✅ {counts['unchanged']} unchanged")
+    summary = " · ".join(parts)
     if base_sha:
         summary += f" · baseline `{base_sha[:7]}`"
     out.append(summary)
