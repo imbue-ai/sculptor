@@ -95,7 +95,14 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
       return;
     }
     let isCancelled = false;
+    let isInFlight = false;
     const interval = window.setInterval(() => {
+      // Single-flight: a status request outliving the interval must not stack
+      // duplicates behind it.
+      if (isInFlight) {
+        return;
+      }
+      isInFlight = true;
       void (async (): Promise<void> => {
         try {
           const response = await getPiLoginStatus({ path: { login_id: activeLoginId }, meta: { skipWsAck: true } });
@@ -106,6 +113,8 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
           }
         } catch {
           // Transient (e.g. the session is briefly not found) — keep polling until teardown.
+        } finally {
+          isInFlight = false;
         }
       })();
     }, PI_LOGIN_STATUS_POLL_INTERVAL_MS);
@@ -114,6 +123,26 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
       window.clearInterval(interval);
     };
   }, [activeLoginId, teardown]);
+
+  // The live session's last-resort reap: Done, the X button, and the status poll all
+  // tear down explicitly, but the dialog can also unmount from above (the parent view
+  // goes away) before the terminal's WebSocket-close backstop is armed. finishPiLogin
+  // is idempotent across all of these paths.
+  useEffect(() => {
+    if (activeLoginId === null) {
+      return;
+    }
+
+    return (): void => {
+      void (async (): Promise<void> => {
+        try {
+          await finishPiLogin({ path: { login_id: activeLoginId }, meta: { skipWsAck: true } });
+        } catch {
+          // Best-effort reap; the PTY is also reaped on WebSocket close.
+        }
+      })();
+    };
+  }, [activeLoginId]);
 
   const isLogin = request.mode === "login";
   const title = isLogin ? `Authenticate ${request.displayName}` : `Disconnect ${request.displayName}`;

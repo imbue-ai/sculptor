@@ -48,10 +48,11 @@ def test_pi_providers_settings_groups_and_detail(
         settings_page = navigate_to_settings_page(page=instance.page)
         pi_section = settings_page.click_on_pi()
 
-        # anthropic is in auth.json -> a Connected card with the live status label.
-        connected = pi_section.get_providers_group_connected()
-        expect(connected).to_contain_text("Anthropic")
-        expect(connected).to_contain_text("Connected")
+        # anthropic is in auth.json -> its card sits in the Connected section and
+        # shows the live status label (the section header also says "Connected",
+        # so assert the label on the card itself).
+        expect(pi_section.get_providers_group_connected()).to_contain_text("Anthropic")
+        expect(pi_section.get_connected_card("anthropic")).to_contain_text("Connected")
 
         # A single-key provider with no credential -> a cell in the Add-a-provider grid.
         expect(pi_section.get_providers_group_available()).to_contain_text("OpenRouter")

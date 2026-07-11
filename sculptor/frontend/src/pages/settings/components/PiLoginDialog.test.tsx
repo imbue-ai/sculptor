@@ -1,5 +1,5 @@
 import { Theme } from "@radix-ui/themes";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -108,6 +108,57 @@ describe("PiLoginDialog", () => {
     renderDialog("login");
 
     expect(await screen.findByText(/Could not start the pi session/)).toBeTruthy();
+  });
+
+  it("reaps the live session when the dialog unmounts without an explicit teardown", async () => {
+    mockStartPiLogin.mockResolvedValue({ data: { loginId: "login-6" } });
+    mockGetPiLoginStatus.mockResolvedValue({ data: { completed: false } });
+    mockFinishPiLogin.mockResolvedValue({ data: {} });
+
+    const { unmount } = render(
+      <Theme>
+        <PiLoginDialog
+          request={{
+            providerId: "openai",
+            displayName: "OpenAI",
+            mode: "login",
+            supportsSubscription: false,
+            group: ProviderGroup.SINGLE_KEY,
+          }}
+          onClose={vi.fn()}
+        />
+      </Theme>,
+    );
+    await screen.findByTestId("fake-login-terminal");
+    unmount();
+
+    await waitFor(() => {
+      expect(mockFinishPiLogin).toHaveBeenCalledWith(expect.objectContaining({ path: { login_id: "login-6" } }));
+    });
+  });
+
+  it("keeps the status poll single-flight while a request is still pending", async () => {
+    vi.useFakeTimers();
+    try {
+      mockStartPiLogin.mockResolvedValue({ data: { loginId: "login-7" } });
+      // A status request that never settles: further interval ticks must not stack.
+      mockGetPiLoginStatus.mockImplementation(() => new Promise(() => undefined));
+
+      renderDialog("login");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1300);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1300);
+      });
+
+      expect(mockGetPiLoginStatus).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("tears the session down and closes on Done", async () => {
