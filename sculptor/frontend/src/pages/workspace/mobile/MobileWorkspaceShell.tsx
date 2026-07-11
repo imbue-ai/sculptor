@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
+import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 
 import { ChatPanelContent } from "../components/ChatPanelContent.tsx";
@@ -45,7 +46,7 @@ export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactEleme
   }, [taskID, workspaceID]);
 
   return (
-    <div className={`mobileTheme ${styles.shell}`}>
+    <div className={`mobileTheme ${styles.shell}`} data-testid={ElementIds.MOBILE_WORKSPACE_SHELL}>
       <MobileWorkspaceHeader
         onOpenDrawer={() => setIsDrawerOpen(true)}
         onOpenReview={() => setOverlay("review")}

@@ -2,6 +2,7 @@ import { IconButton } from "@radix-ui/themes";
 import { ChevronLeft, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 
+import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 
 import { CombinedDiffView } from "../../components/diffPanel/CombinedDiffView.tsx";
@@ -19,13 +20,19 @@ export const ReviewAllOverlay = ({ onBack }: { onBack: () => void }): ReactEleme
   const summary = useMobileChangeSummary(workspaceID);
 
   return (
-    <div className={styles.overlay} role="dialog" aria-label="Review all changes">
+    <div
+      className={styles.overlay}
+      role="dialog"
+      aria-label="Review all changes"
+      data-testid={ElementIds.MOBILE_REVIEW_ALL_OVERLAY}
+    >
       <header className={styles.header}>
         <IconButton
           variant="ghost"
           color="gray"
           className={styles.iconButton}
           aria-label="Back to chat"
+          data-testid={ElementIds.MOBILE_OVERLAY_BACK_BUTTON}
           onClick={onBack}
         >
           <ChevronLeft size={22} />

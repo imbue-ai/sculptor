@@ -8,6 +8,7 @@
 import { useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useEffect } from "react";
 
+import { ElementIds } from "~/api";
 import { reportTerminalConnectionStatusAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
@@ -55,7 +56,7 @@ export const TerminalPanelView = ({ workspaceId, index }: { workspaceId: string;
   }, [setTerminalPanelMounted]);
 
   return (
-    <div className={styles.terminalPanel}>
+    <div className={styles.terminalPanel} data-testid={ElementIds.TERMINAL_PANEL_VIEW}>
       <div ref={terminalContainerRef} className={styles.xtermWrapper} />
     </div>
   );

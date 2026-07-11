@@ -4,7 +4,7 @@ import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
-import type { CodingAgentTaskView } from "~/api";
+import { type CodingAgentTaskView, ElementIds } from "~/api";
 import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
@@ -114,11 +114,15 @@ const AgentRow = ({
           className="mobileTheme"
           onCloseAutoFocus={(e): void => e.preventDefault()}
         >
-          <DropdownMenu.Item onSelect={() => setIsRenaming(true)}>
+          <DropdownMenu.Item onSelect={() => setIsRenaming(true)} data-testid={ElementIds.MOBILE_ROW_RENAME_ACTION}>
             <Pencil size={16} /> Rename
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item color="red" onSelect={() => onRequestDelete(agent)}>
+          <DropdownMenu.Item
+            color="red"
+            onSelect={() => onRequestDelete(agent)}
+            data-testid={ElementIds.MOBILE_ROW_DELETE_ACTION}
+          >
             <Trash2 size={16} /> Delete agent
           </DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -128,6 +132,7 @@ const AgentRow = ({
         className={`${styles.row} ${isCurrent ? styles.current : ""}`}
         aria-current={isCurrent}
         onClick={handleClick}
+        data-testid={ElementIds.MOBILE_AGENT_SHEET_ROW}
         {...longPress}
       >
         {dot}
@@ -191,7 +196,11 @@ export const AgentSheet = ({ isOpen, onClose }: AgentSheetProps): ReactElement =
   };
 
   return (
-    <aside className={`${styles.sheet} ${isOpen ? styles.open : ""}`} aria-hidden={!isOpen}>
+    <aside
+      className={`${styles.sheet} ${isOpen ? styles.open : ""}`}
+      aria-hidden={!isOpen}
+      data-testid={ElementIds.MOBILE_AGENT_SHEET}
+    >
       <div className={styles.handle} />
       <div className={styles.title}>Agents in {workspaceName}</div>
 
@@ -219,6 +228,7 @@ export const AgentSheet = ({ isOpen, onClose }: AgentSheetProps): ReactElement =
           onClose();
           void createAgent();
         }}
+        data-testid={ElementIds.MOBILE_AGENT_SHEET_NEW_AGENT}
       >
         <span className={styles.newIcon}>
           <Plus size={18} />

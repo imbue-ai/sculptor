@@ -3,6 +3,7 @@ import { Ellipsis, Layers, Pencil, Plus, Settings, SquareMenu, Terminal } from "
 import type { ReactElement } from "react";
 import { useState } from "react";
 
+import { ElementIds } from "~/api";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
@@ -54,12 +55,13 @@ export const MobileWorkspaceHeader = ({
   };
 
   return (
-    <header className={styles.header}>
+    <header className={styles.header} data-testid={ElementIds.MOBILE_WORKSPACE_HEADER}>
       <IconButton
         variant="ghost"
         color="gray"
         className={styles.iconButton}
         aria-label="Open workspaces"
+        data-testid={ElementIds.MOBILE_HEADER_MENU_BUTTON}
         onClick={onOpenDrawer}
       >
         <SquareMenu size={22} />
@@ -73,27 +75,36 @@ export const MobileWorkspaceHeader = ({
 
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
-          <IconButton variant="ghost" color="gray" className={styles.iconButton} aria-label="Workspace actions">
+          <IconButton
+            variant="ghost"
+            color="gray"
+            className={styles.iconButton}
+            aria-label="Workspace actions"
+            data-testid={ElementIds.MOBILE_HEADER_ACTIONS_BUTTON}
+          >
             <Ellipsis size={22} />
           </IconButton>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" variant="soft" className="mobileTheme">
-          <DropdownMenu.Item onSelect={() => void createAgent()}>
+          <DropdownMenu.Item onSelect={() => void createAgent()} data-testid={ElementIds.MOBILE_HEADER_NEW_AGENT_ITEM}>
             <Plus size={16} /> Create new agent
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={onOpenReview}>
+          <DropdownMenu.Item onSelect={onOpenReview} data-testid={ElementIds.MOBILE_HEADER_REVIEW_ITEM}>
             <Layers size={16} /> Review all changes
             {filesChanged > 0 ? <span className={styles.menuMeta}>{filesChanged} files</span> : null}
           </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={onOpenTerminal}>
+          <DropdownMenu.Item onSelect={onOpenTerminal} data-testid={ElementIds.MOBILE_HEADER_TERMINAL_ITEM}>
             <Terminal size={16} /> Open terminal
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={openRename}>
+          <DropdownMenu.Item onSelect={openRename} data-testid={ElementIds.MOBILE_HEADER_RENAME_ITEM}>
             <Pencil size={16} /> Rename workspace
           </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => navigateToGlobalSettings()}>
+          <DropdownMenu.Item
+            onSelect={() => navigateToGlobalSettings()}
+            data-testid={ElementIds.MOBILE_HEADER_SETTINGS_ITEM}
+          >
             <Settings size={16} /> Workspace settings
           </DropdownMenu.Item>
         </DropdownMenu.Content>

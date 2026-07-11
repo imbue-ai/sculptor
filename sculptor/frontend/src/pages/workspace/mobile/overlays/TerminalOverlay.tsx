@@ -2,6 +2,7 @@ import { IconButton } from "@radix-ui/themes";
 import { ChevronLeft, Ellipsis } from "lucide-react";
 import type { ReactElement } from "react";
 
+import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
@@ -26,13 +27,19 @@ export const TerminalOverlay = ({ onBack }: { onBack: () => void }): ReactElemen
   const repoName = project?.name ?? "";
 
   return (
-    <div className={styles.overlay} role="dialog" aria-label="Terminal">
+    <div
+      className={styles.overlay}
+      role="dialog"
+      aria-label="Terminal"
+      data-testid={ElementIds.MOBILE_TERMINAL_OVERLAY}
+    >
       <header className={styles.header}>
         <IconButton
           variant="ghost"
           color="gray"
           className={styles.iconButton}
           aria-label="Back to chat"
+          data-testid={ElementIds.MOBILE_OVERLAY_BACK_BUTTON}
           onClick={onBack}
         >
           <ChevronLeft size={22} />

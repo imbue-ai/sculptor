@@ -224,6 +224,9 @@ class ElementIDs(StrEnum):
     DIFF_SKELETON = "DIFF_SKELETON"
     DIFF_VIEWER_EMPTY = "DIFF_VIEWER_EMPTY"
     COMBINED_DIFF_FILE_SECTION = "COMBINED_DIFF_FILE_SECTION"
+    # The file-navigation / scope / commit toolbar row. Hidden (not rendered) when
+    # CombinedDiffView is given `hideToolbar` — as the mobile review-all overlay does.
+    COMBINED_DIFF_TOOLBAR = "COMBINED_DIFF_TOOLBAR"
     # Root of the Review All panel, which wraps the combined multi-file diff.
     REVIEW_ALL_PANEL = "REVIEW_ALL_PANEL"
     DIFF_VIEW_UNIFIED = "DIFF_VIEW_UNIFIED"
@@ -842,3 +845,56 @@ class ElementIDs(StrEnum):
     # an indefinite progress bar after a failed auto-update install.
     BACKEND_SHUTDOWN_SPINNER = "BACKEND_SHUTDOWN_SPINNER"
     BACKEND_SHUTDOWN_STALLED = "BACKEND_SHUTDOWN_STALLED"
+
+    # Mobile workspace shell (the single-column, chat-first Workspace view that
+    # replaces the desktop layout below 768px). These surfaces are mobile-only —
+    # none of the desktop sidebar/section/panel tags render under the mobile
+    # shell — so they carry their own hooks for the mobile integration suite.
+    MOBILE_WORKSPACE_SHELL = "MOBILE_WORKSPACE_SHELL"
+    MOBILE_WORKSPACE_HEADER = "MOBILE_WORKSPACE_HEADER"
+    MOBILE_HEADER_MENU_BUTTON = "MOBILE_HEADER_MENU_BUTTON"
+    MOBILE_HEADER_ACTIONS_BUTTON = "MOBILE_HEADER_ACTIONS_BUTTON"
+    MOBILE_HEADER_NEW_AGENT_ITEM = "MOBILE_HEADER_NEW_AGENT_ITEM"
+    MOBILE_HEADER_REVIEW_ITEM = "MOBILE_HEADER_REVIEW_ITEM"
+    MOBILE_HEADER_TERMINAL_ITEM = "MOBILE_HEADER_TERMINAL_ITEM"
+    MOBILE_HEADER_RENAME_ITEM = "MOBILE_HEADER_RENAME_ITEM"
+    MOBILE_HEADER_SETTINGS_ITEM = "MOBILE_HEADER_SETTINGS_ITEM"
+    # Left drawer: Home/Settings nav, repo-grouped workspace rows, and the pinned
+    # "New workspace" button that opens the shared new-workspace modal.
+    MOBILE_WORKSPACE_DRAWER = "MOBILE_WORKSPACE_DRAWER"
+    MOBILE_DRAWER_HOME_LINK = "MOBILE_DRAWER_HOME_LINK"
+    MOBILE_DRAWER_SETTINGS_LINK = "MOBILE_DRAWER_SETTINGS_LINK"
+    MOBILE_DRAWER_WORKSPACE_ROW = "MOBILE_DRAWER_WORKSPACE_ROW"
+    MOBILE_DRAWER_NEW_WORKSPACE_BUTTON = "MOBILE_DRAWER_NEW_WORKSPACE_BUTTON"
+    # The long-press context menu shared by drawer workspace rows and agent-sheet
+    # rows (only one menu is ever open at a time, so both reuse these two tags).
+    MOBILE_ROW_RENAME_ACTION = "MOBILE_ROW_RENAME_ACTION"
+    MOBILE_ROW_DELETE_ACTION = "MOBILE_ROW_DELETE_ACTION"
+    # Agent switcher pill (in the status row) and the agent bottom sheet.
+    MOBILE_AGENT_SWITCHER_PILL = "MOBILE_AGENT_SWITCHER_PILL"
+    MOBILE_AGENT_SHEET = "MOBILE_AGENT_SHEET"
+    MOBILE_AGENT_SHEET_ROW = "MOBILE_AGENT_SHEET_ROW"
+    MOBILE_AGENT_SHEET_NEW_AGENT = "MOBILE_AGENT_SHEET_NEW_AGENT"
+    # Changes pill (right of the status row) and the full-screen overlays it and
+    # the header ⋮ menu open over the chat.
+    MOBILE_CHANGES_PILL = "MOBILE_CHANGES_PILL"
+    MOBILE_CHANGES_PILL_TOGGLE = "MOBILE_CHANGES_PILL_TOGGLE"
+    MOBILE_CHANGES_PILL_REVIEW_ALL = "MOBILE_CHANGES_PILL_REVIEW_ALL"
+    MOBILE_REVIEW_ALL_OVERLAY = "MOBILE_REVIEW_ALL_OVERLAY"
+    MOBILE_TERMINAL_OVERLAY = "MOBILE_TERMINAL_OVERLAY"
+    MOBILE_OVERLAY_BACK_BUTTON = "MOBILE_OVERLAY_BACK_BUTTON"
+    # Mobile ChatInput: the secondary controls collapse into a single options
+    # menu; the model/effort submenus, fast-mode item, and (absent-on-mobile)
+    # keyboard-hint row carry hooks so the collapse can be asserted.
+    MOBILE_CHAT_INPUT_OPTIONS = "MOBILE_CHAT_INPUT_OPTIONS"
+    MOBILE_CHAT_INPUT_MODEL_SUBMENU = "MOBILE_CHAT_INPUT_MODEL_SUBMENU"
+    MOBILE_CHAT_INPUT_EFFORT_SUBMENU = "MOBILE_CHAT_INPUT_EFFORT_SUBMENU"
+    MOBILE_CHAT_INPUT_FAST_MODE_ITEM = "MOBILE_CHAT_INPUT_FAST_MODE_ITEM"
+    CHAT_INPUT_KEYBOARD_HINTS = "CHAT_INPUT_KEYBOARD_HINTS"
+    # Mobile Home / Settings headers (the drawer's Home/Settings nav lands here);
+    # these replace the global TopBar on those routes below 768px.
+    MOBILE_HOME_HEADER = "MOBILE_HOME_HEADER"
+    MOBILE_SETTINGS_HEADER = "MOBILE_SETTINGS_HEADER"
+    # The terminal panel's root (the shell-agnostic xterm wrapper). The mobile
+    # terminal overlay mounts this; a hook here lets a test assert it mounted.
+    TERMINAL_PANEL_VIEW = "TERMINAL_PANEL_VIEW"
