@@ -6,15 +6,15 @@ overwhelm us and create a bad experience for everyone. We'd rather do this right
 than do it fast.
 
 So for now we keep contributions on a short leash. The approach is inspired by
+**Issues are open to everyone — file away.** Found a bug, want to propose a
+change, curious about direction? Open an issue. That's how you reach us.
+
+## Start with an issue
+
 [pi](https://github.com/earendil-works/pi)'s
 [contribution model](https://github.com/earendil-works/pi/blob/main/CONTRIBUTING.md) —
 credit to them for figuring out something that works for a small team — though
 we've loosened it: **issues are open to everyone; only pull requests are gated.**
-
-## Start with an issue
-
-**Issues are open to everyone — file away.** Found a bug, want to propose a
-change, curious about direction? Open an issue. That's how you reach us.
 
 **Opening a pull request is gated.** We only accept PRs from contributors we've
 cleared. Here's how you get cleared: open an issue, and if we want the change and
