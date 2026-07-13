@@ -355,3 +355,53 @@ def test_pointer_drag_moves_group_below_adjacent_group(
     expect(cards.nth(1)).to_contain_text("Group 1")
     expect(sidebar.get_group_member_rows(group_one)).to_have_count(2)
     expect(sidebar.get_group_member_rows(group_two)).to_have_count(2)
+
+
+@user_story("to drag a group below another by dropping in the empty space beneath it")
+def test_pointer_drag_moves_group_past_bottom_edge(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Pointer-dragging a group's header PAST the bottom of the next group's
+    box — releasing in the empty space beneath the lane — still lands it below
+    that group.
+
+    This is the flaky case from hand-testing: the pointer is dragged clear
+    below the target box rather than parked in its bottom half. The group's
+    before/after side must resolve for a pointer OUTSIDE every box (a rule
+    total over the whole rail), not only while the pointer sits within a box's
+    vertical extent — otherwise the drop is a silent no-op and the group snaps
+    back above.
+
+    Steps:
+    1. Group 1 (WS Alpha + WS Bravo) above Group 2 (WS Charlie + WS Delta);
+       nothing loose below.
+    2. Pointer-drag Group 1's header down onto Group 2's bottom member, then
+       push well past the box's bottom edge into empty space, and drop.
+    3. The lane reads [Group 2, Group 1]; both groups keep their members.
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: Two adjacent two-member groups and no loose rows (membership via
+    # the row menu — the drag under test is the group-header drag below).
+    sidebar = _create_single_group(page, ["WS Alpha", "WS Bravo", "WS Charlie", "WS Delta"], "WS Alpha")
+    group_one = sidebar.get_group_card_by_name("Group 1")
+    sidebar.add_workspace_to_group_via_menu(sidebar.get_workspace_row_by_name("WS Bravo"), "Group 1")
+    sidebar.create_group_from_workspace(sidebar.get_workspace_row_by_name("WS Charlie"))
+    expect(sidebar.get_group_cards()).to_have_count(2)
+    group_two = sidebar.get_group_card_by_name("Group 2")
+    sidebar.add_workspace_to_group_via_menu(sidebar.get_workspace_row_by_name("WS Delta"), "Group 2")
+    expect(sidebar.get_group_member_rows(group_one)).to_have_count(2)
+    expect(sidebar.get_group_member_rows(group_two)).to_have_count(2)
+
+    # Step 2: Flick Group 1's header straight down past every box in one jump
+    # and drop in the empty space beneath — never dwelling in Group 2's bottom
+    # half, so the drop side must resolve for a pointer below every box.
+    sidebar.flick_group_below_all_via_pointer(sidebar.get_group_header(group_one))
+
+    # Step 3: Group 1 landed below Group 2, memberships untouched.
+    cards = sidebar.get_group_cards()
+    expect(cards).to_have_count(2)
+    expect(cards.nth(0)).to_contain_text("Group 2")
+    expect(cards.nth(1)).to_contain_text("Group 1")
+    expect(sidebar.get_group_member_rows(group_one)).to_have_count(2)
+    expect(sidebar.get_group_member_rows(group_two)).to_have_count(2)

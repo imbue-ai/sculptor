@@ -276,16 +276,17 @@ export const SidebarRepoGroup = ({
         return;
       }
 
-      // A pointer-driven group drag over another group's box is owned by the
-      // LEVEL-triggered resolution in handleSectionDragMove: over events are
-      // edge-triggered (they fire only when the collision target changes), and
-      // the tall dragged overlay's center leads the pointer, so a box's inner
-      // targets are often all spent while the pointer is still in its top half
-      // — a later midpoint crossing would never re-evaluate the side here.
-      // Loose-row targets stay on this over path: a single-row target re-fires
-      // on every crossing, and standard slot-taking is stable there (the
-      // placeholder takes the over slot, so the next over is the drag itself
-      // and the early-return above holds).
+      // A pointer-driven group drag targeting another group is owned entirely
+      // by the LEVEL-triggered resolution in handleSectionDragMove: over events
+      // are edge-triggered (they fire only when the collision target changes),
+      // and the tall dragged overlay's center leads the pointer, so a box's
+      // inner targets are often all spent while the pointer is still in its top
+      // half — a later midpoint crossing, or a drag past the box's bottom into
+      // empty space, would never re-evaluate the side here. Loose-row targets
+      // stay on this over path: a single-row target re-fires on every crossing,
+      // and standard slot-taking is stable there (the placeholder takes the
+      // over slot, so the next over is the drag itself and the early-return
+      // above holds).
       if (
         state.kind === "group" &&
         event.activatorEvent instanceof PointerEvent &&
@@ -352,31 +353,39 @@ export const SidebarRepoGroup = ({
       }
       const pointerY = activator.clientY + event.delta.y;
 
-      // A dragged GROUP resolves its slot against the other group box under
-      // the pointer on EVERY move: before or after that whole box by the
-      // pointer's side of its midpoint (projectGroupBesideGroup — a fixed
-      // point, so a stationary pointer cannot oscillate). Level-triggered
-      // deliberately — see the matching guard in handleSectionDragOver for why
-      // edge-triggered over events cannot decide the side. Outside every box
-      // (gaps, loose rows, the group's own placeholder) nothing projects here;
-      // loose-row targets arrive through the over path.
+      // A dragged GROUP resolves its slot geometrically against the OTHER
+      // group boxes on EVERY move (level-triggered — see the matching guard in
+      // handleSectionDragOver for why edge-triggered over events cannot decide
+      // the side). The rule is total over the whole rail, not just the box
+      // interiors: the group lands BEFORE the first other box whose midpoint is
+      // at or below the pointer, else AFTER the last other box. So a pointer in
+      // a box's top half, above all boxes, in a gap, below the last box, or
+      // dwelling in the empty space beneath the lane all resolve to a definite
+      // slot — the earlier "must be inside a box" gate silently dropped the
+      // past-the-bottom case, which is the most natural way to drag a group
+      // down past the final one. projectGroupBesideGroup is a fixed point, so a
+      // stationary pointer settles without oscillating.
+      //
+      // Loose-row targets still belong to the over path (arrayMove is stable
+      // there): defer whenever the nearest droppable is a loose row, mirroring
+      // the over handler's guard so the two never fight over the same move.
       if (state.kind === "group") {
-        for (const card of section.querySelectorAll(`[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`)) {
-          const targetGroupId = card.getAttribute("data-group-id");
-          if (targetGroupId === null || targetGroupId === state.activeId) {
-            continue;
-          }
-          const rect = card.getBoundingClientRect();
-          if (pointerY >= rect.top && pointerY <= rect.bottom) {
-            const side = pointerY <= (rect.top + rect.bottom) / 2 ? "before" : "after";
-            acceptProjection(
-              state,
-              projectGroupBesideGroup(state.display, state.activeId, targetGroupId, side),
-              state.depthIntent,
-            );
-            return;
-          }
+        const overId = event.over === null ? null : String(event.over.id);
+        if (overId !== null && overId !== state.activeId && locateTopLevelGroupId(state.display, overId) === null) {
+          return;
         }
+        const otherBoxes = [...section.querySelectorAll(`[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`)]
+          .map((card) => ({ id: card.getAttribute("data-group-id"), rect: card.getBoundingClientRect() }))
+          .filter((box): box is { id: string; rect: DOMRect } => box.id !== null && box.id !== state.activeId);
+        if (otherBoxes.length === 0) {
+          return;
+        }
+        const before = otherBoxes.find((box) => pointerY <= (box.rect.top + box.rect.bottom) / 2);
+        const projection =
+          before !== undefined
+            ? projectGroupBesideGroup(state.display, state.activeId, before.id, "before")
+            : projectGroupBesideGroup(state.display, state.activeId, otherBoxes[otherBoxes.length - 1].id, "after");
+        acceptProjection(state, projection, state.depthIntent);
         return;
       }
 

@@ -226,9 +226,43 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         # racing their membership assertions against the drop commit.
         expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
 
+    def _pointer_activate_drag(self, item: Locator) -> tuple[float, float]:
+        """Press on ``item``'s center and run the activation nudge, returning the
+        pointer's resting (x, y) afterward.
+
+        The nudge (far enough to cross the sensor's distance constraint, small
+        enough to stay on the grabbed element) is load-bearing: activating the
+        drag reflows the lane — a picked-up group's members collapse into the
+        drag — so anything measured pre-activation aims at a stale position.
+        """
+        box = item.bounding_box()
+        if box is None:
+            raise AssertionError("pointer drag item is not visible")
+        start_x = box["x"] + box["width"] / 2
+        start_y = box["y"] + box["height"] / 2
+        self._page.mouse.move(start_x, start_y)
+        self._page.mouse.down()
+        nudged_y = start_y + 12
+        self._page.mouse.move(start_x, nudged_y, steps=4)
+        self._page.wait_for_timeout(250)
+        return start_x, nudged_y
+
+    def _pointer_settle(self, x: float, y: float) -> None:
+        """Wiggle one pixel and pause so a position the pointer already sits at
+        still emits a move event.
+
+        The lane's pointer-geometric decisions ride the move-event stream, so a
+        target that lands exactly where the pointer rests would otherwise emit
+        nothing — the wiggle forces a fresh evaluation against the settled
+        layout, the way a real hand is never perfectly still.
+        """
+        self._page.mouse.move(x, y + 1)
+        self._page.mouse.move(x, y)
+        self._page.wait_for_timeout(250)
+
     def drag_via_pointer(self, item: Locator, waypoints: list[Locator]) -> None:
         """Drag ``item`` with the real PointerSensor: press on its center, move
-        through each waypoint's center, release.
+        through each waypoint's center (parking + settling at each), release.
 
         Each waypoint re-resolves against the LIVE lane right before its move —
         the drag's own projections re-slot rows mid-flight, so a position
@@ -238,30 +272,8 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         pointer is exactly where a projection feedback loop would spin, and
         pausing there gives one time to surface as a crash instead of being
         skated over.
-
-        Two fidelity details make the synthetic pointer behave like a hand:
-
-        - An activation nudge runs before the first waypoint is measured.
-          Activating the drag itself reflows the lane (a picked-up group's
-          members collapse into the drag), so a waypoint measured
-          pre-activation aims at a stale position.
-        - After settling at each waypoint the pointer wiggles one pixel. The
-          lane's pointer-geometric decisions ride the move-event stream, and a
-          waypoint that lands where the pointer already sits emits no move
-          events — the wiggle guarantees a fresh evaluation against the
-          settled layout, the way a real hand is never perfectly still.
         """
-        box = item.bounding_box()
-        if box is None:
-            raise AssertionError("pointer drag item is not visible")
-        start_x = box["x"] + box["width"] / 2
-        start_y = box["y"] + box["height"] / 2
-        self._page.mouse.move(start_x, start_y)
-        self._page.mouse.down()
-        # Activation nudge (see docstring): far enough to cross the sensor's
-        # distance constraint, small enough to stay on the grabbed row.
-        self._page.mouse.move(start_x, start_y + 12, steps=4)
-        self._page.wait_for_timeout(250)
+        start_x, _ = self._pointer_activate_drag(item)
         for waypoint in waypoints:
             waypoint_box = waypoint.bounding_box()
             if waypoint_box is None:
@@ -270,14 +282,43 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
             target_y = waypoint_box["y"] + waypoint_box["height"] / 2
             self._page.mouse.move(target_x, target_y, steps=8)
             self._page.wait_for_timeout(250)
-            # Settle wiggle (see docstring).
-            self._page.mouse.move(target_x, target_y + 1)
-            self._page.mouse.move(target_x, target_y)
-            self._page.wait_for_timeout(250)
+            self._pointer_settle(target_x, target_y)
         self._page.mouse.up()
 
         # The drop clears the drag flag once the reorder commits; asserting it
         # here keeps callers from racing their order assertions against it.
+        expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
+
+    def flick_group_below_all_via_pointer(self, item: Locator) -> None:
+        """Flick a group header straight down PAST every group box in ONE jump
+        and drop in the empty space beneath the lane.
+
+        Unlike ``drag_via_pointer``, this never parks the pointer inside a box:
+        the move from the header to below the lane is a single step, so no
+        intermediate pointer position lands in a target box's interior. That is
+        the fast hand that never dwells over the target — and the case that
+        silently no-ops unless the group's drop side resolves for a pointer
+        below every box, not just one inside a box's vertical extent.
+        """
+        cards = self.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_CARD)
+        # The lowest card's bottom edge, measured BEFORE the drag lifts
+        # anything: on pickup the boxes only shift up (the dragged group's slot
+        # collapses), so this stays safely below every box for the whole drag.
+        lowest_bottom = 0.0
+        for index in range(cards.count()):
+            card_box = cards.nth(index).bounding_box()
+            if card_box is not None:
+                lowest_bottom = max(lowest_bottom, card_box["y"] + card_box["height"])
+
+        start_x, _ = self._pointer_activate_drag(item)
+        drop_y = lowest_bottom + 30
+        # Single step (no intermediate moves) so the pointer never samples a
+        # box interior on the way down — the whole point of the gesture.
+        self._page.mouse.move(start_x, drop_y, steps=1)
+        self._page.wait_for_timeout(250)
+        self._pointer_settle(start_x, drop_y)
+        self._page.mouse.up()
+
         expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
 
     # -- Workspace rows (mirrors PlaywrightHomePage.get_workspace_rows) --
