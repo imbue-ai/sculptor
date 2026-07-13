@@ -60,22 +60,16 @@ class TestUiOpenFile:
         assert result.exit_code == 2
 
     def test_invalid_mode_returns_2(self, runner: CliRunner) -> None:
-        result = runner.invoke(
-            app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123", "--mode", "bogus"]
-        )
+        result = runner.invoke(app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123", "--mode", "bogus"])
         assert result.exit_code == 2
 
     @respx.mock
     def test_success_exits_0(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_workspaces("ws_test123")
-        respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/ui/open-file").mock(
-            return_value=Response(204)
-        )
+        respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/ui/open-file").mock(return_value=Response(204))
 
-        result = runner.invoke(
-            app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123"])
         assert result.exit_code == 0
 
     @respx.mock
@@ -94,9 +88,7 @@ class TestUiOpenFile:
             )
         )
 
-        result = runner.invoke(
-            app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123"])
         assert result.exit_code == 3
         assert "is not open" in result.stderr
 
@@ -116,9 +108,7 @@ class TestUiOpenFile:
             )
         )
 
-        result = runner.invoke(
-            app, ["ui", "open-file", "/tmp/nope.txt", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["ui", "open-file", "/tmp/nope.txt", "-w", "ws_test123"])
         assert result.exit_code == 4
 
     @respx.mock
@@ -129,9 +119,7 @@ class TestUiOpenFile:
             return_value=Response(500, text="Internal Server Error")
         )
 
-        result = runner.invoke(
-            app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123"])
         assert result.exit_code == 5
 
     @respx.mock
@@ -142,15 +130,11 @@ class TestUiOpenFile:
             side_effect=ConnectError("Connection refused")
         )
 
-        result = runner.invoke(
-            app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123"]
-        )
+        result = runner.invoke(app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123"])
         assert result.exit_code == 5
 
     @respx.mock
-    def test_relative_path_is_resolved_to_absolute(
-        self, runner: CliRunner, tmp_path: Any
-    ) -> None:
+    def test_relative_path_is_resolved_to_absolute(self, runner: CliRunner, tmp_path: Any) -> None:
         _mock_session()
         _mock_workspaces("ws_test123")
 
@@ -160,16 +144,12 @@ class TestUiOpenFile:
             captured["body"] = json.loads(request.content)
             return Response(204)
 
-        respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/ui/open-file").mock(
-            side_effect=_capture
-        )
+        respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/ui/open-file").mock(side_effect=_capture)
 
         cwd = os.getcwd()
         try:
             os.chdir(str(tmp_path))
-            result = runner.invoke(
-                app, ["ui", "open-file", "relative.txt", "-w", "ws_test123"]
-            )
+            result = runner.invoke(app, ["ui", "open-file", "relative.txt", "-w", "ws_test123"])
         finally:
             os.chdir(cwd)
 
@@ -190,13 +170,9 @@ class TestUiOpenFile:
             captured["body"] = json.loads(request.content)
             return Response(204)
 
-        respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/ui/open-file").mock(
-            side_effect=_capture
-        )
+        respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/ui/open-file").mock(side_effect=_capture)
 
-        result = runner.invoke(
-            app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123", "--mode", "diff"]
-        )
+        result = runner.invoke(app, ["ui", "open-file", "/tmp/x.txt", "-w", "ws_test123", "--mode", "diff"])
         assert result.exit_code == 0
         assert captured["body"]["mode"] == "diff"
 

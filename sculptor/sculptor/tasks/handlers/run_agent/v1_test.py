@@ -1521,6 +1521,104 @@ def test_eager_pi_probe_records_fetched_empty_when_no_models(
     assert _read_persisted_task_state(local_task, services).available_models == []
 
 
+_SEEDED_OPUS = ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8")
+_PI_DEFAULT_SONNET = ModelOption(provider="anthropic", model_id="claude-sonnet-4-5", display_name="Claude Sonnet 4.5")
+
+
+class _DefaultModelProbePiAgent:
+    """Stands in for a PiAgent whose probe reports pi's own session default."""
+
+    def fetch_available_models_probe(self, secrets: object) -> tuple[list[ModelOption], ModelOption]:
+        return [_SEEDED_OPUS, _PI_DEFAULT_SONNET], _PI_DEFAULT_SONNET
+
+
+def test_eager_pi_probe_preserves_seeded_current_model(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: AgentExecutionEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A create-time backend-model selection survives the pre-message probe.
+
+    The probe reports pi's own session default, but a modal-created task is born
+    with a validated `current_model`; persisting the probe's default over it
+    would silently discard the user's choice before start-time adoption runs.
+    """
+    task_data = local_task.input_data
+    assert isinstance(task_data, AgentTaskInputsV2)
+    seeded = AgentTaskStateV2(workspace_id=WorkspaceID(), current_model=_SEEDED_OPUS)
+    _set_task_state(local_task, seeded, services)
+
+    harness_stub = MagicMock()
+    harness_stub.capabilities.return_value.supports_model_selection = True
+    with (
+        patch("sculptor.tasks.handlers.run_agent.v1.get_harness_for_config", return_value=harness_stub),
+        patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=_DefaultModelProbePiAgent()),
+        patch("sculptor.tasks.handlers.run_agent.v1._build_agent_secrets", return_value={}),
+        patch("sculptor.tasks.handlers.run_agent.v1.PiAgent", _DefaultModelProbePiAgent),
+        patch(
+            "sculptor.tasks.handlers.run_agent.v1.compute_authenticated_provider_ids",
+            return_value={"anthropic"},
+        ),
+    ):
+        evolved = _eager_fetch_pi_models_into_state(
+            task=local_task,
+            task_data=task_data,
+            task_state=seeded,
+            environment=environment,
+            project=project,
+            settings=test_settings,
+            services=services,
+            in_testing=True,
+        )
+
+    assert evolved.current_model == _SEEDED_OPUS
+    assert _read_persisted_task_state(local_task, services).current_model == _SEEDED_OPUS
+
+
+def test_eager_pi_probe_drops_seeded_current_model_when_provider_lost_auth(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: AgentExecutionEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A seeded selection whose provider lost authentication between create and
+    env-ready is not retained — the probe's own result stands (the start-time
+    reselect owns dropping or switching properly)."""
+    task_data = local_task.input_data
+    assert isinstance(task_data, AgentTaskInputsV2)
+    seeded = AgentTaskStateV2(workspace_id=WorkspaceID(), current_model=_SEEDED_OPUS)
+    _set_task_state(local_task, seeded, services)
+
+    harness_stub = MagicMock()
+    harness_stub.capabilities.return_value.supports_model_selection = True
+    with (
+        patch("sculptor.tasks.handlers.run_agent.v1.get_harness_for_config", return_value=harness_stub),
+        patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=_EmptyProbePiAgent()),
+        patch("sculptor.tasks.handlers.run_agent.v1._build_agent_secrets", return_value={}),
+        patch("sculptor.tasks.handlers.run_agent.v1.PiAgent", _EmptyProbePiAgent),
+        patch(
+            "sculptor.tasks.handlers.run_agent.v1.compute_authenticated_provider_ids",
+            return_value=set(),
+        ),
+    ):
+        evolved = _eager_fetch_pi_models_into_state(
+            task=local_task,
+            task_data=task_data,
+            task_state=seeded,
+            environment=environment,
+            project=project,
+            settings=test_settings,
+            services=services,
+            in_testing=True,
+        )
+
+    assert evolved.current_model is None
+    assert evolved.available_models == []
+
+
 def test_queued_followup_is_dispatched_after_resumed_turn_completes(
     local_task: Task,
     services: ServiceCollectionForTask,

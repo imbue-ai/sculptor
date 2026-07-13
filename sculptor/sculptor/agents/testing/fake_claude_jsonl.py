@@ -2,21 +2,100 @@
 
 import itertools
 import json
+import os
+import secrets
 from collections.abc import Sequence
+from pathlib import Path
+
+from sculptor.agents.default.claude_code_sdk.harness import compute_claude_jsonl_directory
 
 _id_counter = itertools.count(1)
+# Process-unique suffix mixed into every generated id so multiple FakeClaude
+# subprocess invocations within a single test run don't collide on, e.g.,
+# ``msg_fakeclaude_001`` (the module-level counter resets each subprocess).
+# Real Claude assigns globally-unique ids; downstream consumers (the
+# SavedAgentMessage path, message-history dedup, etc.) treat colliding
+# upstream ids as duplicates, which can manifest as the assistant message
+# silently failing to land on subsequent turns. See SCU-1324.
+_PROCESS_NONCE = f"{os.getpid():d}{secrets.token_hex(2)}"
 
 _LAST_SESSION_ID: str | None = None
 
 
 def generate_id(prefix: str = "msg") -> str:
-    """Return a unique ID string like 'msg_fakeclaude_001'."""
-    return f"{prefix}_fakeclaude_{next(_id_counter):03d}"
+    """Return a unique ID string like 'msg_fakeclaude_<nonce>_001'."""
+    return f"{prefix}_fakeclaude_{_PROCESS_NONCE}_{next(_id_counter):03d}"
 
 
 def get_last_session_id() -> str | None:
     """Return the session id from the most recent make_init_message call."""
     return _LAST_SESSION_ID
+
+
+def session_transcript_path(session_id: str) -> Path:
+    """Path of the on-disk session JSONL for ``session_id``.
+
+    Mirrors ``ClaudeCodeHarness.get_jsonl_path``: the CLI is launched with the
+    working directory as its CWD, so the transcript lands under the slugged
+    projects tree that ``compute_claude_jsonl_directory`` derives from HOME and
+    that CWD. Read HOME/CWD at call time so a test that pins ``$HOME`` gets the
+    path it expects.
+    """
+    resolved_cwd = Path(os.path.realpath(os.getcwd()))
+    return compute_claude_jsonl_directory(Path.home(), resolved_cwd) / f"{session_id}.jsonl"
+
+
+def append_transcript_entry(session_id: str, entry: dict) -> None:
+    """Append one JSONL entry to ``session_id``'s on-disk transcript.
+
+    Creating the projects directory on first write mirrors the real CLI, which
+    materializes the transcript lazily once a turn actually runs — so a session
+    that emits nothing (immediate EOF) leaves no file behind.
+    """
+    path = session_transcript_path(session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as transcript:
+        transcript.write(json.dumps(entry) + "\n")
+
+
+def make_plain_user_transcript_entry(session_id: str, content: str) -> dict:
+    """Transcript entry for a turn-starting user frame (a plain user message).
+
+    The top-level ``sessionId`` (camelCase, matching the real CLI's on-disk
+    shape) is what ``is_session_id_valid`` scans for, so writing this per turn
+    also keeps the session resumable.
+    """
+    return {
+        "type": "user",
+        "sessionId": session_id,
+        "message": {"role": "user", "content": content},
+    }
+
+
+def make_queued_command_attachment_entry(session_id: str, prompt: str) -> dict:
+    """Transcript entry for a frame absorbed mid-cycle (the steering shape).
+
+    The real CLI records a frame that arrives while a turn is in flight as a
+    ``queued_command`` attachment rather than a plain user message; this is the
+    on-disk marker that distinguishes steering from a turn-starting follow-up.
+    ``commandMode: "prompt"`` matches the real CLI's attachment shape (a queued
+    plain prompt, as opposed to a queued slash command).
+    """
+    return {
+        "type": "attachment",
+        "sessionId": session_id,
+        "attachment": {"type": "queued_command", "prompt": prompt, "commandMode": "prompt"},
+    }
+
+
+def make_user_frame_echo(content: str) -> dict:
+    """Stdout echo of an accepted user frame (the ``--replay-user-messages`` shape).
+
+    The real CLI, launched with ``--replay-user-messages``, re-emits each
+    accepted frame as a ``type:"user"`` event whose message content is a plain
+    string — the same shape the wrapper writes on stdin.
+    """
+    return {"type": "user", "message": {"role": "user", "content": content}}
 
 
 def make_init_message(session_id: str) -> dict:

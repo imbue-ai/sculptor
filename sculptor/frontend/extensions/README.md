@@ -21,7 +21,7 @@ Beyond the bundled set, extensions load from two other kinds of source:
   Refresh button in the Extensions settings re-scans the folder without a
   reload. Agents install and iterate on extensions this way via the
   `sculpt extension` CLI (`load`, `reload`, `inspect`, `unload`, …), and the
-  **build-sculptor-plugin** skill teaches any agent how to author one.
+  **build-sculptor-extension** skill teaches any agent how to author one.
 - **URL sources**: the URL of a server hosting a `manifest.json` (e.g. a Vite
   dev server), added from the Extensions settings. URL sources are persisted
   to localStorage and re-loaded each launch.
@@ -103,9 +103,9 @@ code. Then, at load time:
 ## SDK surface extensions target (`@sculptor/extension-sdk`)
 
 The full contract is rolled up into
-`sculptor/sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts` (generated —
+`sculptor/sculptor-plugin/skills/build-sculptor-extension/sdk.d.ts` (generated —
 `just generate-extension-sdk-dts`, freshness-checked in CI), which ships to
-every Sculptor agent inside the build-sculptor-plugin skill. Highlights:
+every Sculptor agent inside the build-sculptor-extension skill. Highlights:
 
 - `useCurrentWorkspace(selector?)` — the active workspace as a curated view
   (`id`, `description`, `branch`, `targetBranch`, `pullRequestUrl`); pass a

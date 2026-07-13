@@ -1,7 +1,8 @@
 import { Button, Flex, IconButton, Text } from "@radix-ui/themes";
+import { useExtensionSetting } from "@sculptor/extension-sdk";
 import { FlaskConical, RefreshCw, X } from "lucide-react";
-import type { CSSProperties, MouseEvent, ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent, PointerEvent as ReactPointerEvent, ReactElement } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { NGINX_DOWN_STATUSES, QUICK_BAND_END, QUICK_BAND_START, parsePreviewLabel, parsePreviewPort } from "./scan.ts";
 
@@ -26,6 +27,11 @@ import { NGINX_DOWN_STATUSES, QUICK_BAND_END, QUICK_BAND_START, parsePreviewLabe
  * navigating keeps the installed PWA in its standalone window — which is the
  * whole point. The current #/ route is read at click time and carried across so
  * the same screen reopens on the other bundle.
+ *
+ * The overlay is draggable — pointer events, so mouse and touch alike — for
+ * when its default corner sits over something (small screens especially). A
+ * dragged spot is persisted via useExtensionSetting and clamped back on-screen
+ * whenever the viewport or the overlay's own size changes.
  */
 
 const SCAN_CONCURRENCY = 16;
@@ -98,15 +104,61 @@ const navigateKeepingRoute = (basePath: string): void => {
   window.location.assign(basePath + window.location.hash);
 };
 
-const containerStyle: CSSProperties = {
-  position: "fixed",
-  // The bottom-left corner of PageLayout's dev/version footer strip, whose
-  // left column is empty — visually part of the dev provisions, overlapping
-  // nothing.
-  bottom: "var(--space-1)",
-  left: "var(--space-2)",
-  pointerEvents: "auto",
+/** A dragged overlay spot, in viewport top-left coordinates. */
+type Position = { x: number; y: number };
+
+/** Pointer movement below this stays a tap/click; beyond it the gesture is a drag. */
+const DRAG_THRESHOLD_PX = 6;
+const VIEWPORT_MARGIN_PX = 8;
+
+const parsePosition = (raw: string): Position | null => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && "x" in parsed && "y" in parsed) {
+      const { x, y } = parsed;
+      // Finite only: JSON like 1e999 parses to Infinity, which would render
+      // as invalid left/top CSS and strand the overlay off-screen.
+      if (typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)) {
+        return { x, y };
+      }
+    }
+  } catch {
+    // An unset or malformed setting means "never dragged": anchored default.
+  }
+  return null;
 };
+
+/**
+ * Keep the whole overlay on-screen given its measured size. The `Math.max(…,
+ * VIEWPORT_MARGIN_PX)` on the upper bounds guards viewports too small to fit
+ * the overlay at all.
+ */
+const clampPosition = (position: Position, width: number, height: number): Position => ({
+  x: Math.min(
+    Math.max(VIEWPORT_MARGIN_PX, position.x),
+    Math.max(VIEWPORT_MARGIN_PX, window.innerWidth - width - VIEWPORT_MARGIN_PX),
+  ),
+  y: Math.min(
+    Math.max(VIEWPORT_MARGIN_PX, position.y),
+    Math.max(VIEWPORT_MARGIN_PX, window.innerHeight - height - VIEWPORT_MARGIN_PX),
+  ),
+});
+
+const containerStyle = (position: Position | null, isDragging: boolean): CSSProperties => ({
+  position: "fixed",
+  // Until dragged: the bottom-left corner of PageLayout's dev/version footer
+  // strip, whose left column is empty — visually part of the dev provisions,
+  // overlapping nothing.
+  ...(position === null ? { bottom: "var(--space-1)", left: "var(--space-2)" } : { left: position.x, top: position.y }),
+  pointerEvents: "auto",
+  // touch-action none keeps a touch-drag delivering pointermoves instead of
+  // scrolling the page; the selection guards stop a mouse drag from sweeping
+  // up the overlay's text.
+  touchAction: "none",
+  userSelect: "none",
+  WebkitUserSelect: "none",
+  cursor: isDragging ? "grabbing" : undefined,
+});
 
 const panelStyle: CSSProperties = {
   minWidth: 240,
@@ -188,17 +240,118 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
     navigateKeepingRoute("/proxy/");
   }, []);
 
+  const [positionRaw, setPositionRaw] = useExtensionSetting("position");
+  // The "home" spot — where the user last dropped the overlay. Only a drag
+  // release writes it; the transient viewport clamping below never does.
+  const homePosition = useMemo((): Position | null => parsePosition(positionRaw), [positionRaw]);
+  // The rendered spot: home, temporarily shifted while the overlay doesn't
+  // fit beside it (e.g. the expanded panel near a viewport edge), or
+  // following the pointer mid-drag. Re-derived from home whenever the
+  // overlay's size changes, so collapsing a shifted panel returns the pill
+  // to its exact spot.
+  const [displayPosition, setDisplayPosition] = useState<Position | null>(homePosition);
+  const [isDragging, setIsDragging] = useState(false);
+  const displayPositionRef = useRef(displayPosition);
+  displayPositionRef.current = displayPosition;
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const wasDraggedRef = useRef(false);
+
+  // The whole overlay drags — buttons included, since the collapsed state IS
+  // a button. A gesture only becomes a drag past the movement threshold, so
+  // taps and clicks keep working; once it does, the click browsers fire after
+  // release is swallowed in onOverlayClickCapture.
+  const onOverlayPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>): void => {
+      const box = boxRef.current;
+      // Left button only (touch reports 0), so right-click still opens the
+      // context menu instead of dragging.
+      if (!event.isPrimary || event.button !== 0 || box === null) return;
+      wasDraggedRef.current = false;
+      const rect = box.getBoundingClientRect();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      // Only the initiating pointer drives the drag — the window-level
+      // listeners also see other pointers (a second touch), which must
+      // neither move the overlay nor end the drag early.
+      const pointerId = event.pointerId;
+      const onMove = (moveEvent: PointerEvent): void => {
+        if (moveEvent.pointerId !== pointerId) return;
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = moveEvent.clientY - startY;
+        if (!wasDraggedRef.current && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
+        wasDraggedRef.current = true;
+        setIsDragging(true);
+        setDisplayPosition(clampPosition({ x: rect.left + deltaX, y: rect.top + deltaY }, rect.width, rect.height));
+      };
+      const onEnd = (endEvent: PointerEvent): void => {
+        if (endEvent.pointerId !== pointerId) return;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onEnd);
+        window.removeEventListener("pointercancel", onEnd);
+        setIsDragging(false);
+        // The drop spot becomes the new home, once per drag — not per move.
+        if (wasDraggedRef.current && displayPositionRef.current !== null) {
+          setPositionRaw(JSON.stringify(displayPositionRef.current));
+        }
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onEnd);
+      window.addEventListener("pointercancel", onEnd);
+    },
+    [setPositionRaw],
+  );
+
+  const onOverlayClickCapture = useCallback((event: MouseEvent<HTMLDivElement>): void => {
+    if (!wasDraggedRef.current) return;
+    wasDraggedRef.current = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
+  // Re-derive the rendered spot from home when the viewport or the overlay's
+  // own size changes (expand/collapse, rows appearing as the scan finds
+  // previews): an overlay that doesn't fit beside its home slides into view,
+  // and slides back the moment it fits again — a shift is never persisted, so
+  // a spot saved on a larger viewport also just re-fits. The never-dragged
+  // anchored placement needs none of this: bottom/left CSS tracks the
+  // viewport by itself.
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (box === null) return undefined;
+    const fit = (): void => {
+      setDisplayPosition(homePosition === null ? null : clampPosition(homePosition, box.offsetWidth, box.offsetHeight));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(box);
+    window.addEventListener("resize", fit);
+    return (): void => {
+      observer.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, [homePosition, isOnOpenhostFront]);
+
   if (!isOnOpenhostFront) return null;
 
   const isPreview = previewPort !== null;
   const others = previews.filter((preview) => preview.port !== previewPort);
+
+  // One container carries the drag wiring for both states, so collapsed and
+  // expanded stay draggable the same way (and reconcile to the same DOM node,
+  // keeping boxRef stable for the fit observer).
+  const containerProps = {
+    ref: boxRef,
+    style: containerStyle(displayPosition, isDragging),
+    onPointerDown: onOverlayPointerDown,
+    onClickCapture: onOverlayClickCapture,
+  };
 
   if (!isExpanded) {
     const pillText = isPreview
       ? `:${previewPort}${ownIdentity === "" ? "" : ` · ${ownIdentity}`}`
       : `previews${previews.length > 0 ? ` (${previews.length})` : ""}`;
     return (
-      <div style={containerStyle}>
+      <div {...containerProps}>
         <Button
           size="1"
           radius="full"
@@ -215,7 +368,7 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
   }
 
   return (
-    <div style={containerStyle}>
+    <div {...containerProps}>
       <Flex direction="column" gap="1" style={panelStyle}>
         <Flex align="center" gap="2" px="1">
           <Text size="1" weight="bold" style={{ flex: 1 }}>
@@ -284,7 +437,8 @@ export const PreviewSwitcherOverlay = (): ReactElement | null => {
           </Text>
         ) : null}
         <Button asChild size="1" variant="ghost" color="gray" style={rowStyle}>
-          <a href="/proxy/" onClick={openSwitchboard}>
+          {/* draggable=false: a press-and-move here is an overlay drag, not a native link drag. */}
+          <a href="/proxy/" draggable={false} onClick={openSwitchboard}>
             switchboard (full-band scan) →
           </a>
         </Button>

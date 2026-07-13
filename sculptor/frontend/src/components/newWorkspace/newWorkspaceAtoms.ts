@@ -2,7 +2,7 @@ import type { Atom, PrimitiveAtom, WritableAtom } from "jotai";
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
-import type { WorkspaceInitializationStrategy } from "~/api";
+import type { ModelOption, WorkspaceInitializationStrategy } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { hasEverHadWorkspacesAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 
@@ -31,6 +31,29 @@ export type NewWorkspaceModalState = {
 export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom<NewWorkspaceModalState>({
   open: false,
 });
+
+/**
+ * The form's in-progress entries, stashed whenever the form unmounts —
+ * Escape, an overlay click, the X, and the Settings-routing CTAs all close
+ * the dialog the same way — and seeding the next open, where the open
+ * request's explicit seeds still win. A successful create clears it, so a
+ * completed form never resurrects. Deliberately not persisted: a draft lives
+ * for the session, keeping reloads fresh and prompt text off disk.
+ */
+export type NewWorkspaceDraft = {
+  projectId: string | null;
+  title: string;
+  prompt: string;
+  branchNameOverride: string | null;
+  mode: WorkspaceInitializationStrategy;
+  sourceBranch: string | undefined;
+  agentTypeValue: StoredAgentType;
+  piSelectionOverride: ModelOption | undefined;
+};
+
+export const newWorkspaceDraftAtom: PrimitiveAtom<NewWorkspaceDraft | undefined> = atom<NewWorkspaceDraft | undefined>(
+  undefined,
+);
 
 /**
  * The "keep open" switch: when on, Create keeps the dialog open for rapid

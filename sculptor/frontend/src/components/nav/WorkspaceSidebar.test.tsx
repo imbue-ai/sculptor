@@ -1,5 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -80,6 +81,41 @@ describe("WorkspaceSidebar nav buttons", () => {
   });
 });
 
+describe("WorkspaceSidebar loading state", () => {
+  let store: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    store = createStore();
+  });
+
+  afterEach(() => {
+    cleanup();
+    queryClient.clear();
+  });
+
+  it("shows the loading skeleton before the first workspace snapshot arrives", () => {
+    // `workspaceIdsAtom` defaults to `undefined` (its not-yet-loaded sentinel).
+    // The sidebar can't tell that from an empty list without this signal, so the
+    // rail would otherwise render blank during the post-refresh reconnect.
+    seedProject(store, "p1");
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.getByTestId(ElementIds.SIDEBAR_LOADING_SKELETON)).toBeVisible();
+    // The real repo list is withheld while loading, so a seeded repo's group
+    // (and its "No workspaces yet" hint) must not show through the skeleton.
+    expect(screen.queryByTestId(ElementIds.SIDEBAR_REPO_GROUP)).toBeNull();
+  });
+
+  it("replaces the skeleton with the list once the first snapshot lands", () => {
+    // The first frame writes an array — even an empty one — flipping the list out
+    // of its loading sentinel.
+    store.set(workspaceIdsAtom, []);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.queryByTestId(ElementIds.SIDEBAR_LOADING_SKELETON)).toBeNull();
+  });
+});
+
 describe("WorkspaceSidebar repo groups", () => {
   let store: ReturnType<typeof createStore>;
 
@@ -113,5 +149,21 @@ describe("WorkspaceSidebar repo groups", () => {
     renderWithProviders(<Sidebar />, { store });
 
     expect(screen.getByTestId(ElementIds.SIDEBAR_REPO_ADD_WORKSPACE)).toBeVisible();
+  });
+
+  it("enters inline rename mode when a workspace row is double-clicked", async () => {
+    // user.dblClick fires the real click → click → dblclick sequence, so the
+    // clicks that precede a dblclick are exercised and shown not to block the row
+    // from entering rename mode.
+    const user = userEvent.setup();
+    seedProject(store, "p1");
+    seedWorkspaces(store, ["w1"]);
+    renderWithProviders(<Sidebar />, { store });
+
+    expect(screen.queryByTestId(ElementIds.INLINE_RENAME_INPUT)).toBeNull();
+
+    await user.dblClick(screen.getByTestId(ElementIds.SIDEBAR_WORKSPACE_ROW));
+
+    expect(await screen.findByTestId(ElementIds.INLINE_RENAME_INPUT)).toBeVisible();
   });
 });

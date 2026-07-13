@@ -17,6 +17,7 @@ from loguru import logger
 from sculptor.agents.harness_registry import create_agent_for_run
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
+from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -867,6 +868,15 @@ def _eager_fetch_pi_models_into_state(
         return task_state
     secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
     available_models, current_model = agent_wrapper.fetch_available_models_probe(secrets)
+    # A create-time selection (the modal's validated backend model) is already on
+    # task state; the read-only probe reports pi's own session default, which must
+    # not clobber it. Keep the seeded selection while its provider is still
+    # authenticated — the wrapper's start-time adoption reconciles pi to it. A
+    # seeded selection whose provider lost authentication falls back to the
+    # probe's result (the start-time reselect owns dropping or switching it).
+    seeded_model = task_state.current_model
+    if seeded_model is not None and seeded_model.provider in compute_authenticated_provider_ids():
+        current_model = seeded_model
     # Persist even the empty result: it records that the probe COMPLETED, moving the
     # catalog off NOT_FETCHED_YET to a fetched-but-empty [] (authenticated with no
     # providers — or a best-effort probe failure, which today falls back the same

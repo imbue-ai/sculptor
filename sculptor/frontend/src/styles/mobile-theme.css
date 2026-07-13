@@ -1,0 +1,56 @@
+/* =============================================================================
+   MOBILE THEME (mobile-only, scoped)
+
+   Applied via the global `.mobileTheme` class on the mobile shell / landing root.
+   The mobile chrome (header, drawer, changes pill, chat input, pager, overlays)
+   uses standard Sculptor colors: this class does NOT remap the Radix gray,
+   accent, or color scales, so the reused chat / review-all / terminal render
+   exactly like desktop and follow the user's light/dark app theme.
+
+   The mobile tokens below are a thin semantic layer the mobile component .scss
+   modules read; they map onto standard Radix tokens so the chrome tracks the
+   app theme too. This lives in a plain .css file (not an .scss module) so
+   `npm run lint:styles` (which forbids literal colors in .scss) is satisfied —
+   there are no literal colors here, only var() references.
+   ============================================================================= */
+
+.mobileTheme {
+  /* Base ink follows the standard text token. */
+  color: var(--gray-12);
+
+  /* A fully-round radius for the mobile chrome's custom circles/pills (drawer
+     avatar, empty-state icon, agent-pager dots). Deliberately NOT Radix's
+     `--radius-full`: Radix buttons compute `max(--radius-N, --radius-full)`, so
+     overriding that token would round every solid button (send, Create) into a
+     circle. This separate token only affects elements that opt into it. */
+  --mobile-radius-full: 9999px;
+
+  /* ---- mobile-chrome semantic tokens → standard Radix tokens ---- */
+  --mobile-bg: var(--color-background);
+  --mobile-surface: var(--color-panel-solid);
+  --mobile-surface-2: var(--gray-2);
+  --mobile-press: var(--gray-a3);
+  --mobile-line: var(--gray-a5);
+  --mobile-line-soft: var(--gray-a3);
+  --mobile-ink: var(--gray-12);
+  --mobile-ink-2: var(--gray-11);
+  --mobile-ink-3: var(--gray-10);
+  --mobile-accent: var(--accent-9);
+  --mobile-accent-press: var(--accent-10);
+  --mobile-accent-tint: var(--accent-3);
+
+  /* Diff / change colors track the app's status palette (green/red/amber). */
+  --mobile-add: var(--green-11);
+  --mobile-add-bg: var(--green-a3);
+  --mobile-del: var(--red-11);
+  --mobile-del-bg: var(--red-a3);
+  --mobile-modified: var(--amber-11);
+  --mobile-modified-bg: var(--amber-a3);
+
+  /* Stronger than Radix's default --color-overlay (--black-a6/a8): a full-screen
+     mobile drawer/sheet scrim needs the backdrop to clearly recede, especially in
+     dark theme where a light overlay over dark content barely dims. */
+  --mobile-overlay: var(--black-a9);
+  --mobile-shadow: var(--shadow-5);
+  --mobile-shadow-sm: var(--shadow-2);
+}

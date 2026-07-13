@@ -56,8 +56,10 @@ from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.agents.pi_agent.authenticated_providers import PiAuthJsonError
+from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
 from sculptor.agents.pi_agent.authenticated_providers import write_auth_json_entry
+from sculptor.agents.pi_agent.catalog_probe import probe_catalog_on_host
 from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.common.plugin import get_plugin_dirs
@@ -167,6 +169,7 @@ from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ModelOption
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.telemetry import telemetry
@@ -236,6 +239,7 @@ from sculptor.web.data_types import PasteKeyRequest
 from sculptor.web.data_types import PiLoginRequest
 from sculptor.web.data_types import PiLoginResponse
 from sculptor.web.data_types import PiLoginStatusResponse
+from sculptor.web.data_types import PiModelsResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -353,7 +357,45 @@ def validate_workspace_id(workspace_id: str) -> WorkspaceID:
         ) from e
 
 
-def _workspace_to_response(workspace: Workspace, workspace_setup_command: str | None = None) -> WorkspaceResponse:
+def _project_path_from_git_repo_url(user_git_repo_url: str | None) -> str | None:
+    """Convert a project's file:// repo URL to a local filesystem path.
+
+    Mirrors ``Project.get_local_user_path`` for callers that only have the raw
+    URL (e.g. denormalized listing rows), but returns None instead of asserting
+    when the URL is missing or not file://-schemed.
+    """
+    if user_git_repo_url is None or not user_git_repo_url.startswith("file://"):
+        return None
+    return str(Path(user_git_repo_url.removeprefix("file://")))
+
+
+def _workspace_working_directory(
+    strategy: WorkspaceInitializationStrategy,
+    environment_id: str | None,
+    project_path: str | None,
+) -> str | None:
+    """Resolve the directory holding a workspace's checkout.
+
+    Mirrors ``LocalEnvironment.get_working_directory`` without resuming the
+    environment (resume has side effects and is too heavy for list endpoints):
+    clone/worktree checkouts live at ``<environment_id>/code`` (environment_id
+    is the absolute workspace directory path), while in-place workspaces work
+    directly in the project's local repo. None when the environment hasn't been
+    initialized yet.
+    """
+    if strategy == WorkspaceInitializationStrategy.IN_PLACE:
+        return project_path
+    if environment_id is None:
+        return None
+    return str(Path(environment_id) / "code")
+
+
+def _workspace_to_response(
+    workspace: Workspace,
+    workspace_setup_command: str | None = None,
+    project_path: str | None = None,
+    current_branch: str | None = None,
+) -> WorkspaceResponse:
     """Convert a Workspace model to a WorkspaceResponse."""
     setup_snapshot = _build_setup_snapshot(workspace)
     return WorkspaceResponse(
@@ -370,6 +412,10 @@ def _workspace_to_response(workspace: Workspace, workspace_setup_command: str | 
         created_at=workspace.created_at,
         workspace_setup_command=workspace_setup_command,
         setup=setup_snapshot,
+        working_directory=_workspace_working_directory(
+            workspace.initialization_strategy, workspace.environment_id, project_path
+        ),
+        current_branch=current_branch,
     )
 
 
@@ -513,6 +559,70 @@ def set_session_token_cookie(
     )
 
 
+def _validate_prompt_model_selection(
+    agent_type: AgentTypeName,
+    model: LLMModel | None,
+    backend_model: ModelOption | None,
+) -> None:
+    """Enforce the create-time model contract for a prompt-ful create.
+
+    A create names its model on exactly one harness's terms: `model` for
+    Claude's static list, `backend_model` for a backend-sourced catalog (pi).
+    A pi prompt requires a `backend_model` whose provider is authenticated at
+    create time — an instant host-side read sharing
+    `compute_authenticated_provider_ids` with the catalog probe — so a queued
+    first prompt can never name a model that cannot run.
+    """
+    if model is not None and backend_model is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["body", "backend_model"],
+                    "msg": "model and backend_model are mutually exclusive",
+                    "type": "value_error",
+                }
+            ],
+        )
+    if agent_type == AgentTypeName.PI:
+        if backend_model is None:
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": "A pi prompt requires a backend_model selected from pi's catalog",
+                        "type": "value_error.missing",
+                    }
+                ],
+            )
+        if backend_model.provider not in compute_authenticated_provider_ids():
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": (
+                            f"pi provider '{backend_model.provider}' is not authenticated — "
+                            + "connect it under Settings → Pi → Providers and retry"
+                        ),
+                        "type": "value_error",
+                    }
+                ],
+            )
+    elif model is None:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["body", "model"],
+                    "msg": "Model is required when providing a prompt",
+                    "type": "value_error.missing",
+                }
+            ],
+        )
+
+
 @router.post("/api/v1/projects/{project_id}/tasks")
 def start_task(
     project_id: ProjectID,
@@ -595,6 +705,7 @@ def start_task(
             if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
                 raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
             resolved_agent_type, _ = _resolve_requested_agent_type(task_request.agent_type, None, has_prompt=True)
+            _validate_prompt_model_selection(resolved_agent_type, model, task_request.backend_model)
             agent_config = _agent_config_for_request(resolved_agent_type, None)
             if task_request.agent_type is not None:
                 _record_most_recently_used_agent_type(resolved_agent_type, None)
@@ -611,10 +722,13 @@ def start_task(
 
         max_seconds = None
 
-        # Create initial task state with workspace_id
+        # Create initial task state with workspace_id. A validated backend-model
+        # selection (pi) is the task's current model from birth, so the wrapper's
+        # start-time adoption runs the queued prompt under it.
         initial_task_state = AgentTaskStateV2(
             title=task_name,
             workspace_id=workspace.object_id,
+            current_model=task_request.backend_model,
         )
 
         task = Task(
@@ -764,7 +878,12 @@ def create_workspace_v2(
             in (WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE)
             else None
         )
-        return _workspace_to_response(workspace, workspace_setup_command=setup_command)
+        return _workspace_to_response(
+            workspace,
+            workspace_setup_command=setup_command,
+            project_path=_project_path_from_git_repo_url(project.user_git_repo_url),
+            current_branch=services.workspace_service.get_cached_current_branch(workspace.object_id),
+        )
 
 
 _PREVIEW_BRANCH_NAME_GIT_TIMEOUT = 5.0
@@ -939,6 +1058,12 @@ def list_recent_workspaces(
             agent_count=row.agent_count,
             is_open=row.is_open,
             last_activity_at=row.last_activity_at,
+            working_directory=_workspace_working_directory(
+                row.initialization_strategy,
+                row.environment_id,
+                _project_path_from_git_repo_url(row.project_git_repo_url),
+            ),
+            current_branch=services.workspace_service.get_cached_current_branch(row.object_id),
         )
         for row in workspace_rows
     ]
@@ -969,13 +1094,18 @@ def update_workspace(
         except WorkspaceNotFoundError as e:
             raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found") from e
         logger.info("Updated workspace {}", workspace_id)
+        project = transaction.get_project(updated_workspace.project_id)
 
     # Refresh diffs after the transaction commits so the frontend picks up the
     # new target-branch diff via the diffUpdatedAt reactivity.
     if update_request.target_branch is not None:
         services.workspace_service.refresh_workspace_diff(validated_workspace_id, include_target_branch_diff=True)
 
-    return _workspace_to_response(updated_workspace)
+    return _workspace_to_response(
+        updated_workspace,
+        project_path=_project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None,
+        current_branch=services.workspace_service.get_cached_current_branch(updated_workspace.object_id),
+    )
 
 
 @router.post("/api/v1/workspaces/batch-update-open-state")
@@ -1015,7 +1145,12 @@ def get_workspace(
         workspace = transaction.get_workspace(validated_workspace_id)
         if workspace is None or workspace.is_deleted:
             raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
-        return _workspace_to_response(workspace)
+        project = transaction.get_project(workspace.project_id)
+        return _workspace_to_response(
+            workspace,
+            project_path=_project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None,
+            current_branch=services.workspace_service.get_cached_current_branch(workspace.object_id),
+        )
 
 
 @router.get("/api/v1/projects/{project_id}/workspaces")
@@ -1030,7 +1165,16 @@ def list_workspaces(
 
     with user_session.open_transaction(services) as transaction:
         workspaces = transaction.get_workspaces(project_id=validated_project_id)
-        return [_workspace_to_response(w) for w in workspaces]
+        project = transaction.get_project(validated_project_id)
+        project_path = _project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None
+        return [
+            _workspace_to_response(
+                w,
+                project_path=project_path,
+                current_branch=services.workspace_service.get_cached_current_branch(w.object_id),
+            )
+            for w in workspaces
+        ]
 
 
 @router.delete("/api/v1/workspaces/{workspace_id}")
@@ -2139,24 +2283,14 @@ def create_workspace_agent(
         if agent_request.prompt:
             if agent_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
                 raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
-            # Delegate to existing start_task logic
-            model = agent_request.model
-            if model is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail=[
-                        {
-                            "loc": ["body", "model"],
-                            "msg": "Model is required when providing a prompt",
-                            "type": "value_error.missing",
-                        }
-                    ],
-                )
-
+            # Delegate to existing start_task logic, which validates the
+            # model/backend_model pair against the resolved harness
+            # (`_validate_prompt_model_selection`).
             task_request = StartTaskRequest(
                 prompt=agent_request.prompt,
                 interface=agent_request.interface,
-                model=model,
+                model=agent_request.model,
+                backend_model=agent_request.backend_model,
                 files=agent_request.files,
                 name=agent_request.name,
                 workspace_id=validated_workspace_id,
@@ -2174,7 +2308,20 @@ def create_workspace_agent(
                 settings=settings,
             )
 
-        # No prompt — create agent in waiting state
+        # No prompt — create agent in waiting state. There is no turn to run a
+        # backend-model selection under (post-start selection owns that case),
+        # so reject one rather than silently dropping it.
+        if agent_request.backend_model is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": "backend_model requires a prompt — a promptless create selects pi's model after start",
+                        "type": "value_error",
+                    }
+                ],
+            )
         _prevent_action_if_out_of_free_space(services)
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
@@ -4456,6 +4603,26 @@ def get_pi_authenticated_providers(
     )
 
 
+@router.get("/api/v1/pi/models")
+def get_pi_models(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiModelsResponse:
+    """Return pi's curated, authenticated-only model catalog, probed on the host.
+
+    Global (no workspace/agent): pre-create surfaces — the New Workspace modal's
+    pi model picker — read this before any execution environment exists. The
+    probe is best-effort like its in-task twin, so a missing binary, version
+    mismatch, or unauthenticated user yields an empty catalog, never an error.
+    """
+    services = get_services_from_request_or_websocket(request)
+    binary = services.dependency_management_service.resolve_binary_path(Dependency.PI)
+    if binary is None:
+        return PiModelsResponse(available_models=(), default_model=None)
+    available_models, default_model = probe_catalog_on_host(binary)
+    return PiModelsResponse(available_models=tuple(available_models), default_model=default_model)
+
+
 @router.post("/api/v1/pi/login")
 def start_pi_login(
     request: Request,
@@ -4514,9 +4681,11 @@ def write_pi_provider_key(
 ) -> Response:
     """Merge a single-key provider's api key into auth.json and refresh running pi agents.
 
-    The optional power-user path (the primary path is interactive /login). The value
-    is written verbatim (literal / $ENV / !command); session-only and unknown
-    providers are rejected (their config is not expressible as a single auth.json key).
+    Not exposed in the UI (the login modal is interactive /login only); kept for tests —
+    an integration test writes a credential through it to fire the models-refresh
+    broadcast, and app-level tests cover the route directly. The value is written verbatim
+    (literal / $ENV / !command); session-only and unknown providers are rejected (their
+    config is not expressible as a single auth.json key).
     """
     entry = get_provider_entry(paste_key_request.provider_id)
     if entry is None or entry.group is not ProviderGroup.SINGLE_KEY:

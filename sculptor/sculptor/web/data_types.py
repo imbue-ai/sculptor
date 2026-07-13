@@ -30,6 +30,7 @@ from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.messages import EffortLevel
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 
 
 class TaskInterface(StrEnum):
@@ -126,7 +127,11 @@ class RequestModel(SerializableModel):
 class StartTaskRequest(RequestModel):
     prompt: str
     interface: str = TaskInterface.TERMINAL.value
-    model: LLMModel
+    # Mutually exclusive, one per harness's terms — the same pair as
+    # CreateAgentRequest, validated per resolved harness
+    # (`_validate_prompt_model_selection`).
+    model: LLMModel | None = None
+    backend_model: ModelOption | None = None
     files: list[str] = Field(default_factory=list)
     initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE
     name: str | None = None
@@ -173,7 +178,13 @@ class CreateAgentRequest(RequestModel):
     """Create agent request — prompt is optional for the '+' button flow."""
 
     prompt: str | None = None
+    # Mutually exclusive with `backend_model`: a create names its model on
+    # exactly one harness's terms — `model` for Claude's static list,
+    # `backend_model` (the chosen `ModelOption`) for a backend-sourced catalog
+    # (pi). A pi prompt requires `backend_model`; a promptless create must not
+    # carry one (post-start selection owns that case).
     model: LLMModel | None = None
+    backend_model: ModelOption | None = None
     interface: str = TaskInterface.TERMINAL.value
     files: list[str] = Field(default_factory=list)
     name: str | None = None
@@ -237,6 +248,13 @@ class WorkspaceResponse(SerializableModel):
     created_at: datetime.datetime
     workspace_setup_command: str | None = None
     setup: "WorkspaceSetupSnapshot | None" = None
+    # Absolute path of the workspace's checkout: `<environment_id>/code` for
+    # clone/worktree workspaces, the project's local repo path for in-place ones.
+    # None when the environment hasn't been initialized yet.
+    working_directory: str | None = None
+    # Branch currently checked out in that directory, from the workspace
+    # service's branch scan cache. None when not yet scanned.
+    current_branch: str | None = None
 
 
 class PreviewBranchNameResponse(SerializableModel):
@@ -288,6 +306,19 @@ class AuthenticatedProvidersResponse(SerializableModel):
     """The full pi provider catalog crossed with current authentication status."""
 
     providers: tuple[AuthenticatedProviderEntry, ...]
+
+
+class PiModelsResponse(SerializableModel):
+    """The host-side pi catalog for pre-workspace surfaces (the New Workspace modal's picker).
+
+    Mirrors the task-state catalog fields: `available_models` is the curated,
+    authenticated-only list and `default_model` is pi's own current model when
+    usable. Empty/None means "no usable model" (or a best-effort probe failure),
+    driving the same empty state the composer shows.
+    """
+
+    available_models: tuple[ModelOption, ...]
+    default_model: ModelOption | None
 
 
 class PiLoginRequest(RequestModel):
@@ -343,6 +374,13 @@ class RecentWorkspaceResponse(SerializableModel):
     agent_count: int
     is_open: bool
     last_activity_at: datetime.datetime
+    # Absolute path of the workspace's checkout: `<environment_id>/code` for
+    # clone/worktree workspaces, the project's local repo path for in-place ones.
+    # None when the environment hasn't been initialized yet.
+    working_directory: str | None = None
+    # Branch currently checked out in that directory, from the workspace
+    # service's branch scan cache. None when not yet scanned.
+    current_branch: str | None = None
 
 
 class ListWorkspacesResponse(SerializableModel):

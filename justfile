@@ -149,8 +149,8 @@ format:
     {{ _quiet_by_default_fn }}
     _do_format() {
       echo "Formatting Python files..."
-      uv run ruff check --select UP006,UP007,I,F401 --fix --force-exclude --config pyproject.toml sculptor/
-      uv run ruff format --force-exclude --config pyproject.toml sculptor/
+      uv run ruff check --select UP006,UP007,I,F401 --fix --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
+      uv run ruff format --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Formatting JS/TS files..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run format .
@@ -167,9 +167,9 @@ lint:
     {{ _quiet_by_default_fn }}
     _do_lint() {
       echo "Checking Python formatting..."
-      uv run ruff format --check --force-exclude --config pyproject.toml sculptor/
+      uv run ruff format --check --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Linting Python files..."
-      uv run ruff check --force-exclude --config pyproject.toml sculptor/
+      uv run ruff check --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Linting JS/TS files..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run lint .
@@ -959,7 +959,7 @@ generate-api:
     }
     quiet_by_default generate-api _do_generate_api
 
-# Roll up the extension SDK declarations into the build-sculptor-plugin skill's sdk.d.ts
+# Roll up the extension SDK declarations into the build-sculptor-extension skill's sdk.d.ts
 [group("codegen")]
 generate-extension-sdk-dts: generate-api
     #!/usr/bin/env bash
@@ -984,7 +984,7 @@ check-extension-sdk-dts:
       tmp_file=$(mktemp)
       trap 'rm -f "$tmp_file"' EXIT
       ./scripts/generate-extension-sdk-dts.sh "$tmp_file"
-      if ! diff -u ../sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts "$tmp_file"; then
+      if ! diff -u ../sculptor-plugin/skills/build-sculptor-extension/sdk.d.ts "$tmp_file"; then
         echo "sdk.d.ts is stale - run 'just generate-extension-sdk-dts' and commit the result."
         exit 1
       fi
@@ -1696,6 +1696,33 @@ test-unit-offload *args="":
     {{ _require_offload }}
     ulimit -n 8192
     offload run -c offload-unit.toml --trace --show-estimated-cost {{args}} || [ $? -eq 2 ]
+
+# Run the perf scenario suite (sculptor/tests/perf/) on Offload (Modal); see
+# offload-perf.toml. Each sandbox writes measurements to test-results-perf/ as
+# perf-measurements-<token>.jsonl; concatenate them for the compare step
+# (tools/perf/comment.py). retry_count=0 there keeps measurements un-duplicated.
+[group("test")]
+test-offload-perf *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    offload run -c offload-perf.toml --trace {{args}} || [ $? -eq 2 ]
+
+# Fast perf subset on offload (default per-PR lane): deselects the perf_heavy
+# scenarios (long_history ~6.5 min, long_chat_scrolled ~3+ min) that would set
+# the parallel tail; PRs get quick signal (~5-6 min job) from everything else.
+# main — and PRs labeled "performance" — run the full matrix via
+# test-offload-perf. The fast config is derived from offload-perf.toml (single
+# source of truth) rather than committed separately, so the two can't drift.
+[group("test")]
+test-offload-perf-fast *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    python3 tools/perf/make_fast_config.py
+    offload run -c offload-perf-fast.toml --trace {{args}} || [ $? -eq 2 ]
 
 # -------- Sculptor Release Commands --------
 

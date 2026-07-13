@@ -54,3 +54,7 @@ storybook-static/
 # App signing secrets
 config/*.p8
 config/*.p12
+
+# Runtime-installed frontend plugins (the backend copies built plugin bundles
+# here to serve them); never tracked — plugin sources live in extensions/.
+public/plugins/

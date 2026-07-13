@@ -361,6 +361,24 @@ describe("useAlphaAutoScroll", () => {
     expect(result.current.isEngaged).toBe(true);
   });
 
+  it("auto-engages within the tighter short-viewport threshold", () => {
+    // Positive companion to the short-viewport test below ("does not
+    // auto-engage at streaming start 100px above the bottom on a short
+    // viewport"): within the tightened 80px threshold the engage still works.
+    const el = createMockScrollContainer(1500, 2000, 500); // distance=0, at bottom
+    const ref = { current: el };
+    const virtualizer = createMockVirtualizer();
+
+    const { result, rerender } = renderHook(
+      ({ isStreaming }) => useAlphaAutoScroll(ref, isStreaming, 10, virtualizer, null, -1, "test-task"),
+      { initialProps: { isStreaming: false } },
+    );
+
+    setScrollPosition(el, 1560, 2100); // distance = 2100 - 1560 - 500 = 40 <= 80
+    rerender({ isStreaming: true });
+    expect(result.current.isEngaged).toBe(true);
+  });
+
   describe("following pin direction", () => {
     /** Engage `following` by starting a stream while the view sits at the bottom. */
     const renderFollowing = (el: HTMLDivElement): void => {

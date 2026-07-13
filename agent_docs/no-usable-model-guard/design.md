@@ -16,8 +16,9 @@ Two coupled defects:
 
 ## Decision 1 — empty the catalog for an unusable selection
 
-Wherever the catalog is computed (start-time fetch, live credential refresh, and the
-pre-message probe): if the selected model's provider is unauthenticated **and** no
+Wherever the catalog is computed (start-time fetch, live credential refresh, the
+pre-message probe, and the pre-workspace modal probe — see
+`agent_docs/pi-modal-model-picker/spec.md`): if the selected model's provider is unauthenticated **and** no
 authenticated fallback exists, drop the selection (`current_model → None`) so curation yields
 `[]`. Emit that empty catalog rather than falling back to the built-in list.
 

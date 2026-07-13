@@ -127,6 +127,12 @@ class WorkspaceBranchPoller:
         with self._observer_lock:
             self._observers = [observer for observer in self._observers if observer is not queue]
 
+    def get_current_branch(self, workspace_id: WorkspaceID) -> str | None:
+        """Return the last-scanned current branch for a workspace, or None if not yet scanned."""
+        with self._observer_lock:
+            info = self._branch_info_by_workspace.get(workspace_id)
+        return info.current_branch if info is not None else None
+
     def _publish_branch_info(self, info: WorkspaceBranchInfo) -> None:
         """Atomically record and fan out a branch update under ``_observer_lock``."""
         with self._observer_lock:
