@@ -2,7 +2,6 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Queue
-from threading import Thread
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -37,7 +36,6 @@ from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
-from sculptor.server.llm_content_generation import TaskTitle
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
@@ -55,7 +53,6 @@ from sculptor.state.messages import PersistentUserMessage
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import HistoryScan
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
-from sculptor.tasks.handlers.run_agent.setup import _resolve_title_prediction_thread
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
@@ -255,60 +252,6 @@ def _scan_history(local_task: Task, services: ServiceCollectionForTask) -> Histo
     with services.data_model_service.open_task_transaction() as transaction:
         saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
     return scan_message_history(saved_messages)
-
-
-def test_resolve_title_prediction_overwrites_renamed_title(
-    local_task: Task,
-    services: ServiceCollectionForTask,
-) -> None:
-    """_resolve_title_prediction_thread clobbers a title that was renamed via the API.
-
-    Simulates the race condition:
-    1. Agent starts with title=None, kicks off title prediction thread
-    2. User renames the agent to "Renamed Title" (updates DB)
-    3. Title prediction finishes and saves the predicted title, overwriting the rename
-    """
-    workspace_id = WorkspaceID()
-    initial_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title=None,
-    )
-    _set_task_state(local_task, initial_state, services)
-
-    # Step 1: Agent loads state into memory (title=None).
-    in_memory_state = initial_state
-
-    # Step 2: User renames agent via API (directly updating DB).
-    renamed_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title="Renamed Title",
-    )
-    _set_task_state(local_task, renamed_state, services)
-    assert _get_task_title(local_task, services) == "Renamed Title"
-
-    # Step 3: Title prediction thread completes with a predicted title.
-    predicted_title = [TaskTitle(title="Predicted Title")]
-    completed_thread = Thread(target=lambda: None)
-    completed_thread.start()
-    completed_thread.join()
-
-    initial_message = ChatInputUserMessage(
-        message_id=AgentMessageID(),
-        text="Initial prompt",
-        model_name=LLMModel.CLAUDE_4_SONNET,
-    )
-
-    _resolve_title_prediction_thread(
-        title_thread=completed_thread,
-        title_result=predicted_title,
-        task_id=local_task.object_id,
-        task_state=in_memory_state,
-        initial_message=initial_message,
-        services=services,
-    )
-
-    # Step 4: The renamed title should be preserved, not overwritten.
-    assert _get_task_title(local_task, services) == "Renamed Title"
 
 
 class _SigtermOnFirstPushAgent(DefaultAgentWrapper):
@@ -1367,8 +1310,8 @@ def test_eager_pi_probe_records_fetched_empty_when_no_models(
         )
 
     # The carried-forward state AND the persisted row are fetched-empty [], not the
-    # NOT_FETCHED_YET sentinel — otherwise finalize_task_setup would later write the
-    # in-memory sentinel back over the DB.
+    # NOT_FETCHED_YET sentinel — so agent construction reads the fetched-empty
+    # catalog from the carried-forward in-memory copy, not the stale sentinel.
     assert evolved.available_models == []
     assert not isinstance(evolved.available_models, ModelCatalogState)
     assert _read_persisted_task_state(local_task, services).available_models == []

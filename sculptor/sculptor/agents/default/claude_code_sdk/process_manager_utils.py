@@ -205,6 +205,56 @@ Log file: {setup_state.log_path}
 """
 
 
+# Injected on the first message of an auto-rename-enabled workspace. Asks the agent to give
+# the workspace and itself descriptive names once it understands the task. References the
+# SCULPT_WORKSPACE_ID / SCULPT_AGENT_ID env vars (always present in the agent's shell), so no
+# ids need threading in here; the agent's bash expands them.
+#
+# The id vars are left unquoted on purpose: Sculptor ids have no whitespace or glob
+# characters, so expansion is shell-safe, and quoting them would place the quoted id and the
+# quoted name as two adjacent double-quoted tokens on one command line. The
+# no-implicit-string-concat ratchet is a raw-text regex scanner (not a Python parser), so it
+# reads that adjacency as implicit string concatenation and fails `just check` even though
+# the tokens live inside this triple-quoted string. (This very comment must avoid writing
+# that adjacent pair literally, for the same reason.)
+_AUTO_RENAME_REMINDER_PREFIX = """<system-reminder>
+This is the first message in a new Sculptor workspace. Its workspace and agent both have auto-generated placeholder names. Once you understand what this task is about, give them concise, descriptive names (3-6 words each) and set them by running BOTH of these commands once:
+
+  sculpt workspace rename $SCULPT_WORKSPACE_ID "<workspace name>"
+  sculpt agent rename $SCULPT_AGENT_ID "<agent name>"
+
+The two names capture different things:
+- The workspace name is the overall task or goal, e.g. "Add graph visualization".
+- The agent name is the specific action you are taking toward it, e.g. "Find graph visualization library"."""
+
+_AUTO_RENAME_REMINDER_SUFFIX = """
+
+Do this early and only once. Do not ask the user about it, do not mention it in your reply, and do not let it delay the real work. If a command fails, ignore it and carry on with the task.
+</system-reminder>
+
+"""
+
+
+def _build_auto_rename_reminder(naming_conventions: str | None) -> str:
+    """Assemble the first-message auto-rename reminder.
+
+    ``naming_conventions`` is the pre-resolved, layered convention block (see
+    ``naming_conventions.resolve_naming_conventions``). When present it is inlined
+    verbatim and told to override the default guidance on conflict; when absent the
+    default guidance stands alone.
+    """
+    conventions_block = ""
+    if naming_conventions is not None:
+        conventions_block = f"""
+
+The naming conventions below apply here and OVERRIDE the guidance above where they conflict. They are listed from least to most specific; when two conventions disagree, follow the one listed later.
+
+<naming-conventions>
+{naming_conventions}
+</naming-conventions>"""
+    return _AUTO_RENAME_REMINDER_PREFIX + conventions_block + _AUTO_RENAME_REMINDER_SUFFIX
+
+
 def get_user_instructions(
     message: ChatInputUserMessage | ResumeAgentResponseRunnerMessage | UserQuestionAnswerMessage,
     file_paths: tuple[str, ...],
@@ -212,6 +262,8 @@ def get_user_instructions(
     env_var_names: Sequence[str] = (),
     is_first_message: bool = False,
     setup_state: SetupReminderState | None = None,
+    enable_auto_rename: bool = False,
+    naming_conventions: str | None = None,
 ) -> str:
     if isinstance(message, ChatInputUserMessage):
         user_instructions = _strip_and_unescape_html(message.text)
@@ -246,6 +298,11 @@ The user has configured the following environment variables for this agent: {", 
 
 """
             user_instructions = env_var_instructions + user_instructions
+        if is_first_message and enable_auto_rename:
+            user_instructions = _build_auto_rename_reminder(naming_conventions) + user_instructions
+        # Prepend the setup reminder after the auto-rename one so it ends up above it: a
+        # running or failed setup command is higher-priority first-message context than the
+        # rename nudge, and shouldn't be pushed down by it.
         if is_first_message and setup_state is not None:
             user_instructions = _build_setup_reminder(setup_state) + user_instructions
         if skill_invocation_match is not None:

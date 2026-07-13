@@ -17,6 +17,7 @@ from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
+from sculptor.agents.default.claude_code_sdk.naming_conventions import resolve_naming_conventions
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor
 from sculptor.agents.default.claude_code_sdk.output_processor import is_first_user_message_of_conversation
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_claude_command
@@ -586,6 +587,11 @@ class ClaudeProcessManager:
             is_first_message = is_first_user_message_of_conversation(self.environment, self._harness)
             env_var_names = self.environment.get_project_env_var_names()
             setup_state = self._fetch_setup_state(is_first_message)
+            enable_auto_rename = get_user_config_instance().enable_auto_rename
+            # Only read the on-disk convention docs when the reminder will actually use them.
+            naming_conventions = (
+                resolve_naming_conventions(self.environment) if is_first_message and enable_auto_rename else None
+            )
             user_instructions = get_user_instructions(
                 # UserMessageUnion is wider than get_user_instructions accepts; non-chat messages never reach here
                 # pyrefly: ignore [bad-argument-type]
@@ -595,6 +601,8 @@ class ClaudeProcessManager:
                 env_var_names=env_var_names,
                 is_first_message=is_first_message,
                 setup_state=setup_state,
+                enable_auto_rename=enable_auto_rename,
+                naming_conventions=naming_conventions,
             )
             filename = str(self.environment.get_state_path() / f"user_instructions_{message.message_id}.txt")
             self.environment.write_file(filename, user_instructions)
