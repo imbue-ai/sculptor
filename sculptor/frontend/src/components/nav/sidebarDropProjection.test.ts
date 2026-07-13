@@ -8,7 +8,7 @@ import {
   flatSectionItemIds,
   locateTopLevelGroupId,
   locateWorkspaceParent,
-  projectGroupBesideGroup,
+  projectGroupBesideChild,
   projectSectionDrop,
   toggleBoundaryDepth,
 } from "./sidebarDropProjection.ts";
@@ -312,9 +312,9 @@ describe("locateTopLevelGroupId", () => {
   });
 });
 
-describe("projectGroupBesideGroup", () => {
-  it("lands the group directly before or after the target box, from either direction", () => {
-    const beforeFromAbove = projectGroupBesideGroup(CHILDREN, "wsg-1", "wsg-2", "before");
+describe("projectGroupBesideChild", () => {
+  it("lands the group directly before or after a target box, from either direction", () => {
+    const beforeFromAbove = projectGroupBesideChild(CHILDREN, "wsg-1", "wsg-2", "before");
     expect(keysOf(applySectionProjection(CHILDREN, beforeFromAbove as SectionProjection))).toEqual([
       "w-apple",
       "w-banana",
@@ -322,7 +322,7 @@ describe("projectGroupBesideGroup", () => {
       "wsg-2",
     ]);
 
-    const afterFromAbove = projectGroupBesideGroup(CHILDREN, "wsg-1", "wsg-2", "after");
+    const afterFromAbove = projectGroupBesideChild(CHILDREN, "wsg-1", "wsg-2", "after");
     expect(keysOf(applySectionProjection(CHILDREN, afterFromAbove as SectionProjection))).toEqual([
       "w-apple",
       "w-banana",
@@ -330,7 +330,7 @@ describe("projectGroupBesideGroup", () => {
       "wsg-1",
     ]);
 
-    const beforeFromBelow = projectGroupBesideGroup(CHILDREN, "wsg-2", "wsg-1", "before");
+    const beforeFromBelow = projectGroupBesideChild(CHILDREN, "wsg-2", "wsg-1", "before");
     expect(keysOf(applySectionProjection(CHILDREN, beforeFromBelow as SectionProjection))).toEqual([
       "w-apple",
       "wsg-2",
@@ -338,7 +338,7 @@ describe("projectGroupBesideGroup", () => {
       "w-banana",
     ]);
 
-    const afterFromBelow = projectGroupBesideGroup(CHILDREN, "wsg-2", "wsg-1", "after");
+    const afterFromBelow = projectGroupBesideChild(CHILDREN, "wsg-2", "wsg-1", "after");
     expect(keysOf(applySectionProjection(CHILDREN, afterFromBelow as SectionProjection))).toEqual([
       "w-apple",
       "wsg-1",
@@ -347,25 +347,48 @@ describe("projectGroupBesideGroup", () => {
     ]);
   });
 
+  it("lands the group directly before or after a loose row, from either direction", () => {
+    const afterFromAbove = projectGroupBesideChild(CHILDREN, "wsg-1", "w-banana", "after");
+    expect(keysOf(applySectionProjection(CHILDREN, afterFromAbove as SectionProjection))).toEqual([
+      "w-apple",
+      "w-banana",
+      "wsg-1",
+      "wsg-2",
+    ]);
+
+    const beforeFromBelow = projectGroupBesideChild(CHILDREN, "wsg-2", "w-banana", "before");
+    expect(keysOf(applySectionProjection(CHILDREN, beforeFromBelow as SectionProjection))).toEqual([
+      "w-apple",
+      "wsg-1",
+      "wsg-2",
+      "w-banana",
+    ]);
+
+    // Already directly before the row: the steady state is "no move".
+    expect(projectGroupBesideChild(CHILDREN, "wsg-1", "w-banana", "before")).toBeNull();
+  });
+
   it("is a fixed point: re-projecting the applied order returns null, so a stationary pointer cannot oscillate", () => {
     const moves = [
       ["wsg-1", "wsg-2"],
       ["wsg-2", "wsg-1"],
+      ["wsg-1", "w-banana"],
+      ["wsg-2", "w-apple"],
     ] as const;
     for (const side of ["before", "after"] as const) {
-      for (const [activeId, targetGroupId] of moves) {
-        const projection = projectGroupBesideGroup(CHILDREN, activeId, targetGroupId, side);
-        expect(projection).not.toBeNull();
-        const settled = applySectionProjection(CHILDREN, projection as SectionProjection);
-        expect(projectGroupBesideGroup(settled, activeId, targetGroupId, side)).toBeNull();
+      for (const [activeId, targetId] of moves) {
+        const projection = projectGroupBesideChild(CHILDREN, activeId, targetId, side);
+        const settled =
+          projection === null ? CHILDREN : applySectionProjection(CHILDREN, projection as SectionProjection);
+        expect(projectGroupBesideChild(settled, activeId, targetId, side)).toBeNull();
       }
     }
   });
 
   it("returns null for self-targets and unknown ids", () => {
-    expect(projectGroupBesideGroup(CHILDREN, "wsg-1", "wsg-1", "before")).toBeNull();
-    expect(projectGroupBesideGroup(CHILDREN, "wsg-ghost", "wsg-1", "after")).toBeNull();
-    expect(projectGroupBesideGroup(CHILDREN, "wsg-1", "wsg-ghost", "after")).toBeNull();
+    expect(projectGroupBesideChild(CHILDREN, "wsg-1", "wsg-1", "before")).toBeNull();
+    expect(projectGroupBesideChild(CHILDREN, "wsg-ghost", "wsg-1", "after")).toBeNull();
+    expect(projectGroupBesideChild(CHILDREN, "wsg-1", "wsg-ghost", "after")).toBeNull();
   });
 });
 

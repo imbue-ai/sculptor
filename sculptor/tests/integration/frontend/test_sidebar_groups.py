@@ -357,6 +357,117 @@ def test_pointer_drag_moves_group_below_adjacent_group(
     expect(sidebar.get_group_member_rows(group_two)).to_have_count(2)
 
 
+@user_story("to drag a group above or below a loose workspace row with the mouse")
+def test_pointer_drag_lands_group_beside_loose_row(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Parking a dragged group's pointer on a loose row's bottom/top half lands
+    the group after/before that row — deterministically, without jitter.
+
+    A loose row next to a group box is the geometry where two competing drag
+    authorities used to disagree: over-slot taking is side-agnostic while the
+    move stream resolves by midpoint, and each application re-slotted the lane
+    and flipped the collision target, sliding the row back and forth under a
+    stationary pointer (2-4 flips/second in hand-testing). The parked settles
+    here sit exactly on that boundary; the drop must land by the pointer's
+    side of the row's midpoint, and the parked lane must be stable enough for
+    the drop to commit it.
+
+    Steps:
+    1. Group 1 (WS Alpha) and Group 2 (WS Bravo) above the loose WS Charlie.
+    2. Drag Group 1's header down and park on WS Charlie's BOTTOM half; the
+       group lands after the row: [Group 2, WS Charlie, Group 1].
+    3. Drag Group 1's header back up and park on WS Charlie's TOP half; the
+       group lands before the row: [Group 2, Group 1, WS Charlie].
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: Two single-member groups above one loose row.
+    sidebar = _create_single_group(page, ["WS Alpha", "WS Bravo", "WS Charlie"], "WS Alpha")
+    sidebar.create_group_from_workspace(sidebar.get_workspace_row_by_name("WS Bravo"))
+    expect(sidebar.get_group_cards()).to_have_count(2)
+
+    # Step 2: Park in the row's bottom half (center +8px on a ~28px row) —
+    # the group lands after the row.
+    loose_row = sidebar.get_workspace_row_by_name("WS Charlie")
+    sidebar.drag_via_pointer(
+        item=sidebar.get_group_header(sidebar.get_group_card_by_name("Group 1")),
+        waypoints=[loose_row],
+        y_offsets=[8],
+    )
+    cards = sidebar.get_group_cards()
+    expect(cards).to_have_count(2)
+    expect(cards.nth(0)).to_contain_text("Group 2")
+    expect(cards.nth(1)).to_contain_text("Group 1")
+    group_one_box = sidebar.get_group_card_by_name("Group 1").bounding_box()
+    loose_box = loose_row.bounding_box()
+    assert group_one_box is not None and loose_box is not None
+    assert loose_box["y"] < group_one_box["y"], "the group must land BELOW the loose row"
+
+    # Step 3: Park in the row's top half — the group lands back above the row.
+    sidebar.drag_via_pointer(
+        item=sidebar.get_group_header(sidebar.get_group_card_by_name("Group 1")),
+        waypoints=[loose_row],
+        y_offsets=[-8],
+    )
+    cards = sidebar.get_group_cards()
+    expect(cards).to_have_count(2)
+    expect(cards.nth(0)).to_contain_text("Group 2")
+    expect(cards.nth(1)).to_contain_text("Group 1")
+    group_one_box = sidebar.get_group_card_by_name("Group 1").bounding_box()
+    loose_box = loose_row.bounding_box()
+    assert group_one_box is not None and loose_box is not None
+    assert group_one_box["y"] < loose_box["y"], "the group must land back ABOVE the loose row"
+
+
+@user_story("to drop a workspace into the group box my pointer is actually over")
+def test_pointer_drag_row_lands_in_box_under_pointer(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """A row drag released with the pointer inside a group's box joins THAT
+    group — even when the drag passed through another group on the way.
+
+    Passing through the first group leaves its slot as the projection's last
+    over-driven state, and the eject/re-enter transitions between adjacent
+    boxes could re-attach the row to the box ABOVE the pointer's gap rather
+    than the one the pointer went on to enter — with the edge-triggered over
+    stream silent, the stale parent survived to the drop (the hand-tested
+    symptom: a row released over the second group's header landing in the
+    first group). The pointer's box must win.
+
+    Steps:
+    1. Loose WS Alpha above Group 1 (WS Bravo, WS Charlie) above Group 2
+       (WS Delta).
+    2. Drag WS Alpha down through Group 1 (parking on its last member) and on
+       to Group 2's header, parking INSIDE Group 2's box, then drop.
+    3. WS Alpha is a member of Group 2, not Group 1.
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: [WS Alpha loose, Group 1 (Bravo, Charlie), Group 2 (Delta)].
+    sidebar = _create_single_group(page, ["WS Alpha", "WS Bravo", "WS Charlie", "WS Delta"], "WS Bravo")
+    group_one = sidebar.get_group_card_by_name("Group 1")
+    sidebar.add_workspace_to_group_via_menu(sidebar.get_workspace_row_by_name("WS Charlie"), "Group 1")
+    sidebar.create_group_from_workspace(sidebar.get_workspace_row_by_name("WS Delta"))
+    expect(sidebar.get_group_cards()).to_have_count(2)
+    group_two = sidebar.get_group_card_by_name("Group 2")
+    expect(sidebar.get_group_member_rows(group_one)).to_have_count(2)
+    expect(sidebar.get_group_member_rows(group_two)).to_have_count(1)
+
+    # Step 2: Down through Group 1's tail, then park on Group 2's header —
+    # squarely inside Group 2's box — and drop there.
+    sidebar.drag_via_pointer(
+        item=sidebar.get_workspace_row_by_name("WS Alpha"),
+        waypoints=[sidebar.get_workspace_row_by_name("WS Charlie"), sidebar.get_group_header(group_two)],
+    )
+
+    # Step 3: The row joined the group under the pointer.
+    expect(sidebar.get_group_member_rows(group_two)).to_have_count(2)
+    expect(sidebar.get_group_member_rows(group_two)).to_contain_text(["WS Alpha", "WS Delta"])
+    expect(sidebar.get_group_member_rows(group_one)).to_have_count(2)
+    expect(sidebar.get_workspace_rows()).to_have_count(4)
+
+
 @user_story("to drag a group below another by dropping in the empty space beneath it")
 def test_pointer_drag_moves_group_past_bottom_edge(
     sculptor_instance_: SculptorInstance,

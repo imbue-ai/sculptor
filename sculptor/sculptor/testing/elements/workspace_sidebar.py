@@ -260,7 +260,7 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         self._page.mouse.move(x, y)
         self._page.wait_for_timeout(250)
 
-    def drag_via_pointer(self, item: Locator, waypoints: list[Locator]) -> None:
+    def drag_via_pointer(self, item: Locator, waypoints: list[Locator], y_offsets: list[float] | None = None) -> None:
         """Drag ``item`` with the real PointerSensor: press on its center, move
         through each waypoint's center (parking + settling at each), release.
 
@@ -272,14 +272,23 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         pointer is exactly where a projection feedback loop would spin, and
         pausing there gives one time to surface as a crash instead of being
         skated over.
+
+        ``y_offsets`` (one per waypoint) nudges each park point vertically off
+        the waypoint's center, positive = down. The lane's geometric rules key
+        on which half of a row or box the pointer rests in, so a gesture
+        aiming for "the bottom half of that row" cannot park dead on the
+        midpoint — that is the ambiguous point the rules split on.
         """
+        offsets = [0.0] * len(waypoints) if y_offsets is None else y_offsets
+        if len(offsets) != len(waypoints):
+            raise AssertionError("y_offsets must align one-to-one with waypoints")
         start_x, _ = self._pointer_activate_drag(item)
-        for waypoint in waypoints:
+        for waypoint, y_offset in zip(waypoints, offsets):
             waypoint_box = waypoint.bounding_box()
             if waypoint_box is None:
                 raise AssertionError("pointer drag waypoint is not visible")
             target_x = waypoint_box["x"] + waypoint_box["width"] / 2
-            target_y = waypoint_box["y"] + waypoint_box["height"] / 2
+            target_y = waypoint_box["y"] + waypoint_box["height"] / 2 + y_offset
             self._page.mouse.move(target_x, target_y, steps=8)
             self._page.wait_for_timeout(250)
             self._pointer_settle(target_x, target_y)

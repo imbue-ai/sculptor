@@ -135,24 +135,25 @@ export const locateTopLevelGroupId = (children: ReadonlyArray<RepoSectionChild>,
 
 /**
  * Project a dragged group to the top-level slot directly before or after
- * another group (REQ-DND-4). The side comes from the caller — pointer position
- * against the target box's midpoint — NOT from the `over` slot: an over-slot
- * arrayMove is unstable when the pointer rests inside a multi-row box, because
- * the dragged header's placeholder is one row tall while the target box is
- * many, so every application lands the group on the other side of a target the
- * pointer is still inside — re-slotting the lane under a stationary pointer,
- * re-firing `over`, and looping until React aborts with "Maximum update depth
+ * another top-level child — a group box or a loose row (REQ-DND-4). The side
+ * comes from the caller — pointer position against the target's midpoint —
+ * NOT from the `over` slot: an over-slot arrayMove is side-agnostic and
+ * unstable when the pointer rests inside a multi-row box, because the dragged
+ * header's placeholder is one row tall while the target box is many, so every
+ * application lands the group on the other side of a target the pointer is
+ * still inside — re-slotting the lane under a stationary pointer, re-firing
+ * `over`, and looping until React aborts with "Maximum update depth
  * exceeded". Side-of-midpoint is a fixed point: a stationary pointer projects
  * the same order every time, and the steady state returns null (no move).
  */
-export const projectGroupBesideGroup = (
+export const projectGroupBesideChild = (
   children: ReadonlyArray<RepoSectionChild>,
   activeId: string,
-  targetGroupId: string,
+  targetId: string,
   side: "before" | "after",
 ): SectionGroupProjection | null => {
   const from = topLevelIndexOf(children, activeId);
-  const target = topLevelIndexOf(children, targetGroupId);
+  const target = topLevelIndexOf(children, targetId);
   if (from === -1 || target === -1 || from === target) {
     return null;
   }

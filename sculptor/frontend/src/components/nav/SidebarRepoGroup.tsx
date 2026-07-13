@@ -66,9 +66,8 @@ import type { SectionAppendProjection, SectionDepthIntent, SectionProjection } f
 import {
   applySectionProjection,
   flatSectionItemIds,
-  locateTopLevelGroupId,
   locateWorkspaceParent,
-  projectGroupBesideGroup,
+  projectGroupBesideChild,
   projectSectionDrop,
   toggleBoundaryDepth,
 } from "./sidebarDropProjection.ts";
@@ -89,6 +88,12 @@ const noSortingStrategy: SortingStrategy = () => null;
 // vertical axis keeps the drag reading as list reordering (the overlay rides
 // the rail instead of trailing the pointer sideways off it).
 const sectionDndModifiers = [restrictToVerticalAxis];
+
+// The DOM-geometry reads on the move stream measure the lane's group boxes
+// and workspace row buttons; queries run against the section's own children
+// container, so sibling repo sections never leak in.
+const GROUP_CARD_SELECTOR = `[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`;
+const WORKSPACE_ROW_SELECTOR = `[data-testid="${ElementIds.SIDEBAR_WORKSPACE_ROW}"]`;
 
 // How far inside a group box's top/bottom edge the pointer must be before the
 // depth intent reads "inside". The raw gap between two adjacent boxes is only
@@ -276,22 +281,16 @@ export const SidebarRepoGroup = ({
         return;
       }
 
-      // A pointer-driven group drag targeting another group is owned entirely
-      // by the LEVEL-triggered resolution in handleSectionDragMove: over events
-      // are edge-triggered (they fire only when the collision target changes),
-      // and the tall dragged overlay's center leads the pointer, so a box's
-      // inner targets are often all spent while the pointer is still in its top
-      // half — a later midpoint crossing, or a drag past the box's bottom into
-      // empty space, would never re-evaluate the side here. Loose-row targets
-      // stay on this over path: a single-row target re-fires on every crossing,
-      // and standard slot-taking is stable there (the placeholder takes the
-      // over slot, so the next over is the drag itself and the early-return
-      // above holds).
-      if (
-        state.kind === "group" &&
-        event.activatorEvent instanceof PointerEvent &&
-        locateTopLevelGroupId(state.display, overId) !== null
-      ) {
+      // A pointer-driven GROUP drag is owned entirely by the LEVEL-triggered
+      // geometric resolution in handleSectionDragMove. Over events cannot
+      // share that ownership: they are edge-triggered (they fire only when the
+      // collision target changes) and their slot-taking is side-agnostic, so
+      // at a loose row's boundary the two authorities can disagree — and each
+      // application re-slots the lane, flips the collision target, and hands
+      // the decision back to the other, sliding the row back and forth under a
+      // stationary pointer forever. Keyboard group drags (no live pointer)
+      // keep this path.
+      if (state.kind === "group" && event.activatorEvent instanceof PointerEvent) {
         return;
       }
 
@@ -323,24 +322,11 @@ export const SidebarRepoGroup = ({
   );
 
   // Every pointer-geometric decision lives on the move stream (level-
-  // triggered): a dragged group's before/after side against the box under the
-  // pointer, and a dragged row's depth intent below.
-  //
-  // Row depth intent is geometric, like Dia's: "inside" while the pointer
-  // sits within some group box's vertical extent, "outside" in the gaps
-  // between boxes and below the last one. This is what makes the loose slot
-  // between two adjacent groups — and after a trailing group — actually
-  // reachable (REQ-DND-6): a group-edge slot only reads inside while the
-  // pointer really is over the group's box. The box growing around the drop
-  // gap it holds open gives natural hysteresis: ejecting takes one extra row
-  // of travel past the grown box's edge, and a pointer parked in a between-box
-  // gap never reads inside in the first place, so the box can't chase it.
-  //
-  // When the pointer is outside every box while the row's placeholder sits IN
-  // a group (a fast drag can land it inside before the intent catches up),
-  // eject it directly to the loose slot on whichever side of that group's box
-  // the pointer is — the toggle needs a direction the binary intent can't
-  // carry, so it is built here where the pointer is known.
+  // triggered): a dragged group's whole slot resolution, and a dragged row's
+  // parent and depth intent below. Move events fire on every pointer sample,
+  // so a wrong intermediate state self-heals on the next sample — unlike the
+  // edge-triggered over stream, which stays silent until the collision target
+  // changes and can strand a stale projection under a parked pointer.
   const handleSectionDragMove = useCallback(
     (event: DragMoveEvent): void => {
       const state = dragStateRef.current;
@@ -353,59 +339,113 @@ export const SidebarRepoGroup = ({
       }
       const pointerY = activator.clientY + event.delta.y;
 
-      // A dragged GROUP resolves its slot geometrically against the OTHER
-      // group boxes on EVERY move (level-triggered — see the matching guard in
-      // handleSectionDragOver for why edge-triggered over events cannot decide
-      // the side). The rule is total over the whole rail, not just the box
-      // interiors: the group lands BEFORE the first other box whose midpoint is
-      // at or below the pointer, else AFTER the last other box. So a pointer in
-      // a box's top half, above all boxes, in a gap, below the last box, or
+      // A dragged GROUP resolves its slot geometrically against every OTHER
+      // top-level item — group boxes AND loose rows — on EVERY move, and this
+      // is the ONLY authority for pointer group drags (the over handler defers
+      // wholesale; see the matching guard there). The rule is total over the
+      // whole rail: the group lands BEFORE the first other item whose midpoint
+      // is at or below the pointer, else AFTER the last one — a pointer in a
+      // box's top half, over a loose row, above everything, in a gap, or
       // dwelling in the empty space beneath the lane all resolve to a definite
-      // slot — the earlier "must be inside a box" gate silently dropped the
-      // past-the-bottom case, which is the most natural way to drag a group
-      // down past the final one. projectGroupBesideGroup is a fixed point, so a
-      // stationary pointer settles without oscillating.
-      //
-      // Loose-row targets still belong to the over path (arrayMove is stable
-      // there): defer whenever the nearest droppable is a loose row, mirroring
-      // the over handler's guard so the two never fight over the same move.
+      // slot. Side-of-midpoint keeps projectGroupBesideChild a fixed point, so
+      // a stationary pointer settles without re-slotting.
       if (state.kind === "group") {
-        const overId = event.over === null ? null : String(event.over.id);
-        if (overId !== null && overId !== state.activeId && locateTopLevelGroupId(state.display, overId) === null) {
+        const items: Array<{ id: string; rect: DOMRect }> = [];
+        for (const element of section.querySelectorAll(`${GROUP_CARD_SELECTOR}, ${WORKSPACE_ROW_SELECTOR}`)) {
+          const isCard = element.matches(GROUP_CARD_SELECTOR);
+          if (!isCard && element.closest(GROUP_CARD_SELECTOR) !== null) {
+            // Member rows travel with their box; only the box competes for a slot.
+            continue;
+          }
+          const id = element.getAttribute(isCard ? "data-group-id" : "data-workspace-id");
+          if (id === null || id === state.activeId) {
+            continue;
+          }
+          items.push({ id, rect: element.getBoundingClientRect() });
+        }
+
+        if (items.length === 0) {
           return;
         }
-        const otherBoxes = [...section.querySelectorAll(`[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`)]
-          .map((card) => ({ id: card.getAttribute("data-group-id"), rect: card.getBoundingClientRect() }))
-          .filter((box): box is { id: string; rect: DOMRect } => box.id !== null && box.id !== state.activeId);
-        if (otherBoxes.length === 0) {
-          return;
-        }
-        const before = otherBoxes.find((box) => pointerY <= (box.rect.top + box.rect.bottom) / 2);
+        const before = items.find((item) => pointerY <= (item.rect.top + item.rect.bottom) / 2);
         const projection =
           before !== undefined
-            ? projectGroupBesideGroup(state.display, state.activeId, before.id, "before")
-            : projectGroupBesideGroup(state.display, state.activeId, otherBoxes[otherBoxes.length - 1].id, "after");
+            ? projectGroupBesideChild(state.display, state.activeId, before.id, "before")
+            : projectGroupBesideChild(state.display, state.activeId, items[items.length - 1].id, "after");
         acceptProjection(state, projection, state.depthIntent);
         return;
       }
 
-      let intent: SectionDepthIntent = "outside";
-      for (const card of section.querySelectorAll(`[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"]`)) {
+      // A dragged ROW's depth is geometric, like Dia's: "inside" while the
+      // pointer sits within some group box's vertical extent (minus the edge
+      // inset), "outside" in the gaps between boxes and below the last one.
+      // This is what makes the loose slot between two adjacent groups — and
+      // after a trailing group — actually reachable (REQ-DND-6). The box
+      // growing around the drop gap it holds open gives natural hysteresis:
+      // ejecting takes one extra row of travel past the grown box's edge, and
+      // a pointer parked in a between-box gap never reads inside in the first
+      // place, so the box can't chase it.
+      let pointerBox: Element | null = null;
+      for (const card of section.querySelectorAll(GROUP_CARD_SELECTOR)) {
         const rect = card.getBoundingClientRect();
         if (pointerY >= rect.top + BOX_EDGE_INSET_PX && pointerY <= rect.bottom - BOX_EDGE_INSET_PX) {
-          intent = "inside";
+          pointerBox = card;
           break;
         }
       }
+      const intent: SectionDepthIntent = pointerBox === null ? "outside" : "inside";
+      const activeParent = locateWorkspaceParent(state.display, state.activeId);
 
+      // The box under the pointer is authoritative for WHICH group the row is
+      // in. The over stream alone cannot be: it is edge-triggered, so once its
+      // target stops changing it goes silent, while the eject/re-enter
+      // transitions below can meanwhile re-attach the row to a DIFFERENT box
+      // than the one the pointer sits in — and the binary inside-some-box
+      // intent can't tell the two apart. When the pointer is inside an
+      // expanded box that is not the placeholder's current parent, re-project
+      // the row into THAT box at the slot the pointer indicates: before the
+      // first member whose midpoint is below the pointer, else the member
+      // tail. Same side-of-midpoint rule as the group drag above, so a
+      // stationary pointer settles. (A collapsed box has no member lane to
+      // slot into; joining it stays with the over path's header append.)
+      if (pointerBox !== null) {
+        const pointerGroupId = pointerBox.getAttribute("data-group-id");
+        if (
+          pointerGroupId !== null &&
+          pointerGroupId !== activeParent &&
+          pointerBox.getAttribute("data-collapsed") !== "true"
+        ) {
+          const memberRects = [...pointerBox.querySelectorAll(WORKSPACE_ROW_SELECTOR)].map((row) =>
+            row.getBoundingClientRect(),
+          );
+          const index = memberRects.filter((rect) => (rect.top + rect.bottom) / 2 < pointerY).length;
+          acceptProjection(
+            state,
+            {
+              kind: "row",
+              activeId: state.activeId,
+              parentGroupId: pointerGroupId,
+              index,
+              // The head and tail slots double as the loose slots beside the
+              // box, so both stay flippable by depth intent.
+              isBoundary: index === 0 || index === memberRects.length,
+            },
+            intent,
+          );
+          return;
+        }
+      }
+
+      // The pointer is outside every box while the row's placeholder sits IN
+      // a group (a fast drag can land it inside before the intent catches
+      // up): eject it directly to the loose slot on whichever side of that
+      // group's box the pointer is — the toggle needs a direction the binary
+      // intent can't carry, so it is built here where the pointer is known.
       if (intent === "outside") {
-        const activeParent = locateWorkspaceParent(state.display, state.activeId);
         const card =
           activeParent === null
             ? null
-            : section.querySelector(
-                `[data-testid="${ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}"][data-group-id="${activeParent}"]`,
-              );
+            : section.querySelector(`${GROUP_CARD_SELECTOR}[data-group-id="${activeParent}"]`);
         const cardRect = card?.getBoundingClientRect();
         if (activeParent !== null && cardRect !== undefined) {
           // A member's removal never shifts top-level indices, so the group's
@@ -798,7 +838,12 @@ export const SidebarRepoGroup = ({
                 ),
               )}
             </SortableContext>
-            <DragOverlay>
+            {/* No drop animation: the drop commits instantly and the lane
+                already renders the row/run at its final slot, so the default
+                animation drags an overlay clone across the settled lane —
+                doubled text converging on the real element. Matches the
+                other DragOverlay surfaces (PanelDndProvider, Actions). */}
+            <DragOverlay dropAnimation={null}>
               {overlayRowWorkspace !== null ? (
                 <WorkspaceRowDragPreview
                   workspace={overlayRowWorkspace}
