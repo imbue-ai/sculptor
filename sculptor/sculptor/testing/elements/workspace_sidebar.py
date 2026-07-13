@@ -406,7 +406,7 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         expect(expand_icon).to_be_visible()
         expand_icon.click()
 
-    # -- Layouts --
+    # Layouts
 
     def get_layouts_link(self) -> Locator:
         """The "Layouts" bottom-action item that opens the Layouts switcher."""

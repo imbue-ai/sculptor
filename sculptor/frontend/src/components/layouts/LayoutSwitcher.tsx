@@ -137,7 +137,7 @@ export const LayoutSwitcher = (): ReactElement => {
     close();
   }, [setSaveOpen, close]);
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  // Actions the switcher performs on the highlighted layout.
   const apply = useCallback(
     (layout: SavedLayout): void => {
       applyLayout(layout);
@@ -257,7 +257,7 @@ export const LayoutSwitcher = (): ReactElement => {
     setIsMoreOptionsOpen(true);
   }, [highlighted, enabledPopoverIndexes]);
 
-  // ── Keyboard (capture phase, so it wins over the global handler) ────────────
+  // Keyboard (capture phase, so it wins over the global handler).
   // The capture listener is mounted once and reads live state through this ref;
   // it's refreshed after every commit so the handler never closes over stale
   // values (writing the ref in an effect keeps render side-effect-free).
