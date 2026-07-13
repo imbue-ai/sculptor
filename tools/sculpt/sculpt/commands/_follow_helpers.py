@@ -10,6 +10,7 @@ import typer
 from sculpt.auth import build_client
 from sculpt.commands.data_types import AgentStatusOutput
 from sculpt.formatting import cli_error
+from sculpt.formatting import handle_connection_error
 from sculpt.message_formatting import format_message
 from sculpt.session import SessionTokenError
 from sculpt.session import get_session_token
@@ -25,7 +26,7 @@ def get_session_token_safe(base_url: str, json_output: bool) -> str:
     except SessionTokenError as e:
         cli_error(str(e), json_output=json_output)
     except (httpx.ConnectError, httpx.ConnectTimeout):
-        cli_error(f"Could not connect to Sculptor server at {base_url}", json_output=json_output)
+        handle_connection_error(json_output, base_url=base_url)
 
 
 def handle_exit_reason(reason: ExitReason, json_output: bool) -> None:
@@ -55,6 +56,7 @@ def on_status_json(snapshot: AgentSnapshot) -> None:
         current_activity=snapshot.current_activity,
         last_activity=snapshot.last_activity,
         waiting_detail=snapshot.waiting_detail,
+        waiting_options=snapshot.waiting_options,
         error_detail=snapshot.error_detail,
         task_completed=snapshot.task_completed,
         task_total=snapshot.task_total,
@@ -149,7 +151,5 @@ def follow_and_stream_messages(base_url: str, agent_id: str, *, json_output: boo
         messages_cb = on_messages_text
         reconnect_cb = on_reconnect_separator
 
-    exit_reason = follow_agent(
-        base_url, session_token, agent_id, status_cb, messages_cb, reconnect_cb
-    )
+    exit_reason = follow_agent(base_url, session_token, agent_id, status_cb, messages_cb, reconnect_cb)
     handle_exit_reason(exit_reason, json_output)

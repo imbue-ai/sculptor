@@ -41,10 +41,10 @@ window.__TANSTACK_QUERY_CLIENT__ = queryClient;
 /**
  * Reserved first element for every host-owned query key.
  *
- * This `queryClient` is shared with runtime-loaded frontend plugins through an
+ * This `queryClient` is shared with runtime-loaded extensions through an
  * import map, so the key space is partitioned by namespace: host queries live
- * under `["sculptor", …]`, while each plugin keys its queries under its own
- * plugin id. Keeping the host's keys behind this prefix guarantees a plugin can
+ * under `["sculptor", …]`, while each extension keys its queries under its own
+ * extension id. Keeping the host's keys behind this prefix guarantees an extension can
  * never collide with — or accidentally invalidate — a host query, and vice
  * versa. Every host query key MUST start with this constant.
  */

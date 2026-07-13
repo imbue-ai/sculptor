@@ -173,7 +173,7 @@ class PiHarness(Harness):
         # The raw catalog: NOT_FETCHED_YET until the start-time probe persists a
         # list (possibly [] = authenticated but no providers). Preserved so the
         # switcher shows a loading state during startup rather than flashing the
-        # login CTA. Also NOT_FETCHED_YET when task_state is absent (nothing known).
+        # empty state. Also NOT_FETCHED_YET when task_state is absent (nothing known).
         if task_state is None:
             return NOT_FETCHED_YET
         return task_state.available_models
@@ -188,6 +188,12 @@ class PiHarness(Harness):
     def sources_backend_models(self) -> bool:
         # Pi sources its catalog from its authenticated providers.
         return True
+
+    def configuration_settings_section(self) -> str:
+        # Pi authenticates providers under Settings -> Pi (its own provider-auth area),
+        # not the shared Dependencies binary/auth surface, so the no-usable-model CTA
+        # routes there.
+        return "PI"
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return tool_name == ASK_USER_QUESTION_TOOL_NAME

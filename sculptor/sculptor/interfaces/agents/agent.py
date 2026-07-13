@@ -366,6 +366,14 @@ class RequestSuccessAgentMessage(PersistentRequestCompleteAgentMessage):
     # pyrefly: ignore [bad-override]
     error: None = None
     interrupted: bool = False
+    # Only meaningful when interrupted=True. An interrupted success normally
+    # means "the turn may still be resumed after a restart", so replay keeps the
+    # request orphaned and startup reconciliation refuses to count it as
+    # processed. turn_abandoned=True declares the opposite contract: this
+    # completion terminally settles the request and the turn will not be
+    # continued (harness orphan-finalization on a no-op resume, pi's
+    # resume-settle). Replay and dedup treat such requests as fully processed.
+    turn_abandoned: bool = False
 
 
 class RequestFailureAgentMessage(PersistentRequestCompleteAgentMessage, ErrorMessage):

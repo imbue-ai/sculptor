@@ -52,8 +52,8 @@ class ModelCatalogState(StrEnum):
 
     `NOT_FETCHED_YET` is the birth state of a backend (pi) catalog on task state,
     before the start-time probe runs — distinct from a fetched-but-empty `[]`
-    (authenticated, but no providers), which is what drives the login CTA. Keeping
-    the two apart is what stops the switcher flashing that CTA during startup. A
+    (authenticated, but no providers), which is what drives the empty state. Keeping
+    the two apart is what stops the switcher flashing that empty state during startup. A
     StrEnum member is a value-less, interned singleton that survives serialization
     by identity, so read sites use `is` rather than overloading `None`.
     """

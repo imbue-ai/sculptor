@@ -8,6 +8,7 @@ NOTE: Endpoints are not currently tested for cross-user authorization (preventin
 
 from pathlib import Path
 from typing import Generator
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -48,6 +49,7 @@ from sculptor.state.messages import LLMModel
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.web.app import _agent_config_for_request
+from sculptor.web.app import _workspace_working_directory
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import UserSession
 from sculptor.web.auth import authenticate_anonymous
@@ -259,6 +261,41 @@ def test_create_worktree_workspace_accepts_valid_branch_name(
 ) -> None:
     response = _post_create_worktree_workspace(client, test_project, "imbue/board-demo-workspace")
     assert response.status_code == 200, response.text
+
+
+def test_workspace_working_directory_resolves_per_strategy() -> None:
+    # Clone and worktree checkouts live at <environment_id>/code.
+    assert _workspace_working_directory(WorkspaceInitializationStrategy.CLONE, "/tmp/ws1", "/repo") == "/tmp/ws1/code"
+    assert (
+        _workspace_working_directory(WorkspaceInitializationStrategy.WORKTREE, "/tmp/ws2", "/repo") == "/tmp/ws2/code"
+    )
+    # In-place workspaces work directly in the project's local repo.
+    assert _workspace_working_directory(WorkspaceInitializationStrategy.IN_PLACE, None, "/repo") == "/repo"
+    # No environment yet for an isolated checkout: unknown.
+    assert _workspace_working_directory(WorkspaceInitializationStrategy.CLONE, None, "/repo") is None
+
+
+def test_workspace_endpoints_report_working_directory_and_current_branch(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = client.get("/api/v1/workspaces/recent")
+    assert response.status_code == 200, response.text
+    rows_by_id = {row["objectId"]: row for row in response.json()["workspaces"]}
+    row = rows_by_id[str(workspace.object_id)]
+    # IN_PLACE workspaces work directly in the project's local repo.
+    assert row["workingDirectory"] == str(test_project.get_local_user_path())
+    # The branch scan cache may not have run yet, so only presence is guaranteed.
+    assert "currentBranch" in row
+
+    response = client.get(f"/api/v1/workspaces/{workspace.object_id}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["workingDirectory"] == str(test_project.get_local_user_path())
+    assert "currentBranch" in body
 
 
 def _validate_new_branch_name(client: TestClient, project: Project, name: str) -> dict:
@@ -1165,17 +1202,20 @@ def test_start_task_resolves_agent_type(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
     """Prompt-ful creation honors a chat agent_type and rejects terminal types."""
-    response = client.post(
-        f"/api/v1/projects/{test_project.object_id}/tasks",
-        json=model_dump(
-            StartTaskRequest(
-                prompt="hello pi",
-                model=LLMModel.CLAUDE_4_SONNET,
-                agent_type=AgentTypeName.PI,
+    with patch("sculptor.web.app.compute_authenticated_provider_ids", return_value={"anthropic"}):
+        response = client.post(
+            f"/api/v1/projects/{test_project.object_id}/tasks",
+            json=model_dump(
+                StartTaskRequest(
+                    prompt="hello pi",
+                    backend_model=ModelOption(
+                        provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"
+                    ),
+                    agent_type=AgentTypeName.PI,
+                ),
+                is_camel_case=True,
             ),
-            is_camel_case=True,
-        ),
-    )
+        )
     assert response.status_code == 200, response.text
     task_id = TaskID(response.json()["id"])
     user_session = authenticate_anonymous(test_services, RequestID())

@@ -37,10 +37,14 @@ class ElementIDs(StrEnum):
     NEW_WORKSPACE_CONTEXT_PILL = "NEW_WORKSPACE_CONTEXT_PILL"
     NEW_WORKSPACE_KEEP_OPEN_SWITCH = "NEW_WORKSPACE_KEEP_OPEN_SWITCH"
     NEW_WORKSPACE_CREATE_BUTTON = "NEW_WORKSPACE_CREATE_BUTTON"
-    # Shown in place of the per-prompt agent-settings controls when the first
-    # agent is pi: model / effort / plan / fast do not apply to a pi create
-    # (pi picks its model from its own in-task catalog), so a hint replaces them.
-    NEW_WORKSPACE_PI_SETTINGS_HINT = "NEW_WORKSPACE_PI_SETTINGS_HINT"
+    # The pi first-agent model picker, shown in place of Claude's per-prompt
+    # controls: pi carries a backend-sourced catalog, so the modal offers the same
+    # model selector the composer has, fed by the host-side catalog probe.
+    NEW_WORKSPACE_PI_MODEL_PICKER = "NEW_WORKSPACE_PI_MODEL_PICKER"
+    # The pi no-usable-model surface (no authenticated providers): the picker's
+    # "No models available" state plus the CTA routing to Settings -> Pi. A pi
+    # prompt cannot be submitted against it; a promptless create still can.
+    NEW_WORKSPACE_PI_EMPTY_STATE = "NEW_WORKSPACE_PI_EMPTY_STATE"
     WORKSPACE_SELECTOR = "WORKSPACE_SELECTOR"
     WORKSPACE_OPTION_NAME = "WORKSPACE_OPTION_NAME"
     HOME_PAGE_SYSTEM_PROMPT_OPEN_BUTTON = "HOME_PAGE_SYSTEM_PROMPT_OPEN_BUTTON"
@@ -220,6 +224,9 @@ class ElementIDs(StrEnum):
     DIFF_SKELETON = "DIFF_SKELETON"
     DIFF_VIEWER_EMPTY = "DIFF_VIEWER_EMPTY"
     COMBINED_DIFF_FILE_SECTION = "COMBINED_DIFF_FILE_SECTION"
+    # The file-navigation / scope / commit toolbar row. Hidden (not rendered) when
+    # CombinedDiffView is given `hideToolbar` — as the mobile review-all overlay does.
+    COMBINED_DIFF_TOOLBAR = "COMBINED_DIFF_TOOLBAR"
     # Root of the Review All panel, which wraps the combined multi-file diff.
     REVIEW_ALL_PANEL = "REVIEW_ALL_PANEL"
     DIFF_VIEW_UNIFIED = "DIFF_VIEW_UNIFIED"
@@ -347,18 +354,18 @@ class ElementIDs(StrEnum):
     SETTINGS_PRIVACY_TELEMETRY_DIALOG = "SETTINGS_PRIVACY_TELEMETRY_DIALOG"
     SETTINGS_PRIVACY_TELEMETRY_DIALOG_CONFIRM = "SETTINGS_PRIVACY_TELEMETRY_DIALOG_CONFIRM"
     SETTINGS_PRIVACY_TELEMETRY_DIALOG_CANCEL = "SETTINGS_PRIVACY_TELEMETRY_DIALOG_CANCEL"
-    SETTINGS_NAV_PLUGINS = "SETTINGS_NAV_PLUGINS"
-    SETTINGS_PLUGINS_LIST = "SETTINGS_PLUGINS_LIST"
-    SETTINGS_PLUGINS_EMPTY = "SETTINGS_PLUGINS_EMPTY"
-    SETTINGS_PLUGINS_SOURCE_INPUT = "SETTINGS_PLUGINS_SOURCE_INPUT"
-    SETTINGS_PLUGINS_ADD_BUTTON = "SETTINGS_PLUGINS_ADD_BUTTON"
-    SETTINGS_PLUGINS_SOURCE_ROW = "SETTINGS_PLUGINS_SOURCE_ROW"
-    SETTINGS_PLUGINS_SOURCE_REMOVE = "SETTINGS_PLUGINS_SOURCE_REMOVE"
-    SETTINGS_PLUGINS_SOURCE_TOGGLE = "SETTINGS_PLUGINS_SOURCE_TOGGLE"
-    SETTINGS_PLUGINS_SOURCE_RELOAD = "SETTINGS_PLUGINS_SOURCE_RELOAD"
-    SETTINGS_PLUGINS_SOURCE_SETTINGS = "SETTINGS_PLUGINS_SOURCE_SETTINGS"
-    SETTINGS_PLUGINS_REFRESH_BUTTON = "SETTINGS_PLUGINS_REFRESH_BUTTON"
-    SETTINGS_PLUGINS_DIRECTORY = "SETTINGS_PLUGINS_DIRECTORY"
+    SETTINGS_NAV_EXTENSIONS = "SETTINGS_NAV_EXTENSIONS"
+    SETTINGS_EXTENSIONS_LIST = "SETTINGS_EXTENSIONS_LIST"
+    SETTINGS_EXTENSIONS_EMPTY = "SETTINGS_EXTENSIONS_EMPTY"
+    SETTINGS_EXTENSIONS_SOURCE_INPUT = "SETTINGS_EXTENSIONS_SOURCE_INPUT"
+    SETTINGS_EXTENSIONS_ADD_BUTTON = "SETTINGS_EXTENSIONS_ADD_BUTTON"
+    SETTINGS_EXTENSIONS_SOURCE_ROW = "SETTINGS_EXTENSIONS_SOURCE_ROW"
+    SETTINGS_EXTENSIONS_SOURCE_REMOVE = "SETTINGS_EXTENSIONS_SOURCE_REMOVE"
+    SETTINGS_EXTENSIONS_SOURCE_TOGGLE = "SETTINGS_EXTENSIONS_SOURCE_TOGGLE"
+    SETTINGS_EXTENSIONS_SOURCE_RELOAD = "SETTINGS_EXTENSIONS_SOURCE_RELOAD"
+    SETTINGS_EXTENSIONS_SOURCE_SETTINGS = "SETTINGS_EXTENSIONS_SOURCE_SETTINGS"
+    SETTINGS_EXTENSIONS_REFRESH_BUTTON = "SETTINGS_EXTENSIONS_REFRESH_BUTTON"
+    SETTINGS_EXTENSIONS_DIRECTORY = "SETTINGS_EXTENSIONS_DIRECTORY"
     SETTINGS_NAV_REPOSITORIES = "SETTINGS_NAV_REPOSITORIES"
     SETTINGS_NAV_ACTIONS = "SETTINGS_NAV_ACTIONS"
     SETTINGS_NAV_GIT = "SETTINGS_NAV_GIT"
@@ -434,13 +441,16 @@ class ElementIDs(StrEnum):
     PI_LOGIN_DIALOG = "pi-login-dialog"
     PI_LOGIN_TERMINAL = "pi-login-terminal"
     PI_LOGIN_DONE_BUTTON = "pi-login-done-button"
-    # Power-user paste-key path, reached via "Paste API key instead" inside the modal.
+    # Unused paste-key UI test IDs; drop with a `just generate-api` pass.
     PI_PROVIDER_PASTE_KEY_SWITCH = "pi-provider-paste-key-switch"
     PI_PASTE_KEY_INPUT = "pi-paste-key-input"
     PI_PASTE_KEY_SAVE = "pi-paste-key-save"
-    # Model-picker empty state when a pi agent has no authenticated providers.
+    # Model-picker disabled "no models available" state when a harness (pi) has no
+    # authenticated providers; the fix-it action lives on the composer send slot.
     PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"
-    PI_PICKER_LOGIN_CTA = "pi-picker-login-cta"
+    # Composer send-slot CTA that replaces Send when the harness has no usable model,
+    # routing to that harness's own configuration settings section.
+    HARNESS_CONFIG_CTA = "harness-config-cta"
     # Model-picker placeholder while the start-time catalog probe is still in
     # flight (catalog NOT_FETCHED_YET), shown instead of the empty-state CTA.
     PI_PICKER_LOADING = "pi-picker-loading"
@@ -589,6 +599,10 @@ class ElementIDs(StrEnum):
     WORKSPACE_NAME_INPUT = "WORKSPACE_NAME_INPUT"
     WORKSPACE_ROW = "WORKSPACE_ROW"
     WORKSPACE_ROW_BRANCH = "WORKSPACE_ROW_BRANCH"
+    # Placeholder shown in place of a recent-workspace row's branch label while
+    # the workspace's current branch is still streaming in (so the row never
+    # flashes the source branch it was forked from).
+    WORKSPACE_ROW_BRANCH_SKELETON = "WORKSPACE_ROW_BRANCH_SKELETON"
     WORKSPACE_SEARCH_INPUT = "WORKSPACE_SEARCH_INPUT"
     ADD_WORKSPACE_EMPTY_STATE = "ADD_WORKSPACE_EMPTY_STATE"
 
@@ -616,6 +630,10 @@ class ElementIDs(StrEnum):
     # beneath a repo that has no workspaces.
     SIDEBAR_ADD_REPO_BUTTON = "SIDEBAR_ADD_REPO_BUTTON"
     SIDEBAR_NO_WORKSPACES_HINT = "SIDEBAR_NO_WORKSPACES_HINT"
+    # Placeholder skeleton shown in the repo-list area while the first workspace
+    # snapshot is still in flight (e.g. right after a hard refresh), before the
+    # list is known to be empty or populated.
+    SIDEBAR_LOADING_SKELETON = "SIDEBAR_LOADING_SKELETON"
 
     # Layouts feature (the switcher dialog, its rows + bottom bar + more-options
     # popover, the save dialog, and the tidy confirmation).
@@ -679,6 +697,10 @@ class ElementIDs(StrEnum):
     SECTION_MAXIMIZE_BUTTON = "SECTION_MAXIMIZE_BUTTON"
     SECTION_ACTIVE_RING = "SECTION_ACTIVE_RING"
     SECTION_EMPTY_STATE = "SECTION_EMPTY_STATE"
+    # Placeholder shown in a section body while its placed panel is still
+    # resolving because the agent/task snapshot hasn't arrived yet (e.g. after a
+    # hard refresh), in place of the empty-state launcher.
+    SECTION_LOADING_STATE = "SECTION_LOADING_STATE"
     SECTION_SPLIT_SUBSECTION = "SECTION_SPLIT_SUBSECTION"
     # The collapsed-section drop overlay floating at a window edge during a panel
     # drag; suffixed with the section id (e.g. f"{SECTION_DROP_OVERLAY}-bottom").
@@ -773,8 +795,8 @@ class ElementIDs(StrEnum):
     # Entity Mentions (experimental)
     SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE = "SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE"
 
-    SETTINGS_ENABLE_FRONTEND_PLUGINS_TOGGLE = "SETTINGS_ENABLE_FRONTEND_PLUGINS_TOGGLE"
-    SETTINGS_ALLOW_AGENT_PLUGIN_LOADING_TOGGLE = "SETTINGS_ALLOW_AGENT_PLUGIN_LOADING_TOGGLE"
+    SETTINGS_ENABLE_EXTENSIONS_TOGGLE = "SETTINGS_ENABLE_EXTENSIONS_TOGGLE"
+    SETTINGS_ALLOW_AGENT_EXTENSION_LOADING_TOGGLE = "SETTINGS_ALLOW_AGENT_EXTENSION_LOADING_TOGGLE"
 
     # Notes panel
     NOTES_PANEL = "NOTES_PANEL"
@@ -851,3 +873,56 @@ class ElementIDs(StrEnum):
     # an indefinite progress bar after a failed auto-update install.
     BACKEND_SHUTDOWN_SPINNER = "BACKEND_SHUTDOWN_SPINNER"
     BACKEND_SHUTDOWN_STALLED = "BACKEND_SHUTDOWN_STALLED"
+
+    # Mobile workspace shell (the single-column, chat-first Workspace view that
+    # replaces the desktop layout below 768px). These surfaces are mobile-only —
+    # none of the desktop sidebar/section/panel tags render under the mobile
+    # shell — so they carry their own hooks for the mobile integration suite.
+    MOBILE_WORKSPACE_SHELL = "MOBILE_WORKSPACE_SHELL"
+    MOBILE_WORKSPACE_HEADER = "MOBILE_WORKSPACE_HEADER"
+    MOBILE_HEADER_MENU_BUTTON = "MOBILE_HEADER_MENU_BUTTON"
+    MOBILE_HEADER_ACTIONS_BUTTON = "MOBILE_HEADER_ACTIONS_BUTTON"
+    MOBILE_HEADER_NEW_AGENT_ITEM = "MOBILE_HEADER_NEW_AGENT_ITEM"
+    MOBILE_HEADER_REVIEW_ITEM = "MOBILE_HEADER_REVIEW_ITEM"
+    MOBILE_HEADER_TERMINAL_ITEM = "MOBILE_HEADER_TERMINAL_ITEM"
+    MOBILE_HEADER_RENAME_ITEM = "MOBILE_HEADER_RENAME_ITEM"
+    MOBILE_HEADER_SETTINGS_ITEM = "MOBILE_HEADER_SETTINGS_ITEM"
+    # Left drawer: Home/Settings nav, repo-grouped workspace rows, and the pinned
+    # "New workspace" button that opens the shared new-workspace modal.
+    MOBILE_WORKSPACE_DRAWER = "MOBILE_WORKSPACE_DRAWER"
+    MOBILE_DRAWER_HOME_LINK = "MOBILE_DRAWER_HOME_LINK"
+    MOBILE_DRAWER_SETTINGS_LINK = "MOBILE_DRAWER_SETTINGS_LINK"
+    MOBILE_DRAWER_WORKSPACE_ROW = "MOBILE_DRAWER_WORKSPACE_ROW"
+    MOBILE_DRAWER_NEW_WORKSPACE_BUTTON = "MOBILE_DRAWER_NEW_WORKSPACE_BUTTON"
+    # The long-press context menu shared by drawer workspace rows and agent-sheet
+    # rows (only one menu is ever open at a time, so both reuse these two tags).
+    MOBILE_ROW_RENAME_ACTION = "MOBILE_ROW_RENAME_ACTION"
+    MOBILE_ROW_DELETE_ACTION = "MOBILE_ROW_DELETE_ACTION"
+    # Agent switcher pill (in the status row) and the agent bottom sheet.
+    MOBILE_AGENT_SWITCHER_PILL = "MOBILE_AGENT_SWITCHER_PILL"
+    MOBILE_AGENT_SHEET = "MOBILE_AGENT_SHEET"
+    MOBILE_AGENT_SHEET_ROW = "MOBILE_AGENT_SHEET_ROW"
+    MOBILE_AGENT_SHEET_NEW_AGENT = "MOBILE_AGENT_SHEET_NEW_AGENT"
+    # Changes pill (right of the status row) and the full-screen overlays it and
+    # the header ⋮ menu open over the chat.
+    MOBILE_CHANGES_PILL = "MOBILE_CHANGES_PILL"
+    MOBILE_CHANGES_PILL_TOGGLE = "MOBILE_CHANGES_PILL_TOGGLE"
+    MOBILE_CHANGES_PILL_REVIEW_ALL = "MOBILE_CHANGES_PILL_REVIEW_ALL"
+    MOBILE_REVIEW_ALL_OVERLAY = "MOBILE_REVIEW_ALL_OVERLAY"
+    MOBILE_TERMINAL_OVERLAY = "MOBILE_TERMINAL_OVERLAY"
+    MOBILE_OVERLAY_BACK_BUTTON = "MOBILE_OVERLAY_BACK_BUTTON"
+    # Mobile ChatInput: the secondary controls collapse into a single options
+    # menu; the model/effort submenus, fast-mode item, and (absent-on-mobile)
+    # keyboard-hint row carry hooks so the collapse can be asserted.
+    MOBILE_CHAT_INPUT_OPTIONS = "MOBILE_CHAT_INPUT_OPTIONS"
+    MOBILE_CHAT_INPUT_MODEL_SUBMENU = "MOBILE_CHAT_INPUT_MODEL_SUBMENU"
+    MOBILE_CHAT_INPUT_EFFORT_SUBMENU = "MOBILE_CHAT_INPUT_EFFORT_SUBMENU"
+    MOBILE_CHAT_INPUT_FAST_MODE_ITEM = "MOBILE_CHAT_INPUT_FAST_MODE_ITEM"
+    CHAT_INPUT_KEYBOARD_HINTS = "CHAT_INPUT_KEYBOARD_HINTS"
+    # Mobile Home / Settings headers (the drawer's Home/Settings nav lands here);
+    # these replace the global TopBar on those routes below 768px.
+    MOBILE_HOME_HEADER = "MOBILE_HOME_HEADER"
+    MOBILE_SETTINGS_HEADER = "MOBILE_SETTINGS_HEADER"
+    # The terminal panel's root (the shell-agnostic xterm wrapper). The mobile
+    # terminal overlay mounts this; a hook here lets a test assert it mounted.
+    TERMINAL_PANEL_VIEW = "TERMINAL_PANEL_VIEW"

@@ -26,7 +26,7 @@ export const REMOTE_REPOS_INITIAL_LIMIT = 5;
 export const normalizeQuery = (q: string): string => q.trim().toLowerCase();
 
 // Keys live under the host's reserved `SCULPTOR_QUERY_KEY_PREFIX` namespace so
-// runtime-loaded plugins keyed on the same root can't collide with this cache.
+// runtime-loaded extensions keyed on the same root can't collide with this cache.
 export const remoteReposQueryKey = (
   provider: RemoteProvider,
   q: string,

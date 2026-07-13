@@ -1,8 +1,10 @@
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CodingAgentTaskView, UserConfig, Workspace } from "../../../api";
+import type { CodingAgentTaskView, Project, UserConfig, Workspace } from "../../../api";
+import { TaskStatus } from "../../../api";
 import { encodeRegisteredAgentType } from "../../../common/state/atoms/agentTabs.ts";
+import { projectAtomFamily, projectIdsAtom } from "../../../common/state/atoms/projects.ts";
 import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
 import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
@@ -76,8 +78,55 @@ const seedWorkspace = (id: string, description: string): void => {
   store.set(workspaceAtomFamily(id), { objectId: id, description, isOpen: true } as unknown as Workspace);
 };
 
+// Variant of seedWorkspace that also stamps projectId + createdAt, for the
+// cross-project / recency ordering tests.
+const seedWorkspaceIn = (id: string, description: string, projectId: string, createdAt?: string): void => {
+  getDefaultStore().set(workspaceAtomFamily(id), {
+    objectId: id,
+    description,
+    isOpen: true,
+    projectId,
+    createdAt,
+  } as unknown as Workspace);
+};
+
 const setWorkspaceIds = (ids: Array<string>): void => {
   getDefaultStore().set(workspaceIdsAtom, ids);
+};
+
+const seedProjects = (projects: Array<{ id: string; name: string }>): void => {
+  const store = getDefaultStore();
+  for (const p of projects) {
+    // The provider only reads objectId/name; projectsArrayAtom's URL-dedupe
+    // keeps entries with no userGitRepoUrl, so a bare partial is enough.
+    store.set(projectAtomFamily(p.id), { objectId: p.id, name: p.name } as unknown as Project);
+  }
+  store.set(
+    projectIdsAtom,
+    projects.map((p) => p.id),
+  );
+};
+
+// Seed tasks carrying the status/read fields the attention ranking reads
+// (setTasks above only carries the title/prompt fields the agent tests need).
+const seedAttentionTasks = (
+  tasks: Array<{ id: string; workspaceId: string; status: TaskStatus; updatedAt: string; lastReadAt: string | null }>,
+): void => {
+  const store = getDefaultStore();
+  for (const t of tasks) {
+    store.set(taskAtomFamily(t.id), {
+      id: t.id,
+      workspaceId: t.workspaceId,
+      status: t.status,
+      updatedAt: t.updatedAt,
+      lastReadAt: t.lastReadAt,
+      isDeleted: false,
+    } as unknown as CodingAgentTaskView);
+  }
+  store.set(
+    taskIdsAtom,
+    tasks.map((t) => t.id),
+  );
 };
 
 const setTasks = (
@@ -109,6 +158,7 @@ const setTasks = (
 beforeEach(() => {
   setWorkspaceIds([]);
   setTasks([]);
+  seedProjects([]);
 });
 
 afterEach(() => {
@@ -190,6 +240,98 @@ describe("buildWorkspaceProvider", () => {
     setWorkspaceIds(["ws1", "ws2"]);
     const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
     expect(cmds.find((c) => c.id.startsWith("workspaces.go."))).toBeUndefined();
+  });
+
+  const OLDER = "2024-01-01T00:00:00.000Z";
+  const NEWER = "2024-01-02T00:00:00.000Z";
+  const orderOf = (cmds: ReturnType<ReturnType<typeof buildWorkspaceProvider>["produce"]>, id: string): number =>
+    cmds.find((c) => c.id === `workspaces.page.${id}`)?.order ?? Number.POSITIVE_INFINITY;
+
+  it("sorts attention-needing workspaces above idle ones via `order`", () => {
+    seedWorkspaceIn("idle", "Idle", "pA");
+    seedWorkspaceIn("waiting", "Waiting", "pA");
+    setWorkspaceIds(["idle", "waiting"]);
+    seedAttentionTasks([
+      { id: "t-idle", workspaceId: "idle", status: TaskStatus.READY, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-wait", workspaceId: "waiting", status: TaskStatus.WAITING, updatedAt: OLDER, lastReadAt: OLDER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "waiting")).toBeLessThan(orderOf(cmds, "idle"));
+  });
+
+  it("breaks ties within a tier by recency (newest activity first)", () => {
+    seedWorkspaceIn("stale", "Stale", "pA");
+    seedWorkspaceIn("fresh", "Fresh", "pA");
+    setWorkspaceIds(["stale", "fresh"]);
+    seedAttentionTasks([
+      { id: "t-stale", workspaceId: "stale", status: TaskStatus.READY, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-fresh", workspaceId: "fresh", status: TaskStatus.READY, updatedAt: NEWER, lastReadAt: NEWER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "fresh")).toBeLessThan(orderOf(cmds, "stale"));
+  });
+
+  it("keeps an already-viewed error out of the top tier (acked error → idle)", () => {
+    seedWorkspaceIn("ackedError", "Seen error", "pA");
+    seedWorkspaceIn("unread", "Fresh reply", "pA");
+    setWorkspaceIds(["ackedError", "unread"]);
+    seedAttentionTasks([
+      // Errored but viewed after it broke → drops below the unread reply.
+      { id: "t-err", workspaceId: "ackedError", status: TaskStatus.ERROR, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-unread", workspaceId: "unread", status: TaskStatus.READY, updatedAt: NEWER, lastReadAt: OLDER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "unread")).toBeLessThan(orderOf(cmds, "ackedError"));
+  });
+
+  it("tags every row with its project when the list spans projects and there is no current one", () => {
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pB");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([
+      { id: "pA", name: "Alpha" },
+      { id: "pB", name: "Beta" },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBe("Alpha");
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBe("Beta");
+  });
+
+  it("only tags rows from a different project than the current one", () => {
+    seedWorkspaceIn("cur", "Current", "pA");
+    seedWorkspaceIn("same", "Same project", "pA");
+    seedWorkspaceIn("other", "Other project", "pB");
+    setWorkspaceIds(["cur", "same", "other"]);
+    seedProjects([
+      { id: "pA", name: "Alpha" },
+      { id: "pB", name: "Beta" },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce({ ...ROOT_CTX, activeWorkspaceId: "cur" });
+    expect(cmds.find((c) => c.id === "workspaces.page.cur")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.same")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.other")?.trailingBadge).toBe("Beta");
+  });
+
+  it("shows no project badges when every workspace shares one project", () => {
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pA");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([{ id: "pA", name: "Alpha" }]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBeUndefined();
+  });
+
+  it("omits the badge for a row whose project record hasn't loaded", () => {
+    // Two distinct projects (so badges are in play), but only pA's record is
+    // loaded — the pB row has no resolvable name, so it must not be tagged.
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pB");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([{ id: "pA", name: "Alpha" }]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBe("Alpha");
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBeUndefined();
   });
 });
 
@@ -594,18 +736,19 @@ describe("buildAddPanelProvider", () => {
     expect(cmds.find((c) => c.id === "addpanel.panels.files")?.title).toBe("File browser");
   });
 
-  it('titles the new-agent row "New Claude agent" by default', () => {
+  it('titles the new-agent row "New Claude" by default', () => {
     seedLayout();
     getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
     const cmd = buildAddPanelProvider(makeRuntime())
       .produce(WORKSPACE_CTX)
       .find((c) => c.id === "addpanel.panels.new_agent");
-    expect(cmd?.title).toBe("New Claude agent");
+    expect(cmd?.title).toBe("New Claude");
   });
 
-  it('collapses the new-agent row to "New agent" (no doubled word) when the recent type is a registered terminal agent', () => {
+  it('shows a generic "New agent" when the recent type is a registered terminal agent', () => {
     // The provider runs outside React and can't resolve a registered program's
-    // display name, so the row must not read "New agent agent".
+    // display name, so the row falls back to a generic "New agent" rather than a
+    // nameless row.
     seedLayout();
     getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
     getDefaultStore().set(userConfigAtom, {
