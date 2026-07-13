@@ -181,7 +181,6 @@ export function createWorld(root) {
     surface: null,       // DOM element he's standing on; null = viewport floor
     facing: 1,
     coyote: 0,
-    landTimer: 0,
     t: Math.random() * 10,
   };
 
@@ -236,7 +235,6 @@ export function createWorld(root) {
     state.vy = 0;
     state.grounded = true;
     state.surface = el;
-    state.landTimer = 0.13;
     dropTimer = 0;
     spawnPoof();
   }
@@ -420,9 +418,10 @@ export function createWorld(root) {
       s.feetY = floorY();
     }
 
-    s.landTimer = Math.max(0, s.landTimer - dt);
     s.t += dt;
-    ax = (s.vx - prevVx) / dt;
+    // Guard the zero-length frame: a dt of 0 (coarse timer resolution) would
+    // make ax NaN and permanently corrupt the pose springs.
+    ax = dt > 0 ? (s.vx - prevVx) / dt : 0;
   }
 
   // -------------------------------------------------------------------------
