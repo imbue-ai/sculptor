@@ -71,7 +71,7 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
     if (!canSave) {
       return;
     }
-    saveCurrentLayout({ name, setAsDefault: isSetAsDefault });
+    saveCurrentLayout({ name: name.trim(), setAsDefault: isSetAsDefault });
     onClose();
   }, [canSave, saveCurrentLayout, name, isSetAsDefault, onClose]);
 

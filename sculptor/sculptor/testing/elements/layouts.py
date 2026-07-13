@@ -48,14 +48,16 @@ class PlaywrightLayoutsSwitcherElement(PlaywrightIntegrationTestElement):
     """POM for the Layouts switcher dialog (⌘⇧L / sidebar Layouts)."""
 
     def get_search_input(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_SEARCH_INPUT)
+        return self.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_SEARCH_INPUT)
 
     def get_rows(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_ROW)
+        return self.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_ROW)
 
     def get_row_by_id(self, layout_id: str) -> Locator:
         # Kept in the POM to honour the integration-test css-locator ratchet.
-        return self._page.locator(f'[data-testid="{ElementIDs.LAYOUTS_SWITCHER_ROW}"][data-layout-id="{layout_id}"]')
+        return self._locator.locator(
+            f'[data-testid="{ElementIDs.LAYOUTS_SWITCHER_ROW.value}"][data-layout-id="{layout_id}"]'
+        )
 
     def get_system_default_row(self) -> Locator:
         return self.get_row_by_id(SYSTEM_DEFAULT_LAYOUT_ID)
@@ -64,14 +66,17 @@ class PlaywrightLayoutsSwitcherElement(PlaywrightIntegrationTestElement):
         return self.get_rows().filter(has_text=name)
 
     def open_save_dialog(self) -> PlaywrightSaveLayoutDialogElement:
-        self._page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_SAVE_BUTTON).click()
+        # The Save button lives inside the switcher; the dialog it opens is a
+        # separate portal-mounted PaletteDialog, so it stays page-scoped.
+        self.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_SAVE_BUTTON).click()
         dialog = self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_DIALOG)
         expect(dialog).to_be_visible()
         return PlaywrightSaveLayoutDialogElement(locator=dialog, page=self._page)
 
     def open_more_options(self) -> Locator:
-        self._page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_MORE_OPTIONS_BUTTON).click()
-        popover = self._page.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_POPOVER)
+        # Both the trigger and its popover render inside the switcher dialog.
+        self.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_MORE_OPTIONS_BUTTON).click()
+        popover = self.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_POPOVER)
         expect(popover).to_be_visible()
         return popover
 
