@@ -6,6 +6,7 @@
 
 import { Button } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
+import type { LucideIcon } from "lucide-react";
 import { Check, Pencil, Plus, Sparkles, Star, Trash2 } from "lucide-react";
 import type { RefObject } from "react";
 import type { ReactElement } from "react";
@@ -13,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useKeybinding } from "~/common/keybindings";
-import { formatShortcutForDisplay, shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
+import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
 import {
   applyLayoutAtom,
   deleteLayoutAtom,
@@ -30,6 +31,7 @@ import {
 } from "~/components/sections/savedLayoutAtoms.ts";
 import type { PanelId } from "~/components/sections/sectionTypes.ts";
 import { SYSTEM_DEFAULT_LAYOUT_ID, SYSTEM_DEFAULT_LAYOUT_SUMMARY } from "~/components/sections/systemDefaultLayout.ts";
+import { ShortcutHint } from "~/components/ShortcutHint.tsx";
 
 import { describeLayout } from "./layoutSummary.ts";
 import styles from "./LayoutSwitcher.module.scss";
@@ -39,11 +41,16 @@ import { initialHighlightIndex, orderLayoutsByMru } from "./switcherOrder.ts";
 
 type RowMarker = "default" | "current" | null;
 
+// Wires the search input's aria-activedescendant to the highlighted row so
+// screen readers announce the active option while focus stays in the input.
+const LISTBOX_ID = "layouts-switcher-listbox";
+const optionDomId = (layoutId: string): string => `layouts-switcher-option-${layoutId}`;
+
 // The ⌘J popover items, scoped to the highlighted layout.
 type PopoverItem = {
   key: string;
   label: string;
-  icon: typeof Check;
+  icon: LucideIcon;
   shortcut?: string;
   testId: string;
   disabled: boolean;
@@ -51,8 +58,6 @@ type PopoverItem = {
   separatorBefore: boolean;
   run: () => void;
 };
-
-const MOD = formatShortcutForDisplay("Meta");
 
 function markerFor(layout: SavedLayout, defaultLayoutId: string, appliedLayoutId: string | undefined): RowMarker {
   if (layout.id === defaultLayoutId) {
@@ -177,7 +182,7 @@ export const LayoutSwitcher = (): ReactElement => {
         key: "apply",
         label: "Apply",
         icon: Check,
-        shortcut: formatShortcutForDisplay("Enter"),
+        shortcut: "Enter",
         testId: ElementIds.LAYOUTS_MORE_OPTIONS_APPLY,
         disabled: false,
         danger: false,
@@ -188,7 +193,7 @@ export const LayoutSwitcher = (): ReactElement => {
         key: "apply-tidy",
         label: "Apply & tidy",
         icon: Sparkles,
-        shortcut: formatShortcutForDisplay("Meta+Enter"),
+        shortcut: "Meta+Enter",
         testId: ElementIds.LAYOUTS_MORE_OPTIONS_APPLY_TIDY,
         disabled: false,
         danger: false,
@@ -222,7 +227,7 @@ export const LayoutSwitcher = (): ReactElement => {
         key: "delete",
         label: "Delete",
         icon: Trash2,
-        shortcut: `${MOD}⌫`,
+        shortcut: "Meta+Backspace",
         testId: ElementIds.LAYOUTS_MORE_OPTIONS_DELETE,
         disabled: isSystemDefault,
         danger: true,
@@ -268,6 +273,13 @@ export const LayoutSwitcher = (): ReactElement => {
     query,
     openLayoutsBinding,
     moreOptionsBinding,
+    apply,
+    applyAndTidy,
+    openPopover,
+    openSave,
+    cancelRename,
+    close,
+    deleteLayout,
   });
   useEffect(() => {
     stateRef.current = {
@@ -282,6 +294,13 @@ export const LayoutSwitcher = (): ReactElement => {
       query,
       openLayoutsBinding,
       moreOptionsBinding,
+      apply,
+      applyAndTidy,
+      openPopover,
+      openSave,
+      cancelRename,
+      close,
+      deleteLayout,
     };
   });
 
@@ -304,14 +323,14 @@ export const LayoutSwitcher = (): ReactElement => {
         event.preventDefault();
         event.stopPropagation();
         if (state.renamingId !== null) {
-          cancelRename();
+          state.cancelRename();
         } else if (state.moreOptionsOpen) {
           setIsMoreOptionsOpen(false);
         } else if (state.query !== "") {
           setQuery("");
           setHighlightIndex(0);
         } else {
-          close();
+          state.close();
         }
         return;
       }
@@ -338,7 +357,7 @@ export const LayoutSwitcher = (): ReactElement => {
         if (state.moreOptionsOpen) {
           setIsMoreOptionsOpen(false);
         } else {
-          openPopover();
+          state.openPopover();
         }
         return;
       }
@@ -349,7 +368,7 @@ export const LayoutSwitcher = (): ReactElement => {
       if (isMod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") {
         event.preventDefault();
         event.stopPropagation();
-        openSave();
+        state.openSave();
         return;
       }
 
@@ -367,16 +386,22 @@ export const LayoutSwitcher = (): ReactElement => {
           return;
         }
 
-        if (event.key === "Enter") {
+        // Plain Enter runs the highlighted popover row (skipping it if it is
+        // disabled); ⌘↵ / ⌘⌫ fall through to their own branches below, so this
+        // must not swallow a modified Enter.
+        if (event.key === "Enter" && !isMod) {
           event.preventDefault();
-          state.popoverItems[state.popoverIndex]?.run();
+          const item = state.popoverItems[state.popoverIndex];
+          if (item !== undefined && !item.disabled) {
+            item.run();
+          }
           return;
         }
 
-        // ⌘↵ / ⌘⌫ still work directly from the popover.
+        // ⌘↵ Apply & tidy / ⌘⌫ Delete work directly from the popover too.
         if (isMod && event.key === "Enter" && state.highlighted !== undefined) {
           event.preventDefault();
-          applyAndTidy(state.highlighted);
+          state.applyAndTidy(state.highlighted);
           return;
         }
 
@@ -387,7 +412,7 @@ export const LayoutSwitcher = (): ReactElement => {
           state.highlighted.id !== SYSTEM_DEFAULT_LAYOUT_ID
         ) {
           event.preventDefault();
-          deleteLayout(state.highlighted.id);
+          state.deleteLayout(state.highlighted.id);
           setIsMoreOptionsOpen(false);
           return;
         }
@@ -414,16 +439,19 @@ export const LayoutSwitcher = (): ReactElement => {
       if (event.key === "Enter" && state.highlighted !== undefined) {
         event.preventDefault();
         if (isMod) {
-          applyAndTidy(state.highlighted);
+          state.applyAndTidy(state.highlighted);
         } else {
-          apply(state.highlighted);
+          state.apply(state.highlighted);
         }
       }
     };
 
     window.addEventListener("keydown", handler, { capture: true });
     return (): void => window.removeEventListener("keydown", handler, { capture: true });
-  }, [apply, applyAndTidy, cancelRename, close, deleteLayout, openPopover, openSave]);
+    // Subscribed once for the switcher's lifetime: the handler reads all live
+    // state and callbacks through stateRef, so it never re-subscribes when the
+    // highlight or selection changes.
+  }, []);
 
   // Focus the search input on open, and the rename input when a rename starts.
   useEffect(() => {
@@ -435,10 +463,6 @@ export const LayoutSwitcher = (): ReactElement => {
       renameInputRef.current?.select();
     }
   }, [renamingId]);
-
-  const applyHint = formatShortcutForDisplay("Enter");
-  const saveHint = formatShortcutForDisplay("Meta+s");
-  const moreOptionsHint = formatShortcutForDisplay(moreOptionsBinding ?? "");
 
   return (
     <div className={styles.root}>
@@ -454,10 +478,14 @@ export const LayoutSwitcher = (): ReactElement => {
           }}
           data-testid={ElementIds.LAYOUTS_SWITCHER_SEARCH_INPUT}
           aria-label="Search layouts"
+          role="combobox"
+          aria-expanded={true}
+          aria-controls={LISTBOX_ID}
+          aria-activedescendant={highlighted !== undefined ? optionDomId(highlighted.id) : undefined}
         />
       </div>
       <div className={styles.divider} />
-      <div className={styles.list}>
+      <div className={styles.list} id={LISTBOX_ID} role="listbox" aria-label="Layouts">
         <div className={styles.groupHeading}>Layouts</div>
         {filtered.length === 0 ? (
           <div className={styles.empty}>No layouts match “{query}”.</div>
@@ -493,7 +521,7 @@ export const LayoutSwitcher = (): ReactElement => {
         >
           <Plus size={13} />
           Save current arrangement…
-          <span className={styles.barKbd}>{saveHint}</span>
+          <ShortcutHint binding="Meta+s" className={styles.barKbd} />
         </Button>
         <div className={styles.barRight}>
           <Button
@@ -507,7 +535,7 @@ export const LayoutSwitcher = (): ReactElement => {
             data-testid={ElementIds.LAYOUTS_SWITCHER_APPLY_BUTTON}
           >
             Apply
-            <span className={styles.barKbd}>{applyHint}</span>
+            <ShortcutHint binding="Enter" className={styles.barKbd} />
           </Button>
           <span className={styles.barDivider} />
           <Button
@@ -521,17 +549,18 @@ export const LayoutSwitcher = (): ReactElement => {
             data-testid={ElementIds.LAYOUTS_SWITCHER_MORE_OPTIONS_BUTTON}
           >
             More options
-            <span className={styles.barKbd}>{moreOptionsHint}</span>
+            <ShortcutHint binding={moreOptionsBinding ?? ""} className={styles.barKbd} />
           </Button>
         </div>
       </div>
       {isMoreOptionsOpen && highlighted !== undefined ? (
-        <div className={styles.popover} data-testid={ElementIds.LAYOUTS_MORE_OPTIONS_POPOVER}>
+        <div className={styles.popover} role="menu" data-testid={ElementIds.LAYOUTS_MORE_OPTIONS_POPOVER}>
           {popoverItems.map((item, index) => (
             <div key={item.key}>
               {item.separatorBefore ? <div className={styles.popoverSeparator} /> : null}
               <Button
                 type="button"
+                role="menuitem"
                 variant="ghost"
                 size="2"
                 color={item.danger ? "red" : "gray"}
@@ -545,7 +574,9 @@ export const LayoutSwitcher = (): ReactElement => {
               >
                 <item.icon size={14} />
                 {item.label}
-                {item.shortcut !== undefined ? <span className={styles.popoverShortcut}>{item.shortcut}</span> : null}
+                {item.shortcut !== undefined ? (
+                  <ShortcutHint binding={item.shortcut} className={styles.popoverShortcut} />
+                ) : null}
               </Button>
             </div>
           ))}
@@ -586,6 +617,9 @@ const SwitcherRow = ({
 }: SwitcherRowProps): ReactElement => {
   return (
     <div
+      id={optionDomId(layout.id)}
+      role="option"
+      aria-selected={selected}
       className={`${styles.row} ${selected ? styles.rowSelected : ""}`}
       onMouseEnter={onMouseEnter}
       onClick={renaming ? undefined : (): void => onClick()}

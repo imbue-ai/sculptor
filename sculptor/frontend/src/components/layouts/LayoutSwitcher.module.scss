@@ -183,7 +183,7 @@
   margin: 0;
   padding: var(--space-1) var(--space-2);
 
-  &:hover,
+  &:hover:not(:disabled),
   &.barButtonActive {
     background: var(--gray-a4);
   }
@@ -194,6 +194,8 @@
 }
 
 .barKbd {
+  background: none;
+  border: 0;
   color: var(--gray-10);
   font-family: inherit;
   font-size: var(--font-size-1);
@@ -265,6 +267,8 @@
 }
 
 .popoverShortcut {
+  background: none;
+  border: 0;
   color: var(--gray-10);
   flex-shrink: 0;
   font-family: inherit;
