@@ -275,3 +275,53 @@ def test_workspace_row_dropdown_menu_rename_focuses_input(
     rename_input = sidebar.get_inline_rename_input()
     expect(rename_input).to_be_visible()
     expect(rename_input).to_be_focused()
+
+
+@user_story("to rename a workspace by double-click and by the menu in the same session")
+def test_workspace_row_double_click_and_menu_rename_coexist(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Double-click rename and menu rename share one rename mode and don't interfere.
+
+    Two rename entry points drive the same ``renamingWorkspaceIdAtom``: the row's
+    double-click (which sets it directly) and the menu / dropdown (which defers
+    through ``pendingWorkspaceRenameIdAtom`` and flushes on the menu's
+    ``onCloseAutoFocus``). This exercises both in one session and also covers the
+    dropdown's click-outside dismissal.
+
+    Steps:
+    1. Create a workspace
+    2. Double-click the row — the inline input opens and holds focus; cancel it
+    3. Open the "..." dropdown and rename — the input opens and holds focus
+    4. Click elsewhere — the dropdown-initiated rename dismisses and the name is kept
+    """
+    page = sculptor_instance_.page
+    sidebar = get_workspace_sidebar(page)
+
+    # Step 1: Create a workspace.
+    task_page = start_task_and_wait_for_ready(page, prompt="Test task", workspace_name="Coexist WS")
+
+    rows = sidebar.get_workspace_rows()
+    expect(rows).to_have_count(1)
+
+    # Step 2: Double-click starts a focused rename; Escape cancels it.
+    rows.first.dblclick()
+    rename_input = sidebar.get_inline_rename_input()
+    expect(rename_input).to_be_visible()
+    expect(rename_input).to_be_focused()
+    rename_input.press("Escape")
+    expect(rename_input).not_to_be_visible()
+
+    # Step 3: The dropdown rename still works right after — focused, not stolen.
+    sidebar.open_row_dropdown_menu(sidebar.get_workspace_rows().first)
+    rename_item = sidebar.get_context_menu_rename()
+    expect(rename_item).to_be_visible()
+    rename_item.click()
+    rename_input = sidebar.get_inline_rename_input()
+    expect(rename_input).to_be_visible()
+    expect(rename_input).to_be_focused()
+
+    # Step 4: Clicking elsewhere dismisses the dropdown-initiated rename.
+    task_page.get_chat_panel().get_chat_input().click()
+    expect(rename_input).not_to_be_visible()
+    expect(sidebar.get_workspace_rows().first).to_contain_text("Coexist WS")
