@@ -274,7 +274,7 @@ class UserConfig(SerializableModel):
     )
     enable_auto_rename: bool = Field(
         default=False,
-        description="When enabled, a first-message system reminder asks the agent to rename its workspace and itself to concise, task-derived names (via the sculpt CLI) once it understands the task. A repo can add a .sculptor/naming.md file to specify its own naming conventions. Experimental; off by default.",
+        description="When enabled, a first-message system reminder asks the agent to rename its workspace and itself to concise, task-derived names (via the sculpt CLI) once it understands the task. Naming conventions can be supplied at three tiers, most-specific wins: ~/.sculptor/naming.md (yours, all repos), .sculptor/naming.md (this repo, shared), and .sculptor/naming.local.md (yours, this repo only). Experimental; off by default.",
     )
     enable_extensions: bool = Field(
         default=True,

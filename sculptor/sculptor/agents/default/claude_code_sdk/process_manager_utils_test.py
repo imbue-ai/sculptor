@@ -207,9 +207,41 @@ def test_get_user_instructions_emits_auto_rename_reminder_when_enabled_and_first
     assert '"<agent name>"' in result
     assert "overall task or goal" in result
     assert "specific action" in result
-    # A repo can override the defaults via .sculptor/naming.md, which the agent reads itself.
-    assert ".sculptor/naming.md" in result
+    # Without resolved conventions, the reminder carries no naming-conventions block; the
+    # backend inlines those (see resolve_naming_conventions) rather than pointing the agent at a path.
+    assert "<naming-conventions>" not in result
     assert "hello" in result
+
+
+def test_get_user_instructions_inlines_naming_conventions_when_provided() -> None:
+    message = ChatInputUserMessage(text="hello")
+    conventions = "### .sculptor/naming.md (this repo's shared conventions)\nPrefix workspaces with the ticket id."
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=True,
+        naming_conventions=conventions,
+    )
+    assert _AUTO_RENAME_MARKER in result
+    # The resolved block is inlined verbatim inside a tagged region, told to override the defaults.
+    assert "<naming-conventions>" in result
+    assert "</naming-conventions>" in result
+    assert conventions in result
+    assert "OVERRIDE" in result
+
+
+def test_get_user_instructions_ignores_naming_conventions_when_auto_rename_disabled() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=False,
+        naming_conventions="### some conventions",
+    )
+    assert _AUTO_RENAME_MARKER not in result
+    assert "<naming-conventions>" not in result
 
 
 def test_get_user_instructions_no_auto_rename_reminder_when_flag_disabled() -> None:

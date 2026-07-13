@@ -504,7 +504,7 @@ export const SettingsPage = (): ReactElement => {
                   </SettingRow>
                   <SettingRow
                     title="Auto-name workspace and agent"
-                    description="After your first message, the agent is asked to name this workspace and itself based on the task."
+                    description="After your first message, the agent is asked to name this workspace and itself based on the task. Set conventions in .sculptor/naming.md (shared with your team) or .sculptor/naming.local.md (personal, git-ignored)."
                   >
                     <Switch
                       checked={isAutoRenameEnabled}
