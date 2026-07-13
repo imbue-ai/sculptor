@@ -486,7 +486,9 @@ export const LayoutSwitcher = (): ReactElement => {
       </div>
       <div className={styles.divider} />
       <div className={styles.list} id={LISTBOX_ID} role="listbox" aria-label="Layouts">
-        <div className={styles.groupHeading}>Layouts</div>
+        <div className={styles.groupHeading} aria-hidden="true">
+          Layouts
+        </div>
         {filtered.length === 0 ? (
           <div className={styles.empty}>No layouts match “{query}”.</div>
         ) : (
