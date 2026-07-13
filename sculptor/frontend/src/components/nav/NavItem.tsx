@@ -14,8 +14,8 @@ type NavItemProps = {
   isActive?: boolean;
   disabled?: boolean;
   /**
-   * Tooltip shown on hover while the item is disabled, explaining why it
-   * can't be used right now (e.g. no workspaces yet). Ignored when enabled.
+   * Tooltip shown on hover or keyboard focus while the item is disabled,
+   * explaining why it can't be used right now. Ignored when enabled.
    */
   disabledTooltip?: string;
   onClick: () => void;
@@ -35,21 +35,25 @@ export const NavItem = ({
     <button
       type="button"
       className={`${styles.navItem} ${isActive ? styles.navItemActive : ""}`}
-      onClick={onClick}
-      disabled={disabled}
+      // aria-disabled (not the native disabled attribute) keeps the row focusable, so
+      // keyboard users can land on it to discover why it's unavailable and the
+      // explanatory tooltip fires on focus as well as hover. An aria-disabled button
+      // still emits events, so the click is guarded here.
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onClick}
       data-testid={testId}
     >
       <Icon size={16} className={styles.navIcon} />
       <span className={styles.navLabel}>{label}</span>
     </button>
   );
-  // Disabled buttons don't emit pointer events, so the tooltip anchors on a
-  // wrapper span that still receives hover — this keeps the affordance
-  // discoverable ("why can't I click this?") instead of a silent no-op.
+  // The row stays focusable while disabled (aria-disabled), so the tooltip anchors on
+  // the button itself and shows on hover or keyboard focus — keeping the "why can't I
+  // use this?" affordance discoverable instead of a silent no-op.
   if (disabled && disabledTooltip) {
     return (
       <Tooltip content={disabledTooltip} side="right">
-        <span className={styles.navItemTooltipAnchor}>{button}</span>
+        {button}
       </Tooltip>
     );
   }

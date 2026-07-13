@@ -12,21 +12,14 @@
   text-align: left;
   width: 100%;
 
-  &:disabled {
+  &[aria-disabled="true"] {
     color: var(--gray-8);
     cursor: not-allowed;
   }
 
-  &:hover:not(:disabled) {
+  &:hover:not([aria-disabled="true"]) {
     background: var(--gray-a3);
   }
-}
-
-// Anchors the "why is this disabled?" tooltip: a disabled button emits no
-// pointer events, so the wrapper receives hover in its place.
-.navItemTooltipAnchor {
-  display: block;
-  width: 100%;
 }
 
 .navItemActive {
@@ -36,7 +29,7 @@
   // Hold the accent pill while hovering. The base `.navItem:hover` rule sets the
   // plain gray hover background at equal specificity, so re-assert the accent here
   // (later in source order) to keep the active state from dimming under the cursor.
-  &:hover:not(:disabled) {
+  &:hover:not([aria-disabled="true"]) {
     background: var(--accent-a3);
   }
 }
@@ -56,7 +49,7 @@
 // Dim the leading icon in step with the disabled label. Kept after
 // `.navItemActive .navIcon` so selector specificity stays in ascending source
 // order for stylelint.
-.navItem:disabled .navIcon {
+.navItem[aria-disabled="true"] .navIcon {
   color: var(--gray-8);
 }
 
