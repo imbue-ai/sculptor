@@ -2,7 +2,6 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Queue
-from threading import Thread
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -37,7 +36,6 @@ from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
-from sculptor.server.llm_content_generation import TaskTitle
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
@@ -55,7 +53,6 @@ from sculptor.state.messages import PersistentUserMessage
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import HistoryScan
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
-from sculptor.tasks.handlers.run_agent.setup import _resolve_title_prediction_thread
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
@@ -255,60 +252,6 @@ def _scan_history(local_task: Task, services: ServiceCollectionForTask) -> Histo
     with services.data_model_service.open_task_transaction() as transaction:
         saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
     return scan_message_history(saved_messages)
-
-
-def test_resolve_title_prediction_overwrites_renamed_title(
-    local_task: Task,
-    services: ServiceCollectionForTask,
-) -> None:
-    """_resolve_title_prediction_thread clobbers a title that was renamed via the API.
-
-    Simulates the race condition:
-    1. Agent starts with title=None, kicks off title prediction thread
-    2. User renames the agent to "Renamed Title" (updates DB)
-    3. Title prediction finishes and saves the predicted title, overwriting the rename
-    """
-    workspace_id = WorkspaceID()
-    initial_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title=None,
-    )
-    _set_task_state(local_task, initial_state, services)
-
-    # Step 1: Agent loads state into memory (title=None).
-    in_memory_state = initial_state
-
-    # Step 2: User renames agent via API (directly updating DB).
-    renamed_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title="Renamed Title",
-    )
-    _set_task_state(local_task, renamed_state, services)
-    assert _get_task_title(local_task, services) == "Renamed Title"
-
-    # Step 3: Title prediction thread completes with a predicted title.
-    predicted_title = [TaskTitle(title="Predicted Title")]
-    completed_thread = Thread(target=lambda: None)
-    completed_thread.start()
-    completed_thread.join()
-
-    initial_message = ChatInputUserMessage(
-        message_id=AgentMessageID(),
-        text="Initial prompt",
-        model_name=LLMModel.CLAUDE_4_SONNET,
-    )
-
-    _resolve_title_prediction_thread(
-        title_thread=completed_thread,
-        title_result=predicted_title,
-        task_id=local_task.object_id,
-        task_state=in_memory_state,
-        initial_message=initial_message,
-        services=services,
-    )
-
-    # Step 4: The renamed title should be preserved, not overwritten.
-    assert _get_task_title(local_task, services) == "Renamed Title"
 
 
 class _SigtermOnFirstPushAgent(DefaultAgentWrapper):
@@ -1367,11 +1310,109 @@ def test_eager_pi_probe_records_fetched_empty_when_no_models(
         )
 
     # The carried-forward state AND the persisted row are fetched-empty [], not the
-    # NOT_FETCHED_YET sentinel — otherwise finalize_task_setup would later write the
-    # in-memory sentinel back over the DB.
+    # NOT_FETCHED_YET sentinel — so agent construction reads the fetched-empty
+    # catalog from the carried-forward in-memory copy, not the stale sentinel.
     assert evolved.available_models == []
     assert not isinstance(evolved.available_models, ModelCatalogState)
     assert _read_persisted_task_state(local_task, services).available_models == []
+
+
+_SEEDED_OPUS = ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8")
+_PI_DEFAULT_SONNET = ModelOption(provider="anthropic", model_id="claude-sonnet-4-5", display_name="Claude Sonnet 4.5")
+
+
+class _DefaultModelProbePiAgent:
+    """Stands in for a PiAgent whose probe reports pi's own session default."""
+
+    def fetch_available_models_probe(self, secrets: object) -> tuple[list[ModelOption], ModelOption]:
+        return [_SEEDED_OPUS, _PI_DEFAULT_SONNET], _PI_DEFAULT_SONNET
+
+
+def test_eager_pi_probe_preserves_seeded_current_model(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: AgentExecutionEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A create-time backend-model selection survives the pre-message probe.
+
+    The probe reports pi's own session default, but a modal-created task is born
+    with a validated `current_model`; persisting the probe's default over it
+    would silently discard the user's choice before start-time adoption runs.
+    """
+    task_data = local_task.input_data
+    assert isinstance(task_data, AgentTaskInputsV2)
+    seeded = AgentTaskStateV2(workspace_id=WorkspaceID(), current_model=_SEEDED_OPUS)
+    _set_task_state(local_task, seeded, services)
+
+    harness_stub = MagicMock()
+    harness_stub.capabilities.return_value.supports_model_selection = True
+    with (
+        patch("sculptor.tasks.handlers.run_agent.v1.get_harness_for_config", return_value=harness_stub),
+        patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=_DefaultModelProbePiAgent()),
+        patch("sculptor.tasks.handlers.run_agent.v1._build_agent_secrets", return_value={}),
+        patch("sculptor.tasks.handlers.run_agent.v1.PiAgent", _DefaultModelProbePiAgent),
+        patch(
+            "sculptor.tasks.handlers.run_agent.v1.compute_authenticated_provider_ids",
+            return_value={"anthropic"},
+        ),
+    ):
+        evolved = _eager_fetch_pi_models_into_state(
+            task=local_task,
+            task_data=task_data,
+            task_state=seeded,
+            environment=environment,
+            project=project,
+            settings=test_settings,
+            services=services,
+            in_testing=True,
+        )
+
+    assert evolved.current_model == _SEEDED_OPUS
+    assert _read_persisted_task_state(local_task, services).current_model == _SEEDED_OPUS
+
+
+def test_eager_pi_probe_drops_seeded_current_model_when_provider_lost_auth(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: AgentExecutionEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    """A seeded selection whose provider lost authentication between create and
+    env-ready is not retained — the probe's own result stands (the start-time
+    reselect owns dropping or switching properly)."""
+    task_data = local_task.input_data
+    assert isinstance(task_data, AgentTaskInputsV2)
+    seeded = AgentTaskStateV2(workspace_id=WorkspaceID(), current_model=_SEEDED_OPUS)
+    _set_task_state(local_task, seeded, services)
+
+    harness_stub = MagicMock()
+    harness_stub.capabilities.return_value.supports_model_selection = True
+    with (
+        patch("sculptor.tasks.handlers.run_agent.v1.get_harness_for_config", return_value=harness_stub),
+        patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=_EmptyProbePiAgent()),
+        patch("sculptor.tasks.handlers.run_agent.v1._build_agent_secrets", return_value={}),
+        patch("sculptor.tasks.handlers.run_agent.v1.PiAgent", _EmptyProbePiAgent),
+        patch(
+            "sculptor.tasks.handlers.run_agent.v1.compute_authenticated_provider_ids",
+            return_value=set(),
+        ),
+    ):
+        evolved = _eager_fetch_pi_models_into_state(
+            task=local_task,
+            task_data=task_data,
+            task_state=seeded,
+            environment=environment,
+            project=project,
+            settings=test_settings,
+            services=services,
+            in_testing=True,
+        )
+
+    assert evolved.current_model is None
+    assert evolved.available_models == []
 
 
 def test_queued_followup_is_dispatched_after_resumed_turn_completes(

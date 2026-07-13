@@ -6,9 +6,9 @@ import { effectiveHomeViewIdAtom, homeViewOptionsAtom, selectedHomeViewAtom } fr
 
 /**
  * Segmented control that switches the homepage body between the built-in
- * recent-workspaces view and any plugin-contributed home views. Bound to the
+ * recent-workspaces view and any extension-contributed home views. Bound to the
  * persisted selection; the active item reflects the *effective* view, so a
- * selection whose plugin has gone away shows the built-in view as active.
+ * selection whose extension has gone away shows the built-in view as active.
  */
 export const HomeViewSwitcher = (): ReactElement => {
   const options = useAtomValue(homeViewOptionsAtom);

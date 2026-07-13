@@ -59,7 +59,7 @@ nginx fronts it and adds a reverse proxy:
   running", with a way back and an auto-reload once the server returns), so a
   phone PWA — which has no URL bar — can never get stranded on a dead preview.
 - The deployed Sculptor UI also shows a **preview-switcher pill** (bottom-left
-  footer corner): the `openhost-preview-switcher` frontend plugin, auto-installed
+  footer corner): the `openhost-preview-switcher` extension, auto-installed
   at boot from the image, lists live previews and switches between them and the
   deployed app in place.
 - For the **Sculptor web frontend** specifically, use the `openhost-frontend-preview`

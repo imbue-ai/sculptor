@@ -25,6 +25,12 @@ credentials change; an empty catalog shows a verbatim actionable
 
 ## Current Architecture
 
+> **Amended — see `agent_docs/pi-modal-model-picker/spec.md`.** The diagram below
+> shows catalog discovery beginning at agent start
+> (`fetch_available_models_probe` / `_fetch_models_into_state`). The same probe
+> also runs host-side, before any workspace exists, to feed a pi model picker in
+> the New Workspace modal — agent start is not the earliest discovery point.
+
 ```
                        SETTINGS (global route /settings)
   ┌───────────────────────────────────────────────────────────────┐

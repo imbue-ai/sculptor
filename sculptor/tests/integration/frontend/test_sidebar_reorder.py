@@ -9,13 +9,17 @@ follows the visible order.
 
 import re
 
+from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.workspace_sidebar import PlaywrightWorkspaceSidebarElement
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import blur_active_element
+from sculptor.testing.playwright_utils import create_zero_agent_workspace
+from sculptor.testing.playwright_utils import get_active_project_id_by_name
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import open_new_workspace_form
@@ -193,3 +197,119 @@ def test_reorder_repo_groups_via_keyboard_drag(
 
     # Step 3: The group order is swapped.
     expect(groups).to_contain_text([bottom_name, top_name])
+
+
+# Repo groups render expanded by default (isRepoCollapsedAtomFamily defaults to false),
+# independent of workspace count; the count only affects the group's height. This many
+# rows makes the expanded group tall enough that its collision-rect centre sits far past
+# a single-workspace neighbour's — the condition under which closestCenter can never make
+# `over` leave the dragged group, so it never reorders. Eight clears the
+# ~3x-neighbour-height margin with room to spare, without slowing the test by creating
+# needless workspaces.
+_TALL_GROUP_WORKSPACE_COUNT = 8
+
+
+def _build_short_and_tall_repo_groups(
+    page: Page, test_repo_factory: TestRepoFactory, tall_repo_name: str
+) -> tuple[PlaywrightWorkspaceSidebarElement, Locator, str, str, list[str]]:
+    """Build a short repo group (default repo, one workspace) and a tall one.
+
+    The tall group is a second repo piled with ``_TALL_GROUP_WORKSPACE_COUNT`` agent-less
+    workspaces (created straight through the API so it stays cheap), expanded by default so
+    its height dwarfs the short group's. Returns the sidebar POM, the repo-group locator,
+    the tall and short project ids, and the initial top→bottom group-id order.
+    """
+    create_zero_agent_workspace(page, description="Short Repo WS")
+
+    tall_repo = test_repo_factory.create_repo(name=tall_repo_name, branch="main")
+    settings_page = navigate_to_settings_page(page=page)
+    settings_page.click_on_repositories().add_repo(str(tall_repo.base_path.resolve()))
+    tall_project_id = get_active_project_id_by_name(page, tall_repo_name)
+    for index in range(_TALL_GROUP_WORKSPACE_COUNT):
+        create_zero_agent_workspace(page, description=f"Tall Repo WS {index}", project_id=tall_project_id)
+
+    sidebar = PlaywrightTaskPage(page).get_workspace_sidebar()
+    groups = sidebar.get_repo_groups()
+    expect(groups).to_have_count(2)
+    # Pin each group's id before the drag (expect() first so the one-shot reads can't race a
+    # re-render). The short group is simply whichever isn't the tall one.
+    for index in range(2):
+        expect(groups.nth(index)).to_have_attribute("data-project-id", re.compile(r".+"))
+    initial_ids = [groups.nth(index).get_attribute("data-project-id") for index in range(2)]
+    short_project_id = initial_ids[0] if initial_ids[1] == tall_project_id else initial_ids[1]
+    return sidebar, groups, tall_project_id, short_project_id, initial_ids
+
+
+@user_story("to re-order a big expanded repo group by dragging it with the mouse")
+def test_reorder_tall_expanded_repo_group_via_pointer_drag(
+    sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
+) -> None:
+    """A pointer drag reorders a repo group that is expanded and full of workspaces.
+
+    This is the pointer-drag counterpart to ``test_reorder_repo_groups_via_keyboard_drag``.
+    The keyboard sensor steps the dragged item's rect straight onto the target slot, so a
+    keyboard drag never depends on the group's height. A mouse drag does — the group's
+    collision rect is its full expanded height — so only this path exercises the collision
+    detection a tall group's reorder relies on. A tall group whose ``over`` never leaves
+    itself can be dragged but never reordered.
+
+    Steps:
+    1. Create a short repo group (default repo, one workspace) and a tall one (a second
+       repo piled with many workspaces, expanded by default).
+    2. Drag the tall group past the short one with the mouse.
+    3. Verify the two groups swapped — the reorder registered.
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: A short group and a tall one.
+    sidebar, groups, tall_project_id, short_project_id, initial_ids = _build_short_and_tall_repo_groups(
+        page, test_repo_factory_, "tall-reorder-repo"
+    )
+
+    # Step 2: Drag the tall group past the short one with the mouse.
+    sidebar.reorder_via_pointer_drag(
+        item=sidebar.get_repo_group_by_project_id(tall_project_id),
+        target=sidebar.get_repo_group_by_project_id(short_project_id),
+    )
+
+    # Step 3: The two groups swapped — dragging the tall group past the short one moved
+    # it into the other slot.
+    expect(groups.nth(0)).to_have_attribute("data-project-id", initial_ids[1])
+    expect(groups.nth(1)).to_have_attribute("data-project-id", initial_ids[0])
+
+
+@user_story("to re-order a big expanded repo group even when I drag past the sidebar")
+def test_reorder_tall_group_when_dragged_past_the_container_edge(
+    sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
+) -> None:
+    """A pointer drag that overshoots past the container still reorders (no snap-back).
+
+    The drop resolves from the dragged element's rectangle, which restrictToParentElement
+    holds inside the list, so it always overlaps some group — even when the pointer runs
+    well past the container edge. That keeps ``over`` pinned to the extreme group rather than
+    dropping out; a null ``over`` would zero dnd-kit's active-item transform (it only offsets
+    the dragged item while ``overIndex`` is valid) and snap the item back to its origin.
+
+    Steps:
+    1. Create a short repo group and a tall one.
+    2. Drag the tall group and overshoot well past the short group, beyond the container.
+    3. Verify the two groups still swapped — ``over`` stayed pinned to the extreme group.
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: A short group and a tall one.
+    sidebar, groups, tall_project_id, short_project_id, initial_ids = _build_short_and_tall_repo_groups(
+        page, test_repo_factory_, "tall-overshoot-repo"
+    )
+
+    # Step 2: Drag the tall group and overshoot past the short group / container edge.
+    sidebar.reorder_via_pointer_drag(
+        item=sidebar.get_repo_group_by_project_id(tall_project_id),
+        target=sidebar.get_repo_group_by_project_id(short_project_id),
+        overshoot=True,
+    )
+
+    # Step 3: The groups still swapped — the clamped pointer kept the extreme group as the
+    # drop target instead of dropping out and snapping the dragged group back.
+    expect(groups.nth(0)).to_have_attribute("data-project-id", initial_ids[1])
+    expect(groups.nth(1)).to_have_attribute("data-project-id", initial_ids[0])

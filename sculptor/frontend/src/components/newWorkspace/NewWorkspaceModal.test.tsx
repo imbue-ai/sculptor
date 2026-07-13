@@ -1,4 +1,4 @@
-import { cleanup, screen } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -41,7 +41,7 @@ describe("NewWorkspaceModal", () => {
   });
 
   it("passes the open request's seeds and create callback through to the form", () => {
-    // A plugin's open request (via the SDK's useOpenNewWorkspaceModal) and the
+    // An extension's open request (via the SDK's useOpenNewWorkspaceModal) and the
     // home page's first-run auto-open both ride this atom; the form only sees
     // what the modal forwards.
     const store = createStore();
@@ -63,6 +63,19 @@ describe("NewWorkspaceModal", () => {
         onWorkspaceCreated,
       }),
     );
+  });
+
+  it("closes the dialog when the form asks to be dismissed", () => {
+    // The form's pi empty-state CTA navigates to Settings, which lands
+    // underneath this dialog — its dismissal request must actually close it.
+    const store = createStore();
+    store.set(newWorkspaceModalAtom, { open: true });
+    renderWithProviders(<NewWorkspaceModal />, { store });
+
+    const props = formProps.mock.calls[0][0] as { onDismiss: () => void };
+    act(() => props.onDismiss());
+    expect(store.get(newWorkspaceModalAtom).open).toBe(false);
+    expect(screen.queryByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeNull();
   });
 
   it("renders every open as a modal dialog (with overlay)", () => {

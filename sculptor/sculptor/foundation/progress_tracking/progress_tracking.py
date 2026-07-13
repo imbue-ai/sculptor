@@ -107,26 +107,8 @@ class SubprocessHandle(StartFinishHandle):
         pass
 
 
-class TaskTitleProgressHandle(ProgressHandle):
-    """Progress handle for task title generation operations."""
-
-    def on_start(self) -> None: ...
-
-    def finish(self) -> None: ...
-
-    def report_failure(self, explanation: str) -> None: ...
-
-    def report_generated_title(self, task_title: str) -> None:
-        """Report the generated task title."""
-        pass
-
-
 class RootProgressHandle:
     """Root progress handle that can create scoped progress handles (e.g. on a per-task basis)."""
-
-    def track_task_title_generation(self) -> UnstartedHandle[TaskTitleProgressHandle]:
-        """Get a progress handle for tracking task title generation."""
-        return get_unstarted(TaskTitleProgressHandle)
 
     def track_environment_setup(self, task_id: str) -> UnstartedHandle[ProgressHandle]:
         """Get a progress handle for tracking workspace environment setup."""

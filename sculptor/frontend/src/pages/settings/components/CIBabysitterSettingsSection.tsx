@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { type CiBabysitterConfig, ElementIds, UserConfigField } from "../../../api";
+import { formatRegisteredAgentLabel } from "../../../common/state/atoms/agentTabs.ts";
 import {
   ciBabysitterAgentAtom,
   ciBabysitterMergeConflictPromptAtom,
@@ -149,7 +150,7 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
                 key={registration.registrationId}
                 value={`${REGISTERED_VALUE_PREFIX}${registration.registrationId}`}
               >
-                {registration.displayName}
+                {formatRegisteredAgentLabel(registration.displayName)}
               </Select.Item>
             ))}
           </Select.Content>

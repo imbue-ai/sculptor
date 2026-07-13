@@ -15,14 +15,15 @@ import {
   setAgentForWorkspaceAtom,
 } from "../../common/state/atoms/workspaces.ts";
 import { useWorkspaceShellBootstrap } from "../../common/state/hooks/useWorkspaceShellBootstrap.ts";
+import { MobileWorkspaceShell } from "./mobile/MobileWorkspaceShell.tsx";
 import { WorkspaceLayoutShell } from "./WorkspaceLayoutShell.tsx";
 
 // The desktop shell, bootstrapped for the active workspace + agent: scope switch,
 // registry sync, and center-agent placement happen here so the center renders the
 // resolved agent's chat. `taskId` is undefined for a workspace with no agents,
-// which renders the shell with an empty center. The mobile branch
-// (MobileWorkspaceShell) is not built yet — useIsMobile is a no-op seam that
-// always takes this path.
+// which renders the shell with an empty center. Narrow browser viewports take the
+// mobile branch in WorkspacePage below (MobileWorkspaceShell) instead of this
+// desktop shell; this content only renders on desktop.
 const WorkspacePageContent = ({ workspaceId, taskId }: { workspaceId: string; taskId?: string }): ReactElement => {
   useWorkspaceShellBootstrap({ workspaceId, taskId });
 
@@ -95,8 +96,17 @@ export const WorkspacePage = (): ReactElement | null => {
     removeTab,
   ]);
 
-  // The mobile shell is not built yet; the seam always resolves to desktop for now.
-  if (isMobile) return null;
+  // Narrow viewports render the single-column mobile shell. It deliberately
+  // does NOT render WorkspacePageContent, so the desktop section-layout
+  // bootstrap (scope switch, registry sync, layout persistence) never runs
+  // from a phone and desktop layout preferences survive a mobile session
+  // untouched. Until an agent resolves (the fix-up effect above navigates),
+  // render nothing — same brief window as the desktop branch below.
+  if (isMobile) {
+    if (!agentIDFromUrl) return null;
+    return <MobileWorkspaceShell taskID={agentIDFromUrl} />;
+  }
+
   if (agentIDFromUrl) {
     return <WorkspacePageContent workspaceId={workspaceID} taskId={agentIDFromUrl} />;
   }

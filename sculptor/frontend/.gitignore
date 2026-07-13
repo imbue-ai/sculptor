@@ -34,18 +34,17 @@ generated-*.ts
 # Lint caches
 .stylelintcache
 
-# Plugin output. Compiled plugins (currently only `linear-issue`) keep their
-# source in `plugins/<id>/` and are built into public/plugins/<id>/ by the host
-# Vite build (see vite-plugins/bundled-plugins.ts); that generated output is
-# ignored.
+# Extension output. Compiled extensions are built to public/extensions/<id>/ by
+# the host Vite build from their source under `extensions/<id>/` (see
+# vite-plugins/bundled-extensions.ts); that generated output is ignored.
 #
-# The no-build example plugins (`sculpty`, `pomodoro`, `buster`) are the
+# The no-build example extensions (`sculpty`, `pomodoro`, `buster`) are the
 # exception: they are hand-authored as a manifest.json + main.js with no build
 # step, so they are checked in here directly. Re-include them explicitly.
-public/plugins/*
-!public/plugins/sculpty/
-!public/plugins/pomodoro/
-!public/plugins/buster/
+public/extensions/*
+!public/extensions/sculpty/
+!public/extensions/pomodoro/
+!public/extensions/buster/
 
 # Test coverage output
 coverage/
@@ -56,3 +55,7 @@ storybook-static/
 # App signing secrets
 config/*.p8
 config/*.p12
+
+# Runtime-installed frontend plugins (the backend copies built plugin bundles
+# here to serve them); never tracked — plugin sources live in extensions/.
+public/plugins/

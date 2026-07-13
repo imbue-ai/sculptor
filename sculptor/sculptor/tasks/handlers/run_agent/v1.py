@@ -17,6 +17,7 @@ from loguru import logger
 from sculptor.agents.harness_registry import create_agent_for_run
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
+from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -91,12 +92,10 @@ from sculptor.state.messages import ModelOption
 from sculptor.state.messages import PersistentAgentMessage
 from sculptor.state.messages import PersistentUserMessage
 from sculptor.tasks.handlers.run_agent.setup import HistoryScan
-from sculptor.tasks.handlers.run_agent.setup import finalize_task_setup
 from sculptor.tasks.handlers.run_agent.setup import get_killed_exit_code
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import message_queue_subscription_context
 from sculptor.tasks.handlers.run_agent.setup import scan_message_history
-from sculptor.tasks.handlers.run_agent.setup import title_prediction_context
 from sculptor.tasks.handlers.run_agent.setup import wait_for_initial_message_and_process_queue
 from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
@@ -251,25 +250,6 @@ def run_agent_task_v1(
                     # from this in-memory copy; re-read so the selection is not lost here.
                     task_state = _refresh_model_fields_from_db(task.object_id, task_state, services)
 
-                    with title_prediction_context(
-                        task_state,
-                        initial_message,
-                        settings,
-                        environment_concurrency_group,
-                        root_progress_handle,
-                    ) as (
-                        title_result,
-                        title_thread,
-                    ):
-                        # Handle git initialization and branch setup
-                        task_state = finalize_task_setup(
-                            task=task,
-                            task_state=task_state,
-                            title_thread=title_thread,
-                            title_result=title_result,
-                            initial_message=initial_message,
-                            services=services,
-                        )
                     setup_duration = time.monotonic() - setup_start_time
                     if setup_duration >= TIMING_LOG_THRESHOLD_SECONDS:
                         logger.debug(format_timing_log("task setup", setup_duration))
@@ -828,11 +808,11 @@ def _eager_fetch_pi_models_into_state(
     task state so the switcher reflects pi's models immediately.
 
     Returns the task state evolved with the probe's result, so the caller carries
-    it forward — otherwise `finalize_task_setup`'s later evolve-and-upsert (from
-    the in-memory state) would write the stale `NOT_FETCHED_YET` back out.
-    Restricted to pi: the `supports_model_selection` check skips harnesses that
-    cannot select a model at all, and the `PiAgent` check below skips the rest —
-    only pi sources a dynamic catalog via the probe (Claude supports model
+    it forward into agent construction, which reads this in-memory copy rather
+    than re-reading the DB. Restricted to pi: the `supports_model_selection` check
+    skips harnesses that cannot select a model at all, and the `PiAgent` check
+    below skips the rest — only pi sources a dynamic catalog via the probe (Claude
+    supports model
     selection but with a static built-in list). Best-effort: on any failure the
     probe returns an empty catalog, which is persisted as a fetched-but-empty `[]`
     (the switcher then shows the empty state) rather than left not-fetched.
@@ -856,6 +836,15 @@ def _eager_fetch_pi_models_into_state(
         return task_state
     secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
     available_models, current_model = agent_wrapper.fetch_available_models_probe(secrets)
+    # A create-time selection (the modal's validated backend model) is already on
+    # task state; the read-only probe reports pi's own session default, which must
+    # not clobber it. Keep the seeded selection while its provider is still
+    # authenticated — the wrapper's start-time adoption reconciles pi to it. A
+    # seeded selection whose provider lost authentication falls back to the
+    # probe's result (the start-time reselect owns dropping or switching it).
+    seeded_model = task_state.current_model
+    if seeded_model is not None and seeded_model.provider in compute_authenticated_provider_ids():
+        current_model = seeded_model
     # Persist even the empty result: it records that the probe COMPLETED, moving the
     # catalog off NOT_FETCHED_YET to a fetched-but-empty [] (authenticated with no
     # providers — or a best-effort probe failure, which today falls back the same
@@ -1059,8 +1048,8 @@ def _refresh_model_fields_from_db(
     The set_model endpoint writes the selected model straight to task state while the
     agent waits for its first message, so this handler's in-memory copy goes stale.
     Refresh only those two fields (leaving the rest of the in-memory state as-is) so a
-    pre-message switch reaches agent construction and survives `finalize_task_setup`'s
-    write-back. A no-op when nothing changed or the task row is missing.
+    pre-message switch reaches agent construction. A no-op when nothing changed or the
+    task row is missing.
     """
     with services.data_model_service.open_task_transaction() as transaction:
         task_row = transaction.get_task(task_id)
