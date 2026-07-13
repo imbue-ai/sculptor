@@ -333,13 +333,28 @@ button { font-family: inherit; }
 .prev .ptab.default { background: transparent; border: 1px dashed var(--gray-a6); color: var(--gray-10); }
 .prev-legend { color: var(--gray-9); font-size: 12px; }
 
-/* save-options proposal: per-layout switches move up into the body (tidy-on-apply
-   joins set-as-default); the footer keeps only the save affordances. */
-.opt-rows { display: flex; flex-direction: column; gap: 12px; }
-.opt-row { align-items: flex-start; cursor: pointer; display: flex; gap: 10px; }
-.opt-row .switch { margin-top: 3px; }
-.opt-title { color: var(--gray-11); font-size: 13px; }
-.opt-sub { color: var(--gray-9); font-size: 12px; margin-top: 1px; }
+/* Save dialog options — a clean label-left / control-right list (mirrors the
+   settings SettingRow), holding the inline keyboard-shortcut affordance, the
+   tidy-on-apply toggle, and set-as-default. */
+.opt-list { display: flex; flex-direction: column; }
+.opt-row2 {
+  align-items: center; border-top: 1px solid var(--gray-a3); display: flex; gap: 20px;
+  justify-content: space-between; padding: 12px 0;
+}
+.opt-row2:first-child { border-top: none; padding-top: 4px; }
+.opt2-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.opt2-title { color: var(--gray-12); font-size: 13px; }
+.opt2-sub { color: var(--gray-9); font-size: 12px; }
+.opt2-ctrl { align-items: center; display: flex; flex-shrink: 0; gap: 10px; }
+/* Shortcut control: the assigned combo shown as an accent chip beside the
+   Set/Update button. Reuses the app's HotkeyChip recording under the hood. */
+.sk-set { align-items: center; display: none; gap: 10px; }
+.sk-kbd {
+  background: var(--indigo-a5); border: 1px solid var(--indigo-a6); border-radius: 4px;
+  color: var(--indigo-11); font-family: inherit; font-size: 12px; padding: 3px 9px;
+}
+.btn.tiny { font-size: 12px; padding: 5px 10px; }
+.opt-note { color: var(--gray-9); font-size: 12px; margin-top: 10px; }
 
 /* ============================================================
    Keyboard settings — the Layouts group inside Settings ▸ Keybindings.
@@ -443,7 +458,12 @@ body[data-state="dialog"] #dlg-layouts { display: flex; }
 body[data-state="dialog-search"] #dlg-layouts-search { display: flex; }
 body[data-state="palette"] #dlg-palette { display: flex; box-shadow: var(--shadow-palette); max-height: min(72vh, 560px); }
 body[data-state="save"] #dlg-save { display: flex; }
-body[data-state="save-options"] #dlg-save-options { display: flex; }
+body[data-state="save-options"] #dlg-save-options,
+body[data-state="save-shortcut-set"] #dlg-save-options { display: flex; }
+body[data-state="save-shortcut-set"] .overlay { background: rgba(0, 0, 0, 0.7); display: block; }
+/* Shortcut control swaps between "Set…" (no binding) and combo + "Update…". */
+body[data-state="save-shortcut-set"] .sk-set { display: inline-flex; }
+body[data-state="save-shortcut-set"] .sk-idle { display: none; }
 body[data-state="tidy"] #dlg-tidy { display: flex; }
 body[data-state="sidebar"] .nav-layouts { background: var(--gray-a3); }
 
@@ -846,7 +866,6 @@ body.bare #chrome { display: none; }
 <section class="pal" id="dlg-save-options">
   <div class="save-body">
     <div class="save-title">Planning<span class="caret"></span></div>
-    <div class="save-cap">Saves this workspace&rsquo;s panels and space as a reusable layout.</div>
     <div class="prev">
       <div class="cell cell-l saved">
         <div class="cell-label">Left</div>
@@ -866,10 +885,24 @@ body.bare #chrome { display: none; }
       </div>
     </div>
     <div class="prev-legend">An agent is created by default in the center section. A terminal is created by default in the bottom section.</div>
-    <div class="opt-rows">
-      <label class="opt-row"><span class="switch on"></span><span><span class="opt-title">Tidy panels when applying</span><div class="opt-sub">Closes panels this layout doesn&rsquo;t include — never agents or terminals.</div></span></label>
-      <label class="opt-row"><span class="switch"></span><span><span class="opt-title">Set as default for new workspaces</span></span></label>
+    <div class="opt-list">
+      <div class="opt-row2">
+        <span class="opt2-label"><span class="opt2-title">Keyboard shortcut</span><span class="opt2-sub">Apply this layout with a keypress.</span></span>
+        <span class="opt2-ctrl">
+          <span class="sk-set"><span class="sk-kbd">⌥1</span><button class="btn soft tiny">Update keyboard shortcut</button></span>
+          <button class="btn soft tiny sk-idle">Set keyboard shortcut</button>
+        </span>
+      </div>
+      <div class="opt-row2">
+        <span class="opt2-label"><span class="opt2-title">Tidy panels when applying</span><span class="opt2-sub">Closes panels this layout doesn&rsquo;t include — never agents or terminals.</span></span>
+        <span class="opt2-ctrl"><span class="switch on"></span></span>
+      </div>
+      <div class="opt-row2">
+        <span class="opt2-label"><span class="opt2-title">Set as default for new workspaces</span></span>
+        <span class="opt2-ctrl"><span class="switch"></span></span>
+      </div>
     </div>
+    <div class="opt-note">Change or clear layout shortcuts anytime in Settings ▸ Keybindings.</div>
   </div>
   <footer class="pal-foot" style="justify-content: flex-end; padding: 16px 24px;">
     <span style="align-items: center; display: flex; gap: 12px;">
@@ -941,7 +974,8 @@ body.bare #chrome { display: none; }
   <a href="?state=context-menu">Right-click</a>
   <a href="?state=keyboard-settings">Keyboard settings</a>
   <a href="?state=save">Save as…</a>
-  <a href="?state=save-options">Save options</a>
+  <a href="?state=save-options">Save (no shortcut)</a>
+  <a href="?state=save-shortcut-set">Save (shortcut set)</a>
   <a href="?state=tidy">Tidy</a>
   <a href="?state=palette">Cmd+K</a>
   <a href="?state=sidebar">Sidebar</a>
