@@ -140,7 +140,7 @@ export const sectionSizesAtom: Atom<SectionSizes> = selectAtom(
 );
 
 // Write a section's size percentage (clamped) into the active workspace's layout.
-// Resizing now only affects the workspace it happens in.
+// Section sizes are per-workspace, so a resize affects only this workspace.
 export const setSectionSizeAtom = atom(
   null,
   (_get, set, params: { side: "left" | "right" | "bottom"; percent: number }) => {

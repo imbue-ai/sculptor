@@ -2,13 +2,13 @@
 // would close. No atoms, no React, no DOM — the write actions in layoutActions.ts
 // wrap these, and they are directly unit-testable.
 //
-// The two invariants from design.md live here:
-//   Rule 2 (safety): apply is ADDITIVE — it keeps every currently-open panel,
-//   moves/opens only the layout's declared static panels, and sets geometry. It
-//   never deletes a placement, so it can never close an agent, terminal, or any
-//   other panel. Collapsing a section (geometry) hides but does not close.
-//   Rule 1 (portability): only static panels are ever declared, so apply only
-//   ever repositions statics — agents/terminals are left exactly where they are.
+// Two invariants live here:
+//   Safety: apply is ADDITIVE — it keeps every currently-open panel, moves/opens
+//   only the layout's declared static panels, and sets geometry. It never deletes a
+//   placement, so it can never close an agent, terminal, or any other panel.
+//   Collapsing a section (geometry) hides but does not close.
+//   Portability: only static panels are ever declared, so apply only ever
+//   repositions statics — agents/terminals are left exactly where they are.
 //
 // Tidy is the explicit escape hatch: it closes the static panels the layout does
 // not declare (never agents/terminals).

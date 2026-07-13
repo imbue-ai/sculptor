@@ -12,7 +12,7 @@ import { SAVED_LAYOUT_VERSION } from "./persistence/types.ts";
 import { appliedLayoutIdAtom, defaultLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "./savedLayoutAtoms.ts";
 import { closePanelAtom } from "./sectionActions.ts";
 import { workspaceLayoutAtom } from "./sectionAtoms.ts";
-import { SYSTEM_DEFAULT_LAYOUT_ID } from "./systemDefaultLayout.ts";
+import { isSystemDefaultLayoutId, SYSTEM_DEFAULT_LAYOUT_ID } from "./systemDefaultLayout.ts";
 import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 // Move an id to the front of the MRU list (most-recently-applied first),
@@ -61,7 +61,7 @@ export const saveCurrentLayoutAtom = atom(null, (get, set, params: { name: strin
 // Layout falls back to System Default, and the active workspace drops a now-dangling
 // applied pointer (other workspaces resolve theirs to "no Current" at read time).
 export const deleteLayoutAtom = atom(null, (get, set, id: string) => {
-  if (id === SYSTEM_DEFAULT_LAYOUT_ID) {
+  if (isSystemDefaultLayoutId(id)) {
     return;
   }
   set(
@@ -89,7 +89,7 @@ export const setDefaultLayoutAtom = atom(null, (_get, set, id: string) => {
 // Rename a Layout. System Default's name is fixed, and an empty name is ignored.
 export const renameLayoutAtom = atom(null, (get, set, params: { id: string; name: string }) => {
   const name = params.name.trim();
-  if (params.id === SYSTEM_DEFAULT_LAYOUT_ID || name === "") {
+  if (isSystemDefaultLayoutId(params.id) || name === "") {
     return;
   }
   set(

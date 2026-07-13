@@ -51,9 +51,9 @@ export type WorkspaceLayoutState = {
 
 // The captured subset of a workspace arrangement that a Layout stores. Only STATIC
 // panels are recorded in placement/order/activePanel (agent/terminal ids are
-// instance-bound and unportable — see design.md Rule 1); the geometry fields are
-// captured whole. maximizedSection comes from the transient maximize atom, not the
-// persisted layout, so it is captured separately here.
+// instance-bound and unportable); the geometry fields are captured whole.
+// maximizedSection comes from the transient maximize atom, not the persisted
+// layout, so it is captured separately here.
 export type CapturedLayout = {
   placement: Partial<Record<PanelId, SubSectionId>>;
   order: Partial<Record<SubSectionId, Array<PanelId>>>;
@@ -71,8 +71,8 @@ export type CapturedLayout = {
 export const SAVED_LAYOUT_VERSION = 1;
 
 // A named, reusable arrangement the user can switch between and set as the
-// new-workspace default. A portable template, not a snapshot of one workspace
-// (see design.md): it captures structure + stateless content only.
+// new-workspace default. A portable template, not a snapshot of one workspace:
+// it captures structure + stateless content only.
 export type SavedLayout = {
   id: string;
   name: string;

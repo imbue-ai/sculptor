@@ -51,10 +51,12 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
       "activeSubSection" in value
     );
   }
-  // sidebarOrder and the saved-layout fields are deliberately absent here: they may
-  // be missing (snapshots written before they existed) or corrupt without
-  // invalidating the user's other settings — normalizeSnapshot handles them
-  // field-level on read. A now-orphaned sectionSizes on an old global snapshot is
+  // sidebarOrder and the saved-layout fields (savedLayouts, layoutMru) are
+  // deliberately not required here: they may be missing (snapshots written before
+  // they existed) or a wrong kind without invalidating the user's other settings.
+  // normalizeSnapshot coerces each on read so a wrong-kind value never reaches the
+  // ordering/switcher atoms, which iterate these lists (same rationale as
+  // isValidSidebarOrder). A now-orphaned sectionSizes on an old global snapshot is
   // ignored rather than validated.
   return (
     typeof value.sidebarWidthPx === "number" &&
@@ -88,7 +90,19 @@ function normalizeSnapshot<TScope extends LayoutScope>(
   const sidebarOrder = isValidSidebarOrder(snapshot.sidebarOrder)
     ? snapshot.sidebarOrder
     : DEFAULT_GLOBAL_LAYOUT.sidebarOrder;
-  return { ...DEFAULT_GLOBAL_LAYOUT, ...snapshot, sidebarOrder } as LayoutSnapshotFor<TScope>;
+  const normalized: Record<string, unknown> = { ...DEFAULT_GLOBAL_LAYOUT, ...snapshot, sidebarOrder };
+  // savedLayouts and layoutMru are optional, so an absent field stays absent (the
+  // savedLayoutAtoms `?? []` fallback covers it). A PRESENT wrong-kind value must be
+  // coerced, though: the ordering/switcher atoms iterate these lists and a non-array
+  // would throw on .filter/.map (`?? []` does not rescue a non-null wrong kind).
+  if ("savedLayouts" in snapshot) {
+    normalized.savedLayouts = Array.isArray(snapshot.savedLayouts) ? snapshot.savedLayouts : [];
+  }
+
+  if ("layoutMru" in snapshot) {
+    normalized.layoutMru = Array.isArray(snapshot.layoutMru) ? snapshot.layoutMru : [];
+  }
+  return normalized as LayoutSnapshotFor<TScope>;
 }
 
 export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {

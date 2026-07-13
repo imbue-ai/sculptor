@@ -14,7 +14,7 @@ import { SAVED_LAYOUT_VERSION } from "./persistence/types.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "./registry/dynamicPanels.tsx";
 
 export const SYSTEM_DEFAULT_LAYOUT_ID = "system-default";
-export const SYSTEM_DEFAULT_LAYOUT_NAME = "System Default";
+const SYSTEM_DEFAULT_LAYOUT_NAME = "System Default";
 
 // The switcher summary shown for System Default. Fixed (rather than derived from the
 // captured statics) so it can name the dynamic terminal the seeding places, which a

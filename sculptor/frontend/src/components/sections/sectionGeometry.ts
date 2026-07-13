@@ -57,7 +57,7 @@ export function resolveSectionPixelSizes(params: ResolveSectionSizesParams): Sec
   return { leftPx, rightPx, bottomPx };
 }
 
-// Convert a dragged pixel size back to a clamped global percentage of its axis.
+// Convert a dragged pixel size back to a clamped percentage of its axis.
 export function sizeToPercent(px: number, dimension: number): number {
   if (dimension <= 0) {
     return SECTION_SIZE_MIN_PERCENT;

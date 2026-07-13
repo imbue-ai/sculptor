@@ -3,9 +3,9 @@
 // is directly unit-testable and shared by the save action and the System Default
 // derivation.
 //
-// A Layout is a portable template (design.md Rule 1), so only STATIC panels are
-// recorded in placement/order/activePanel — agent/terminal ids are instance-bound
-// and don't exist in another workspace. The geometry fields (expanded, splits,
+// A Layout is a portable template, so only STATIC panels are recorded in
+// placement/order/activePanel — agent/terminal ids are instance-bound and don't
+// exist in another workspace. The geometry fields (expanded, splits,
 // sizes, active sub-section) are captured whole; maximize lives in the transient
 // atom, so the caller passes it in.
 

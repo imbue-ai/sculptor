@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LocalStorageLayoutAdapter } from "./LocalStorageLayoutAdapter.ts";
-import type { GlobalLayoutState, LayoutScope, WorkspaceLayoutState } from "./types.ts";
-import { DEFAULT_SECTION_SIZES, LAYOUT_SNAPSHOT_VERSION } from "./types.ts";
+import type { GlobalLayoutState, LayoutScope, SavedLayout, WorkspaceLayoutState } from "./types.ts";
+import { DEFAULT_SECTION_SIZES, LAYOUT_SNAPSHOT_VERSION, SAVED_LAYOUT_VERSION } from "./types.ts";
 
 const WS_SCOPE: LayoutScope = { kind: "workspace", workspaceId: "ws-1" };
 const GLOBAL_SCOPE: LayoutScope = { kind: "global" };
@@ -27,6 +27,24 @@ function makeGlobalLayout(overrides: Partial<GlobalLayoutState> = {}): GlobalLay
     sidebarOrder: { repos: [], workspaces: {} },
     explorerSidebarHiddenByPanel: {},
     ...overrides,
+  };
+}
+
+function makeSavedLayout(id: string, name: string): SavedLayout {
+  return {
+    id,
+    name,
+    captured: {
+      placement: { files: "left" },
+      order: { left: ["files"] },
+      activePanel: { left: "files" },
+      expanded: { left: true, right: false, bottom: false },
+      splits: {},
+      sectionSizes: DEFAULT_SECTION_SIZES,
+      maximizedSection: null,
+      activeSubSection: "center",
+    },
+    version: SAVED_LAYOUT_VERSION,
   };
 }
 
@@ -132,6 +150,38 @@ describe("LocalStorageLayoutAdapter", () => {
         explorerSidebarHiddenByPanel: {},
       });
     }
+  });
+
+  it("round-trips savedLayouts, defaultLayoutId, and layoutMru unchanged", () => {
+    const layout = makeSavedLayout("layout-1", "My Layout");
+    const global = makeGlobalLayout({
+      savedLayouts: [layout],
+      defaultLayoutId: "layout-1",
+      layoutMru: ["layout-1"],
+    });
+    adapter.write(GLOBAL_SCOPE, global);
+    adapter.flush();
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual(global);
+  });
+
+  it("coerces a non-array savedLayouts/layoutMru to [] on read instead of throwing", () => {
+    // A hand-edited or corrupt global snapshot can carry a wrong-kind value in these
+    // fields. The `?? []` fallback in savedLayoutAtoms only rescues an ABSENT field, so
+    // a present non-array would reach .filter/.map and throw — read() must coerce it.
+    localStorage.setItem(
+      "sculptor-layout-global",
+      JSON.stringify({
+        sidebarWidthPx: 300,
+        sidebarCollapsed: true,
+        explorerListWidthPx: 260,
+        savedLayouts: "not-a-list",
+        layoutMru: 42,
+      }),
+    );
+    expect(() => adapter.read(GLOBAL_SCOPE)).not.toThrow();
+    const read = adapter.read(GLOBAL_SCOPE) as GlobalLayoutState;
+    expect(read.savedLayouts).toEqual([]);
+    expect(read.layoutMru).toEqual([]);
   });
 
   it("stamps the current snapshot version on writes and strips it on reads", () => {
