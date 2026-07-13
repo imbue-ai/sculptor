@@ -92,15 +92,19 @@ function normalizeSnapshot<TScope extends LayoutScope>(
     : DEFAULT_GLOBAL_LAYOUT.sidebarOrder;
   const normalized: Record<string, unknown> = { ...DEFAULT_GLOBAL_LAYOUT, ...snapshot, sidebarOrder };
   // savedLayouts and layoutMru are optional, so an absent field stays absent (the
-  // savedLayoutAtoms `?? []` fallback covers it). A PRESENT wrong-kind value must be
-  // coerced, though: the ordering/switcher atoms iterate these lists and a non-array
-  // would throw on .filter/.map (`?? []` does not rescue a non-null wrong kind).
+  // savedLayoutAtoms `?? []` fallback covers it). A PRESENT value must be coerced,
+  // though — the container AND its members: the ordering/switcher atoms iterate these
+  // lists (`.filter`/`.map`) and read `.version` off each saved layout, so a non-array
+  // — or an array carrying a null/non-object entry (or a non-string MRU id) — would
+  // throw before the version filter runs. `?? []` does not rescue a non-null wrong kind.
   if ("savedLayouts" in snapshot) {
-    normalized.savedLayouts = Array.isArray(snapshot.savedLayouts) ? snapshot.savedLayouts : [];
+    normalized.savedLayouts = Array.isArray(snapshot.savedLayouts) ? snapshot.savedLayouts.filter(isObject) : [];
   }
 
   if ("layoutMru" in snapshot) {
-    normalized.layoutMru = Array.isArray(snapshot.layoutMru) ? snapshot.layoutMru : [];
+    normalized.layoutMru = Array.isArray(snapshot.layoutMru)
+      ? snapshot.layoutMru.filter((id): id is string => typeof id === "string")
+      : [];
   }
   return normalized as LayoutSnapshotFor<TScope>;
 }

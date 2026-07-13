@@ -184,6 +184,26 @@ describe("LocalStorageLayoutAdapter", () => {
     expect(read.layoutMru).toEqual([]);
   });
 
+  it("drops null/non-object savedLayouts entries and non-string MRU ids on read", () => {
+    // A stored array with a wrong-kind MEMBER is still an array, so the container
+    // coercion above passes it through; resolvedLayoutsAtom then reads `.version` off
+    // each entry, so a null/non-object member must be filtered out on read too.
+    const layout = makeSavedLayout("layout-1", "My Layout");
+    localStorage.setItem(
+      "sculptor-layout-global",
+      JSON.stringify({
+        sidebarWidthPx: 300,
+        sidebarCollapsed: true,
+        explorerListWidthPx: 260,
+        savedLayouts: [null, layout, "nope", 7],
+        layoutMru: ["layout-1", null, 3],
+      }),
+    );
+    const read = adapter.read(GLOBAL_SCOPE) as GlobalLayoutState;
+    expect(read.savedLayouts).toEqual([layout]);
+    expect(read.layoutMru).toEqual(["layout-1"]);
+  });
+
   it("stamps the current snapshot version on writes and strips it on reads", () => {
     const snapshot = makeWorkspaceLayout("agent:1");
     adapter.write(WS_SCOPE, snapshot);
