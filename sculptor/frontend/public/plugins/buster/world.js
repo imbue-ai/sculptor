@@ -1,4 +1,4 @@
-// Cart guy's world: a tiny platformer engine that treats the host page's DOM
+// Buster's world: a tiny platformer engine that treats the host page's DOM
 // as terrain. React-free on purpose - the plugin's React wrapper (main.js)
 // mounts it, and a plain harness page can import it directly for testing.
 //
@@ -19,7 +19,7 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// The rig: sculptor-guy-cart.svg with prefixed ids/classes so nothing
+// The rig: buster.svg with prefixed ids/classes so nothing
 // collides with the host page. See that file for the joint reference.
 // ---------------------------------------------------------------------------
 const VIEW_W = 260, VIEW_H = 320;
@@ -55,11 +55,11 @@ const GUY_SVG = `
     <g transform="translate(52,44)">
       <path d="M103.454 3.61361C121.524 12.5312 120.94 41.6833 117.978 52.6868C115.015 63.6904 107.821 70.0386 100.906 75.388C97.9926 106.013 134.582 64.3285 148.548 84.6428C162.514 104.957 153.627 133.736 144.739 135.005C128.703 137.296 125.232 138.624 117.845 148.001C110.459 157.379 120.69 173.484 113.322 184.73C102.996 200.492 20.5874 208.896 19.344 187.446C18.9618 180.851 19.465 174.645 22.2676 168.655C23.315 166.417 26.9455 158.371 23.1397 157.379C16.7512 155.714 0.917805 158.702 0.229106 148.748C-0.811812 133.703 1.18263 109.089 17.0262 101.84C27.9341 96.849 53.1464 99.2114 60.3123 90.9717C62.586 88.3571 62.6406 85.3365 63.0102 82.1206C59.8859 80.1425 57.3346 77.4172 54.7865 74.7714C46.0239 65.6729 45.514 50.5068 46.8776 39.144C49.4168 17.9833 55.7701 8.83934 71.3307 2.64402C80.8742 -1.1556 94.3401 -0.883824 103.454 3.61361Z" fill="#F50D00"/>
       <g stroke="#FCEFD4" stroke-width="4" stroke-linecap="round" fill="none">
-        <path filter="url(#cg-scratch-a)" d="M53.1592 101.047H70.4064"/>
-        <path filter="url(#cg-scratch-b)" d="M90.9717 99.2595C93.7012 99.2595 100.389 98.3314 103.73 97.2345C107.668 96.5354 110.678 96.1247 112.147 95.6959C112.879 95.451 113.582 95.1503 115.319 94.584"/>
+        <path filter="url(#bs-scratch-a)" d="M53.1592 101.047H70.4064"/>
+        <path filter="url(#bs-scratch-b)" d="M90.9717 99.2595C93.7012 99.2595 100.389 98.3314 103.73 97.2345C107.668 96.5354 110.678 96.1247 112.147 95.6959C112.879 95.451 113.582 95.1503 115.319 94.584"/>
       </g>
     </g>
-    <g class="cg-face">
+    <g class="bs-face">
       <ellipse cx="124" cy="84" rx="7.5" ry="8.5" fill="#FFFFFF"/>
       <ellipse cx="150" cy="80" rx="7.5" ry="8.5" fill="#FFFFFF"/>
       <g data-joint="pupils">
@@ -74,11 +74,11 @@ const GUY_SVG = `
     </g>
   </g>
   <defs>
-    <filter id="cg-scratch-a" x="49.552" y="97.4397" width="24.4614" height="7.21429" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <filter id="bs-scratch-a" x="49.552" y="97.4397" width="24.4614" height="7.21429" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feTurbulence type="fractalNoise" baseFrequency="0.16969696 0.16969696" numOctaves="3" seed="1005"/>
       <feDisplacementMap in="SourceGraphic" scale="3.2142861" xChannelSelector="R" yChannelSelector="G"/>
     </filter>
-    <filter id="cg-scratch-b" x="87.3645" y="90.9768" width="31.5624" height="11.8901" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <filter id="bs-scratch-b" x="87.3645" y="90.9768" width="31.5624" height="11.8901" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feTurbulence type="fractalNoise" baseFrequency="0.16969696 0.16969696" numOctaves="3" seed="1005"/>
       <feDisplacementMap in="SourceGraphic" scale="3.2142861" xChannelSelector="R" yChannelSelector="G"/>
     </filter>
@@ -86,22 +86,22 @@ const GUY_SVG = `
 </svg>`;
 
 const STYLE_CSS = `
-@keyframes cg-blink {
+@keyframes bs-blink {
   0%, 95%, 100% { transform: scaleY(1); }
   97% { transform: scaleY(0.08); }
 }
-.cg-face { animation: cg-blink 4.6s infinite; transform-box: fill-box; transform-origin: center; }
-@keyframes cg-poof {
+.bs-face { animation: bs-blink 4.6s infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes bs-poof {
   from { opacity: 0.8; transform: translate(var(--px), var(--py)) scale(0.5); }
   to   { opacity: 0;   transform: translate(calc(var(--px) + var(--dx)), calc(var(--py) - 10px)) scale(1.6); }
 }
-.cg-poof {
+.bs-poof {
   position: absolute; top: 0; left: 0;
   width: 8px; height: 8px; border-radius: 50%;
   background: #D9CCC5; pointer-events: none;
-  animation: cg-poof 0.45s ease-out forwards;
+  animation: bs-poof 0.45s ease-out forwards;
 }
-.cg-bubble {
+.bs-bubble {
   position: absolute; top: 0; left: 0;
   background: #fff; color: #5c524d;
   border: 1px solid #EFE8E4; border-radius: 8px;
@@ -138,13 +138,13 @@ export function createWorld(root) {
   root.style.cssText = 'position:fixed;inset:0;pointer-events:none;overflow:hidden;';
 
   const style = document.createElement('style');
-  style.dataset.cartGuyPlugin = '';
+  style.dataset.busterPlugin = '';
   style.textContent = STYLE_CSS;
   document.head.appendChild(style);
 
   const guyEl = document.createElement('div');
   guyEl.style.cssText = 'position:absolute;top:0;left:0;pointer-events:auto;cursor:pointer;will-change:transform;';
-  guyEl.title = 'cart guy — click to drive';
+  guyEl.title = 'Buster — click to drive';
   guyEl.innerHTML = GUY_SVG;
   root.appendChild(guyEl);
 
@@ -160,7 +160,7 @@ export function createWorld(root) {
   root.appendChild(markerEl);
 
   const bubbleEl = document.createElement('div');
-  bubbleEl.className = 'cg-bubble';
+  bubbleEl.className = 'bs-bubble';
   bubbleEl.innerHTML = 'a/d drive · space jump · s drop through (hold to plummet) · esc releases';
   root.appendChild(bubbleEl);
 
@@ -194,8 +194,8 @@ export function createWorld(root) {
   let ax = 0;
   const held = { left: false, right: false, jump: false, crouch: false };
 
-  // Pose springs (see CartGuy in the playground: rock = unstrapped-cargo
-  // wobble from acceleration, gap = daylight from the deck while airborne).
+  // Pose springs: rock = unstrapped-cargo wobble from acceleration, gap =
+  // daylight from the deck while airborne.
   let rock = 0, rockV = 0, gap = 0, gapV = 0;
   let mouth = 0, wheelAngle = 0;
   let pupilX = 0, pupilY = 0;
@@ -488,7 +488,7 @@ export function createWorld(root) {
     const feetX = state.x + W / 2;
     for (let i = 0; i < 3; i++) {
       const p = document.createElement('div');
-      p.className = 'cg-poof';
+      p.className = 'bs-poof';
       p.style.setProperty('--px', `${feetX + (i - 1) * 12}px`);
       p.style.setProperty('--py', `${state.feetY - 6}px`);
       p.style.setProperty('--dx', `${(i - 1) * 22}px`);
@@ -518,7 +518,7 @@ export function createWorld(root) {
   raf = requestAnimationFrame(frame);
 
   const world = { state, takeControl, release, get controlled() { return controlled; } };
-  if (window.__CARTGUY_DEBUG) window.__cartGuy = world;
+  if (window.__BUSTER_DEBUG) window.__buster = world;
 
   return function dispose() {
     disposed = true;
@@ -528,6 +528,6 @@ export function createWorld(root) {
     window.removeEventListener('blur', onBlur);
     style.remove();
     root.replaceChildren();
-    if (window.__cartGuy === world) delete window.__cartGuy;
+    if (window.__buster === world) delete window.__buster;
   };
 }

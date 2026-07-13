@@ -108,6 +108,7 @@ type BuiltinSource = { path: string; disabledByDefault?: boolean };
 const BUILTIN_SOURCES: ReadonlyArray<BuiltinSource> = [
   { path: "/plugins/sculpty", disabledByDefault: true },
   { path: "/plugins/pomodoro", disabledByDefault: true },
+  { path: "/plugins/buster", disabledByDefault: true },
   { path: "/plugins/linear-issue" },
 ];
 

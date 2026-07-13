@@ -39,12 +39,13 @@ generated-*.ts
 # Vite build (see vite-plugins/bundled-plugins.ts); that generated output is
 # ignored.
 #
-# The no-build example plugins (`sculpty`, `pomodoro`) are the exception: they
-# are hand-authored as a manifest.json + main.js with no build step, so they
-# are checked in here directly. Re-include them explicitly.
+# The no-build example plugins (`sculpty`, `pomodoro`, `buster`) are the
+# exception: they are hand-authored as a manifest.json + main.js with no build
+# step, so they are checked in here directly. Re-include them explicitly.
 public/plugins/*
 !public/plugins/sculpty/
 !public/plugins/pomodoro/
+!public/plugins/buster/
 
 # Test coverage output
 coverage/
