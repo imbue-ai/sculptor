@@ -19,6 +19,21 @@ import type { SubSectionId } from "~/components/sections/sectionTypes.ts";
 export const renamingWorkspaceIdAtom = atom<string | null>(null);
 
 /**
+ * A rename handoff the sidebar row menus flush once their menu has closed. The
+ * sidebar `beginRename` stashes the target workspace id here instead of writing
+ * `renamingWorkspaceIdAtom` directly: writing it while the right-click context
+ * menu or the row's "..." dropdown is still open would mount — and focus — the
+ * inline rename input inside the menu's still-active focus scope, which yanks
+ * focus back and the resulting blur cancels the rename. Each menu's
+ * `onCloseAutoFocus` is the consumer: it suppresses the focus restore, clears
+ * this atom, and writes `renamingWorkspaceIdAtom`, so the input only ever mounts
+ * with nothing competing for focus. Mirrors `palettePendingRenameAtom` for the
+ * sidebar menu surfaces; see the `use_close_auto_focus_for_focus_handoff`
+ * review rule.
+ */
+export const pendingWorkspaceRenameIdAtom = atom<string | null>(null);
+
+/**
  * A rename handoff the palette flushes once its dialog has closed. The palette
  * runtimes' `beginRename` stash the target here instead of writing the rename
  * atoms directly: writing them while the palette is open would mount — and
