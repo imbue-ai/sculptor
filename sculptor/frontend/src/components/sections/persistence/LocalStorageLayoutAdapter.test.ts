@@ -184,10 +184,11 @@ describe("LocalStorageLayoutAdapter", () => {
     expect(read.layoutMru).toEqual([]);
   });
 
-  it("drops null/non-object savedLayouts entries and non-string MRU ids on read", () => {
-    // A stored array with a wrong-kind MEMBER is still an array, so the container
-    // coercion above passes it through; resolvedLayoutsAtom then reads `.version` off
-    // each entry, so a null/non-object member must be filtered out on read too.
+  it("drops malformed savedLayouts entries and non-string MRU ids on read", () => {
+    // A wrong-kind MEMBER is still inside an array, so the container coercion passes it
+    // through; the switcher/apply path then reads `.version` and `captured.*` off each
+    // entry. So null/non-object members AND version-matching-but-structurally-broken
+    // entries (missing or invalid captured) must be dropped on read too.
     const layout = makeSavedLayout("layout-1", "My Layout");
     localStorage.setItem(
       "sculptor-layout-global",
@@ -195,7 +196,15 @@ describe("LocalStorageLayoutAdapter", () => {
         sidebarWidthPx: 300,
         sidebarCollapsed: true,
         explorerListWidthPx: 260,
-        savedLayouts: [null, layout, "nope", 7],
+        savedLayouts: [
+          null,
+          "nope",
+          7,
+          { id: "no-captured", name: "No captured", version: 1 },
+          { id: "null-captured", name: "Null captured", version: 1, captured: null },
+          { id: "partial-captured", name: "Partial", version: 1, captured: { placement: {} } },
+          layout,
+        ],
         layoutMru: ["layout-1", null, 3],
       }),
     );

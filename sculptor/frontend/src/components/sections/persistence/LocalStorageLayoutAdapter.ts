@@ -76,6 +76,32 @@ function isValidSidebarOrder(value: unknown): value is SidebarOrderState {
   );
 }
 
+// A saved layout is rendered (summary + wireframe) and applied by dereferencing
+// captured.* — so a version-matching entry with a missing/broken captured payload
+// would crash at render, not just startup. Require the minimal readable shape so an
+// unreadable entry is dropped on read instead of reaching the switcher / apply path.
+// Value-level shape (versions, panel ids) is still gated by the version stamp.
+function isValidSavedLayout(value: unknown): boolean {
+  if (
+    !isObject(value) ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.version !== "number"
+  ) {
+    return false;
+  }
+  const captured = value.captured;
+  return (
+    isObject(captured) &&
+    isObject(captured.placement) &&
+    isObject(captured.order) &&
+    isObject(captured.activePanel) &&
+    isObject(captured.expanded) &&
+    isObject(captured.splits) &&
+    isObject(captured.sectionSizes)
+  );
+}
+
 // Fill fields a stored snapshot lacks from the scope's defaults, so additive
 // schema growth never needs a version bump and read() always returns the full
 // declared shape. A missing or corrupt sidebarOrder degrades to the default
@@ -94,11 +120,14 @@ function normalizeSnapshot<TScope extends LayoutScope>(
   // savedLayouts and layoutMru are optional, so an absent field stays absent (the
   // savedLayoutAtoms `?? []` fallback covers it). A PRESENT value must be coerced,
   // though — the container AND its members: the ordering/switcher atoms iterate these
-  // lists (`.filter`/`.map`) and read `.version` off each saved layout, so a non-array
-  // — or an array carrying a null/non-object entry (or a non-string MRU id) — would
-  // throw before the version filter runs. `?? []` does not rescue a non-null wrong kind.
+  // lists (`.filter`/`.map`) and the switcher/apply path dereferences `.version` and
+  // `captured.*` off each saved layout, so a non-array — or an array carrying a
+  // structurally-broken entry (or a non-string MRU id) — would throw. `?? []` does not
+  // rescue a non-null wrong kind.
   if ("savedLayouts" in snapshot) {
-    normalized.savedLayouts = Array.isArray(snapshot.savedLayouts) ? snapshot.savedLayouts.filter(isObject) : [];
+    normalized.savedLayouts = Array.isArray(snapshot.savedLayouts)
+      ? snapshot.savedLayouts.filter(isValidSavedLayout)
+      : [];
   }
 
   if ("layoutMru" in snapshot) {
