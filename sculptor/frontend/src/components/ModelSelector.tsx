@@ -1,12 +1,13 @@
 import { Button, DropdownMenu, Flex, Select, Text, Tooltip } from "@radix-ui/themes";
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
-import { ElementIds } from "~/api";
+import { ElementIds, ModelCatalogState } from "~/api";
 import {
   getModelShortName,
   getProviderDisplayName,
   groupModelsByProvider,
+  hasNoUsableModel,
   routeModelChange,
 } from "~/common/modelConstants.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
@@ -22,9 +23,10 @@ type ModelSelectorProps = {
   /** The active task's `supports_model_selection` capability. When false the
    *  switcher renders disabled-with-tooltip (the current model still shows). */
   capabilityValue?: boolean;
-  /** A harness-supplied model list (pi). Options are keyed by model_id and
-   *  `selectedModelId` is shown selected. */
-  backendModels?: ReadonlyArray<ModelOption>;
+  /** The pi catalog for the switcher: the fetched list (keyed by model_id, with
+   *  `selectedModelId` shown selected), or `NOT_FETCHED_YET` while the start-time
+   *  probe is still in flight — which renders a loading state, not the empty state. */
+  backendModels?: ReadonlyArray<ModelOption> | ModelCatalogState;
   /** The model_id to show selected when the harness sources a backend list (pi). */
   selectedModelId?: string;
   /** The out-of-band change handler for a backend model list (pi). Called with
@@ -33,16 +35,17 @@ type ModelSelectorProps = {
   onBackendModelChange?: (option: ModelOption) => void;
   /** Whether the harness sources its catalog from a backend (pi); when false the
    *  built-in Claude list is shown. An empty `backendModels` then means "no
-   *  authenticated providers" — show the login CTA, not the Claude fallback list. */
+   *  authenticated providers" — render a disabled "no models available" trigger, not
+   *  the Claude fallback list. The fix-it action lives on the composer's send slot. */
   sourcesBackendModels?: boolean;
-  /** Invoked by the no-providers prompt to send the user to authenticate a
-   *  provider (the pi login flow under Settings -> Pi). */
-  onAuthenticate: () => void;
 };
 
-const PI_NO_MODELS_COPY = "No models available — please log in to authenticate";
+const PI_NO_MODELS_COPY = "No models available";
 
-export const ModelSelector = ({
+// Memoized: ChatInput re-renders on draft-flag flips, send state, and task/
+// capability churn. The model props here are atom-backed (stable refs) +
+// useCallback handlers, so memo lets this Radix Select subtree bail out.
+export const ModelSelector = memo(function ModelSelector({
   model,
   onModelChange,
   capabilityValue,
@@ -50,12 +53,18 @@ export const ModelSelector = ({
   selectedModelId,
   onBackendModelChange,
   sourcesBackendModels = false,
-  onAuthenticate,
-}: ModelSelectorProps): ReactElement => {
+}: ModelSelectorProps): ReactElement {
   const gate = useCapabilityGate(capabilityValue, ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION);
 
-  const models = backendModels ?? [];
+  const models = Array.isArray(backendModels) ? backendModels : [];
+  const isCatalogNotFetched = backendModels === ModelCatalogState.NOT_FETCHED_YET;
   const hasBackendModels = sourcesBackendModels && models.length > 0;
+  // Shared with the composer's send-guard (ChatInput) so the disabled picker and the
+  // blocked Send stay in lockstep. NOT_FETCHED_YET (still loading) is handled above.
+  const isMissingUsableModel = hasNoUsableModel(
+    sourcesBackendModels,
+    backendModels ?? ModelCatalogState.NOT_FETCHED_YET,
+  );
   const providerGroups = hasBackendModels ? groupModelsByProvider(models) : [];
 
   // The Select value / trigger label diverge by source: a backend list (pi) is
@@ -85,18 +94,35 @@ export const ModelSelector = ({
     );
   }
 
-  if (sourcesBackendModels && models.length === 0) {
-    // pi with no authenticated providers: an empty catalog is genuinely "nothing to
-    // authenticate as", not a cue to fall back to the Claude list. Show the locked
-    // copy + a CTA into the login flow.
+  if (sourcesBackendModels && isCatalogNotFetched) {
+    // The start-time catalog probe is still in flight (catalog NOT_FETCHED_YET):
+    // show a quiet, disabled placeholder — never the empty state, which would
+    // otherwise flash for an authenticated user until the real catalog lands. Only
+    // a fetched-but-empty catalog (below) means "no providers".
     return (
-      <Flex align="center" gap="2" data-testid={ElementIds.PI_PICKER_EMPTY_STATE}>
+      <Select.Root size="1" value="" disabled>
+        <Select.Trigger className={styles.trigger} data-testid={ElementIds.PI_PICKER_LOADING} variant="ghost">
+          <Flex align="center">
+            <Text size="1" color="gray">
+              Loading models…
+            </Text>
+          </Flex>
+        </Select.Trigger>
+      </Select.Root>
+    );
+  }
+
+  if (isMissingUsableModel) {
+    // pi with no authenticated providers: a fetched-but-empty catalog is genuinely
+    // "no usable model", not a cue to fall back to the Claude list. Render an inert,
+    // disabled label stating the fact — no dropdown, no action button. The fix-it
+    // action lives on the composer's send slot, which swaps Send for a "Go to harness
+    // configuration" button (see ChatInput).
+    return (
+      <Flex align="center" data-testid={ElementIds.PI_PICKER_EMPTY_STATE}>
         <Text size="1" color="gray">
           {PI_NO_MODELS_COPY}
         </Text>
-        <Button size="1" variant="ghost" onClick={onAuthenticate} data-testid={ElementIds.PI_PICKER_LOGIN_CTA}>
-          Open pi login
-        </Button>
       </Flex>
     );
   }
@@ -167,7 +193,7 @@ export const ModelSelector = ({
       </Select.Content>
     </Select.Root>
   );
-};
+});
 
 type CascadingProviderMenuProps = {
   groups: ReadonlyArray<{ provider: string; models: ReadonlyArray<ModelOption> }>;

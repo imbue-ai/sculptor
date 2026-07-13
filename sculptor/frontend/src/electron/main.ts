@@ -899,8 +899,9 @@ const createWindow = async (): Promise<void> => {
           })();
           `,
         )
-        .catch(() => {
-          // Swallow: the page may have navigated away before we could inject.
+        .catch((error) => {
+          // The page may have navigated away before we could inject.
+          console.warn("Failed to inject target=_blank interceptor; the page likely navigated away.", error);
         });
     };
     attachedContents.on("dom-ready", injectTargetBlankInterceptor);
@@ -1001,7 +1002,7 @@ const registerAppProtocolHandler = (): void => {
     }
     let target = resolved;
     // TODO(SCU-1517): this serves one fixed bundle at startup, so a sync stat
-    // is fine. Once the handler also serves plugins from arbitrary local
+    // is fine. Once the handler also serves extensions from arbitrary local
     // directories at runtime, switch existsSync (and the read below) to async
     // fs.promises to keep the main process thread non-blocking.
     if (!fs.existsSync(target)) {

@@ -1,6 +1,6 @@
 """Integration tests for section collapse/expand + within-section panel cycling.
 
-The default test layout has only the CENTER section expanded; the left, right, and
+The default test layout has the CENTER and LEFT sections expanded; the right and
 bottom sections are collapsed and render no header until expanded. A non-center
 section can be expanded/collapsed either by its workspace-header toggle or by the
 ``mod+Alt+Arrow*`` keyboard shortcut; the center section has no toggle and cannot be
@@ -31,7 +31,9 @@ def test_expand_side_section_via_header_toggle(sculptor_instance_: SculptorInsta
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Expand Toggle WS")
 
-    for section_id in ("left", "right", "bottom"):
+    # Left starts expanded in the default layout, so the collapsed-by-default sections
+    # exercised by the header toggle are right and bottom.
+    for section_id in ("right", "bottom"):
         section = PlaywrightWorkspaceSection(page, section_id)
         # Collapsed by default: no header is rendered.
         expect(section.get_header()).to_have_count(0)
@@ -41,21 +43,22 @@ def test_expand_side_section_via_header_toggle(sculptor_instance_: SculptorInsta
 
 @user_story("to expand and collapse a side section with the keyboard")
 def test_toggle_side_section_via_hotkey(sculptor_instance_: SculptorInstance) -> None:
-    """The ``mod+Alt+Arrow*`` shortcut expands a collapsed section and collapses it again."""
+    """The ``mod+Alt+Arrow*`` shortcut collapses an expanded section and expands it again."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Toggle Hotkey WS")
 
     left = PlaywrightWorkspaceSection(page, "left")
-    expect(left.get_header()).to_have_count(0)
-
-    # Expand via the hotkey -> header renders.
-    toggle_section_via_hotkey(page, "left")
+    # Left is expanded in the default layout, so its header renders from the start.
     expect(left.get_header()).to_be_visible()
 
-    # Collapse via the hotkey -> header removed again.
+    # Collapse via the hotkey -> header removed.
     toggle_section_via_hotkey(page, "left")
     expect(left.get_header()).to_have_count(0)
+
+    # Expand via the hotkey -> header renders again.
+    toggle_section_via_hotkey(page, "left")
+    expect(left.get_header()).to_be_visible()
 
 
 @user_story("to keep the center section always visible because it cannot be collapsed")

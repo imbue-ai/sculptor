@@ -25,6 +25,12 @@ credentials change; an empty catalog shows a verbatim actionable
 
 ## Current Architecture
 
+> **Amended — see `agent_docs/pi-modal-model-picker/spec.md`.** The diagram below
+> shows catalog discovery beginning at agent start
+> (`fetch_available_models_probe` / `_fetch_models_into_state`). The same probe
+> also runs host-side, before any workspace exists, to feed a pi model picker in
+> the New Workspace modal — agent start is not the earliest discovery point.
+
 ```
                        SETTINGS (global route /settings)
   ┌───────────────────────────────────────────────────────────────┐
@@ -181,6 +187,14 @@ Read-only. Two consumers:
    `_fetch_models_into_state` (running agent). Filtering is layered with the
    existing `_curate_models` (blacklist / dated-pin / sort) — the current model
    is still always retained so the switcher never goes empty mid-session.
+
+   > **Being revised — see `agent_docs/no-usable-model-guard/design.md`.** This
+   > "current model always retained" plank makes the empty state unreachable once a
+   > model has been selected: with no authenticated provider and no authenticated
+   > fallback, the catalog resolves to `[<the one unusable model>]`, not `[]`. The
+   > revision drops the selection in exactly that case (keeping the cosmetic
+   > blacklist/dated-pin exemptions), so `available_models` reaches `[]` and the
+   > REQ-UI-5 empty state actually renders.
 2. **Settings list** — the same computation behind a global read endpoint (C).
 
 ### C. Settings → Pi → Providers UI (REQ-UI-1/2)
@@ -274,6 +288,16 @@ restart, when the terminal closes" intent for an idle agent; rejected.) An
 agent mid-turn applies the refresh between turns, exactly like `set_model`.
 
 ### H. Empty / error state (REQ-UI-5, REQ-ERR-1) — **CHOSEN: both surfaces + a backend-catalog signal**
+
+> **Amended — see `agent_docs/no-usable-model-guard/design.md`.** Two gaps surfaced
+> after ship: (1) the "empty picker" below assumes the empty state is reachable at
+> start-time, but a *previously-selected* model is retained even with no providers, so
+> `available_models` is `[<that model>]`, not `[]` — the empty state never renders
+> (fixed by emptying the catalog for an unusable selection). (2) The failed-turn surface
+> is *post-hoc*: nothing guards the Send button, so the message is sent and crashes into
+> `PiCrashError` first. The amendment adds a pre-send guard that replaces Send with a
+> **generic** "Go to harness configuration" CTA (harness-owned destination: pi → Pi,
+> Claude → Dependencies), so the crash path is never entered.
 
 **Both** surfaces carry the verbatim copy "No models available — please log in
 to authenticate":

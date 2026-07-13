@@ -19,7 +19,7 @@ import { TreeRow } from "./TreeRow.tsx";
 import type { FileStatus, TreeNode, ViewMode } from "./types.ts";
 import { useActiveFileOperation } from "./useActiveFileOperation.ts";
 import { useKeyboardNavigation } from "./useKeyboardNavigation.ts";
-import { useAgentFileTracking, useCollapseChildren, useTreeNodeMap } from "./useTreeView.ts";
+import { useAgentFileTracking, useCollapseChildren, useSearchAutoExpand, useTreeNodeMap } from "./useTreeView.ts";
 import {
   buildChangesTree,
   collectAllFolderPaths,
@@ -115,18 +115,38 @@ export const ChangesTreeView = ({
 
   const folderChangeCounts = useMemo(() => computeFolderChangeCounts(changesTree), [changesTree]);
 
-  // Auto-expand all folders in the changes tree on first render and when tree changes
-  const prevTreeIdRef = useRef<string>("");
+  // Open each changed folder the first time it appears in the tree, but only once:
+  // folders already recorded in `changesAutoExpandedFolders` are left as the user
+  // left them, so a collapse survives a remount, a change tick, and a workspace
+  // switch. Search-driven expansion is transient and handled by useSearchAutoExpand
+  // below, so this stays out of its way while a search is active.
   useEffect(() => {
-    const allFolders = collectAllFolderPaths(compactedTree);
-    const treeId = [...allFolders].sort().join(",");
-    if (treeId !== prevTreeIdRef.current) {
-      prevTreeIdRef.current = treeId;
-      if (allFolders.length > 0) {
-        expandFolders({ workspaceId, paths: allFolders });
-      }
+    if (isSearchActive) {
+      return;
     }
-  }, [compactedTree, expandFolders, workspaceId]);
+    const allFolders = collectAllFolderPaths(compactedTree);
+    if (allFolders.length === 0) {
+      return;
+    }
+    setFileBrowserState((prev) => {
+      // A persisted snapshot can omit this field, so coalesce before use.
+      const prevAutoExpanded = prev.changesAutoExpandedFolders ?? [];
+      const alreadyAutoExpanded = new Set(prevAutoExpanded);
+      const newlyAppeared = allFolders.filter((path) => !alreadyAutoExpanded.has(path));
+      if (newlyAppeared.length === 0) {
+        return prev;
+      }
+      const expanded = new Set(prev.changesExpandedFolders);
+      for (const path of newlyAppeared) {
+        expanded.add(path);
+      }
+      return {
+        ...prev,
+        changesExpandedFolders: Array.from(expanded),
+        changesAutoExpandedFolders: [...prevAutoExpanded, ...newlyAppeared],
+      };
+    });
+  }, [compactedTree, isSearchActive, setFileBrowserState]);
 
   const expandedFoldersSet = useMemo(
     () => new Set(fileBrowserState.changesExpandedFolders),
@@ -190,6 +210,19 @@ export const ChangesTreeView = ({
     },
     [setFileBrowserState],
   );
+
+  // Expand every folder in the filtered tree while a search is active so matches
+  // are visible, then restore the pre-search expand state on clear — the same
+  // transient search behaviour the Files tree uses, so a collapse the user makes
+  // outside search is preserved once the search ends.
+  useSearchAutoExpand({
+    isSearchActive,
+    tree: compactedTree,
+    currentExpandedFolders: fileBrowserState.changesExpandedFolders,
+    expandFolders,
+    setExpandedFolders,
+    workspaceId,
+  });
 
   const handleCollapseChildren = useCollapseChildren({
     flatRows,

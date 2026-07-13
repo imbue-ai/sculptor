@@ -7,9 +7,9 @@ dropdown (and vice versa) — and picking an entry stays in the originating
 panel: Files re-opens a read-only file view, Changes re-opens the file's diff,
 and Commits re-opens the file's diff within the commit it was viewed in.
 
-The three panels are seeded into the (collapsed) left section, so the tests
-drive them by expanding that section and switching its panel tabs (via
-``open_panel``, which reveals a seeded panel where it lives).
+The three panels are seeded into the left section, so the tests drive them by
+switching its panel tabs (via ``open_panel``, which reveals a seeded panel
+where it lives).
 """
 
 from playwright.sync_api import Page

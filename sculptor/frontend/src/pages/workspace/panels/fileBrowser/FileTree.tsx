@@ -1,7 +1,7 @@
 import { Flex, Text } from "@radix-ui/themes";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef } from "react";
+import { type ReactElement, useCallback, useEffect, useId, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
 import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
@@ -103,6 +103,8 @@ export const FileTree = ({
   );
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Links the scroll container to the overlay scrollbar's `aria-controls`.
+  const scrollContainerId = useId();
 
   const itemCount = viewMode === "tree" ? flatRows.length : flatFiles.length;
 
@@ -232,6 +234,7 @@ export const FileTree = ({
   return (
     <div
       ref={scrollContainerRef}
+      id={scrollContainerId}
       className={styles.scrollContainer}
       onScroll={handleScroll}
       onKeyDown={onKeyDown}
@@ -327,7 +330,11 @@ export const FileTree = ({
           );
         })}
       </div>
-      <VerticalOverlayScrollbar scrollRef={scrollContainerRef} thumbTestId={ElementIds.FILE_BROWSER_SCROLLBAR_THUMB} />
+      <VerticalOverlayScrollbar
+        scrollRef={scrollContainerRef}
+        scrollContainerId={scrollContainerId}
+        thumbTestId={ElementIds.FILE_BROWSER_SCROLLBAR_THUMB}
+      />
     </div>
   );
 };

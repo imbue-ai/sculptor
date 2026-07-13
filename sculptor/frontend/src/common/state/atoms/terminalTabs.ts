@@ -1,5 +1,5 @@
 import { atom } from "jotai";
-import { atomWithStorage } from "jotai/utils";
+import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
 
 /** The live state of a terminal's WebSocket connection.
  *
@@ -12,7 +12,7 @@ import { atomWithStorage } from "jotai/utils";
  *
  * The union lives here (not in useTerminal.ts) so registry/atom consumers can
  * import it without pulling the terminal runtime — and its window-global
- * ambient deps — into type-only programs like the plugin-SDK .d.ts rollup. */
+ * ambient deps — into type-only programs like the extension-SDK .d.ts rollup. */
 export type TerminalConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
 type PersistedTerminalTab = {
@@ -78,4 +78,17 @@ export const reportTerminalConnectionStatusAtom = atom(
       return next;
     });
   },
+);
+
+// One terminal's connection status, sliced out of the aggregate map and memoized per
+// panel id. A terminal tab subscribes to its OWN slice so a connection transition on
+// one terminal re-renders only that tab's indicator dot — the status is read here
+// directly rather than threaded through the dynamic-panel derivation, which would
+// otherwise rewrite the whole panel registry on every transition. selectAtom's
+// value-equality guard means a change to one terminal's entry leaves every other
+// terminal's slice untouched (its selected value is unchanged). Keyed by panel id,
+// which is unbounded across a session, so deriveDynamicPanels evicts a terminal's
+// slice once its tab is gone (mirrors panelDefinitionByIdAtom's eviction).
+export const terminalConnectionStatusByPanelIdAtom = atomFamily((panelId: string) =>
+  selectAtom(terminalConnectionStatusesAtom, (statuses): TerminalConnectionStatus | undefined => statuses[panelId]),
 );

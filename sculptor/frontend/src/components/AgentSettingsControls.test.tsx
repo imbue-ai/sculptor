@@ -46,28 +46,15 @@ const defaultProps = {
   onPlanModeToggle: (): void => {},
 };
 
-describe("AgentSettingsControls canSelectModel", () => {
-  it("renders an enabled model picker when canSelectModel defaults to true", () => {
+describe("AgentSettingsControls", () => {
+  it("renders the full Claude control cluster with an enabled model picker", () => {
     render(withStore(<AgentSettingsControls {...defaultProps} />));
-    expect(screen.getByTestId(ElementIds.MODEL_SELECTOR)).toBeTruthy();
-    expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeNull();
-  });
-
-  it("renders a disabled model picker when canSelectModel is false", () => {
-    render(withStore(<AgentSettingsControls {...defaultProps} canSelectModel={false} />));
-    expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).toBeNull();
-    expect(screen.getByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeTruthy();
-  });
-});
-
-describe("AgentSettingsControls canUseFastMode", () => {
-  it("hides the fast-mode toggle when canUseFastMode is false", () => {
-    render(withStore(<AgentSettingsControls {...defaultProps} canUseFastMode={false} />));
-    expect(screen.queryByTestId(ElementIds.FAST_MODE_TOGGLE)).toBeNull();
-  });
-
-  it("shows the fast-mode toggle when the model supports it and canUseFastMode is true", () => {
-    render(withStore(<AgentSettingsControls {...defaultProps} canUseFastMode={true} />));
+    expect(screen.getByTestId(ElementIds.PLAN_MODE_TOGGLE)).toBeTruthy();
+    // Opus supports fast mode, so its toggle shows.
     expect(screen.getByTestId(ElementIds.FAST_MODE_TOGGLE)).toBeTruthy();
+    expect(screen.getByTestId(ElementIds.MODEL_SELECTOR)).toBeTruthy();
+    // This cluster is Claude-only, so the model picker is never the disabled
+    // capability-tooltip treatment.
+    expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeNull();
   });
 });

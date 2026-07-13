@@ -155,5 +155,6 @@ export type WorkspaceActionRuntime = {
 
 export type AgentActionRuntime = {
   markUnread: (agent: Agent) => void;
+  beginRename: (agent: Agent) => void;
   beginDelete: (agent: Agent) => void;
 };

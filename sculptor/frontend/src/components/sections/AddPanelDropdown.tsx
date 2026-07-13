@@ -14,13 +14,14 @@
 
 import { DropdownMenu, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
-import type { ReactElement } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactElement } from "react";
 import { useRef } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
 import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { INSTALL_PI_LABEL, usePiAgentOption } from "~/common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { mergeClasses } from "~/common/Utils.ts";
 
 import {
   availableStaticPanelsAtom,
@@ -34,14 +35,33 @@ import { useAddPanelActions } from "./useAddPanelActions.ts";
 
 // The shared row body rendered inside every dropdown item and sub-trigger: a label
 // with an optional trailing keybinding hint (no leading icons — text-only rows).
-// Hover/active backgrounds come from the wrapping Radix item, so this only lays out
-// the contents.
-const MenuRow = ({ label, shortcut }: { label: string; shortcut?: string }): ReactElement => (
-  <span className={styles.item}>
-    <span className={styles.itemTitle}>{label}</span>
-    {shortcut !== undefined && shortcut !== "" && <span className={styles.shortcut}>{shortcut}</span>}
-  </span>
-);
+// When a description is supplied it renders inline after the label on the same row,
+// muted and ellipsized when space runs short; the label then holds its width so the
+// description is what gives way. A row without a description is a single title line
+// that ellipsizes if it outgrows the menu. Hover/active backgrounds come from the
+// wrapping Radix item, so this only lays out the contents.
+const MenuRow = ({
+  label,
+  shortcut,
+  description,
+}: {
+  label: string;
+  shortcut?: string;
+  description?: string;
+}): ReactElement => {
+  const hasDescription = description !== undefined && description !== "";
+  return (
+    <span className={styles.item}>
+      <span className={styles.itemText}>
+        <span className={mergeClasses(styles.itemTitle, hasDescription ? styles.itemTitleWithDescription : undefined)}>
+          {label}
+        </span>
+        {hasDescription && <span className={styles.description}>{description}</span>}
+      </span>
+      {shortcut !== undefined && shortcut !== "" && <span className={styles.shortcut}>{shortcut}</span>}
+    </span>
+  );
+};
 
 type AddPanelDropdownProps = {
   subSection: SubSectionId;
@@ -78,11 +98,18 @@ const agentTypeTestId = (agentType: AgentTypeName): string => {
 const AddPanelMenuItems = ({
   subSection,
   onOpenPanel,
+  onPointerEnter,
+  onPointerLeave,
 }: {
   subSection: SubSectionId;
   // Called synchronously when an item is selected, before the menu closes, so the
   // dropdown can suppress Radix's focus-restore-to-trigger (see AddPanelDropdown).
   onOpenPanel: () => void;
+  // The agent-type sub-menu is a portal OUTSIDE the main content, so a hover-driven host
+  // (SectionAddPanelControl) must also see enter/leave on it — otherwise moving from the
+  // menu into the sub-menu reads as leaving the menu and closes it mid-navigation.
+  onPointerEnter?: (event: ReactPointerEvent) => void;
+  onPointerLeave?: (event: ReactPointerEvent) => void;
 }): ReactElement => {
   // state and hooks
   const actions = useAddPanelActions();
@@ -107,14 +134,21 @@ const AddPanelMenuItems = ({
           actions.createRecentAgent(subSection);
         }}
       >
-        <MenuRow label={`New ${recentAgentLabel(recentAgentType, registrations)} agent`} shortcut={newAgentShortcut} />
+        {/* recentAgentLabel already carries the "in terminal" marker for a
+            registered recent type, so the row reads e.g. "New Claude in
+            terminal". */}
+        <MenuRow label={`New ${recentAgentLabel(recentAgentType, registrations)}`} shortcut={newAgentShortcut} />
       </DropdownMenu.Item>
 
       <DropdownMenu.Sub>
         <DropdownMenu.SubTrigger data-testid={ElementIds.ADD_PANEL_AGENT_TYPE_SUBMENU}>
           <MenuRow label="New agent of type…" />
         </DropdownMenu.SubTrigger>
-        <DropdownMenu.SubContent data-testid={ElementIds.AGENT_TYPE_MENU}>
+        <DropdownMenu.SubContent
+          data-testid={ElementIds.AGENT_TYPE_MENU}
+          onPointerEnter={onPointerEnter}
+          onPointerLeave={onPointerLeave}
+        >
           {agentTypeOptions.map((option) => {
             // pi is optional: while no usable binary is resolved its entry reads
             // "Install Pi" and routes to Settings → Pi instead of creating a pi
@@ -163,7 +197,7 @@ const AddPanelMenuItems = ({
                 actions.openStaticPanel(panel.id, subSection);
               }}
             >
-              <MenuRow label={panel.displayName} />
+              <MenuRow label={panel.displayName} description={panel.description} />
             </DropdownMenu.Item>
           ))}
         </>
@@ -172,7 +206,20 @@ const AddPanelMenuItems = ({
   );
 };
 
-export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => {
+// The dropdown's `DropdownMenu.Content` + items, shared by the empty-state
+// AddPanelDropdown (click-to-open) and the section-header control
+// (SectionAddPanelControl, hover-to-open). Owns the focus-restore suppression so an
+// opened panel keeps the focus it grabs on mount. Optional pointer handlers let a
+// hover-driven host keep the menu open while the pointer is over it.
+export const AddPanelMenuContent = ({
+  subSection,
+  onPointerEnter,
+  onPointerLeave,
+}: {
+  subSection: SubSectionId;
+  onPointerEnter?: (event: ReactPointerEvent) => void;
+  onPointerLeave?: (event: ReactPointerEvent) => void;
+}): ReactElement => {
   // Selecting an item opens a panel/agent/terminal that manages its own focus
   // (e.g. the Browser panel focuses its URL bar, an agent focuses its composer).
   // Radix's default close behaviour restores focus to the trigger `+`, which lands
@@ -180,6 +227,37 @@ export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropd
   // only when the close was caused by an item selection; Escape / click-outside
   // (no selection) still return focus to the trigger for keyboard users.
   const openedPanelRef = useRef(false);
+  return (
+    <DropdownMenu.Content
+      size="1"
+      className={styles.content}
+      data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      onCloseAutoFocus={(event) => {
+        if (openedPanelRef.current) {
+          openedPanelRef.current = false;
+          event.preventDefault();
+        }
+      }}
+    >
+      <AddPanelMenuItems
+        subSection={subSection}
+        onOpenPanel={() => {
+          openedPanelRef.current = true;
+        }}
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
+      />
+    </DropdownMenu.Content>
+  );
+};
+
+// The empty-section "Add panel" button's dropdown: a plain click-to-open Radix
+// DropdownMenu. The section-header "+" uses SectionAddPanelControl instead (hover to
+// open, click to quick-add/pin) — this component keeps the simpler behaviour the
+// empty state wants (it already offers its own "New {recent} agent" quick button).
+export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropdownProps): ReactElement => {
   return (
     <DropdownMenu.Root>
       {tooltip !== undefined ? (
@@ -189,23 +267,7 @@ export const AddPanelDropdown = ({ subSection, trigger, tooltip }: AddPanelDropd
       ) : (
         <DropdownMenu.Trigger>{trigger}</DropdownMenu.Trigger>
       )}
-      <DropdownMenu.Content
-        size="1"
-        data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}
-        onCloseAutoFocus={(event) => {
-          if (openedPanelRef.current) {
-            openedPanelRef.current = false;
-            event.preventDefault();
-          }
-        }}
-      >
-        <AddPanelMenuItems
-          subSection={subSection}
-          onOpenPanel={() => {
-            openedPanelRef.current = true;
-          }}
-        />
-      </DropdownMenu.Content>
+      <AddPanelMenuContent subSection={subSection} />
     </DropdownMenu.Root>
   );
 };

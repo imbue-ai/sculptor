@@ -6,6 +6,7 @@ import { type ReactElement, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { getUpdateStatusText } from "~/common/autoUpdateUtils.ts";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
@@ -37,16 +38,17 @@ import { CustomBackendSection } from "./components/AdvancedSection.tsx";
 import { CIBabysitterSettingsSection } from "./components/CIBabysitterSettingsSection.tsx";
 import { DependenciesSettingsSection } from "./components/DependenciesSettingsSection.tsx";
 import { EnvironmentVariablesSection } from "./components/EnvironmentVariablesSection.tsx";
+import { ExtensionsSettingsSection } from "./components/ExtensionsSettingsSection.tsx";
 import { FileBrowserSettingsSection } from "./components/FileBrowserSettingsSection.tsx";
 import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
 import { PiSettingsSection } from "./components/PiSettingsSection.tsx";
-import { PluginsSettingsSection } from "./components/PluginsSettingsSection.tsx";
 import { ReposSection } from "./components/ReposSection.tsx";
 import { SettingRow } from "./components/SettingRow.tsx";
 import { SettingsSectionLayout } from "./components/SettingsSection.tsx";
 import { TelemetryRow } from "./components/TelemetryRow.tsx";
 import { ThemeBuilderSection } from "./components/ThemeBuilderSection.tsx";
+import { MobileSettingsHeader } from "./MobileSettingsHeader.tsx";
 import { SETTINGS_SECTIONS, SettingsSection, type SettingsSectionId } from "./sections.ts";
 import styles from "./SettingsPage.module.scss";
 
@@ -99,6 +101,9 @@ const renderMobileNavNodes = (): Array<ReactElement> => {
 const activeSectionAtom = atomWithStorage<SettingsSection>("sculptor-settings-active-section", SettingsSection.GENERAL);
 
 export const SettingsPage = (): ReactElement => {
+  // On mobile the global chrome (sidebar rail) is suppressed, so Settings
+  // carries its own header with a back affordance, like the Workspace view.
+  const isMobile = useIsMobile();
   const [storedSection, setActiveSection] = useAtom(activeSectionAtom);
   // A persisted section id can outlive the section it names (e.g. a section that
   // existed in an earlier build is gone here). An unknown value would leave the
@@ -180,6 +185,9 @@ export const SettingsPage = (): ReactElement => {
 
   return (
     <>
+      {/* On mobile the global chrome is suppressed, so Settings carries its own
+          header with a back affordance, like the Workspace view. */}
+      {isMobile && <MobileSettingsHeader />}
       <Flex
         direction="column"
         className={styles.container}
@@ -397,8 +405,8 @@ export const SettingsPage = (): ReactElement => {
               {activeSection === SettingsSection.KEYBINDINGS && (
                 <KeybindingsSection onSettingChange={handleSettingChange} />
               )}
-              {activeSection === SettingsSection.PLUGINS && (
-                <PluginsSettingsSection onSettingChange={handleSettingChange} />
+              {activeSection === SettingsSection.EXTENSIONS && (
+                <ExtensionsSettingsSection onSettingChange={handleSettingChange} />
               )}
               {activeSection === SettingsSection.PRIVACY && (
                 <SettingsSectionLayout description="Your email and telemetry preferences.">

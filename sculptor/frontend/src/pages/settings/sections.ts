@@ -33,7 +33,7 @@ export const SettingsSection = {
   GENERAL: "GENERAL",
   AGENT: "AGENT",
   KEYBINDINGS: "KEYBINDINGS",
-  PLUGINS: "PLUGINS",
+  EXTENSIONS: "EXTENSIONS",
   DEPENDENCIES: "DEPENDENCIES",
   PI: "PI",
   REPOSITORIES: "REPOSITORIES",
@@ -82,16 +82,16 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     icon: CogIcon,
     testId: ElementIds.SETTINGS_NAV_GENERAL,
   },
-  // The Plugins section is always visible: it hosts the frontend-plugins
-  // master switch, so it must stay reachable even when the system is off (to
-  // flip it back on).
+  // The Extensions section is always visible: it hosts the extensions master
+  // switch, so it must stay reachable even when the system is off (to flip it
+  // back on).
   {
-    id: SettingsSection.PLUGINS,
-    displayName: "Plugins",
-    paletteSubtitle: "Installed plugins and their settings",
-    paletteKeywords: ["extensions", "addons"],
+    id: SettingsSection.EXTENSIONS,
+    displayName: "Extensions",
+    paletteSubtitle: "Installed extensions and their settings",
+    paletteKeywords: ["plugins", "addons"],
     icon: PuzzleIcon,
-    testId: ElementIds.SETTINGS_NAV_PLUGINS,
+    testId: ElementIds.SETTINGS_NAV_EXTENSIONS,
   },
   {
     id: SettingsSection.DEPENDENCIES,

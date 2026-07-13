@@ -25,8 +25,8 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  // stylelint-disable-next-line sculptor/no-hardcoded-values -- divider + viewer-sliver reserve
-  max-width: calc(100% - 48px);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- viewer floor (160px) + divider slack
+  max-width: calc(100% - 168px);
   min-width: 0;
   overflow: hidden;
 }
@@ -35,7 +35,11 @@
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  min-width: 0;
+  // Floor the viewer so it always keeps enough room to preview content; paired
+  // with the list's max-width reserve, the list (tree) loses width first at
+  // narrow widths and the viewer never collapses below this.
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- viewer floor paired with .list max-width reserve
+  min-width: 160px;
   overflow: hidden;
 }
 

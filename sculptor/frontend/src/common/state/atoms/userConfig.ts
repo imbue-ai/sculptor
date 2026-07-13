@@ -194,21 +194,21 @@ export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfig
 // Auto-rename workspace + agent from the first prompt (experimental — off by default)
 export const isAutoRenameEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableAutoRename ?? false);
 
-// Frontend plugin system (experimental — off by default). Gates plugin
-// loading at boot and the Plugins settings section. Enabling takes effect
-// immediately (PluginLoader bootstraps when the flag turns on); disabling only
-// fully takes effect after a reload, since already-loaded plugins are not
+// Extension system (experimental — off by default). Gates extension
+// loading at boot and the Extensions settings section. Enabling takes effect
+// immediately (ExtensionLoader bootstraps when the flag turns on); disabling only
+// fully takes effect after a reload, since already-loaded extensions are not
 // unloaded mid-session.
-export const isFrontendPluginsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableFrontendPlugins ?? false);
+export const isExtensionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableExtensions ?? false);
 
-// Whether agents may drive this renderer's plugin system over the per-user
-// WebSocket (the `sculpt plugin` commands). Off by default: even with the
-// frontend-plugins runtime on, an agent can't install or run a plugin in the UI
+// Whether agents may drive this renderer's extension system over the per-user
+// WebSocket (the `sculpt extension` commands). Off by default: even with the
+// extensions runtime on, an agent can't install or run an extension in the UI
 // until the user opts in here. (The stream handler still replies to the agent
-// when off — see `respondToPluginCommand` — so the CLI gets a clear signal
+// when off — see `respondToExtensionCommand` — so the CLI gets a clear signal
 // rather than a timeout.)
-export const isAgentPluginLoadingAllowedAtom = atom<boolean>(
-  (get) => get(userConfigAtom)?.allowAgentPluginLoading ?? false,
+export const isAgentExtensionLoadingAllowedAtom = atom<boolean>(
+  (get) => get(userConfigAtom)?.allowAgentExtensionLoading ?? false,
 );
 
 // Agent defaults

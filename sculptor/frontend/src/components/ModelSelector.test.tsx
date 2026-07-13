@@ -1,10 +1,10 @@
 import { Button, DropdownMenu, Select, Theme } from "@radix-ui/themes";
-import { cleanup, fireEvent, render, type RenderResult, screen, within } from "@testing-library/react";
+import { cleanup, render, type RenderResult, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ElementIds, LlmModel, type ModelOption } from "~/api";
+import { ElementIds, LlmModel, ModelCatalogState, type ModelOption } from "~/api";
 import { groupModelsByProvider, routeModelChange } from "~/common/modelConstants.ts";
 
 import { ModelSelectOptions } from "./ModelSelectOptions";
@@ -113,7 +113,6 @@ describe("ModelSelector", () => {
           sourcesBackendModels={true}
           backendModels={PI_MODELS}
           selectedModelId="claude-sonnet-4-6"
-          onAuthenticate={() => {}}
         />,
       ),
     );
@@ -122,14 +121,7 @@ describe("ModelSelector", () => {
 
   it("keeps the Claude short-name label when no backend models are present", () => {
     render(
-      withStore(
-        <ModelSelector
-          model={LlmModel.CLAUDE_FABLE_5}
-          onModelChange={() => {}}
-          capabilityValue={true}
-          onAuthenticate={() => {}}
-        />,
-      ),
+      withStore(<ModelSelector model={LlmModel.CLAUDE_FABLE_5} onModelChange={() => {}} capabilityValue={true} />),
     );
     const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
     // The Claude path must not show a raw model_id; it renders the short name.
@@ -138,14 +130,7 @@ describe("ModelSelector", () => {
 
   it("renders the disabled-with-tooltip treatment when the capability is false", () => {
     render(
-      withStore(
-        <ModelSelector
-          model={LlmModel.CLAUDE_FABLE_5}
-          onModelChange={() => {}}
-          capabilityValue={false}
-          onAuthenticate={() => {}}
-        />,
-      ),
+      withStore(<ModelSelector model={LlmModel.CLAUDE_FABLE_5} onModelChange={() => {}} capabilityValue={false} />),
     );
     expect(screen.getByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeInTheDocument();
     expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
@@ -161,7 +146,6 @@ describe("ModelSelector", () => {
           sourcesBackendModels={true}
           backendModels={[PI_MODELS[0]]}
           selectedModelId="claude-opus-4-8"
-          onAuthenticate={() => {}}
         />,
       ),
     );
@@ -171,7 +155,7 @@ describe("ModelSelector", () => {
     expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).not.toBeInTheDocument();
   });
 
-  it("shows the login CTA when a backend harness has no providers", () => {
+  it("shows the disabled empty state when a backend harness has no providers", () => {
     render(
       withStore(
         <ModelSelector
@@ -180,18 +164,17 @@ describe("ModelSelector", () => {
           capabilityValue={true}
           sourcesBackendModels={true}
           backendModels={[]}
-          onAuthenticate={() => {}}
         />,
       ),
     );
     const emptyState = screen.getByTestId(ElementIds.PI_PICKER_EMPTY_STATE);
-    expect(emptyState).toHaveTextContent("No models available — please log in to authenticate");
-    expect(screen.getByTestId(ElementIds.PI_PICKER_LOGIN_CTA)).toBeInTheDocument();
+    expect(emptyState).toHaveTextContent("No models available");
+    // The picker is disabled (no action button); the fix-it CTA lives on the composer
+    // send slot (ChatInput), covered there and in the integration suite.
     expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
   });
 
-  it("invokes onAuthenticate when the login CTA is clicked", () => {
-    const onAuthenticate = vi.fn();
+  it("shows a loading state, not the empty state, while the pi catalog is not yet fetched", () => {
     render(
       withStore(
         <ModelSelector
@@ -199,13 +182,16 @@ describe("ModelSelector", () => {
           onModelChange={() => {}}
           capabilityValue={true}
           sourcesBackendModels={true}
-          backendModels={[]}
-          onAuthenticate={onAuthenticate}
+          backendModels={ModelCatalogState.NOT_FETCHED_YET}
         />,
       ),
     );
-    fireEvent.click(screen.getByTestId(ElementIds.PI_PICKER_LOGIN_CTA));
-    expect(onAuthenticate).toHaveBeenCalledTimes(1);
+    // Until the start-time probe lands, an authenticated user's catalog is
+    // NOT_FETCHED_YET — the switcher shows a loading placeholder and must NOT flash
+    // the empty "no models available" state (reserved for a fetched-but-empty
+    // catalog, i.e. real no-auth).
+    expect(screen.getByTestId(ElementIds.PI_PICKER_LOADING)).toBeInTheDocument();
+    expect(screen.queryByTestId(ElementIds.PI_PICKER_EMPTY_STATE)).not.toBeInTheDocument();
   });
 
   it("renders an interactive cascading trigger for a multi-provider catalog", () => {
@@ -218,7 +204,6 @@ describe("ModelSelector", () => {
           sourcesBackendModels={true}
           backendModels={MULTI_PROVIDER_MODELS}
           selectedModelId="anthropic-new"
-          onAuthenticate={() => {}}
         />,
       ),
     );

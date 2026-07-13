@@ -1,4 +1,4 @@
-import { Badge, Flex, Skeleton, Tooltip } from "@radix-ui/themes";
+import { Badge, Flex, Skeleton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { GitBranchIcon, PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
@@ -19,8 +19,8 @@ import { primaryOf } from "~/components/sections/sectionTypes.ts";
 import { isDropTargetAtom } from "~/components/sections/transientAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
+import { extensionWorkspaceWidgetsAtom } from "~/extensions/extensionRegistry.ts";
 import { getBranchName } from "~/pages/home/Utils";
-import { pluginWorkspaceWidgetsAtom } from "~/plugins/pluginRegistry.ts";
 
 import { DiffSummary } from "./components/DiffSummary";
 import { PrButton } from "./components/PrButton";
@@ -87,7 +87,7 @@ const SectionToggle = ({ section, icon, label, testId }: SectionToggleProps): Re
 const WorkspaceHeaderComponent = (): ReactElement | null => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
-  const workspaceWidgets = useAtomValue(pluginWorkspaceWidgetsAtom);
+  const workspaceWidgets = useAtomValue(extensionWorkspaceWidgetsAtom);
 
   // External hooks
   const { workspaceID } = useWorkspacePageParams();
@@ -126,7 +126,9 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
         if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
         copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
       })
-      .catch(() => {});
+      .catch((error) => {
+        console.warn("Failed to copy branch name to clipboard.", error);
+      });
   }, [branchName]);
 
   const handleTargetBranchChange = useCallback(
@@ -182,10 +184,10 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
     [hasMismatch, prStatus?.mismatchedPrTargetBranch, prStatus?.mismatchedPrIid],
   );
 
-  // Plugin-contributed workspace widgets sit in the banner's action row beside the
-  // PR button (see pluginWorkspaceWidgetsAtom). Higher collapsePriority is the more
+  // Extension-contributed workspace widgets sit in the banner's action row beside the
+  // PR button (see extensionWorkspaceWidgetsAtom). Higher collapsePriority is the more
   // protected slot, so order it nearest the PR button (rendered last). Each widget
-  // component already carries its own error boundary + Plugin/WorkspacePluginContext.
+  // component already carries its own error boundary + Extension/WorkspaceExtensionContext.
   const orderedWorkspaceWidgets = useMemo(
     () => [...workspaceWidgets].sort((a, b) => a.collapsePriority - b.collapsePriority),
     [workspaceWidgets],
@@ -223,6 +225,21 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
           testId={ElementIds.HEADER_SECTION_TOGGLE_LEFT}
         />
       </Flex>
+
+      {/* Only shown when the sidebar is collapsed — it otherwise carries the name.
+          "Untitled" guards a blank name so this slot never renders empty. */}
+      {isSidebarCollapsed && (
+        <Text
+          as="span"
+          size="1"
+          weight="bold"
+          truncate
+          className={styles.workspaceTitle}
+          data-testid={ElementIds.WORKSPACE_HEADER_TITLE}
+        >
+          {(workspace.description ?? "").trim() || "Untitled"}
+        </Text>
+      )}
 
       {/* Branch pill: a real button so it is focusable and Enter/Space-activatable
           for free; the visible label is the branch name, so the aria-label spells

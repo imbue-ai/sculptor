@@ -84,10 +84,11 @@ export type AvailableStaticPanel = {
   id: PanelId;
   displayName: string;
   icon: PanelDefinition["icon"];
+  description?: string;
 };
 
 // Single-instance static panels not currently open anywhere — the re-add list.
-// Sourced from the live registry (not STATIC_PANEL_METADATA) so plugin-contributed
+// Sourced from the live registry (not STATIC_PANEL_METADATA) so extension-contributed
 // panels — also kind "static" — are offered too; the multi-instance agent/terminal
 // panels are excluded by the kind filter.
 export function listAvailableStaticPanels(
@@ -97,5 +98,10 @@ export function listAvailableStaticPanels(
   const openPanelIds = new Set<PanelId>(Object.keys(placement));
   return registry
     .filter((definition) => definition.kind === "static" && !openPanelIds.has(definition.id))
-    .map((definition) => ({ id: definition.id, displayName: definition.displayName, icon: definition.icon }));
+    .map((definition) => ({
+      id: definition.id,
+      displayName: definition.displayName,
+      icon: definition.icon,
+      description: definition.description,
+    }));
 }

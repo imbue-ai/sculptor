@@ -12,6 +12,8 @@ For each issue found, note the issue type, file/line, and a brief description of
 
 The dominant data-flow in this codebase is WS push → Jotai atom → `useX` hook. The backend pushes full payloads over the unified stream (`useUnifiedStream`); incoming frames update Jotai atoms (`workspaceAtomFamily`, `projectAtomFamily`, `workspaceIdsAtom`, `projectsArrayAtom`, …); components read those atoms through generic hooks (`useWorkspace`, `useProject`, `useProjects`, `useIsWorkspaceDeleted`, …). Nothing fetches — the data is kept fresh by the stream. Reach for this path first.
 
+Agent *tasks* are the exception: their WS frames land in the TanStack Query cache (`syncTasksToQueryCache`), read via `useTask`/`useTaskIds`, and the Jotai task atoms are a legacy projection maintained by a single mirror (`useTaskQueryMirror`) — never write them directly (see [`no_dual_store_writes`](#no_dual_store_writes)).
+
 TanStack Query ([`use_tanstack_for_pulled_data`](#use_tanstack_for_pulled_data)) covers the cases where this doesn't apply: data that isn't pushed over the WS, or is too large to ship every frame (the workspace diff, commit history, file content at a ref, per-commit diffs, …). Those endpoints are pulled on demand and cached by TanStack instead.
 
 **What to look for:**
@@ -69,7 +71,85 @@ HTTP-pulled data — anything `fetch`-ed from the backend via the generated API 
 **Exceptions:**
 - WS-pushed payloads belong in atoms. The streaming-data pipeline writes to atoms; this rule is not about those.
 - Client state (form drafts, optimistic UI, "currently selected item" identifiers) belongs in atoms — that's what they're for. The data behind a selected ID still belongs in TanStack if it's HTTP-pulled, or in the WS-pushed atom if it's streamed.
-- Mutations follow a separate pattern: optimistically update the atom that backs the WS-pushed payload, fire-and-forget the HTTP write, and let the WS deliver the server-authoritative value to reconcile. `useMarkRead` is one example — it sets `lastReadAt` on the task atom, calls `markWorkspaceAgentRead`, and lets the WS frame settle the truth. Don't introduce `useMutation` or write-through-TanStack patterns.
+- Mutations on server facts use `useMutation` with cache-only optimistic writes — see the canonical hooks and shared helpers in `sculptor/frontend/src/common/state/mutations/` and the state-ownership rules below ([`no_dual_store_writes`](#no_dual_store_writes), [`optimistic_write_without_failure_path`](#optimistic_write_without_failure_path)). The old pattern of optimistically writing the Jotai atom and fire-and-forgetting the HTTP call is retired: the delta stream only re-sends a task when it *changes*, so a failed request left the optimistic value on screen forever.
+
+---
+
+## `no_dual_store_writes`
+
+**Question:** Does this change write the same server fact into more than one store (query cache + Jotai atom, atom + module map, …)?
+
+Every server fact has exactly one written store. A second store may hold the fact only as a **derived projection with a single writer** — one subscription/mirror module that projects the canonical store into the legacy one (`useTaskQueryMirror` is the template). Dual-writing at call sites means every writer must know about both stores, any missed site silently diverges them, and the eventual cleanup requires hunting every write site instead of deleting one mirror.
+
+**What to look for:**
+- A mutation, WS handler, or action that calls both `queryClient.setQueryData(...)` and `store.set(someAtomFamily(...), ...)` for the same entity
+- A new writer of `taskAtomFamily` / `taskIdsAtom` outside `useTaskQueryMirror` (tests and stories excepted)
+- A "keep X in sync with Y" comment on a write site — synchronization belongs in one projection, not at N call sites
+- Snapshot/rollback logic that captures from one store and restores into another
+
+**Fix:** Pick the canonical store for the fact. Route all writes there; if legacy readers still need the other store, feed it from one mirror with a reference-equality guard, and delete the mirror when the last legacy reader migrates.
+
+---
+
+## `optimistic_write_without_failure_path`
+
+**Question:** If the request behind this optimistic update fails, what corrects the UI — concretely, and does that mechanism actually fire on *failure*?
+
+Every optimistic write must name its healing mechanism for both outcomes. On **success**, "the WS delivers the authoritative value" is valid: the server changed, so a delta frame arrives. On **failure** it is not — the delta stream only re-sends an entity when it changes server-side, and a rejected request changes nothing, so a fire-and-forget optimistic write sticks on screen indefinitely. This exact false comment ("the server-authoritative value will arrive via WebSocket") shipped multiple stale-UI bugs.
+
+**What to look for:**
+- An optimistic local write (cache or atom) followed by `apiCall(...).catch(() => {})` or `void apiCall(...)` with no rollback
+- A comment asserting the WS/stream will reconcile a *failure* path
+- `useMutation` with `onMutate` but no `onError`
+
+**Fix:** Use the shared helpers in `sculptor/frontend/src/common/state/mutations/` (`applyOptimisticTaskUpdate` / `rollbackOptimisticTaskUpdate`) or follow their shape: snapshot in `onMutate`, restore in `onError` (subject to [`unsound_optimistic_rollback`](#unsound_optimistic_rollback)), never write in `onSuccess`.
+
+**Exceptions:** Fire-and-forget without a local optimistic write (telemetry, analytics, reply-POSTs like extension-command results) is fine — there is no local state to heal. The rule triggers only when a local write preceded the swallowed failure.
+
+---
+
+## `unsound_optimistic_rollback`
+
+**Question:** Does this rollback (a) restore *everything* `onMutate` wrote, and (b) yield when an authoritative write landed while the request was in flight?
+
+A rollback that blindly restores a mutate-time snapshot can clobber a WS frame that arrived mid-request — including the frame confirming the mutation actually committed (request timed out after the server applied it). And a rollback that restores only part of what `onMutate` wrote leaves the UI in a state neither before nor after (e.g. restoring `lastReadAt` but leaving a mark-unread override active, so the dot stays unread anyway).
+
+**What to look for:**
+- `onError` that calls `setQueryData(key, ctx.prev)` with no check that the cache still holds the optimistic value (the mutations module's sync-version check is the sanctioned mechanism)
+- `onMutate` that writes N pieces of state (cache entry + override map + ids list, …) while `onError` restores fewer than N
+- Rollback logic duplicated per-mutation instead of using `rollbackOptimisticTaskUpdate`
+
+**Fix:** Capture the per-entity sync version in `onMutate` (`getTaskSyncVersion`), restore only if it is unchanged in `onError`, and pair every side effect of `onMutate` with its undo in the same guard.
+
+---
+
+## `push_fed_query_with_fetch_semantics`
+
+**Question:** Is this query key fed by pushes (WS frames, mutation writes) rather than fetches — and if so, has every fetch-cache behavior been neutralized?
+
+Using the TanStack cache as a push-fed store means opting out of its fetch machinery explicitly, or its time policy leaks into value semantics. The two that bite: a no-op `queryFn` fakes a successful fetch (a cache miss "settles" as a bogus value, and it races the first real push), and the default 5-minute `gcTime` evicts unobserved entries — which a delta stream never re-delivers until the entity next changes, so quiet entities silently vanish.
+
+**What to look for:**
+- `queryFn: () => null` / `queryFn: () => []` or any synchronous stub instead of `queryFn: skipToken`
+- A push-fed key family without `gcTime: Infinity` pinned via `queryClient.setQueryDefaults` (see the task keys in `queryClient.ts`)
+- `staleTime` / `refetchOn*` options on a `skipToken` query — dead config implying fetch behavior that can't happen
+
+**Fix:** `queryFn: skipToken`, pin `gcTime` for the key prefix next to the other defaults in `queryClient.ts`, and let `undefined` mean "not delivered yet" so loading is distinguishable from empty/deleted.
+
+---
+
+## `no_duplicate_operation_paths`
+
+**Question:** Does this operation (mark-read, rename, delete, …) already have an implementation that this code path bypasses?
+
+One operation gets one implementation. A second path — e.g. a direct API call + hand-rolled cache write next to an existing `useMutation` hook for the same endpoint — drifts from the first (different rollback behavior, different stores written) and doubles the audit surface. These duplicates usually enter with a justifying comment about why the canonical path "can't be used"; verify the claim before accepting it (the last one — "TanStack Query cancels pending `mutate()` on hook unmount" — was false: mutations run to completion after unmount, only mutate-time callbacks are dropped).
+
+**What to look for:**
+- A direct call to a generated API function that also has a `useMutation` hook wrapping it
+- Two functions in one hook performing the same operation with different consistency behavior (one rolls back, one doesn't)
+- A comment claiming a library limitation as the reason for the bypass — test the claim
+
+**Fix:** Route both call sites through the one hook; if the second context genuinely needs different behavior, add a parameter to the canonical implementation rather than forking it.
 
 ---
 
@@ -77,7 +157,7 @@ HTTP-pulled data — anything `fetch`-ed from the backend via the generated API 
 
 **Question:** Does this TanStack query (or mutation) key start with the reserved `SCULPTOR_QUERY_KEY_PREFIX` (`"sculptor"`) as its first element?
 
-The shared `queryClient` is handed to runtime-loaded frontend plugins through an import map, so the cache key space is partitioned by namespace: host-owned queries live under `["sculptor", …]`, while each plugin keys its queries under its own plugin id. A host key that omits the prefix sits in the unreserved root of the cache, where a plugin keyed on the same first element could read it, invalidate it, or evict it out from under the host (and vice versa). Reserving `"sculptor"` as the first element keeps the two cleanly isolated no matter what a plugin does. Every host query and mutation key — including the partial-key filters passed to `invalidateQueries` / `removeQueries` / `getQueryData` / `setQueryData` / `fetchQuery` — must start with this prefix.
+The shared `queryClient` is handed to runtime-loaded extensions through an import map, so the cache key space is partitioned by namespace: host-owned queries live under `["sculptor", …]`, while each extension keys its queries under its own extension id. A host key that omits the prefix sits in the unreserved root of the cache, where an extension keyed on the same first element could read it, invalidate it, or evict it out from under the host (and vice versa). Reserving `"sculptor"` as the first element keeps the two cleanly isolated no matter what an extension does. Every host query and mutation key — including the partial-key filters passed to `invalidateQueries` / `removeQueries` / `getQueryData` / `setQueryData` / `fetchQuery` — must start with this prefix.
 
 Reference the exported `SCULPTOR_QUERY_KEY_PREFIX` constant from `queryClient.ts` rather than a bare `"sculptor"` literal, so the namespace has a single source of truth, and build keys through the per-query `…QueryKey` helper (see [`use_tanstack_querykey_bundle`](#use_tanstack_querykey_bundle)) so producers and the filters that target them can't drift apart.
 
@@ -89,14 +169,14 @@ Reference the exported `SCULPTOR_QUERY_KEY_PREFIX` constant from `queryClient.ts
 **Fix:** Prepend `SCULPTOR_QUERY_KEY_PREFIX` as the first element of the key, leaving the rest unchanged, and update every consumer of that key (the `useQuery` and the `invalidateQueries`/`removeQueries` that target it) in the same change.
 
 ```ts
-// Bad: lands in the unreserved cache root — a plugin keyed on "telemetry" collides
+// Bad: lands in the unreserved cache root — an extension keyed on "telemetry" collides
 key: ["telemetry", workspaceId] as const,
 
 // Good: under the host's reserved namespace
 key: [SCULPTOR_QUERY_KEY_PREFIX, "telemetry", workspaceId] as const,
 ```
 
-**Exceptions:** Plugin-authored queries are keyed under the plugin's own id, not `"sculptor"` — this rule governs host-owned keys only.
+**Exceptions:** Extension-authored queries are keyed under the extension's own id, not `"sculptor"` — this rule governs host-owned keys only.
 
 ---
 
@@ -313,3 +393,22 @@ virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
 isProgrammaticScrollRef.current = true;
 virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
 ```
+
+---
+
+## `use_close_auto_focus_for_focus_handoff`
+
+**Question:** Does this Radix menu/dialog action mount or focus focus-sensitive UI (e.g. an inline-edit input) directly from `onSelect` / a palette command's `perform`?
+
+Radix overlays (ContextMenu, DropdownMenu, Dialog — including the command palette) manage focus at close time: while open they trap focus inside the overlay, and on close they restore focus to the trigger (menus) or to the previously-focused element (dialogs). UI that takes focus for itself — like `InlineRenameInput`, which commits/cancels `onBlur` — loses either way: mounted while the overlay is still open, the focus trap yanks focus back and the resulting blur cancels it; mounted as the overlay closes, the focus restore steals focus a beat later. Deferring the `.focus()` by a frame (`requestAnimationFrame`) merely bets on ordering and loses under main-thread contention.
+
+The deterministic shape: the action only records intent (a ref or a pending atom), and the overlay's `onCloseAutoFocus` consumes it — calling `event.preventDefault()` to suppress the focus restore and only then mounting/starting the focus-sensitive UI. The input then mounts strictly after the overlay and its trap are gone, with nothing competing for focus.
+
+**What to look for:**
+- A menu `onSelect` or palette `perform` that sets state which mounts an auto-focusing component (a rename-target atom, `setIsRenaming(true)`) instead of stashing intent for `onCloseAutoFocus`
+- `requestAnimationFrame` / `setTimeout` wrapped around `.focus()` to "run after the menu closes"
+- A new rename entry point that bypasses the existing handoff patterns (`pendingRenameRef` in `SectionHeader`, `palettePendingRenameAtom` in the command palette)
+
+**Fix:** Record intent in `onSelect`/`perform`; in the overlay's `onCloseAutoFocus`, call `event.preventDefault()` and start the focus-sensitive UI. See `SectionHeader`'s panel-tab context menu and the command palette's `palettePendingRenameAtom` for the two reference implementations.
+
+**Exceptions:** Follow-up UI that owns a focus scope (e.g. a menu item opening a Radix Dialog) needs no deferral — the dialog's focus trap wins the handoff on its own. Non-focus side effects (clipboard copies, navigation, atom writes that don't mount focused UI) are unaffected. Menus whose items never hand off focus may keep an unconditional `onCloseAutoFocus={(e) => e.preventDefault()}` (the workspace row menus do) when returning focus to the trigger is not useful.

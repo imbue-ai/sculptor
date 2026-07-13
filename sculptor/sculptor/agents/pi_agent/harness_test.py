@@ -1,5 +1,6 @@
 """Tests for `PiHarness`'s identity, capability set, and gated methods."""
 
+from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
 from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.agents.pi_agent.harness import PI_HARNESS
@@ -10,6 +11,7 @@ from sculptor.primitives.ids import ToolUseID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ModelOption
+from sculptor.state.messages import NOT_FETCHED_YET
 
 
 def test_pi_harness_capabilities() -> None:
@@ -33,6 +35,16 @@ def test_pi_harness_capabilities() -> None:
         supports_file_references=True,
         supports_model_selection=True,
     )
+
+
+def test_harness_configuration_settings_section() -> None:
+    # The no-usable-model composer CTA opens each harness's own configuration area:
+    # pi -> Settings -> Pi (provider auth), overriding the base default; the base
+    # (Claude and the rest) -> Dependencies, where a harness binary + its auth/login
+    # status live. Both are frontend `SettingsSection` ids (a frontend drift test pins
+    # them to real sections).
+    assert PI_HARNESS.configuration_settings_section() == "PI"
+    assert CLAUDE_CODE_HARNESS.configuration_settings_section() == "DEPENDENCIES"
 
 
 def test_pi_harness_gated_methods_recognize_backchannel_tools() -> None:
@@ -147,6 +159,22 @@ def test_pi_harness_get_available_models_empty_when_unpopulated_or_none() -> Non
     # Empty until the agent has run, and empty when there is no task state.
     assert PI_HARNESS.get_available_models(_task_state_with_models([], current_model=None)) == []
     assert PI_HARNESS.get_available_models(None) == []
+
+
+def test_pi_harness_distinguishes_not_fetched_catalog_from_fetched_empty() -> None:
+    # Before the start-time probe runs, a fresh task's catalog is NOT_FETCHED_YET
+    # — distinct from a fetched-but-empty [] (authenticated, but no providers).
+    # get_available_models coalesces both to [] for runtime callers that only
+    # offer models; get_model_catalog keeps them apart so the switcher can show a
+    # loading state instead of flashing the empty state during startup.
+    fresh = AgentTaskStateV2(workspace_id=WorkspaceID())
+    assert fresh.available_models is NOT_FETCHED_YET
+    assert PI_HARNESS.get_model_catalog(fresh) is NOT_FETCHED_YET
+    assert PI_HARNESS.get_available_models(fresh) == []
+
+    fetched_empty = _task_state_with_models([], current_model=None)
+    assert PI_HARNESS.get_model_catalog(fetched_empty) == []
+    assert PI_HARNESS.get_available_models(fetched_empty) == []
 
 
 def test_pi_harness_sources_backend_models_is_true() -> None:

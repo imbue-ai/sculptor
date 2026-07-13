@@ -3,7 +3,7 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import {
@@ -15,6 +15,7 @@ import {
   sendWorkspaceAgentMessages,
   TaskStatus,
 } from "~/api";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { AgentLightboxProvider } from "~/components/AgentLightboxContext.tsx";
@@ -35,8 +36,7 @@ import { AlphaChatIntro } from "./AlphaChatIntro.tsx";
 import { AlphaMessageNode } from "./AlphaChatView.tsx";
 import {
   buildToolResultMap,
-  hasOnlySubagentResults,
-  hasOnlyToolResults,
+  filterRenderableNodes,
   mergeChatAndQueuedMessages,
   omitMessagesAlreadyInChat,
 } from "./alphaMessageUtils.ts";
@@ -88,6 +88,8 @@ export const AlphaChatInterface = ({
     if (!open) setToast(null);
   }, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Links the scroll container to the overlay scrollbar's `aria-controls`.
+  const scrollContainerId = useId();
 
   // Queued message promotion logic. The agent holds queued messages whenever
   // it is mid-turn — either actively running, or paused on an AskUserQuestion /
@@ -101,6 +103,7 @@ export const AlphaChatInterface = ({
   // `pendingUserQuestion` is null (see below), so the value it sees is unchanged.
   const isAgentBusy =
     (taskStatus === TaskStatus.RUNNING && workingUserMessageId !== null) || pendingUserQuestion !== null;
+  const isMobile = useIsMobile();
   const effectiveQueuedMessages = useMemo(
     () => (isAgentBusy ? omitMessagesAlreadyInChat(queuedChatMessages, chatMessages) : []),
     [chatMessages, isAgentBusy, queuedChatMessages],
@@ -122,10 +125,7 @@ export const AlphaChatInterface = ({
     [effectiveChatMessages],
   );
 
-  const filteredNodes = useMemo(
-    () => messageTree.filter((node) => !hasOnlyToolResults(node.message) && !hasOnlySubagentResults(node.message)),
-    [messageTree],
-  );
+  const filteredNodes = useMemo(() => filterRenderableNodes(messageTree), [messageTree]);
 
   // Build a map from filtered index to the previous filtered node (for isNewCycle detection)
   const prevNodeMap = useMemo(() => {
@@ -174,7 +174,9 @@ export const AlphaChatInterface = ({
 
   // Set true before any programmatic scroll of the chat container so
   // ChatScrollProvider doesn't dismiss popovers on it. Cleared by
-  // useAlphaAutoScroll.handleScroll after it consumes the scroll event.
+  // useAlphaAutoScroll.handleScroll in a microtask after the flagged scroll
+  // event, so every listener of that event (including the persistence save
+  // handler) sees the classification.
   const isProgrammaticScrollRef = useRef(false);
 
   // Single owner of scroll state (authority + layout settle + suppression).
@@ -212,7 +214,14 @@ export const AlphaChatInterface = ({
 
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID, filteredMessageRefs, scrollMachine);
+  useAlphaScrollPersistence(
+    scrollContainerRef,
+    virtualizer,
+    taskID,
+    filteredMessageRefs,
+    scrollMachine,
+    isProgrammaticScrollRef,
+  );
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);
@@ -540,6 +549,7 @@ export const AlphaChatInterface = ({
             <div className={styles.scrollArea}>
               <div
                 ref={scrollContainerRef}
+                id={scrollContainerId}
                 className={styles.scrollContainer}
                 data-testid={ElementIds.ALPHA_CHAT_VIEW}
                 role="log"
@@ -627,16 +637,22 @@ export const AlphaChatInterface = ({
               </div>
               <VerticalOverlayScrollbar
                 scrollRef={scrollContainerRef}
+                scrollContainerId={scrollContainerId}
                 thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
               />
             </div>
           </ChatContextMenu>
-          <AlphaPromptNavigator
-            userMessages={userMessages}
-            scrollContainerRef={scrollContainerRef}
-            activePromptIndex={activePromptIndex.index}
-            onNavigate={handlePromptNavigate}
-          />
+          {/* The prompt-navigator rail is a desktop-only companion to the input
+              (↑↓ keyboard nav); mobile has no hardware arrows, so it's hidden
+              there. The queued-messages strip shows on both. */}
+          {!isMobile && (
+            <AlphaPromptNavigator
+              userMessages={userMessages}
+              scrollContainerRef={scrollContainerRef}
+              activePromptIndex={activePromptIndex.index}
+              onNavigate={handlePromptNavigate}
+            />
+          )}
           <QueuedMessages messages={effectiveQueuedMessages} />
           {taskStatus !== TaskStatus.ERROR &&
             (pendingUserQuestion ? (
@@ -657,7 +673,7 @@ export const AlphaChatInterface = ({
                 editorRef={editorRef}
                 taskId={taskID}
                 workspaceId={workspaceID}
-                showPromptNavHint
+                showPromptNavHint={!isMobile}
               />
             ))}
           {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID} />}

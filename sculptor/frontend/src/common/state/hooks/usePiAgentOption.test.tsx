@@ -64,8 +64,8 @@ describe("usePiAgentOption", () => {
   });
 
   it("re-checks availability when a picker asks (e.g. on its dropdown opening)", async () => {
-    // The hook's consumer mounted before the binary appeared (the inline
-    // first-run form), so the mount re-check saw pi unavailable.
+    // The hook's consumer mounted before the binary appeared (e.g. the
+    // first-run dialog), so the mount re-check saw pi unavailable.
     store.set(dependenciesStatusAtom, makeStatus({}));
     mockGetDependenciesStatus.mockResolvedValue({ data: makeStatus({}) });
 

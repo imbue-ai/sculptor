@@ -97,7 +97,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
             onClick={() => actions.createRecentAgent(subSection)}
             data-testid={`${ElementIds.SECTION_EMPTY_QUICK_ACTION}-${subSection}-new-agent`}
           >
-            New {recentAgentDisplayLabel} agent
+            New {recentAgentDisplayLabel}
           </Button>
           <Button
             variant="soft"
@@ -124,7 +124,7 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
 
         {isSplitPane && (
           <Button
-            variant="ghost"
+            variant="outline"
             color="gray"
             size="1"
             className={styles.closeSplit}

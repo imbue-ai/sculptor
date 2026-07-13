@@ -83,9 +83,8 @@ export const useImbueLocation = (): ImbueLocationType => {
   const isSettingsRoute = /^\/settings$/.test(pathname);
   // A "workspace route" means we're viewing a specific workspace (or one of
   // its agents). "new" is never parsed as a workspace id — /ws/new is a
-  // reserved path (workspace creation lives in the new-workspace dialog, or
-  // EmptyFirstRunPage when the workspace list is empty), and the rootLoader
-  // redirects draft tabs — which have no URL — to /home.
+  // reserved path (workspace creation lives in the new-workspace dialog), and
+  // the rootLoader redirects draft tabs — which have no URL — to /home.
   const isWorkspaceRoute = /^\/ws\/(?!new\b)[^/]+/.test(pathname);
 
   // Parse the workspace + agent ids from the path. We can't use `useParams`
