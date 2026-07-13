@@ -19,8 +19,10 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// The rig: buster.svg with prefixed ids/classes so nothing
-// collides with the host page. See that file for the joint reference.
+// The rig: an inlined copy of buster.svg, which is the source-of-truth (see
+// it for the joint reference). buster.svg keeps plain ids/classes; the copy
+// here prefixes them (bs-*) so the embedded markup can't collide with the
+// host page.
 // ---------------------------------------------------------------------------
 const VIEW_W = 260, VIEW_H = 320;
 const H = 96;                       // display height, px
