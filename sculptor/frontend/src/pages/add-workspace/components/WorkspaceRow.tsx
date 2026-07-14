@@ -35,7 +35,7 @@ const StatusDot = ({ workspace }: { workspace: WorkspaceRowProps["workspace"] })
     return computeWorkspaceDotStatus(workspaceTasks);
   }, [tasks, workspace.objectId, workspace.isOpen]);
 
-  return <WorkspaceStatusDots status={status} size={8} />;
+  return <WorkspaceStatusDots status={status} />;
 };
 
 export const WorkspaceRow = ({

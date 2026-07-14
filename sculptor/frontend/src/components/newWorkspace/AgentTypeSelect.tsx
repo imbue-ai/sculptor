@@ -79,9 +79,6 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
         <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
           {isPiAvailable ? AGENT_TYPE_LABELS.pi : INSTALL_PI_LABEL}
         </Select.Item>
-        <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
-          {AGENT_TYPE_LABELS.terminal}
-        </Select.Item>
         {registrations.map((registration) => (
           <Select.Item
             key={registration.registrationId}
@@ -92,6 +89,9 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
             {registration.displayName}
           </Select.Item>
         ))}
+        <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
+          {AGENT_TYPE_LABELS.terminal}
+        </Select.Item>
       </Select.Content>
     </Select.Root>
   );

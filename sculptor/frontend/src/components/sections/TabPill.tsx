@@ -45,7 +45,7 @@ const TabPillComponent = ({ panelId, variant }: TabPillProps): ReactElement | nu
         // The overlay is visible to assistive tech, so its decorative dot is hidden
         // individually; the ghost's whole root is already aria-hidden.
         <div className={styles.dot} data-panel-tab-dot={definition.dotStatus} aria-hidden={isGhost ? undefined : true}>
-          <AgentStatusDot status={definition.dotStatus} size={8} />
+          <AgentStatusDot status={definition.dotStatus} />
         </div>
       )}
       {/* A terminal's connection-issue dot, mirroring the source tab (SectionHeader's

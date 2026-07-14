@@ -20,6 +20,9 @@
 .navItemActive {
   background: var(--accent-a3);
   color: var(--accent-11);
+  // Match the active workspace row: the selected nav link gains a little type
+  // weight on top of the accent pill.
+  font-weight: var(--font-weight-medium);
 
   // Hold the accent pill while hovering. The base `.navItem:hover` rule sets the
   // plain gray hover background at equal specificity, so re-assert the accent here

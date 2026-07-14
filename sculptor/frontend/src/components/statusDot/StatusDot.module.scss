@@ -1,20 +1,86 @@
-.errorDot {
-  --inner-color: var(--red-9);
+// Status dots (see StatusDot.tsx). Every status is a colored dot; the color
+// classes below tint it, and `running` additionally pulses. Colors match the
+// status semantics used across the app so meaning reads the same everywhere.
+
+// Running — a solid dot with two halos pinging outward in sequence. The wrapper
+// carries the running tint; the core and halos fill with it. Per-instance tempo
+// and phase are set inline from a seed (StatusDot.tsx) so a column of running
+// dots never pulses in lockstep. The halos fade out as they expand past the
+// dot, and are position:absolute so the ping never changes the row's layout.
+.pulseBox {
+  align-items: center;
+  color: var(--blue-9);
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  position: relative;
 }
 
-.waitingDot {
-  --inner-color: var(--yellow-9);
+// The halos share the core's dot size (set inline) and are centered over it via
+// inset:0 + margin:auto, so scaling grows them outward from the core's center.
+.pulseHalo {
+  animation: status-pulse 1.9s ease-out infinite;
+  background: currentColor;
+  border-radius: 50%;
+  inset: 0;
+  margin: auto;
+  position: absolute;
 }
 
-.runningDot {
-  --inner-color: var(--blue-9);
-  --outer-color: var(--blue-a4);
+.pulseCore {
+  background: currentColor;
+  border-radius: 50%;
 }
 
-.readyDot {
-  --inner-color: var(--green-9);
+@keyframes status-pulse {
+  0% {
+    opacity: 50%;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0%;
+    transform: scale(2.1);
+  }
 }
 
-.readDot {
-  --inner-color: var(--gray-8);
+// Respect users who ask for less motion: drop the pinging halos and leave the
+// solid core, so "running" still reads by color and shape.
+@media (prefers-reduced-motion: reduce) {
+  .pulseHalo {
+    animation: none;
+    display: none;
+  }
+}
+
+.waiting {
+  color: var(--yellow-9);
+}
+
+.error {
+  color: var(--red-9);
+}
+
+// unread/read filled dots (FilledDot): a dot centered in a fixed size-wide slot
+// so every status — dot or glyph — keeps the same footprint and the labels stay
+// aligned.
+.dotBox {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+}
+
+.dot {
+  background: currentColor;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.unread {
+  color: var(--green-9);
+}
+
+.read {
+  color: var(--gray-8);
 }
