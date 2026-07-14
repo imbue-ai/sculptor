@@ -36,6 +36,12 @@ MODEL_MAPPING: dict[str, LLMModel] = {
     "opus": LLMModel.CLAUDE_4_OPUS_200K,
     "opus[1m]": LLMModel.CLAUDE_4_OPUS,
     "fable": LLMModel.CLAUDE_FABLE_5,
+    # Deterministic testing models: FakeClaude replays scripted turns (real file
+    # diffs, commits, todo lists) with zero LLM calls, so agent state can be
+    # scripted from the CLI for integration testing and demo seeding. The backend
+    # rejects these models unless integration testing is enabled.
+    "fake": LLMModel.FAKE_CLAUDE,
+    "fake2": LLMModel.FAKE_CLAUDE_2,
 }
 
 
