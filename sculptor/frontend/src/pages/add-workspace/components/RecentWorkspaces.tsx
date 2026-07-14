@@ -1,11 +1,13 @@
 import { ScrollArea, Spinner } from "@radix-ui/themes";
+import { useQuery } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import type { ReactElement, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { RecentWorkspaceResponse } from "../../../api";
 import { listRecentWorkspaces } from "../../../api";
-import { deletedWorkspaceIdsAtom, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
+import { queryClient, recentWorkspacesQueryKey } from "../../../common/queryClient.ts";
+import { tombstonedWorkspaceIdsAtom, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
 import { EmptyState } from "./EmptyState.tsx";
@@ -30,8 +32,6 @@ export const RecentWorkspaces = ({
   onOpenInNewTab,
   onEscapeToTitle,
 }: RecentWorkspacesProps): ReactElement => {
-  const [workspaces, setWorkspaces] = useState<Array<RecentWorkspaceResponse>>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -40,14 +40,10 @@ export const RecentWorkspaces = ({
   const areaRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 
-  const deletedIds = useAtomValue(deletedWorkspaceIdsAtom);
-
-  const handleNavigateAfterDelete = useCallback((workspaceId: string): void => {
-    setWorkspaces((prev) => prev.filter((ws) => ws.objectId !== workspaceId));
-  }, []);
-
   const { execute: executeDelete } = useOptimisticWorkspaceDelete({
-    onNavigateAfterDelete: handleNavigateAfterDelete,
+    // Deleting from Home stays on Home: the row hides via the tombstone
+    // derivation below, and a failed delete un-hides it with the store.
+    onNavigateAfterDelete: useCallback((): void => {}, []),
   });
 
   const handleDelete = useCallback((workspace: RecentWorkspaceResponse): void => {
@@ -60,51 +56,44 @@ export const RecentWorkspaces = ({
     setDeleteTarget(null);
   }, [deleteTarget, executeDelete]);
 
+  // The pulled list snapshot. Data-freshness is invalidation-driven (staleTime
+  // is Infinity globally): membership changes below, plus a confirmed delete
+  // (the mutation invalidates the key so the list heals even when the stream
+  // is down). Refetches swap the list in place — `isPending` is true only
+  // before the first data lands, so there is no spinner flash.
+  const { data: workspaces, isPending } = useQuery({
+    queryKey: recentWorkspacesQueryKey(),
+    queryFn: async (): Promise<Array<RecentWorkspaceResponse>> => {
+      // Read-only fetch consumed straight from the response body, so the
+      // unified-stream acknowledgment adds nothing here. Waiting for it would
+      // also fail this load spuriously: the Home page can mount right as the
+      // stream reconnects, and an ack for a request in flight across a
+      // reconnect never arrives — the tracker would time out and leave the
+      // list empty even though the data landed.
+      const response = await listRecentWorkspaces({ meta: { skipWsAck: true } });
+      return response.data?.workspaces ?? [];
+    },
+  });
+
   // The set of live workspace ids, kept fresh by the unified stream. Reduced
-  // to an order-insensitive key so the fetch below re-runs exactly when
+  // to an order-insensitive key so the invalidation below fires exactly when
   // membership changes — a workspace created or deleted outside this page
   // (the CLI, another window) must show up without a remount, since Home can
   // stay mounted indefinitely.
   const liveWorkspaceIds = useAtomValue(workspaceIdsAtom);
   const liveMembershipKey = useMemo(() => [...(liveWorkspaceIds ?? [])].sort().join(","), [liveWorkspaceIds]);
 
-  // Fetch the recent workspaces on mount and again whenever the live
-  // membership changes. `isLoading` starts true and never flips back, so a
-  // refetch swaps the list in place with no spinner flash; the ignore flag
-  // prevents a stale write if the component unmounts (or the membership
-  // changes again) mid-request.
   useEffect(() => {
-    let isIgnored = false;
-
-    void (async (): Promise<void> => {
-      try {
-        // Read-only fetch consumed straight from the response body, so the
-        // unified-stream acknowledgment adds nothing here. Waiting for it would
-        // also fail this load spuriously: the Home page can mount right as the
-        // stream reconnects, and an ack for a
-        // request in flight across a reconnect never arrives — the tracker would
-        // time out and leave the list empty even though the data landed.
-        const response = await listRecentWorkspaces({ meta: { skipWsAck: true } });
-        if (!isIgnored && response.data) {
-          setWorkspaces(response.data.workspaces);
-        }
-      } catch (error) {
-        console.error("Failed to load workspaces:", error);
-      } finally {
-        if (!isIgnored) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return (): void => {
-      isIgnored = true;
-    };
+    void queryClient.invalidateQueries({ queryKey: recentWorkspacesQueryKey() });
   }, [liveMembershipKey]);
 
+  // Hide rows the canonical store holds as tombstones (optimistic delete in
+  // flight). Derived from the one written store, so a rollback or an
+  // authoritative frame un-hides the row here and in the sidebar at once.
+  const tombstonedIds = useAtomValue(tombstonedWorkspaceIdsAtom);
   const enrichedWorkspaces = useMemo(
-    () => workspaces.filter((ws) => !deletedIds.has(ws.objectId)),
-    [workspaces, deletedIds],
+    () => (workspaces ?? []).filter((ws) => !tombstonedIds.has(ws.objectId)),
+    [workspaces, tombstonedIds],
   );
 
   const filteredWorkspaces = useMemo(() => {
@@ -191,7 +180,7 @@ export const RecentWorkspaces = ({
     }
   }, [focusedIndex]);
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <div className={styles.recentArea}>
         <Spinner size="2" />
