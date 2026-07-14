@@ -1,7 +1,20 @@
+// Fills the PaletteDialog shell (which caps its own height) so the body can
+// scroll while the footer stays pinned — the dialog is tall enough to clip on a
+// short viewport.
+.form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .body {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
   padding: var(--space-5) var(--space-5) var(--space-4);
 }
 
@@ -33,8 +46,8 @@
   gap: var(--space-1);
   grid-template:
     "l c r" 1fr
-    "b b b" 110px / 1fr 1.4fr 1fr;
-  height: 300px;
+    "b b b" 88px / 1fr 1.4fr 1fr;
+  height: 240px;
   margin: 0 auto;
   max-width: 560px;
   padding: var(--space-1);

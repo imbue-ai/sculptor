@@ -109,6 +109,7 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
 
   return (
     <div
+      className={styles.form}
       onKeyDown={(event) => {
         if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
           event.preventDefault();
