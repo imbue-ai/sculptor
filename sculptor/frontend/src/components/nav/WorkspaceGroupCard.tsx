@@ -43,6 +43,7 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { ToastType } from "~/components/Toast.tsx";
 
 import { collapsedWorkspaceGroupsAtom, isWorkspaceGroupCollapsedAtomFamily } from "./navAtoms.ts";
+import { neverAnimateLayoutChanges } from "./sidebarFlip.ts";
 // The compact action-button treatment is shared with the repo header and
 // workspace rows, so the trigger reads that module's class rather than
 // duplicating it here.
@@ -231,7 +232,14 @@ export const WorkspaceGroupCard = ({
     transition: headerTransition,
     isDragging: isGroupDragging,
     isOver: isHeaderOver,
-  } = useSortable({ id: group.objectId, disabled: isRenaming });
+  } = useSortable({
+    id: group.objectId,
+    disabled: isRenaming,
+    // The section's FLIP pass animates the whole lane — including this card's
+    // non-sortable box surface (sidebarFlip.ts); dnd-kit's own layout
+    // animation covers only the sortable header and would tear it from the box.
+    animateLayoutChanges: neverAnimateLayoutChanges,
+  });
 
   // Functions and callbacks
   const handleToggleCollapsed = (): void => {
@@ -348,6 +356,7 @@ export const WorkspaceGroupCard = ({
     <div
       className={`${styles.groupCard} ${isGroupDragging ? styles.cardDragging : ""} ${isProjectedTarget ? styles.dropActive : ""}`}
       data-accent-color={group.color}
+      data-flip-id={group.objectId}
       data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_CARD}
       data-group-id={group.objectId}
       data-collapsed={isCollapsed ? "true" : undefined}

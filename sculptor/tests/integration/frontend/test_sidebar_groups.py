@@ -357,6 +357,79 @@ def test_pointer_drag_moves_group_below_adjacent_group(
     expect(sidebar.get_group_member_rows(group_two)).to_have_count(2)
 
 
+@user_story("to reorder a group's members by dragging them with the mouse")
+def test_pointer_drag_reorders_members_within_group(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Pointer-dragging a member to another member's bottom half reorders the
+    run in place — same group, new order.
+
+    The park aims at the MIDDLE member's bottom half: a bottom-half park on the
+    box's last member sits in the box's edge inset, which deliberately reads as
+    the loose slot below the box (REQ-DND-6), not a member slot.
+
+    Steps:
+    1. Group 1 wraps WS Alpha, WS Bravo, and WS Charlie.
+    2. Pointer-drag Alpha to Bravo's bottom half and drop.
+    3. Member order is Bravo, Alpha, Charlie; membership unchanged.
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: One group holding all three workspaces.
+    sidebar = _create_single_group(page, ["WS Alpha", "WS Bravo", "WS Charlie"], "WS Alpha")
+    group_one = sidebar.get_group_card_by_name("Group 1")
+    sidebar.add_workspace_to_group_via_menu(sidebar.get_workspace_row_by_name("WS Bravo"), "Group 1")
+    sidebar.add_workspace_to_group_via_menu(sidebar.get_workspace_row_by_name("WS Charlie"), "Group 1")
+    members = sidebar.get_group_member_rows(group_one)
+    expect(members).to_have_count(3)
+    expect(members).to_contain_text(["WS Alpha", "WS Bravo", "WS Charlie"])
+
+    # Step 2: Park in Bravo's bottom half, inside the box.
+    sidebar.drag_via_pointer(
+        item=sidebar.get_workspace_row_by_name("WS Alpha"),
+        waypoints=[sidebar.get_workspace_row_by_name("WS Bravo")],
+        y_offsets=[8],
+    )
+
+    # Step 3: Reordered in place.
+    expect(members).to_have_count(3)
+    expect(members).to_contain_text(["WS Bravo", "WS Alpha", "WS Charlie"])
+    expect(sidebar.get_workspace_rows()).to_have_count(3)
+
+
+@user_story("to drop a workspace onto a collapsed group and have it join")
+def test_pointer_drop_on_collapsed_group_appends(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Pointer-dropping a row on a collapsed group's header appends it to the
+    group — the one projection with no visible gap to preview (REQ-DND-6).
+
+    Steps:
+    1. Group 1 wraps WS Bravo; WS Alpha stays loose. Collapse the group.
+    2. Pointer-drag Alpha onto the collapsed header and drop.
+    3. Expand: the members are Bravo then Alpha (appended at the tail).
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: A collapsed single-member group and a loose row.
+    sidebar = _create_single_group(page, ["WS Alpha", "WS Bravo"], "WS Bravo")
+    group_one = sidebar.get_group_card_by_name("Group 1")
+    members = sidebar.get_group_member_rows(group_one)
+    sidebar.get_group_chevron(group_one).click()
+    expect(members).to_have_count(0)
+
+    # Step 2: Drop Alpha on the collapsed header.
+    sidebar.drag_via_pointer(
+        item=sidebar.get_workspace_row_by_name("WS Alpha"),
+        waypoints=[sidebar.get_group_header(group_one)],
+    )
+
+    # Step 3: The append committed; expanding shows Alpha at the tail.
+    sidebar.get_group_chevron(group_one).click()
+    expect(members).to_have_count(2)
+    expect(members).to_contain_text(["WS Bravo", "WS Alpha"])
+
+
 @user_story("to drag a group above or below a loose workspace row with the mouse")
 def test_pointer_drag_lands_group_beside_loose_row(
     sculptor_instance_: SculptorInstance,

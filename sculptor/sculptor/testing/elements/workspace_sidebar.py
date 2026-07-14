@@ -294,9 +294,12 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
             self._pointer_settle(target_x, target_y)
         self._page.mouse.up()
 
-        # The drop clears the drag flag once the reorder commits; asserting it
-        # here keeps callers from racing their order assertions against it.
-        expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
+        # The drop clears the drag flag once the reorder commits; asserting
+        # rail-wide keeps callers from racing their order assertions against
+        # it. (Not on `item` itself: a row dropped into a collapsed group
+        # unmounts, and a locator that resolves nothing can't pass an
+        # attribute check.)
+        expect(self._page.locator('[data-sidebar-dragging="true"]')).to_have_count(0)
 
     def flick_group_below_all_via_pointer(self, item: Locator) -> None:
         """Flick a group header straight down PAST every group box in ONE jump
@@ -328,7 +331,7 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         self._pointer_settle(start_x, drop_y)
         self._page.mouse.up()
 
-        expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
+        expect(self._page.locator('[data-sidebar-dragging="true"]')).to_have_count(0)
 
     # -- Workspace rows (mirrors PlaywrightHomePage.get_workspace_rows) --
 

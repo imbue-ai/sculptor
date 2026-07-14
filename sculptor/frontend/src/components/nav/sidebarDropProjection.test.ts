@@ -9,6 +9,7 @@ import {
   locateTopLevelGroupId,
   locateWorkspaceParent,
   projectGroupBesideChild,
+  projectRowAtSlot,
   projectSectionDrop,
   toggleBoundaryDepth,
 } from "./sidebarDropProjection.ts";
@@ -389,6 +390,63 @@ describe("projectGroupBesideChild", () => {
     expect(projectGroupBesideChild(CHILDREN, "wsg-1", "wsg-1", "before")).toBeNull();
     expect(projectGroupBesideChild(CHILDREN, "wsg-ghost", "wsg-1", "after")).toBeNull();
     expect(projectGroupBesideChild(CHILDREN, "wsg-1", "wsg-ghost", "after")).toBeNull();
+  });
+});
+
+describe("projectRowAtSlot", () => {
+  it("returns null for the row's current slot — the fixed point a parked pointer resolves to", () => {
+    // apple is loose at top-level index 0 (post-removal basis: no others above).
+    expect(
+      projectRowAtSlot({ children: CHILDREN, activeId: "w-apple", parentGroupId: null, index: 0, isBoundary: false }),
+    ).toBeNull();
+    // m2 is wsg-1's second member.
+    expect(
+      projectRowAtSlot({ children: CHILDREN, activeId: "w-m2", parentGroupId: "wsg-1", index: 1, isBoundary: true }),
+    ).toBeNull();
+  });
+
+  it("projects to a different loose slot, and settles after application", () => {
+    const projection = projectRowAtSlot({
+      children: CHILDREN,
+      activeId: "w-apple",
+      parentGroupId: null,
+      index: 2,
+      isBoundary: false,
+    });
+    expect(projection).toEqual({ kind: "row", activeId: "w-apple", parentGroupId: null, index: 2, isBoundary: false });
+    const settled = applySectionProjection(CHILDREN, projection as SectionProjection);
+    expect(keysOf(settled)).toEqual(["wsg-1", "w-banana", "w-apple", "wsg-2"]);
+    expect(
+      projectRowAtSlot({ children: settled, activeId: "w-apple", parentGroupId: null, index: 2, isBoundary: false }),
+    ).toBeNull();
+  });
+
+  it("projects across parents — loose into a member slot — and settles after application", () => {
+    const projection = projectRowAtSlot({
+      children: CHILDREN,
+      activeId: "w-banana",
+      parentGroupId: "wsg-1",
+      index: 2,
+      isBoundary: true,
+    });
+    expect(projection).toEqual({
+      kind: "row",
+      activeId: "w-banana",
+      parentGroupId: "wsg-1",
+      index: 2,
+      isBoundary: true,
+    });
+    const settled = applySectionProjection(CHILDREN, projection as SectionProjection);
+    expect(membersOf(settled, "wsg-1")).toEqual(["w-m1", "w-m2", "w-banana"]);
+    expect(
+      projectRowAtSlot({ children: settled, activeId: "w-banana", parentGroupId: "wsg-1", index: 2, isBoundary: true }),
+    ).toBeNull();
+  });
+
+  it("projects a member's reorder within its own group", () => {
+    expect(
+      projectRowAtSlot({ children: CHILDREN, activeId: "w-m2", parentGroupId: "wsg-1", index: 0, isBoundary: true }),
+    ).toEqual({ kind: "row", activeId: "w-m2", parentGroupId: "wsg-1", index: 0, isBoundary: true });
   });
 });
 

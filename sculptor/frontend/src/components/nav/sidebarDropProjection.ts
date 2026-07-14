@@ -165,6 +165,47 @@ export const projectGroupBesideChild = (
 };
 
 /**
+ * Project the active row to an explicit slot — `index` within
+ * `parentGroupId`'s member lane, or within the top-level lane when null —
+ * returning null when the row already sits there. The caller derives the slot
+ * from pointer geometry (side-of-midpoint over the visible rows and boxes),
+ * and the null steady state is what lets it re-resolve on every move without
+ * re-rendering a settled lane. `index` is in post-removal basis: the slot's
+ * position counting every lane entry EXCEPT the active row — exactly what a
+ * DOM measurement of the other elements yields, and what
+ * `applySectionProjection` (which removes the row first) splices with.
+ */
+export const projectRowAtSlot = (args: {
+  children: ReadonlyArray<RepoSectionChild>;
+  activeId: string;
+  parentGroupId: SectionParent;
+  index: number;
+  isBoundary: boolean;
+}): SectionRowProjection | null => {
+  const { children, activeId, parentGroupId, index, isBoundary } = args;
+  if (locateWorkspaceParent(children, activeId) === parentGroupId) {
+    if (parentGroupId === null) {
+      const current = children.findIndex(
+        (child) => child.kind === "workspace" && child.workspace.objectId === activeId,
+      );
+      // A loose row's top-level index counts the children above it, none of
+      // which is itself — already post-removal basis.
+      if (current !== -1 && current === index) {
+        return null;
+      }
+    } else {
+      const parent = children.find((child) => child.kind === "group" && child.group.objectId === parentGroupId);
+      const current =
+        parent?.kind === "group" ? parent.members.findIndex((member) => member.objectId === activeId) : -1;
+      if (current !== -1 && current === index) {
+        return null;
+      }
+    }
+  }
+  return { kind: "row", activeId, parentGroupId, index, isBoundary };
+};
+
+/**
  * Project where the active item would land if dropped at `overId`'s slot.
  *
  * `children` must be the CURRENTLY DISPLAYED children (cross-parent moves are

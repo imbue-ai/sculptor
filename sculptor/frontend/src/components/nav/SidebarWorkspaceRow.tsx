@@ -20,6 +20,7 @@ import type { WorkspaceAction } from "~/components/CommandPalette/contextActions
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { WorkspaceStatusDots } from "~/components/statusDot";
 
+import { neverAnimateLayoutChanges } from "./sidebarFlip.ts";
 // The row is styled by the repo section's shared stylesheet: its classes are
 // selector-coupled to the section chrome (hover-reveal and drag-suppression
 // rules key on .workspaceRow), so the row reads the same module rather than
@@ -85,6 +86,9 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
     useSortable({
       id: workspace.objectId,
       disabled: isRenaming,
+      // The section's FLIP pass animates the whole lane (sidebarFlip.ts);
+      // dnd-kit's own layout animation would double the motion.
+      animateLayoutChanges: neverAnimateLayoutChanges,
     });
 
   // Enter navigates from the keyboard, like a click. Space is deliberately NOT
@@ -121,6 +125,7 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
           ref={setNodeRef}
           className={rowClassName}
           data-accent-color={isActive ? appAccentColor : undefined}
+          data-flip-id={workspace.objectId}
           style={{ transform: CSS.Translate.toString(transform), transition }}
         >
           {isRenaming ? (
