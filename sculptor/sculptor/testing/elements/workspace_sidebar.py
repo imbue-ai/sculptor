@@ -112,13 +112,12 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         arrived at ``target``'s slot, then Space to drop.
 
         Arrival shows up through one of two signals, matching the sidebar's two
-        preview regimes: a same-container press previews via transforms and
-        lights the targeted slot with ``data-sidebar-drop-target``, while a
-        press that crosses a group boundary (a membership change, or the
-        tail-of-group slot) re-renders the lane with the dragged row's
-        placeholder AT the projected slot — nothing lights, because the drag now
-        hovers its own row; the row's geometry passing the target is the signal
-        instead.
+        drag surfaces: a repo-list press previews via transforms and lights the
+        targeted header with ``data-sidebar-drop-target``, while a flat-lane
+        press re-renders the lane with the dragged row's placeholder AT the
+        projected slot — nothing lights (the lane registers no droppables, so
+        there is no over-target to mark); the row's geometry passing the target
+        is the signal instead.
 
         Pass stably-identified locators (by-name helpers), not positional
         ``nth(...)`` ones: positional locators re-resolve against the post-drop

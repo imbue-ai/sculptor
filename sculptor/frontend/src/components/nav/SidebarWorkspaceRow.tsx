@@ -1,5 +1,4 @@
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { MoreHorizontal, Trash2 } from "lucide-react";
@@ -20,7 +19,6 @@ import type { WorkspaceAction } from "~/components/CommandPalette/contextActions
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { WorkspaceStatusDots } from "~/components/statusDot";
 
-import { neverAnimateLayoutChanges } from "./sidebarFlip.ts";
 // The row is styled by the repo section's shared stylesheet: its classes are
 // selector-coupled to the section chrome (hover-reveal and drag-suppression
 // rules key on .workspaceRow), so the row reads the same module rather than
@@ -41,12 +39,13 @@ import styles from "./SidebarRepoGroup.module.scss";
  * the memo to hold, every non-primitive prop must be reference-stable across
  * parent renders (memoized action lists, id-taking callbacks).
  *
- * The row is a sortable item of its repo section's flat lane: the row div is
- * the measured node, and the name button is the focusable drag activator — the
- * hover action buttons stay outside the listeners so grabbing them can never
- * start a drag. While dragged, the row stays in the flow as an invisible
- * placeholder (the gap the drop would fill); the visible dragged card is the
- * section's DragOverlay.
+ * The row is a draggable of its repo section's flat lane (a plain draggable,
+ * not a sortable — the lane resolves every drop through its own projection
+ * engine and registers no droppables): the row div is the measured node, and
+ * the name button is the focusable drag activator — the hover action buttons
+ * stay outside the listeners so grabbing them can never start a drag. While
+ * dragged, the row stays in the flow as an invisible placeholder (the gap the
+ * drop would fill); the visible dragged card is the section's DragOverlay.
  */
 export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   workspace,
@@ -82,14 +81,10 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   // selected loose row, REQ-UI-4), so the active row re-stamps the app accent
   // to win the nearest-data-accent-color resolution.
   const appAccentColor = useThemeAccentColor();
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
-    useSortable({
-      id: workspace.objectId,
-      disabled: isRenaming,
-      // The section's FLIP pass animates the whole lane (sidebarFlip.ts);
-      // dnd-kit's own layout animation would double the motion.
-      animateLayoutChanges: neverAnimateLayoutChanges,
-    });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
+    id: workspace.objectId,
+    disabled: isRenaming,
+  });
 
   // Enter navigates from the keyboard, like a click. Space is deliberately NOT
   // handled here: it falls through to the dnd-kit keyboard sensor's activator
@@ -118,15 +113,14 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   return (
     <ContextMenu.Root>
       <ContextMenu.Trigger>
-        {/* Translate-only (never CSS.Transform): rows and groups vary in height, and
-            the scale component dnd-kit folds into transforms would stretch the
-            element toward the hovered slot's size. */}
+        {/* No transform: the drag's visual is the DragOverlay, and this in-flow
+            node is the placeholder holding the gap — it moves only by
+            re-render (the projection) and the FLIP pass. */}
         <div
           ref={setNodeRef}
           className={rowClassName}
           data-accent-color={isActive ? appAccentColor : undefined}
           data-flip-id={workspace.objectId}
-          style={{ transform: CSS.Translate.toString(transform), transition }}
         >
           {isRenaming ? (
             <span className={styles.workspaceRowButton}>
@@ -155,11 +149,11 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
               data-workspace-id={workspace.objectId}
               data-has-unread={String(status.hasUnread)}
-              // Live drag flags for the keyboard-drag pipeline (and its Playwright
-              // driver): the dragged row is marked while the drag is active, and the
-              // row whose slot the drag currently targets is marked as the drop target.
+              // Live drag flag for the keyboard-drag pipeline (and its Playwright
+              // driver): the dragged row is marked while the drag is active. Where
+              // the drag currently targets shows through the lane itself — the
+              // placeholder's re-rendered slot and the group cards' drop tint.
               data-sidebar-dragging={isDragging ? "true" : undefined}
-              data-sidebar-drop-target={isOver && !isDragging ? "true" : undefined}
               data-workspace-tab
               data-tab-id={workspace.objectId}
             >

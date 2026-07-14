@@ -5,12 +5,12 @@ import type { Workspace, WorkspaceGroup } from "~/api";
 import type { SectionProjection } from "./sidebarDropProjection.ts";
 import {
   applySectionProjection,
-  flatSectionItemIds,
   locateTopLevelGroupId,
   locateWorkspaceParent,
   projectGroupBesideChild,
   projectRowAtSlot,
   projectSectionDrop,
+  sectionKeyboardStepTarget,
   toggleBoundaryDepth,
 } from "./sidebarDropProjection.ts";
 import type { RepoSectionChild } from "./workspaceGroupComposition.ts";
@@ -64,25 +64,57 @@ const project = (
     depthIntent: opts.depthIntent ?? "inside",
   });
 
-describe("flatSectionItemIds", () => {
-  it("flattens loose rows, headers, and member rows in visible order", () => {
-    expect(flatSectionItemIds(CHILDREN, NONE)).toEqual([
-      "w-apple",
-      "wsg-1",
-      "w-m1",
-      "w-m2",
-      "w-banana",
-      "wsg-2",
-      "w-n1",
-    ]);
+describe("sectionKeyboardStepTarget", () => {
+  const step = (
+    activeId: string,
+    direction: "up" | "down",
+    opts: { collapsed?: ReadonlySet<string>; pendingGroupId?: string | null } = {},
+  ): string | null =>
+    sectionKeyboardStepTarget({
+      children: CHILDREN,
+      collapsedGroupIds: opts.collapsed ?? NONE,
+      activeId,
+      direction,
+      pendingGroupId: opts.pendingGroupId ?? null,
+    });
+
+  it("a row steps through every visible entry — headers and members included", () => {
+    expect(step("w-apple", "down")).toBe("wsg-1");
+    expect(step("w-m1", "down")).toBe("w-m2");
+    expect(step("w-banana", "up")).toBe("w-m2");
+    expect(step("w-banana", "down")).toBe("wsg-2");
   });
 
-  it("collapsed groups contribute only their header", () => {
-    expect(flatSectionItemIds(CHILDREN, new Set(["wsg-1"]))).toEqual(["w-apple", "wsg-1", "w-banana", "wsg-2", "w-n1"]);
+  it("a collapsed group contributes only its header to the path", () => {
+    const collapsed = new Set(["wsg-1"]);
+    expect(step("w-apple", "down", { collapsed })).toBe("wsg-1");
+    expect(step("w-banana", "up", { collapsed })).toBe("wsg-1");
   });
 
-  it("a dragging group's members collapse into the drag", () => {
-    expect(flatSectionItemIds(CHILDREN, NONE, "wsg-1")).toEqual(["w-apple", "wsg-1", "w-banana", "wsg-2", "w-n1"]);
+  it("returns null at the lane's ends", () => {
+    expect(step("w-apple", "up")).toBeNull();
+    expect(step("w-n1", "down")).toBeNull();
+  });
+
+  it("steps from a pending append's header, not the row's own slot", () => {
+    const collapsed = new Set(["wsg-2"]);
+    expect(step("w-apple", "up", { collapsed, pendingGroupId: "wsg-2" })).toBe("w-banana");
+    expect(step("w-apple", "down", { collapsed, pendingGroupId: "wsg-2" })).toBeNull();
+  });
+
+  it("returns the active id when the step lands back on the drag's own placeholder", () => {
+    const collapsed = new Set(["wsg-2"]);
+    expect(step("w-banana", "up", { collapsed, pendingGroupId: "wsg-2" })).toBe("w-banana");
+  });
+
+  it("a dragged group steps through top-level children only", () => {
+    expect(step("wsg-1", "down")).toBe("w-banana");
+    expect(step("wsg-1", "up")).toBe("w-apple");
+    expect(step("wsg-2", "down")).toBeNull();
+  });
+
+  it("returns null for unknown ids", () => {
+    expect(step("w-unknown", "down")).toBeNull();
   });
 });
 

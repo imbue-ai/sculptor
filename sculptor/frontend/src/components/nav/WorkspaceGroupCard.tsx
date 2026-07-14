@@ -8,19 +8,18 @@
 // Radix accent color as `data-accent-color`, remapping the `--accent-*` scale
 // for the subtree, so recolors follow a single attribute.
 //
-// The run is NOT one sortable unit in the DOM: the header row and each member
-// row register individually with the repo section's single flat
-// SortableContext (SidebarRepoGroup), and membership is derived from position
-// by the section's drop projection. Dragging the header moves the whole group
-// (REQ-DND-4): its members collapse into the drag (they unmount, leaving the
-// header's slot as the gap) and the section's DragOverlay shows the full run.
+// The run is NOT one draggable unit in the DOM: the header row and each member
+// row are individual draggables of the repo section's flat lane
+// (SidebarRepoGroup), and membership is derived from position by the section's
+// drop projection. Dragging the header moves the whole group (REQ-DND-4): its
+// members collapse into the drag (they unmount, leaving the header's slot as
+// the gap) and the section's DragOverlay shows the full run.
 //
 // The group menu opens from the hover "⋯" AND from right-click on the header,
 // sharing one body across both Radix menu primitives (the same dual-primitive
 // pattern as the workspace row menu in contextActions/menu.tsx).
 
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal } from "lucide-react";
@@ -43,7 +42,6 @@ import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCrea
 import { ToastType } from "~/components/Toast.tsx";
 
 import { collapsedWorkspaceGroupsAtom, isWorkspaceGroupCollapsedAtomFamily } from "./navAtoms.ts";
-import { neverAnimateLayoutChanges } from "./sidebarFlip.ts";
 // The compact action-button treatment is shared with the repo header and
 // workspace rows, so the trigger reads that module's class rather than
 // duplicating it here.
@@ -219,8 +217,8 @@ export const WorkspaceGroupCard = ({
   const addMember = useAddWorkspaceGroupMemberMutation();
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
 
-  // The header row is the group's sortable item in the section's flat lane
-  // (the members register individually). While the header is dragged the
+  // The header row is the group's draggable in the section's flat lane (the
+  // members are draggables of their own). While the header is dragged the
   // members unmount below, so the header's in-flow placeholder is the whole
   // gap and the run travels as one unit in the overlay (REQ-DND-4).
   const {
@@ -228,17 +226,10 @@ export const WorkspaceGroupCard = ({
     listeners: headerListeners,
     setNodeRef: setHeaderNodeRef,
     setActivatorNodeRef: setHeaderActivatorNodeRef,
-    transform: headerTransform,
-    transition: headerTransition,
     isDragging: isGroupDragging,
-    isOver: isHeaderOver,
-  } = useSortable({
+  } = useDraggable({
     id: group.objectId,
     disabled: isRenaming,
-    // The section's FLIP pass animates the whole lane — including this card's
-    // non-sortable box surface (sidebarFlip.ts); dnd-kit's own layout
-    // animation covers only the sortable header and would tear it from the box.
-    animateLayoutChanges: neverAnimateLayoutChanges,
   });
 
   // Functions and callbacks
@@ -364,14 +355,10 @@ export const WorkspaceGroupCard = ({
     >
       <ContextMenu.Root>
         <ContextMenu.Trigger>
-          {/* Translate-only (never CSS.Transform): the lane's rows vary in
-              height, and the scale component dnd-kit folds into transforms
-              would stretch the header toward the hovered slot's size. */}
-          <div
-            ref={setHeaderNodeRef}
-            className={styles.groupHeader}
-            style={{ transform: CSS.Translate.toString(headerTransform), transition: headerTransition }}
-          >
+          {/* No transform: the drag's visual is the DragOverlay, and this
+              in-flow header is the placeholder holding the gap — it moves only
+              by re-render (the projection) and the FLIP pass. */}
+          <div ref={setHeaderNodeRef} className={styles.groupHeader}>
             {isRenaming ? (
               <span className={styles.groupHeaderButton}>
                 <Chevron size={15} className={styles.groupChevron} />
@@ -396,7 +383,6 @@ export const WorkspaceGroupCard = ({
                 data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_HEADER}
                 data-group-id={group.objectId}
                 data-sidebar-dragging={isGroupDragging ? "true" : undefined}
-                data-sidebar-drop-target={isHeaderOver && !isGroupDragging ? "true" : undefined}
               >
                 <Chevron
                   size={15}

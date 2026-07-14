@@ -2,11 +2,13 @@
 // chevron, hover-revealed repository settings, and an always-visible "+" that
 // direct-creates a workspace in this repo, falling back to the new-workspace dialog
 // pre-scoped to the repo when the branch can't be resolved or the create fails),
-// followed by the repo's children while expanded. The children are ONE flat sortable
-// lane (REQ-DND-1): loose workspace rows, group header rows, and member rows are all
-// siblings of a single SortableContext, composed in visible order by
-// sidebarWorkspaceOrder (with the workspace-groups flag off the lane is exactly the
-// workspace rows). Cross-group concerns — building the groups, the shared action
+// followed by the repo's children while expanded. The children are ONE flat lane
+// (REQ-DND-1): loose workspace rows, group header rows, and member rows are all
+// draggable siblings, composed in visible order by sidebarWorkspaceOrder (with the
+// workspace-groups flag off the lane is exactly the workspace rows). The lane
+// registers no droppables: pointer drags resolve geometrically on the move stream
+// and keyboard drags step through the projection engine, so dnd-kit's collision
+// machinery has no part to play. Cross-group concerns — building the groups, the shared action
 // list, and the delete confirmation — stay in WorkspaceSidebar and arrive as props.
 //
 // The group is itself a sortable item of WorkspaceSidebar's repo-group DndContext
@@ -25,11 +27,10 @@
 // mutation apply optimistically, and a server rejection rolls both back with
 // an error toast (REQ-DND-7).
 
-import type { DragEndEvent, DragMoveEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
-import { closestCenter, DndContext, DragOverlay, MeasuringStrategy } from "@dnd-kit/core";
+import type { DragEndEvent, DragMoveEvent, DragStartEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import type { SortingStrategy } from "@dnd-kit/sortable";
-import { SortableContext, useSortable } from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
@@ -65,11 +66,11 @@ import { WorkspaceGroupDragPreview, WorkspaceRowDragPreview } from "./sidebarDra
 import type { SectionAppendProjection, SectionDepthIntent, SectionProjection } from "./sidebarDropProjection.ts";
 import {
   applySectionProjection,
-  flatSectionItemIds,
   locateWorkspaceParent,
   projectGroupBesideChild,
   projectRowAtSlot,
   projectSectionDrop,
+  sectionKeyboardStepTarget,
   toggleBoundaryDepth,
 } from "./sidebarDropProjection.ts";
 import { layoutRect, useSectionFlipAnimation } from "./sidebarFlip.ts";
@@ -79,12 +80,6 @@ import { commitSectionDropAtom, restoreSectionOrderAtom } from "./sidebarWorkspa
 import { SidebarWorkspaceRow } from "./SidebarWorkspaceRow.tsx";
 import { WorkspaceGroupCard } from "./WorkspaceGroupCard.tsx";
 import type { RepoSectionChild } from "./workspaceGroupComposition.ts";
-
-// The lane previews entirely by re-rendering (see acceptProjection): sortable
-// transforms would slide rows without moving the group boxes wrapping them,
-// so the strategy is a no-op and the section's FLIP pass
-// (useSectionFlipAnimation) carries the motion instead.
-const noSortingStrategy: SortingStrategy = () => null;
 
 // The dragged card is the section's DragOverlay copy; locking it to the
 // vertical axis keeps the drag reading as list reordering (the overlay rides
@@ -271,51 +266,6 @@ export const SidebarRepoGroup = ({
     [beginOwnedDrag, group.children, updateDragState],
   );
 
-  const handleSectionDragOver = useCallback(
-    (event: DragOverEvent): void => {
-      const state = dragStateRef.current;
-      if (state === null || event.over === null) {
-        // over == null means the pointer rests outside every target: keep the
-        // last preview — the drop must land where the gap shows.
-        return;
-      }
-
-      // Pointer drags — rows AND groups — are owned entirely by the LEVEL-
-      // triggered geometric resolution in handleSectionDragMove. Over events
-      // cannot share that ownership: they are edge-triggered (they fire only
-      // when the collision target changes, then go silent) and their
-      // slot-taking is side-agnostic, so wherever the two disagree — a group
-      // at a loose row's boundary, a row approaching a header from below —
-      // each application either re-slots the lane back and forth under a
-      // stationary pointer or flashes a wrong layout for the move stream to
-      // undo. Keyboard drags (no live pointer) keep this path.
-      if (event.activatorEvent instanceof PointerEvent) {
-        return;
-      }
-
-      const overId = String(event.over.id);
-      if (overId === state.activeId) {
-        // The drag returned to its own placeholder: the visual (transforms
-        // reset, the row back in its slot) says "drop here", so a stale
-        // pending preview must not out-vote it.
-        if (state.pending !== null) {
-          updateDragState({ ...state, pending: null });
-        }
-        return;
-      }
-
-      const projection = projectSectionDrop({
-        children: state.display,
-        collapsedGroupIds,
-        activeId: state.activeId,
-        overId,
-        depthIntent: state.depthIntent,
-      });
-      acceptProjection(state, projection, state.depthIntent);
-    },
-    [collapsedGroupIds, acceptProjection, updateDragState],
-  );
-
   // A depth-intent change with no new over target (pointer crossing the member
   // indent while parked at a boundary, or a Left/Right arrow press): flip the
   // projected side of the tail boundary directly (REQ-DND-6).
@@ -327,6 +277,52 @@ export const SidebarRepoGroup = ({
       }
       const projection = toggleBoundaryDepth(state.display, collapsedGroupIds, state.activeId, intent);
       acceptProjection(state, projection, intent);
+    },
+    [collapsedGroupIds, acceptProjection],
+  );
+
+  // The keyboard mirror of resolveSectionPointer below: Up/Down steps the drag
+  // one lane entry through the same projection engine (a pure function of the
+  // display tree — never dnd-kit collisions, whose rects the lane's mid-drag
+  // re-renders move out from under a parked drag). Returns the target entry's
+  // rest-layout top so the sensor rides the DragOverlay to the slot.
+  const handleStepKey = useCallback(
+    (direction: "up" | "down"): number | undefined => {
+      const state = dragStateRef.current;
+      const section = sectionChildrenRef.current;
+      if (state === null || section === null) {
+        return undefined;
+      }
+      const targetId = sectionKeyboardStepTarget({
+        children: state.display,
+        collapsedGroupIds,
+        activeId: state.activeId,
+        direction,
+        pendingGroupId: state.pending?.parentGroupId ?? null,
+      });
+      if (targetId === null) {
+        return undefined;
+      }
+
+      if (targetId === state.activeId) {
+        // Stepped back onto the drag's own placeholder: the display already
+        // shows the drop there, so only a stale pending append needs clearing.
+        acceptProjection(state, null, state.depthIntent);
+      } else {
+        acceptProjection(
+          state,
+          projectSectionDrop({
+            children: state.display,
+            collapsedGroupIds,
+            activeId: state.activeId,
+            overId: targetId,
+            depthIntent: state.depthIntent,
+          }),
+          state.depthIntent,
+        );
+      }
+      const target = section.querySelector(`[data-flip-id="${targetId}"]`);
+      return target === null ? undefined : layoutRect(target, section).top;
     },
     [collapsedGroupIds, acceptProjection],
   );
@@ -594,7 +590,7 @@ export const SidebarRepoGroup = ({
     ],
   );
 
-  const rowDndSensors = useSidebarDndSensors(applyDepthIntent);
+  const rowDndSensors = useSidebarDndSensors({ onDepthKey: applyDepthIntent, onStepKey: handleStepKey });
 
   // The lane's motion: a FLIP pass over the rows and group cards after every
   // commit (see sidebarFlip.ts). The drag's own element — the invisible
@@ -684,11 +680,6 @@ export const SidebarRepoGroup = ({
 
   // JSX and rendering logic
   const displayChildren = dragState?.display ?? group.children;
-  const draggingGroupId = dragState?.kind === "group" ? dragState.activeId : undefined;
-  const flatItemIds = useMemo(
-    () => flatSectionItemIds(displayChildren, collapsedGroupIds, draggingGroupId),
-    [displayChildren, collapsedGroupIds, draggingGroupId],
-  );
 
   // The group whose container surface should light up because the active row
   // would land inside it: the applied display position, or a pending
@@ -830,55 +821,47 @@ export const SidebarRepoGroup = ({
         <div ref={sectionChildrenRef} className={styles.repoRows}>
           <DndContext
             sensors={rowDndSensors}
-            collisionDetection={closestCenter}
             modifiers={sectionDndModifiers}
-            // Projections change the lane's real layout mid-drag (rows
-            // re-slot, a group's box grows around the gap), so droppable
-            // rects must be re-measured continuously, not just at drag start.
-            measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
             onDragStart={handleSectionDragStart}
-            onDragOver={handleSectionDragOver}
             onDragMove={handleSectionDragMove}
             onDragEnd={handleSectionDragEnd}
             onDragCancel={resetSectionDrag}
           >
-            <SortableContext items={flatItemIds} strategy={noSortingStrategy}>
-              {displayChildren.map((child) =>
-                child.kind === "workspace" ? (
-                  <SidebarWorkspaceRow
-                    key={child.workspace.objectId}
-                    workspace={child.workspace}
-                    isRenaming={renamingWorkspaceId === child.workspace.objectId}
-                    isActive={child.workspace.objectId === activeWorkspaceId}
-                    actions={actions}
-                    openInRuntime={openInRuntime}
-                    destructiveColor={dangerColor}
-                    onNavigate={onWorkspaceClick}
-                    onHover={onWorkspaceHover}
-                    onRenameCommit={handleRenameCommit}
-                    onRenameCancel={handleRenameCancel}
-                    onBeginDelete={onBeginDelete}
-                  />
-                ) : (
-                  <WorkspaceGroupCard
-                    key={child.group.objectId}
-                    group={child.group}
-                    members={child.members}
-                    isProjectedTarget={projectedTargetGroupId === child.group.objectId}
-                    actions={actions}
-                    openInRuntime={openInRuntime}
-                    destructiveColor={dangerColor}
-                    renamingWorkspaceId={renamingWorkspaceId}
-                    activeWorkspaceId={activeWorkspaceId}
-                    onWorkspaceClick={onWorkspaceClick}
-                    onWorkspaceHover={onWorkspaceHover}
-                    onWorkspaceRenameCommit={handleRenameCommit}
-                    onWorkspaceRenameCancel={handleRenameCancel}
-                    onBeginDelete={onBeginDelete}
-                  />
-                ),
-              )}
-            </SortableContext>
+            {displayChildren.map((child) =>
+              child.kind === "workspace" ? (
+                <SidebarWorkspaceRow
+                  key={child.workspace.objectId}
+                  workspace={child.workspace}
+                  isRenaming={renamingWorkspaceId === child.workspace.objectId}
+                  isActive={child.workspace.objectId === activeWorkspaceId}
+                  actions={actions}
+                  openInRuntime={openInRuntime}
+                  destructiveColor={dangerColor}
+                  onNavigate={onWorkspaceClick}
+                  onHover={onWorkspaceHover}
+                  onRenameCommit={handleRenameCommit}
+                  onRenameCancel={handleRenameCancel}
+                  onBeginDelete={onBeginDelete}
+                />
+              ) : (
+                <WorkspaceGroupCard
+                  key={child.group.objectId}
+                  group={child.group}
+                  members={child.members}
+                  isProjectedTarget={projectedTargetGroupId === child.group.objectId}
+                  actions={actions}
+                  openInRuntime={openInRuntime}
+                  destructiveColor={dangerColor}
+                  renamingWorkspaceId={renamingWorkspaceId}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onWorkspaceClick={onWorkspaceClick}
+                  onWorkspaceHover={onWorkspaceHover}
+                  onWorkspaceRenameCommit={handleRenameCommit}
+                  onWorkspaceRenameCancel={handleRenameCancel}
+                  onBeginDelete={onBeginDelete}
+                />
+              ),
+            )}
             {/* No drop animation: the drop commits instantly and the lane
                 already renders the row/run at its final slot, so the default
                 animation drags an overlay clone across the settled lane —

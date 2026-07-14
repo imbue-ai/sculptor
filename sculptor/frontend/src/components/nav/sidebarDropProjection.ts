@@ -1,13 +1,15 @@
 // The flat-lane drop projection for a repo section's children (REQ-DND-1..7).
 //
-// A repo section renders as ONE flat sortable lane: loose workspace rows, group
-// header rows, and member rows are all siblings of a single SortableContext,
-// and a group is just a nesting level — membership is DERIVED FROM POSITION
-// (a row sitting between a group's header and the end of its member run is in
-// the group). This module is the single source of truth for that derivation:
-// the drag-over preview, the keyboard path, and the drop commit all call
-// `projectSectionDrop` and apply its result with `applySectionProjection`, so
-// what the user sees mid-drag is exactly what a drop commits.
+// A repo section renders as ONE flat lane: loose workspace rows, group header
+// rows, and member rows are all draggable siblings, and a group is just a
+// nesting level — membership is DERIVED FROM POSITION (a row sitting between
+// a group's header and the end of its member run is in the group). This
+// module is the single source of truth for that derivation, for both input
+// methods: the pointer path resolves slots geometrically (`projectRowAtSlot`,
+// `projectGroupBesideChild`), the keyboard path steps through the lane's
+// entries (`sectionKeyboardStepTarget` feeding `projectSectionDrop`), and
+// every projection is applied with `applySectionProjection` — so what the
+// user sees mid-drag is exactly what a drop commits.
 //
 // Everything here is pure and operates on `RepoSectionChild` trees; the React
 // layer (SidebarRepoGroup) applies every projection to the rendered lane
@@ -74,7 +76,6 @@ type FlatEntry = {
 const flattenChildren = (
   children: ReadonlyArray<RepoSectionChild>,
   collapsedGroupIds: ReadonlySet<string>,
-  hiddenMembersGroupId?: string,
 ): Array<FlatEntry> => {
   const entries: Array<FlatEntry> = [];
   for (const child of children) {
@@ -84,7 +85,7 @@ const flattenChildren = (
     }
     const groupId = child.group.objectId;
     entries.push({ id: groupId, parentGroupId: null, isHeader: true });
-    if (!collapsedGroupIds.has(groupId) && groupId !== hiddenMembersGroupId) {
+    if (!collapsedGroupIds.has(groupId)) {
       for (const member of child.members) {
         entries.push({ id: member.objectId, parentGroupId: groupId, isHeader: false });
       }
@@ -94,17 +95,51 @@ const flattenChildren = (
 };
 
 /**
- * The SortableContext item ids for the section in visible top-to-bottom order:
- * loose workspace ids, group ids (their header rows), and member workspace ids.
- * A collapsed group contributes only its header. While a group header is being
- * dragged its members collapse into the drag (REQ-DND-4), so they leave the
- * lane — pass that group as `draggingGroupId`.
+ * The entry a keyboard drag steps over for one ArrowUp/ArrowDown press — the
+ * lane entry directly above or below the drag's current position — for the
+ * caller to feed to `projectSectionDrop` as `overId`. This is the keyboard
+ * mirror of the pointer path's geometric resolution: the step target comes
+ * from the same display tree the projections maintain, never from DOM
+ * measurement, so both input methods resolve drops through one engine and a
+ * mid-drag re-render can never strand a keyboard drag the way a moved
+ * collision rect could.
+ *
+ * A dragged GROUP steps through the top-level children only — it can never
+ * nest (REQ-DND-4). A dragged ROW steps through every visible lane entry:
+ * loose rows, headers (a collapsed group contributes only its header), and
+ * member rows. While an append onto a collapsed group is pending, the drag
+ * visually sits on that group's header (the display never moved, REQ-DND-6),
+ * so the step is taken from the header's slot rather than the row's.
+ *
+ * Returns null at the lane's ends (the press is a no-op), and the active id
+ * itself when the step lands back on the drag's own placeholder — the display
+ * already shows the drop there, so the caller only clears a pending append.
  */
-export const flatSectionItemIds = (
-  children: ReadonlyArray<RepoSectionChild>,
-  collapsedGroupIds: ReadonlySet<string>,
-  draggingGroupId?: string,
-): Array<string> => flattenChildren(children, collapsedGroupIds, draggingGroupId).map((entry) => entry.id);
+export const sectionKeyboardStepTarget = (args: {
+  children: ReadonlyArray<RepoSectionChild>;
+  collapsedGroupIds: ReadonlySet<string>;
+  activeId: string;
+  direction: "up" | "down";
+  /** The collapsed group a pending append currently targets, or null. */
+  pendingGroupId: string | null;
+}): string | null => {
+  const { children, collapsedGroupIds, activeId, direction, pendingGroupId } = args;
+  const offset = direction === "down" ? 1 : -1;
+
+  const isGroupDrag = children.some((child) => child.kind === "group" && child.group.objectId === activeId);
+  if (isGroupDrag) {
+    const from = topLevelIndexOf(children, activeId);
+    const neighbor = from === -1 ? undefined : children[from + offset];
+    return neighbor === undefined ? null : repoSectionChildKey(neighbor);
+  }
+
+  const flat = flattenChildren(children, collapsedGroupIds);
+  const position = flat.findIndex((entry) => entry.id === (pendingGroupId ?? activeId));
+  if (position === -1) {
+    return null;
+  }
+  return flat[position + offset]?.id ?? null;
+};
 
 /** The group a workspace currently belongs to within the children, or null if loose/absent. */
 export const locateWorkspaceParent = (

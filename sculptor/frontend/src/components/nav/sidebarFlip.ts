@@ -5,10 +5,10 @@
 // the lane's motion instead: a FLIP pass over every keyed lane element — the
 // workspace rows AND the group cards — that runs after each commit, measures
 // what moved, and animates it from where the user last saw it to where it now
-// sits. dnd-kit's own per-item layout animation is disabled on the lane's
-// sortables (`neverAnimateLayoutChanges`): it only covers sortable items, so
-// the non-sortable card surfaces would snap while their header/member rows
-// glide — the box visibly tearing away from its own title.
+// sits. The lane's items are plain dnd-kit draggables, never sortables, so no
+// dnd-kit layout animation exists to compete with the pass (a per-item
+// animation could only ever cover the rows, snapping the card surfaces while
+// their header/member rows glide — the box visibly tearing from its title).
 //
 // A card's height animation is special: unlike a transform, an animated
 // height changes the REAL layout of everything below it on every frame. Left
@@ -36,14 +36,6 @@ import { useLayoutEffect, useRef } from "react";
 // motion language.
 const FLIP_DURATION_MS = 200;
 const FLIP_EASING = "ease";
-
-/**
- * Disables dnd-kit's built-in layout animation on the lane's sortables; the
- * section FLIP pass below animates every lane element (including the
- * non-sortable card surfaces) instead, so letting dnd-kit also animate the
- * sortable subset would double the motion.
- */
-export const neverAnimateLayoutChanges = (): boolean => false;
 
 /** The translateY of a computed-style transform matrix; 0 for none/invalid. */
 const translateYOf = (transform: string): number => {
