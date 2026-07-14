@@ -1209,10 +1209,8 @@ def _handle_partial_response(
     # via the partial first, and the later final ResponseBlockAgentMessage skips it
     # as a duplicate — so without stamping on this path the live turn never gets a role.
     committed_tool_use_ids = {b.id for b in committed_content if isinstance(b, ToolUseBlock)}
-    # Expand TextBlocks through split_text_and_media() so <img>/<video> tags
-    # are extracted into FileBlocks during streaming — matching the behavior of
-    # _handle_response_blocks. Without this, Pi agent partials deliver raw <img>
-    # tags as text, which the frontend MarkdownBlock suppresses (SCU-1830).
+    # Extract <img>/<video> tags from TextBlocks into FileBlocks during streaming.
+    # The _handle_response_blocks path already does this for persisted messages.
     expanded: list[ContentBlockTypes] = []
     for b in content:
         if isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids:
