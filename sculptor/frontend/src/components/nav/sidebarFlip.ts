@@ -10,11 +10,23 @@
 // the non-sortable card surfaces would snap while their header/member rows
 // glide — the box visibly tearing away from its own title.
 //
+// A card's height animation is special: unlike a transform, an animated
+// height changes the REAL layout of everything below it on every frame. Left
+// alone, that drift makes neighbors jump to a wrong position at commit and
+// slide back (or move double-distance): a below-element's live layout starts
+// offset by the card's full height delta and eases to rest. The pass
+// compensates by subtracting the cumulative height delta of every
+// height-animating card earlier in the flow from each later element's start
+// offset — the compensation and the drift share one duration and easing, so
+// they cancel exactly, frame for frame.
+//
 // The drag logic reads the same elements' geometry on every pointer move, so
 // the projections' fixed-point guarantees (a stationary pointer settles) hold
-// only for LAYOUT rects — a box gliding toward its slot sweeps its midpoint
-// through the pointer and would re-trigger the projection it is animating.
-// `layoutRect` strips the in-flight FLIP translation for those reads.
+// only for LAYOUT rects — an animating box sweeps its edges through a parked
+// pointer and would re-trigger the very projection being animated. Each pass
+// therefore stamps every keyed element with its committed layout
+// (`data-flip-top`/`data-flip-height`, section-relative), and `layoutRect`
+// serves geometry from those stamps.
 
 import type { RefObject } from "react";
 import { useLayoutEffect, useRef } from "react";
@@ -57,12 +69,24 @@ const composedTranslateY = (element: Element, root: Element): number => {
 };
 
 /**
- * `element`'s viewport rect with in-flight FLIP translations stripped: the
- * rect the element will occupy at rest. Every pointer-geometric read in the
- * drag handlers must use this instead of getBoundingClientRect — animated
- * rects break the projections' fixed points (see module comment).
+ * `element`'s rest rect — where it sits once every in-flight animation
+ * finishes. Every pointer-geometric read in the drag handlers must use this
+ * instead of getBoundingClientRect: animated rects break the projections'
+ * fixed points (see module comment). Served from the FLIP pass's committed
+ * layout stamps on the nearest keyed ancestor (a row's button reads its row),
+ * which no animation — translate OR height — can pollute; elements without a
+ * stamp fall back to stripping the in-flight translation from the live rect.
  */
 export const layoutRect = (element: Element, root: Element): { top: number; bottom: number } => {
+  const keyed = element.closest<HTMLElement>("[data-flip-id]");
+  if (keyed !== null && root.contains(keyed)) {
+    const top = Number.parseFloat(keyed.dataset.flipTop ?? "");
+    const height = Number.parseFloat(keyed.dataset.flipHeight ?? "");
+    if (Number.isFinite(top) && Number.isFinite(height)) {
+      const rootTop = root.getBoundingClientRect().top;
+      return { top: rootTop + top, bottom: rootTop + top + height };
+    }
+  }
   const rect = element.getBoundingClientRect();
   const translateY = composedTranslateY(element, root);
   return { top: rect.top - translateY, bottom: rect.bottom - translateY };
@@ -80,8 +104,10 @@ type FlipRecord = {
  * group cards keyed by group id) and animate position — plus height, for a
  * card growing or shrinking around a drop gap — from where the user last saw
  * it. Interruptions compose: a re-slot landing mid-animation starts the new
- * animation from the element's current on-screen position, and a nested row's
- * own delta subtracts its card's so the pair never double-shifts.
+ * animation from the element's current on-screen position; a nested row
+ * subtracts its card's raw delta so the pair never double-shifts; and
+ * elements below a height-animating card subtract that card's height delta so
+ * the live-layout drift it causes cancels out (see module comment).
  *
  * `activeDragId` is the in-flight drag's own element (the invisible
  * placeholder holding the gap): its movement IS the projection and must track
@@ -125,17 +151,23 @@ export const useSectionFlipAnimation = (
     animations.clear();
 
     // Pure layout, all transforms gone. Tops are section-relative so a
-    // scrolled sidebar doesn't read as every element having moved.
+    // scrolled sidebar doesn't read as every element having moved. The stamps
+    // are what layoutRect serves to the drag handlers' geometry reads.
     const sectionTop = section.getBoundingClientRect().top;
     const layouts = new Map<HTMLElement, FlipRecord>();
     for (const element of elements) {
       const rect = element.getBoundingClientRect();
-      layouts.set(element, { top: rect.top - sectionTop, height: rect.height });
+      const layout = { top: rect.top - sectionTop, height: rect.height };
+      layouts.set(element, layout);
+      element.dataset.flipTop = String(layout.top);
+      element.dataset.flipHeight = String(layout.height);
     }
 
-    // Document order guarantees a card is processed before its member rows,
-    // so a row's subtraction of its card's start delta always finds it.
-    const startDeltas = new Map<HTMLElement, number>();
+    // Document order guarantees a card is processed before its member rows
+    // and before every element below it in the flow, so the nested-row and
+    // height-drift subtractions always find their inputs.
+    const rawDeltas = new Map<HTMLElement, number>();
+    let precedingHeightDelta = 0;
     const seen = new Set<string>();
     for (const element of elements) {
       const key = element.dataset.flipId as string;
@@ -149,16 +181,34 @@ export const useSectionFlipAnimation = (
       }
 
       // Where the user last saw the element, relative to where it now rests.
-      const viewportDelta = previous.top + flight.translateY - layout.top;
+      const rawDelta = previous.top + flight.translateY - layout.top;
+      rawDeltas.set(element, rawDelta);
       const card = element.parentElement?.closest<HTMLElement>("[data-flip-id]") ?? null;
-      const ancestorDelta = card !== null && section.contains(card) ? (startDeltas.get(card) ?? 0) : 0;
-      const startY = viewportDelta - ancestorDelta;
-      const startHeight = flight.visualHeight;
-      const shouldAnimateHeight = Math.abs(startHeight - layout.height) >= 1;
+      const isNested = card !== null && section.contains(card);
+      // A nested row rides its card's animation, so it subtracts the card's
+      // RAW delta — the card's own height-drift compensation already reaches
+      // the row through that shared transform. A top-level element instead
+      // subtracts the accumulated height drift of the cards above it.
+      const startY = isNested ? rawDelta - (rawDeltas.get(card) ?? 0) : rawDelta - precedingHeightDelta;
+      // The height the user last saw. The live rect can't provide it by
+      // default: by effect time React has already re-laid-out the element, so
+      // its measured height IS the new layout height and the delta would read
+      // zero (the box would slide while its bottom edge snaps). Only an
+      // interrupted in-flight height animation still overrides the displayed
+      // height — detectable as a live height that disagrees with layout — and
+      // then the live value is the one on screen.
+      const startHeight = Math.abs(flight.visualHeight - layout.height) >= 1 ? flight.visualHeight : previous.height;
+      const heightDelta = startHeight - layout.height;
+      const shouldAnimateHeight = Math.abs(heightDelta) >= 1;
+      if (shouldAnimateHeight && !isNested) {
+        // Only a top-level card's animated height re-lays-out the flow below;
+        // a nested element's height stays inside its own box.
+        precedingHeightDelta += heightDelta;
+      }
+
       if (Math.abs(startY) < 1 && !shouldAnimateHeight) {
         continue;
       }
-      startDeltas.set(element, startY);
       const keyframes: Array<Keyframe> = shouldAnimateHeight
         ? [
             { transform: `translateY(${startY}px)`, height: `${startHeight}px` },
