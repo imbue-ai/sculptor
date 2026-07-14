@@ -22,14 +22,16 @@ reproduce — SIGKILL at a precise point, or shutdown timed inside a
 millisecond-scale window. Those are covered by backend unit tests in
 ``sculptor/sculptor/tasks/handlers/run_agent/v1_test.py``.
 
-Both tests use ``fake_claude:sleep`` (or the AUQ-emitting equivalent) for a
-deterministic long-running turn so that any replay would keep the agent in
-``RUNNING`` for at least 120 seconds. Each test asserts the post-restart
-status reaches ``READY`` within a generous timeout — only true if the restart
-scan (``scan_message_history``) settles or quickly resolves the prompt instead
-of re-running it: a killed turn with no partial output derives as settled and
-is dropped by dedup; a killed turn with partial output is converted to a
-short resume of the original turn, never a fresh re-run of the prompt.
+The mid-turn test uses ``fake_claude:sleep`` for a deterministic long-running
+turn, so any replay would keep the agent in ``RUNNING`` for at least 120
+seconds; it asserts the post-restart status reaches ``READY`` within a
+generous timeout — only true if the restart scan (``scan_message_history``)
+derives the killed prompt as settled (no partial output, nothing to resume)
+and dedup therefore drops it so the loop has nothing to dispatch. The AUQ
+test parks the agent on an unanswered question instead: that turn survives
+the restart and pins the status at ``WAITING`` either way, so it
+discriminates a replay by the AUQ tool block count — a replayed chat would
+re-emit the question as a second tool block.
 
 Note on user-clicked Stop: the Stop button does NOT trigger this bug
 class, because Claude's clean exit on a stdin interrupt control_request
@@ -46,6 +48,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
+from sculptor.testing.elements.ask_user_question import get_ask_user_question_tool_blocks
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -145,13 +148,15 @@ def test_chat_does_not_replay_after_shutdown_during_auq_wait(
 
     In the AUQ-pending state the v1 loop deliberately clears
     ``user_input_message_being_processed = None`` while waiting for the
-    answer, so restart handling must not key off that local. The AUQ turn
-    emitted a visible tool_use block before blocking, so the restart scan
-    keeps the killed chat in flight (resumable) rather than settling it: the
-    next run converts it into a resume of the original turn — a short
-    "continue" that completes immediately — never a raw re-delivery of the
-    prompt, which would re-emit the AUQ tool block (duplicating the panel and
-    producing observable activity from a "user did nothing" restart).
+    answer, so restart handling must not key off that local. The restart
+    scan (``scan_message_history``) sees the killed chat blocked on an
+    unanswered question and derives it as settled rather than resumable
+    (its question gate), so dedup drops the chat and the loop dispatches
+    nothing post-restart: the restored question pins the task at WAITING.
+    A raw re-delivery of the prompt would re-emit the AUQ tool block
+    (duplicating the panel and producing observable activity from a "user
+    did nothing" restart), and an auto-resume ("continue") would settle the
+    turn and dismiss the question out from under the user.
     """
     with sculptor_instance_factory_.spawn_instance() as instance:
         start_task_and_wait_for_ready(
@@ -171,12 +176,12 @@ def test_chat_does_not_replay_after_shutdown_during_auq_wait(
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         _open_workspace_after_restart(instance.page)
-        # Expected: BUILDING → (brief resume turn) → READY — a read/unread dot;
-        # the historical AUQ block doesn't pin to WAITING because the
-        # derived-status walk breaks on the turn's terminal completion. A raw
-        # replay instead goes BUILDING → RUNNING → WAITING (Claude re-emits AUQ
-        # on the replayed chat), so the dot would stick at "running"/"waiting"
-        # and the idle dot would never be reached, timing this expect out.
-        expect(_agent_tab(instance.page)).to_have_attribute(
-            "data-dot-status", _IDLE_DOT_STATUS, timeout=_SETTLE_TIMEOUT_MS
-        )
+        # The unanswered question survives the restart, so the task settles to
+        # WAITING either way — the dot can't discriminate a replay here. The
+        # tool block count can: without a replay the single persisted AUQ
+        # ToolUseBlock is restored as-is; a replayed chat would drive
+        # fake_claude to re-emit the question as a SECOND tool block.
+        auq_panel = get_ask_user_question_panel(instance.page)
+        expect(auq_panel).to_be_visible(timeout=_SETTLE_TIMEOUT_MS)
+        expect(_agent_tab(instance.page)).to_have_attribute("data-dot-status", "waiting", timeout=_SETTLE_TIMEOUT_MS)
+        expect(get_ask_user_question_tool_blocks(instance.page)).to_have_count(1)

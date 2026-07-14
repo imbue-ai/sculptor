@@ -166,6 +166,28 @@ class ClaudeProcessManager:
             raise ClaudeBinaryNotFoundError()
         return binary_path
 
+    def apply_conversation_launch_settings(
+        self,
+        model_name: LLMModel | None,
+        fast_mode: bool,
+        effort: str | None,
+    ) -> None:
+        """Seed the conversation's CLI launch settings from replayed history.
+
+        Model-less turns (UserQuestionAnswerMessage, answer-continuation
+        resumes) continue the conversation with the in-memory launch settings
+        — the command shape (real vs fake CLI), fast mode, and effort — which a
+        manager constructed after a backend restart would otherwise reset to
+        defaults. The runner calls this with the last processed chat turn's
+        settings so such turns relaunch the CLI the same way the conversation
+        has been running.
+        """
+        if model_name is None:
+            return
+        self._is_fake_claude = model_name in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2)
+        self._fast_mode = fast_mode
+        self._effort = effort
+
     def process_input_message(
         self, message: ChatInputUserMessage | ResumeAgentResponseRunnerMessage | UserQuestionAnswerMessage
     ) -> None:
@@ -626,16 +648,24 @@ class ClaudeProcessManager:
                     # otherwise, use the previous validated session id if it exists
                     maybe_session_id = get_state_file_contents(self.environment, validated_session_id_state_file)
             combined_system_prompt = self._get_combined_system_prompt()
-            if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)):
+            # A model-less turn (UserQuestionAnswerMessage, or an answer-
+            # continuation resume) continues the conversation with its
+            # existing launch settings — only model-carrying turns update
+            # them. After a restart the runner seeds them from replayed
+            # history via apply_conversation_launch_settings, so they hold
+            # even on a freshly constructed manager.
+            if (
+                isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage))
+                and message.model_name is not None
+            ):
                 self._is_fake_claude = message.model_name in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2)
+                self._fast_mode = message.fast_mode
+                self._effort = message.effort
             maybe_model = (
                 MODEL_SHORTNAME_MAP.get(message.model_name)
                 if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)) and message.model_name
                 else None
             )
-            if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)):
-                self._fast_mode = message.fast_mode
-                self._effort = message.effort
             plugin_dirs = get_plugin_dirs()
             claude_command = get_claude_command(
                 system_prompt=combined_system_prompt,

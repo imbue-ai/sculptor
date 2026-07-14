@@ -79,6 +79,23 @@ class Agent(MutableModel, abc.ABC):
         secrets: Mapping[str, str | Secret],
     ) -> None: ...
 
+    def set_conversation_launch_settings(
+        self,
+        model_name: LLMModel | None,
+        fast_mode: bool,
+        effort: str | None,
+    ) -> None:
+        """Seed the conversation's launch settings from replayed history.
+
+        The runner calls this after replaying persisted messages on task
+        start, passing the most recent processed chat turn's model settings.
+        Turns that carry no model of their own (question answers,
+        answer-continuation resumes) continue the conversation with these
+        settings, so a harness that relaunches a CLI per turn needs them even
+        when its process state did not survive a backend restart. Harnesses
+        without per-turn launch state ignore this (the default no-op).
+        """
+
 
 EnvironmentTypes = LocalEnvironment
 
@@ -390,6 +407,15 @@ class RequestStoppedAgentMessage(PersistentRequestCompleteAgentMessage):
     request_id: AgentMessageID
     # pyrefly: ignore [bad-override]
     error: SerializedException
+    # True when the stop was caused by an explicit user interrupt (Stop button)
+    # that escalated to a signal. False for stops the user did not ask for —
+    # backend shutdown/restart SIGTERM — where any pending AskUserQuestion is
+    # still answerable after resume and must survive state reconstruction
+    # (see message_conversion / derived). Old persisted messages lack this
+    # field and default to False, which matches their overwhelmingly
+    # shutdown-caused origin (a clean user Stop ends the turn via
+    # RequestSuccessAgentMessage(interrupted=True), not this message).
+    stopped_by_user: bool = False
 
 
 ErrorMessageUnion = Annotated[
