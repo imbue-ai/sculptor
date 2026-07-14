@@ -21,6 +21,14 @@ export const AGENT_TYPE_LABELS: Record<Exclude<AgentTypeName, "registered">, str
 
 export const REGISTERED_AGENT_TYPE_PREFIX = "registered:";
 
+/** Label a registered terminal agent for the pickers: its user-set display
+ * name plus an "in terminal" suffix marking it as coming from the user's
+ * terminal-based configuration rather than a built-in harness (Claude / pi /
+ * Terminal). The display name is user-controlled and carries no origin marker,
+ * so every surface that lists registered agents beside the built-ins routes
+ * through this one helper, keeping the label identical across surfaces. */
+export const formatRegisteredAgentLabel = (displayName: string): string => `${displayName} in terminal`;
+
 /** Encode a registration id into the stored `registered:<id>` form. */
 export const encodeRegisteredAgentType = (registrationId: string): StoredAgentType =>
   `${REGISTERED_AGENT_TYPE_PREFIX}${registrationId}`;

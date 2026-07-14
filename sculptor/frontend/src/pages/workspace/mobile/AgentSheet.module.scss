@@ -1,0 +1,164 @@
+/* AgentSheet — bottom sheet listing the workspace's agents. Mirrors the
+   WorkspaceDrawer pattern (the shell owns the dimmed backdrop); slides up from
+   the bottom over the chat. */
+.sheet {
+  background: var(--mobile-surface);
+  border-top: 1px solid var(--mobile-line);
+  border-top-left-radius: var(--radius-5);
+  border-top-right-radius: var(--radius-5);
+  bottom: 0;
+  box-shadow: var(--mobile-shadow);
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  max-height: 70%;
+  padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  position: absolute;
+  right: 0;
+  transform: translateY(110%);
+  transition: transform var(--duration-slow) var(--ease-default);
+  z-index: var(--z-modal);
+}
+
+.sheet.open {
+  transform: translateY(0);
+}
+
+.handle {
+  background: var(--mobile-line);
+  border-radius: var(--mobile-radius-full);
+  flex: 0 0 auto;
+  height: 4px;
+  margin: var(--space-2) auto var(--space-1);
+  width: 36px;
+}
+
+.title {
+  color: var(--mobile-ink-2);
+  flex: 0 0 auto;
+  font-size: var(--font-size-1);
+  overflow: hidden;
+  padding: var(--space-2) var(--space-4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-2);
+}
+
+.row {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-3);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  // Long-press opens the row menu; suppress the browser's text selection.
+  user-select: none;
+  width: 100%;
+}
+
+// Wraps a row + the invisible menu anchor so the long-press menu opens at the
+// row's start rather than tracking the finger.
+.rowWrap {
+  position: relative;
+}
+
+.menuAnchor {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+// Inline rename field — match the row name's size so the row doesn't shift.
+.renameInput {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-2);
+}
+
+.row:hover,
+.row.current {
+  background: var(--mobile-press);
+}
+
+.dot {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  color: var(--mobile-ink-3);
+  font-size: var(--font-size-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check {
+  color: var(--mobile-ink-2);
+  flex: 0 0 auto;
+}
+
+.separator {
+  background: var(--mobile-line-soft);
+  flex: 0 0 auto;
+  height: 1px;
+  margin: var(--space-2) var(--space-3);
+}
+
+.newAgent {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-3);
+  color: var(--mobile-ink-2);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: var(--font-size-2);
+  gap: var(--space-3);
+  margin: 0 var(--space-2);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+.newAgent:hover {
+  background: var(--mobile-press);
+}
+
+.newIcon {
+  align-items: center;
+  color: var(--mobile-ink-3);
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  width: 18px;
+}

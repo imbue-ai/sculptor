@@ -13,7 +13,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { Maximize2, Minimize2, PanelBottom, PanelRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Maximize2, Minimize2, PanelBottom, PanelRight, Pencil, Trash2, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { Fragment, memo, useRef, useState } from "react";
 
@@ -25,7 +25,6 @@ import { AgentStatusDot } from "~/components/statusDot";
 import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
 import { TerminalTabConnectionDot } from "~/pages/workspace/panels/TerminalConnectionIndicator.tsx";
 
-import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
 import type { PanelContextMenuAction, PanelContextMenuItem, PanelDefinition } from "./registry/panelRegistry.ts";
 import {
   panelDefinitionByIdAtom,
@@ -34,6 +33,7 @@ import {
 } from "./registry/panelRegistry.ts";
 import { isMultiInstanceKind } from "./registry/panelRegistry.ts";
 import { closePanelAtom, setActivePanelAtom, splitSectionAtom } from "./sectionActions.ts";
+import { SectionAddPanelControl } from "./SectionAddPanelControl.tsx";
 import { sectionSplitForSectionAtom } from "./sectionAtoms.ts";
 import styles from "./SectionHeader.module.scss";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
@@ -439,7 +439,7 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   const displayedPanelIds = useAtomValue(displayedPanelIdsAtom(subSection));
   // The registry-aware resolved id — the same atom SectionBody renders from — so the
   // highlighted tab always matches the rendered body, including when the persisted
-  // active id is an unregistered (unloaded/still-loading) plugin panel and the body
+  // active id is an unregistered (unloaded/still-loading) extension panel and the body
   // falls back to another open panel.
   const activePanelId = useAtomValue(resolvedActivePanelIdInSubSectionAtom(subSection));
   const ghostPanelId = useAtomValue(ghostPanelIdAtom(subSection));
@@ -500,23 +500,9 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
         })}
       </div>
       {/* The add-panel "+" is left-aligned right after the tab strip; only the maximize
-          toggle stays pinned to the far right of the header. */}
-      <AddPanelDropdown
-        subSection={subSection}
-        tooltip="Add panel"
-        trigger={
-          <IconButton
-            variant="ghost"
-            size="1"
-            color="gray"
-            className={styles.headerButton}
-            aria-label="Add panel"
-            data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
-          >
-            <Plus size={14} />
-          </IconButton>
-        }
-      />
+          toggle stays pinned to the far right of the header. Hover opens the menu; in the
+          center a click quick-adds an agent, elsewhere a click pins the menu open. */}
+      <SectionAddPanelControl subSection={subSection} className={styles.headerButton} />
       <Flex align="center" className={styles.controls}>
         <Tooltip content={isMaximized ? "Restore section" : "Maximize section"}>
           <IconButton

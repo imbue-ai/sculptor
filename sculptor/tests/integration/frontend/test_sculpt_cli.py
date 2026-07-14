@@ -271,10 +271,12 @@ def _assert_subset(expected: dict[str, Any], actual: dict[str, Any]) -> None:
 
 WORKSPACE_CREATE_KEYS = {"id", "repo_id", "description", "strategy", "source_branch"}
 
-WORKSPACE_LIST_ALL_KEYS = {
+WORKSPACE_SHOW_KEYS = {
     "id",
     "repo_id",
     "repo_path",
+    "working_directory",
+    "current_branch",
     "description",
     "strategy",
     "source_branch",
@@ -284,11 +286,13 @@ WORKSPACE_LIST_ALL_KEYS = {
     "last_activity_at",
 }
 
+WORKSPACE_LIST_ALL_KEYS = WORKSPACE_SHOW_KEYS | {"is_self"}
+
 REPO_KEYS = {"id", "name", "path", "accessible", "created_at"}
 
 AGENT_CREATE_KEYS = {"id", "title", "status", "model", "workspace_id", "created_at"}
 
-AGENT_LIST_KEYS = {"id", "title", "status", "model", "workspace_id", "created_at"}
+AGENT_LIST_KEYS = {"id", "title", "status", "model", "workspace_id", "created_at", "is_self"}
 
 AGENT_SHOW_KEYS = {
     "id",
@@ -308,6 +312,7 @@ AGENT_SHOW_KEYS = {
     "task_total",
     "current_task_subject",
     "waiting_detail",
+    "waiting_options",
     "error_detail",
 }
 
@@ -318,6 +323,7 @@ AGENT_STATUS_KEYS = {
     "current_activity",
     "last_activity",
     "waiting_detail",
+    "waiting_options",
     "error_detail",
     "task_completed",
     "task_total",
@@ -378,7 +384,7 @@ def test_workspace_show_via_cli(sculptor_instance_: SculptorInstance) -> None:
     assert exit_code == 0, f"workspace show failed: {output}"
     detail = json.loads(output)
 
-    assert set(detail.keys()) == WORKSPACE_LIST_ALL_KEYS
+    assert set(detail.keys()) == WORKSPACE_SHOW_KEYS
     _assert_subset(
         {
             "id": ws_id,
@@ -811,7 +817,7 @@ def test_agent_delete_via_cli(sculptor_instance_: SculptorInstance) -> None:
     assert exit_code == 0
     agent_id = json.loads(output)["id"]
 
-    exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "delete", agent_id, "--workspace", ws_id])
+    exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "delete", agent_id, "--workspace", ws_id, "--yes"])
     assert exit_code == 0, f"agent delete failed: {output}"
     deleted = json.loads(output)
     assert deleted == {"deleted": True, "id": agent_id}
@@ -1129,6 +1135,7 @@ def _expected_status_event(agent_id: str) -> dict[str, Any]:
             "current_activity": ANY_STR_OR_NONE,
             "last_activity": ANY_STR_OR_NONE,
             "waiting_detail": None,
+            "waiting_options": None,
             "error_detail": None,
             "task_completed": 0,
             "task_total": 0,

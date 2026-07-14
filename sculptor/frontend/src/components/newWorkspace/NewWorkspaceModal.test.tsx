@@ -1,6 +1,5 @@
-import { cleanup, screen } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import { createStore } from "jotai";
-import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
@@ -10,12 +9,14 @@ import { newWorkspaceModalAtom } from "./newWorkspaceAtoms.ts";
 import { NewWorkspaceModal } from "./NewWorkspaceModal.tsx";
 
 // The real form pulls in project queries and creation hooks; the modal's
-// open/close contract is what is under test, so stub the form out — surfacing
-// the props the modal forwards so the seed passthrough is assertable.
+// open/close contract and its prop pass-through are what is under test, so
+// stub the form out but record the props it receives.
+const { formProps } = vi.hoisted(() => ({ formProps: vi.fn() }));
 vi.mock("~/components/newWorkspace/NewWorkspaceForm.tsx", () => ({
-  NewWorkspaceForm: ({ initialPrompt }: { initialPrompt?: string }): ReactElement => (
-    <div data-testid="stub-form" data-initial-prompt={initialPrompt} />
-  ),
+  NewWorkspaceForm: (props: Record<string, unknown>): null => {
+    formProps(props);
+    return null;
+  },
 }));
 
 describe("NewWorkspaceModal", () => {
@@ -23,6 +24,7 @@ describe("NewWorkspaceModal", () => {
   // isn't registered — do it explicitly so each render starts from a fresh DOM.
   afterEach(() => {
     cleanup();
+    formProps.mockClear();
   });
 
   it("renders nothing while the atom holds no open request", () => {
@@ -38,13 +40,42 @@ describe("NewWorkspaceModal", () => {
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeTruthy();
   });
 
-  it("forwards the open request's initial prompt to the form", () => {
-    // The home page's first-run auto-open seeds the onboarding prompt through
-    // the open request; the modal must hand it to the form untouched.
+  it("passes the open request's seeds and create callback through to the form", () => {
+    // An extension's open request (via the SDK's useOpenNewWorkspaceModal) and the
+    // home page's first-run auto-open both ride this atom; the form only sees
+    // what the modal forwards.
     const store = createStore();
-    store.set(newWorkspaceModalAtom, { open: true, initialPrompt: "/sculptor:help hello" });
+    const onWorkspaceCreated = vi.fn();
+    store.set(newWorkspaceModalAtom, {
+      open: true,
+      initialTitle: "Fix the bug",
+      initialPrompt: "Please fix it",
+      initialBranchName: "fix/the-bug",
+      onWorkspaceCreated,
+    });
     renderWithProviders(<NewWorkspaceModal />, { store });
-    expect(screen.getByTestId("stub-form").getAttribute("data-initial-prompt")).toBe("/sculptor:help hello");
+
+    expect(formProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialTitle: "Fix the bug",
+        initialPrompt: "Please fix it",
+        initialBranchName: "fix/the-bug",
+        onWorkspaceCreated,
+      }),
+    );
+  });
+
+  it("closes the dialog when the form asks to be dismissed", () => {
+    // The form's pi empty-state CTA navigates to Settings, which lands
+    // underneath this dialog — its dismissal request must actually close it.
+    const store = createStore();
+    store.set(newWorkspaceModalAtom, { open: true });
+    renderWithProviders(<NewWorkspaceModal />, { store });
+
+    const props = formProps.mock.calls[0][0] as { onDismiss: () => void };
+    act(() => props.onDismiss());
+    expect(store.get(newWorkspaceModalAtom).open).toBe(false);
+    expect(screen.queryByTestId(ElementIds.NEW_WORKSPACE_DIALOG)).toBeNull();
   });
 
   it("renders every open as a modal dialog (with overlay)", () => {

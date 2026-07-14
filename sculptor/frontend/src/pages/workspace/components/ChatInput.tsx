@@ -1,19 +1,22 @@
-import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
+import { Button, DropdownMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import type { Editor as TipTapEditor } from "@tiptap/react";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ListChecks, Plus } from "lucide-react";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { Bot, Check, Gauge, ListChecks, Plus, SlidersHorizontal, Zap } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HTTPException } from "~/common/Errors.ts";
 import { isTextBlock } from "~/common/Guards.ts";
 import { useTimedLatch } from "~/common/Hooks.ts";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
+import { getModelShortName, PRODUCTION_MODELS } from "~/common/modelConstants.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
 import { CapabilityGate } from "~/components/CapabilityGate.tsx";
+import { EFFORT_DISPLAY_NAMES, EFFORT_OPTIONS } from "~/components/effortConstants.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { FilePreviewList } from "~/components/FilePreviewList.tsx";
@@ -32,12 +35,14 @@ import {
   ElementIds,
   interruptWorkspaceAgent,
   LlmModel,
+  ModelCatalogState,
   type ModelOption,
   sendWorkspaceAgentMessages,
   setWorkspaceAgentModel,
 } from "../../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
-import { useImbueNavigate, useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
+import { hasNoUsableModel } from "../../../common/modelConstants.ts";
+import { useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
 import { shouldHandleKeybinding, useModifiedEnter } from "../../../common/ShortcutUtils.ts";
 import { closeBtwPopupAtom, openBtwPopupAtom } from "../../../common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "../../../common/state/atoms/chatActions.ts";
@@ -47,6 +52,7 @@ import {
   modelAtomFamily,
 } from "../../../common/state/atoms/draftAgentSettings.ts";
 import { isCancellableAtomFamily } from "../../../common/state/atoms/interruptState.ts";
+import { promptDraftAtomFamily } from "../../../common/state/atoms/promptDrafts.ts";
 import {
   defaultEffortLevelAtom,
   isAlwaysInterruptAndSendAtom,
@@ -56,10 +62,11 @@ import {
 } from "../../../common/state/atoms/userConfig.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
-import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
+import { useOpenSettings } from "../../../common/state/hooks/useOpenSettings.ts";
 import { useTaskDetailWithDefaults } from "../../../common/state/hooks/useTaskDetail";
 import {
   useTaskAvailableModels,
+  useTaskConfigurationSettingsSection,
   useTaskModel,
   useTaskSelectedModelId,
   useTaskSourcesBackendModels,
@@ -76,7 +83,6 @@ import type { FileUploadHandle } from "../../../components/FileUpload.tsx";
 import { FileUpload } from "../../../components/FileUpload.tsx";
 import { Toast, type ToastContent, ToastType } from "../../../components/Toast.tsx";
 import { TooltipIconButton } from "../../../components/TooltipIconButton.tsx";
-import { SettingsSection } from "../../settings/sections.ts";
 import { stripHtml } from "../utils/utils.ts";
 import styles from "./ChatInput.module.scss";
 
@@ -109,6 +115,16 @@ function draftIsBypassCommand(draft: string | null | undefined): boolean {
   const rest = trimmed.slice("/btw".length);
   return rest === "" || /^\s/.test(rest);
 }
+
+/** The only draft-derived facts the toolbar render needs: whether the send
+ *  button is enabled (`hasContent`) and whether the draft is a /btw bypass
+ *  command (which can send even while the agent is busy). Tracking these as a
+ *  bailout state lets ChatInput avoid re-rendering on every keystroke. */
+type DraftFlags = { hasContent: boolean; isBypass: boolean };
+const deriveDraftFlags = (draft: string | null): DraftFlags => ({
+  hasContent: Boolean(draft?.trim()),
+  isBypass: draftIsBypassCommand(draft),
+});
 
 type ChatInputProps = {
   isDisabled: boolean;
@@ -147,7 +163,10 @@ export const ChatInput = ({
   const { workspaceID: workspaceIDFromRoute, agentID: agentIDFromRoute } = useWorkspacePageParams();
   const taskID = taskIdProp ?? agentIDFromRoute;
   const workspaceID = workspaceIdProp ?? workspaceIDFromRoute;
-  const { navigateToGlobalSettings } = useImbueNavigate();
+  const openSettings = useOpenSettings();
+  // On mobile the toolbar's secondary controls collapse into a single settings
+  // menu (plan/model/effort/fast) and the keyboard hints are dropped.
+  const isMobile = useIsMobile();
   const taskModel = useTaskModel(taskID ?? "");
   // Harness-supplied model list + selection (pi). hasBackendModelSource
   // distinguishes a pi task from Claude, which falls back to its built-in list
@@ -155,12 +174,27 @@ export const ChatInput = ({
   const backendModels = useTaskAvailableModels(taskID ?? "");
   const selectedModelId = useTaskSelectedModelId(taskID ?? "");
   const hasBackendModelSource = useTaskSourcesBackendModels(taskID ?? "");
+  // No usable model (pi with no authenticated providers): the picker renders disabled
+  // and Send is replaced by a "Go to harness configuration" button routing to the
+  // harness's own settings section (pi -> Pi, else Dependencies).
+  const configurationSettingsSection = useTaskConfigurationSettingsSection(taskID ?? "");
+  const isMissingUsableModel = hasNoUsableModel(hasBackendModelSource, backendModels);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
   const [storedModel, setStoredModel] = useAtom(modelAtomFamily(taskID ?? ""));
   const setLastUsedModel = useSetAtom(lastUsedModelAtom);
   const localModel = storedModel ?? (taskModel as LlmModel) ?? LlmModel.CLAUDE_4_OPUS_200K;
+  // The mobile settings menu renders the model picker itself (desktop delegates
+  // to ModelSelector), so it needs the same catalog handling: the fetched pi
+  // list when the harness sources backend models, the built-in Claude list
+  // otherwise, and a loading/empty placeholder while there is nothing to pick.
+  const backendModelOptions = Array.isArray(backendModels) ? backendModels : [];
+  const selectedBackendLabel =
+    backendModelOptions.find((option) => option.modelId === selectedModelId)?.displayName ?? selectedModelId;
+  const mobileModelLabel = hasBackendModelSource
+    ? (selectedBackendLabel ?? "Select model")
+    : getModelShortName(localModel);
   const [isPlanFirst, setIsPlanFirst] = useState<boolean>(false);
 
   // Per-task fast-mode and effort preference, persisted in localStorage,
@@ -212,7 +246,73 @@ export const ChatInput = ({
     toast: interruptToast,
     setToast: setInterruptToast,
   } = useInterruptAgent(workspaceID, taskID);
-  const [promptDraft, setPromptDraft] = usePromptDraft(taskID ?? "");
+  // Decoupled from per-keystroke re-render: ChatInput WRITES the draft atom but
+  // does not SUBSCRIBE to it (useSetAtom + store reads), so typing the prompt
+  // does not re-render this whole toolbar. The send button reads `draftFlags`, a
+  // derived state that only changes on empty<->non-empty / bypass-command flips —
+  // so a render happens on those flips, not on every keystroke. Reads of the live
+  // draft (send, append) go through `getDraft()`.
+  const draftAtom = useMemo(() => promptDraftAtomFamily(taskID ?? ""), [taskID]);
+  const writeDraftAtom = useSetAtom(draftAtom);
+  const draftStore = useStore();
+  // Reads the LIVE editor content (the draft atom is debounced on mobile, so it can
+  // lag what's typed); falls back to the persisted atom before the editor mounts.
+  const getDraft = useCallback((): string | null => {
+    const editor = editorRef.current;
+    if (editor) {
+      const md = editor.getMarkdown();
+      return md === "​" ? "" : md;
+    }
+    return draftStore.get(draftAtom);
+  }, [editorRef, draftStore, draftAtom]);
+  // Stable per-task initial content for the editor. The editor is uncontrolled after
+  // mount (its value prop doesn't track the atom — that would fight typing);
+  // external draft writes reach it via the store subscription below.
+  const initialDraft = useMemo(() => draftStore.get(draftAtom) ?? "", [draftStore, draftAtom]);
+  const [draftFlags, setDraftFlags] = useState<DraftFlags>(() => deriveDraftFlags(draftStore.get(draftAtom)));
+  // The last draft value THIS editor wrote — lets the external-write subscription
+  // below tell our own keystrokes apart from EXTERNAL writes without serializing
+  // the editor on every keystroke.
+  const lastEditorEmitRef = useRef<string | null>(draftStore.get(draftAtom));
+  const setPromptDraft = useCallback(
+    (value: string | null): void => {
+      lastEditorEmitRef.current = value;
+      writeDraftAtom(value);
+      setDraftFlags((prev) => {
+        const next = deriveDraftFlags(value);
+        return prev.hasContent === next.hasContent && prev.isBypass === next.isBypass ? prev : next;
+      });
+    },
+    [writeDraftAtom],
+  );
+  // ChatInput no longer subscribes to the draft atom for renders, so an EXTERNAL
+  // write (e.g. QueuedMessages restoring an overwritten draft) would never reach
+  // the editor. Subscribe manually and push external writes into the editor
+  // imperatively; our own writes (typing) are skipped via lastEditorEmitRef, so a
+  // keystroke never triggers a re-serialize or setContent here.
+  useEffect(() => {
+    return draftStore.sub(draftAtom, () => {
+      const next = draftStore.get(draftAtom);
+      if (next === lastEditorEmitRef.current) return; // our own write — already in the editor
+      lastEditorEmitRef.current = next;
+      const editor = editorRef.current;
+      if (editor) {
+        if (next) {
+          editor.commands.setContent(next, { contentType: "markdown" });
+        } else {
+          editor.commands.clearContent();
+        }
+      }
+      setDraftFlags(deriveDraftFlags(next));
+    });
+  }, [draftStore, draftAtom, editorRef]);
+  // Re-sync the emit ref + bailout flags when the active task (and its persisted
+  // draft) changes; this component doesn't subscribe to the atom for renders.
+  useEffect(() => {
+    lastEditorEmitRef.current = draftStore.get(draftAtom);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync flags to the new task's persisted draft on task switch; not derivable during render without subscribing
+    setDraftFlags(deriveDraftFlags(draftStore.get(draftAtom)));
+  }, [draftAtom, draftStore]);
 
   // Stable callbacks so the memoized <Toast> instances below bail out instead
   // of re-rendering on every unrelated parent render. (SCU-1455)
@@ -359,7 +459,8 @@ export const ChatInput = ({
   );
 
   const sendMessage = useCallback(async (): Promise<void> => {
-    if (!promptDraft?.trim() || !taskID) {
+    const draft = getDraft();
+    if (!draft?.trim() || !taskID) {
       return;
     }
 
@@ -370,7 +471,7 @@ export const ChatInput = ({
     }
 
     if (editorRef.current) {
-      const parsed = parsePseudoSkillCommand(editorRef.current, promptDraft ?? "");
+      const parsed = parsePseudoSkillCommand(editorRef.current, draft ?? "");
       if (parsed !== null) {
         executePseudoSkill(parsed);
         return;
@@ -384,7 +485,7 @@ export const ChatInput = ({
       await sendWorkspaceAgentMessages({
         path: { workspace_id: workspaceID, agent_id: taskID },
         body: {
-          message: promptDraft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, ""),
+          message: draft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, ""),
           model: localModel,
           files: attachedFiles,
           // The plan-mode toggle is gated (disabled-with-tooltip) for harnesses
@@ -404,8 +505,9 @@ export const ChatInput = ({
         has_attached_files: attachedFiles.length > 0,
         is_plan_first: isPlanFirst,
       });
-      setPromptDraft(null);
-      setAttachedFiles([]);
+      // The editor is uncontrolled (stable value prop), so clearing the draft atom
+      // alone no longer empties it — clearEditor() also clears the editor content.
+      clearEditor();
     } catch (error) {
       console.error("Failed to send message:", error);
       // Editor is intentionally left populated so the user does not lose
@@ -427,7 +529,7 @@ export const ChatInput = ({
       setIsSending(false);
     }
   }, [
-    promptDraft,
+    getDraft,
     workspaceID,
     taskID,
     localModel,
@@ -437,8 +539,7 @@ export const ChatInput = ({
     isFastMode,
     modelCapabilities,
     effort,
-    setPromptDraft,
-    setAttachedFiles,
+    clearEditor,
     executePseudoSkill,
     setLastSendError,
     editorRef,
@@ -448,7 +549,12 @@ export const ChatInput = ({
     // A send is already in flight; ignore the trigger entirely so we neither
     // re-send nor fire the trailing interrupt below for a send that no-ops.
     if (isSendingRef.current) return;
-    const isBtwDraft = draftIsBypassCommand(promptDraft);
+    // No usable model (pi with no authenticated providers): Send is replaced by the
+    // "Go to harness configuration" CTA, but the modified-Enter send binding still
+    // reaches here — block it so a doomed message can't be posted to a harness that
+    // cannot service it.
+    if (isMissingUsableModel) return;
+    const isBtwDraft = draftIsBypassCommand(getDraft());
     if (isDisabled && !isBtwDraft) return;
     await sendMessage();
 
@@ -461,16 +567,26 @@ export const ChatInput = ({
     if (!isBtwDraft && isAlwaysInterruptAndSend && isAgentBusy && taskID) {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
-  }, [isDisabled, promptDraft, sendMessage, isAlwaysInterruptAndSend, isAgentBusy, taskID, workspaceID]);
+  }, [
+    isDisabled,
+    getDraft,
+    sendMessage,
+    isAlwaysInterruptAndSend,
+    isAgentBusy,
+    taskID,
+    workspaceID,
+    isMissingUsableModel,
+  ]);
 
   const handleInterruptAndSend = useCallback(async (): Promise<void> => {
     if (isSendingRef.current) return;
-    if (!promptDraft?.trim() || !taskID) return;
+    if (isMissingUsableModel) return;
+    if (!getDraft()?.trim() || !taskID) return;
     await sendMessage();
     if (isAgentBusy) {
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
-  }, [promptDraft, taskID, sendMessage, isAgentBusy, workspaceID]);
+  }, [getDraft, taskID, sendMessage, isAgentBusy, workspaceID, isMissingUsableModel]);
 
   // Out-of-band model switch for a harness with a backend model list (pi). The
   // value stays server-driven (selectedModelId), so on success the persisted
@@ -496,10 +612,11 @@ export const ChatInput = ({
     [taskID, workspaceID],
   );
 
-  // The no-providers prompt sends the user to pi settings to authenticate a provider.
-  const handleAuthenticate = useCallback((): void => {
-    navigateToGlobalSettings(SettingsSection.PI);
-  }, [navigateToGlobalSettings]);
+  // Route the no-usable-model composer CTA to the harness's own configuration section
+  // (pi -> Pi, else Dependencies) via the canonical settings navigator.
+  const handleGoToHarnessConfig = useCallback((): void => {
+    openSettings(configurationSettingsSection);
+  }, [openSettings, configurationSettingsSection]);
 
   const handleMentionPicker = useCallback((): void => {
     if (!editorRef.current) return;
@@ -617,11 +734,16 @@ export const ChatInput = ({
     }
 
     appendTextRef.current = (text: string): void => {
-      const currentDraft = promptDraft || "";
-      setPromptDraft(currentDraft ? `${currentDraft}\n${text}\n` : `${text}\n`);
+      const currentDraft = getDraft() || "";
+      const newDraft = currentDraft ? `${currentDraft}\n${text}\n` : `${text}\n`;
+      // ChatInput no longer re-renders on draft changes, so push the new content
+      // into the editor imperatively (the value prop won't carry it), then mirror
+      // it to the draft atom + flags.
+      editorRef.current?.commands.setContent(newDraft, { contentType: "markdown" });
+      setPromptDraft(newDraft);
       editorRef.current?.commands.focus("end");
     };
-  }, [appendTextRef, setPromptDraft, promptDraft, editorRef]);
+  }, [appendTextRef, getDraft, setPromptDraft, editorRef]);
 
   useEffect(() => {
     if (!insertSkillRef) return;
@@ -694,11 +816,20 @@ export const ChatInput = ({
           <Editor
             wrapperClassName={styles.editorInner}
             placeholder="Enter a prompt..."
-            value={promptDraft || ""}
+            // On mobile, don't auto-focus on mount / agent switch — that would pop
+            // the virtual keyboard and trigger a relayout just from checking on an
+            // agent. The user focuses the input by tapping it. Desktop keeps
+            // auto-focus (no keyboard cost).
+            autoFocus={!isMobile}
+            // Stable initial content (uncontrolled after mount — see initialDraft).
+            value={initialDraft}
             // Read-only while a send is in flight: prevents edits from being
             // wiped by the on-success clear, and visually signals "sending".
             disabled={isSending}
-            onChange={(newValue: string) => setPromptDraft(newValue)}
+            onChange={setPromptDraft}
+            // Coalesce the draft serialization on mobile so per-keystroke markdown
+            // serialization doesn't lag typing / IME; flushed on blur + unmount.
+            changeDebounceMs={isMobile ? 150 : 0}
             onKeyDown={handleKeyPress}
             tagName="CHAT_INPUT"
             editorRef={editorRef}
@@ -739,59 +870,177 @@ export const ChatInput = ({
                 <Plus size={16} />
               </TooltipIconButton>
             </Flex>
-            {/* Parallel copy of AgentSettingsControls' toolbar block, extended with
-                capability-gated disabled states and a backend-model selector this live
-                chat needs. Keep the shared tooltip strings, aria-labels, testids, and
-                styling in sync with AgentSettingsControls. */}
-            <Flex align="center" flexShrink="0">
-              <CapabilityGate
-                capabilityValue={canEnterPlanMode}
-                elementId={ElementIds.CAPABILITY_DISABLED_PLAN_MODE}
-                disabledIcon={<ListChecks size={16} />}
-                size="3"
-                style={{ margin: 0 }}
-              >
-                <Tooltip content={isPlanFirst || isInPlanMode ? "Leave plan mode" : "Enter plan mode"}>
-                  <IconButton
-                    variant="ghost"
+            <Flex align="center" flexShrink="0" gap={isMobile ? "2" : undefined}>
+              {isMobile ? (
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger>
+                    <IconButton
+                      variant="ghost"
+                      size="3"
+                      aria-label="Message options"
+                      data-testid={ElementIds.MOBILE_CHAT_INPUT_OPTIONS}
+                      style={{ margin: 0 }}
+                    >
+                      <SlidersHorizontal size={16} />
+                    </IconButton>
+                  </DropdownMenu.Trigger>
+                  {/* Radix portals to <body>, outside the shell's .mobileTheme
+                      subtree, so re-apply the class on the portaled content. */}
+                  <DropdownMenu.Content align="end" variant="soft" className="mobileTheme">
+                    {/* Plain Items (not CheckboxItem) so Radix doesn't reserve a
+                        left indicator gutter for every row; active state shows as
+                        a trailing check. Model/Effort show just their value. */}
+                    <DropdownMenu.Item
+                      disabled={!canEnterPlanMode}
+                      onSelect={() => setIsPlanFirst(!isPlanFirst)}
+                      data-testid={ElementIds.PLAN_MODE_TOGGLE}
+                    >
+                      <ListChecks size={16} /> Plan mode
+                      {(isPlanFirst || isInPlanMode) && <Check size={14} className={styles.menuTrailing} />}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Sub>
+                      <DropdownMenu.SubTrigger data-testid={ElementIds.MOBILE_CHAT_INPUT_MODEL_SUBMENU}>
+                        <Bot size={16} /> {mobileModelLabel}
+                      </DropdownMenu.SubTrigger>
+                      <DropdownMenu.SubContent className="mobileTheme">
+                        {hasBackendModelSource ? (
+                          // A pi task: the catalog is server-sourced and selection is
+                          // server-driven — the same out-of-band apply the desktop
+                          // ModelSelector uses (selectedModelId stays authoritative
+                          // until the endpoint confirms).
+                          backendModelOptions.length === 0 ? (
+                            <DropdownMenu.Item disabled>
+                              {backendModels === ModelCatalogState.NOT_FETCHED_YET
+                                ? "Loading models…"
+                                : "No models available"}
+                            </DropdownMenu.Item>
+                          ) : (
+                            <DropdownMenu.RadioGroup
+                              value={selectedModelId ?? ""}
+                              onValueChange={(modelId) => {
+                                const option = backendModelOptions.find((o) => o.modelId === modelId);
+                                if (option) void handleBackendModelChange(option);
+                              }}
+                            >
+                              {backendModelOptions.map((option) => (
+                                <DropdownMenu.RadioItem key={option.modelId} value={option.modelId}>
+                                  {option.displayName ?? option.modelId}
+                                </DropdownMenu.RadioItem>
+                              ))}
+                            </DropdownMenu.RadioGroup>
+                          )
+                        ) : (
+                          // Claude: per-turn selection through handleModelChange, which
+                          // also records the MRU model (same as the desktop path).
+                          <DropdownMenu.RadioGroup
+                            value={localModel}
+                            onValueChange={(value) => handleModelChange(value as LlmModel)}
+                          >
+                            {PRODUCTION_MODELS.map((modelValue) => (
+                              <DropdownMenu.RadioItem key={modelValue} value={modelValue}>
+                                {getModelShortName(modelValue)}
+                              </DropdownMenu.RadioItem>
+                            ))}
+                          </DropdownMenu.RadioGroup>
+                        )}
+                      </DropdownMenu.SubContent>
+                    </DropdownMenu.Sub>
+                    <DropdownMenu.Sub>
+                      <DropdownMenu.SubTrigger data-testid={ElementIds.MOBILE_CHAT_INPUT_EFFORT_SUBMENU}>
+                        <Gauge size={16} /> {EFFORT_DISPLAY_NAMES[effort]}
+                      </DropdownMenu.SubTrigger>
+                      <DropdownMenu.SubContent className="mobileTheme">
+                        <DropdownMenu.RadioGroup
+                          value={effort}
+                          onValueChange={(value) => setEffort(value as EffortLevel)}
+                        >
+                          {EFFORT_OPTIONS.map((level) => (
+                            <DropdownMenu.RadioItem key={level} value={level}>
+                              {EFFORT_DISPLAY_NAMES[level]}
+                            </DropdownMenu.RadioItem>
+                          ))}
+                        </DropdownMenu.RadioGroup>
+                      </DropdownMenu.SubContent>
+                    </DropdownMenu.Sub>
+                    {modelCapabilities.supportsFastMode && canUseFastMode && (
+                      <DropdownMenu.Item
+                        onSelect={() => setIsFastMode(!isFastMode)}
+                        data-testid={ElementIds.MOBILE_CHAT_INPUT_FAST_MODE_ITEM}
+                      >
+                        <Zap size={16} /> Fast mode
+                        {isFastMode && <Check size={14} className={styles.menuTrailing} />}
+                      </DropdownMenu.Item>
+                    )}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
+              ) : (
+                <>
+                  {/* Parallel copy of AgentSettingsControls' toolbar block, extended with
+                      capability-gated disabled states and a backend-model selector this live
+                      chat needs. Keep the shared tooltip strings, aria-labels, testids, and
+                      styling in sync with AgentSettingsControls. */}
+                  <CapabilityGate
+                    capabilityValue={canEnterPlanMode}
+                    elementId={ElementIds.CAPABILITY_DISABLED_PLAN_MODE}
+                    disabledIcon={<ListChecks size={16} />}
                     size="3"
-                    onClick={() => setIsPlanFirst(!isPlanFirst)}
-                    aria-label="Toggle plan first mode"
-                    data-testid={ElementIds.PLAN_MODE_TOGGLE}
-                    data-active={isPlanFirst || isInPlanMode}
-                    style={
-                      isPlanFirst || isInPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }
-                    }
+                    style={{ margin: 0 }}
                   >
-                    <ListChecks size={16} />
-                  </IconButton>
-                </Tooltip>
-              </CapabilityGate>
-              {modelCapabilities.supportsFastMode && canUseFastMode && (
-                <FastModeToggle isActive={isFastMode} onToggle={() => setIsFastMode(!isFastMode)} />
+                    <Tooltip content={isPlanFirst || isInPlanMode ? "Leave plan mode" : "Enter plan mode"}>
+                      <IconButton
+                        variant="ghost"
+                        size="3"
+                        onClick={() => setIsPlanFirst(!isPlanFirst)}
+                        aria-label="Toggle plan first mode"
+                        data-testid={ElementIds.PLAN_MODE_TOGGLE}
+                        data-active={isPlanFirst || isInPlanMode}
+                        style={
+                          isPlanFirst || isInPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }
+                        }
+                      >
+                        <ListChecks size={16} />
+                      </IconButton>
+                    </Tooltip>
+                  </CapabilityGate>
+                  {modelCapabilities.supportsFastMode && canUseFastMode && (
+                    <FastModeToggle isActive={isFastMode} onToggle={() => setIsFastMode(!isFastMode)} />
+                  )}
+                  <EffortSelector effort={effort} onEffortChange={setEffort} />
+                  <Flex pr="1">
+                    <ModelSelector
+                      model={localModel}
+                      onModelChange={handleModelChange}
+                      capabilityValue={canSelectModel}
+                      backendModels={backendModels}
+                      selectedModelId={selectedModelId}
+                      onBackendModelChange={handleBackendModelChange}
+                      sourcesBackendModels={hasBackendModelSource}
+                    />
+                  </Flex>
+                </>
               )}
-              <EffortSelector effort={effort} onEffortChange={setEffort} />
-              <Flex pr="1">
-                <ModelSelector
-                  model={localModel}
-                  onModelChange={handleModelChange}
-                  capabilityValue={canSelectModel}
-                  backendModels={backendModels}
-                  selectedModelId={selectedModelId}
-                  onBackendModelChange={handleBackendModelChange}
-                  sourcesBackendModels={hasBackendModelSource}
-                  onAuthenticate={handleAuthenticate}
+              {isMissingUsableModel ? (
+                <Tooltip content="Authenticate a provider before you can send messages">
+                  <Button
+                    size="1"
+                    onClick={handleGoToHarnessConfig}
+                    data-testid={ElementIds.HARNESS_CONFIG_CTA}
+                    aria-label="Go to harness configuration"
+                  >
+                    Go to harness configuration
+                  </Button>
+                </Tooltip>
+              ) : (
+                <SendButton
+                  onClick={handleSend}
+                  disabled={isSending || (isDisabled && !draftFlags.isBypass) || !draftFlags.hasContent}
+                  loading={shouldShowSendSpinner}
+                  tooltip={`${sendHint} to send message`}
+                  ariaLabel="Send message"
+                  testId={ElementIds.SEND_BUTTON}
+                  lastSendError={lastSendError}
                 />
-              </Flex>
-              <SendButton
-                onClick={handleSend}
-                disabled={isSending || (isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}
-                loading={shouldShowSendSpinner}
-                tooltip={`${sendHint} to send message`}
-                ariaLabel="Send message"
-                testId={ElementIds.SEND_BUTTON}
-                lastSendError={lastSendError}
-              />
+              )}
             </Flex>
           </Flex>
           {isDragging && (
@@ -802,12 +1051,14 @@ export const ChatInput = ({
             </div>
           )}
         </div>
-        <Flex justify="between" mt="2" gap="3">
-          <Flex gap="3" align="center">
-            {showPromptNavHint && <KeyboardHint keys="↑↓" label="navigate prompts" />}
+        {!isMobile && (
+          <Flex justify="between" mt="2" gap="3" data-testid={ElementIds.CHAT_INPUT_KEYBOARD_HINTS}>
+            <Flex gap="3" align="center">
+              {showPromptNavHint && <KeyboardHint keys="↑↓" label="navigate prompts" />}
+            </Flex>
+            <KeyboardHint keys={sendHint} label="to send message" />
           </Flex>
-          <KeyboardHint keys={sendHint} label="to send message" />
-        </Flex>
+        )}
       </div>
       <Toast
         open={!!toast}

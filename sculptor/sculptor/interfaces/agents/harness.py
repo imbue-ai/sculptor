@@ -183,6 +183,17 @@ class Harness(BaseModel, abc.ABC):
         """
         return False
 
+    def configuration_settings_section(self) -> str:
+        """The Settings section a user opens to make this harness usable when it has
+        no usable model. The composer's send-guard replaces Send with a "Go to harness
+        configuration" button that routes here. The value is a frontend `SettingsSection`
+        id — that enum is frontend-only, so this crosses the boundary as a string, and a
+        drift test pins every harness's value to a real section. The base points at
+        Dependencies, where a harness's binary and its auth/login status live (Claude's
+        home); pi overrides to its own provider-auth section.
+        """
+        return "DEPENDENCIES"
+
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return False
 

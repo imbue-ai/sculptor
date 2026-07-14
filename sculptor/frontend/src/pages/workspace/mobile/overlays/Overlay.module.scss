@@ -1,0 +1,99 @@
+/* Shared full-screen overlay chrome for review-all (R1) and terminal (T1).
+   Pushed in from the right; "back" closes it (Open Q9). */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.overlay {
+  animation: slideInRight var(--duration-slow) var(--ease-default);
+  background: var(--mobile-bg);
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  position: absolute;
+  z-index: var(--z-modal);
+}
+
+/* Overlay header. Owns the top safe-area inset like the workspace header. */
+.header {
+  align-items: center;
+  background: var(--mobile-bg);
+  border-bottom: 1px solid var(--mobile-line);
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  padding-top: calc(var(--space-1) + env(safe-area-inset-top));
+}
+
+.iconButton {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-3);
+  color: var(--mobile-ink);
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.iconButton:hover {
+  background: var(--mobile-press);
+}
+
+.headerInfo {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.headerTitle {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-bold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerSubtitle {
+  color: var(--mobile-ink-2);
+  font-size: var(--font-size-1);
+}
+
+.headerSubtitle .add {
+  color: var(--mobile-add);
+  font-family: var(--mono-font-family);
+}
+
+.headerSubtitle .del {
+  color: var(--mobile-del);
+  font-family: var(--mono-font-family);
+}
+
+/* Body fills the rest; each overlay drops its reused content here. */
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Terminal-specific: dark header variant (T2 keeps a light header in the mock,
+   so this is unused by default but available if the design changes). */
+.terminalBody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}

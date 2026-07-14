@@ -6,6 +6,7 @@ import { ElementIds } from "~/api";
 import {
   AGENT_TYPE_LABELS,
   encodeRegisteredAgentType,
+  formatRegisteredAgentLabel,
   parseStoredAgentType,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
@@ -16,6 +17,12 @@ type AgentTypeSelectProps = {
   /** The stored agent type (e.g. "claude", "registered:<id>"). */
   value: StoredAgentType;
   onChange: (value: StoredAgentType) => void;
+  /**
+   * Called after the "Install Pi" entry routes to Settings → Pi. A host that
+   * overlays the settings page (the new-workspace dialog) dismisses itself
+   * here so the navigation is actually visible; inline hosts omit it.
+   */
+  onRouteToPiSettings?: () => void;
   className?: string;
 };
 
@@ -25,16 +32,27 @@ type AgentTypeSelectProps = {
  * available; pi is an optional harness, so while no usable pi binary is resolved
  * its entry reads "Install Pi" and choosing it routes to Settings → Pi.
  */
-export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectProps): ReactElement => {
+export const AgentTypeSelect = ({
+  value,
+  onChange,
+  onRouteToPiSettings,
+  className,
+}: AgentTypeSelectProps): ReactElement => {
   // State and hooks
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
   const { isPiAvailable, openPiSettings, refreshPiAvailability } = usePiAgentOption();
 
   // JSX and rendering logic
   const { agentType, registrationId } = parseStoredAgentType(value);
+  const registeredDisplayName =
+    agentType === "registered"
+      ? registrations.find((r) => r.registrationId === registrationId)?.displayName
+      : undefined;
   const triggerLabel =
     agentType === "registered"
-      ? (registrations.find((r) => r.registrationId === registrationId)?.displayName ?? "Registered")
+      ? registeredDisplayName === undefined
+        ? "Registered"
+        : formatRegisteredAgentLabel(registeredDisplayName)
       : AGENT_TYPE_LABELS[agentType];
 
   return (
@@ -47,6 +65,7 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
         // launch.
         if (next === "pi" && !isPiAvailable) {
           openPiSettings();
+          onRouteToPiSettings?.();
           return;
         }
         onChange(next as StoredAgentType);
@@ -86,7 +105,7 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
             data-testid={ElementIds.AGENT_TYPE_OPTION_REGISTERED}
             data-registration-id={registration.registrationId}
           >
-            {registration.displayName}
+            {formatRegisteredAgentLabel(registration.displayName)}
           </Select.Item>
         ))}
         <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>

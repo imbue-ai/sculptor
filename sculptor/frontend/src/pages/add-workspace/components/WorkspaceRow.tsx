@@ -1,4 +1,4 @@
-import { ContextMenu, IconButton } from "@radix-ui/themes";
+import { ContextMenu, IconButton, Skeleton } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -10,10 +10,10 @@ import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider.ts";
-import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
 import { PrButton } from "~/pages/workspace/components/PrButton.tsx";
 
+import { useWorkspaceRowBranch } from "./useWorkspaceRowBranch.ts";
 import styles from "./WorkspaceRow.module.scss";
 
 type WorkspaceRowProps = {
@@ -46,8 +46,11 @@ export const WorkspaceRow = ({
   onDelete,
 }: WorkspaceRowProps): ReactElement => {
   const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
-  const branchInfo = useWorkspaceBranch(workspace.objectId);
-  const displayBranch = branchInfo?.currentBranch ?? workspace.sourceBranch;
+  // The workspace's own working branch streams in over the WebSocket. Until it
+  // arrives the row shows a skeleton rather than flashing `sourceBranch` (the
+  // base branch it was forked from); after a grace window it falls back to
+  // `sourceBranch` so the skeleton can't become permanent (see the hook).
+  const { branch, isLoading: isBranchLoading } = useWorkspaceRowBranch(workspace.objectId, workspace.sourceBranch);
   const gitProvider = useGitProvider(workspace.projectId);
 
   const rowContent = (
@@ -65,24 +68,31 @@ export const WorkspaceRow = ({
 
       <div className={styles.leftGroup}>
         <span className={styles.name}>{workspace.description}</span>
-        {displayBranch && (
-          <span className={styles.branch} data-testid={ElementIds.WORKSPACE_ROW_BRANCH}>
-            {displayBranch}
+        {isBranchLoading ? (
+          // Branch not yet streamed in — a delayed-reveal skeleton so a fast load
+          // shows nothing then the real branch, and never the wrong one.
+          <span className={styles.branchSkeletonWrap} data-testid={ElementIds.WORKSPACE_ROW_BRANCH_SKELETON}>
+            <Skeleton className={styles.branchSkeleton} />
           </span>
-        )}
+        ) : branch !== null ? (
+          <span className={styles.branch} data-testid={ElementIds.WORKSPACE_ROW_BRANCH}>
+            {branch}
+          </span>
+        ) : null}
       </div>
 
       <div className={styles.rightGroup}>
-        {displayBranch && (
-          <div className={styles.prButton} onClick={(e) => e.stopPropagation()}>
-            <PrButton
-              workspaceId={workspace.objectId}
-              targetBranch={prDefaultTargetBranch}
-              hideCreateAction
-              gitProvider={gitProvider}
-            />
-          </div>
-        )}
+        {/* PrButton reads its own PR status and renders nothing when there is no
+            PR (hideCreateAction), so its visibility is driven by PR state — not
+            gated on the branch, which it doesn't consume. */}
+        <div className={styles.prButton} onClick={(e) => e.stopPropagation()}>
+          <PrButton
+            workspaceId={workspace.objectId}
+            targetBranch={prDefaultTargetBranch}
+            hideCreateAction
+            gitProvider={gitProvider}
+          />
+        </div>
         <span className={styles.repo}>{workspace.projectName}</span>
         <span className={styles.time}>{formatRelativeTime(workspace.lastActivityAt)}</span>
         <IconButton

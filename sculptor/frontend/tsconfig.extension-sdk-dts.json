@@ -1,0 +1,11 @@
+{
+  // Compiler settings for the extension-SDK .d.ts rollup (scripts/generate-extension-sdk-dts.sh).
+  // dts-bundle-generator builds its program from the SDK entry alone, so ambient
+  // types must come from `types` (vite/client provides the *.module.scss modules
+  // that vite-env.d.ts normally supplies); jest-dom's test globals are dropped
+  // because the bundler cannot resolve its `expect` augmentations.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client"]
+  }
+}

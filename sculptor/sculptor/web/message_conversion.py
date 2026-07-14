@@ -332,6 +332,15 @@ def convert_agent_messages_to_task_update(
                     completed_chat_messages.append(previously_queued_message)
                     is_promoted = True
                     break
+            # A newly started user turn supersedes any unanswered question left
+            # pending by a non-user stop (shutdown/restart): the user chose to
+            # move on with a fresh prompt instead of answering, so the stale
+            # panel must not linger while the agent works on the new turn.
+            # Promotion only matches queued *chat* messages, so answer-delivery
+            # turns (request_id = the UserQuestionAnswerMessage id) never clear
+            # here — the UserQuestionAnswerMessage branch resolves those.
+            if is_promoted:
+                pending_user_questions.clear()
             # Only update current_request_id for real content requests (matched a
             # queued message) or when idle.  Lifecycle requests like
             # RemoveQueuedMessage emit their own RequestStarted/RequestSuccess pair
@@ -651,41 +660,52 @@ def convert_agent_messages_to_task_update(
             cleared_message = _add_context_cleared_to_message(None, msg)
             completed_message_by_id[cleared_message.id] = cleared_message
             completed_chat_messages.append(cleared_message)
+            # A cleared context wipes the session that asked — any pending
+            # question (including one preserved across a non-user stop) can no
+            # longer be answered against it.
+            pending_user_questions.clear()
 
         elif isinstance(msg, TurnMetricsAgentMessage):
             pending_turn_metrics = msg.turn_metrics
 
         elif isinstance(msg, RequestSuccessAgentMessage):
-            # When the turn was interrupted before any content was streamed, there may
-            # be no in-progress message yet. Create an empty one so the frontend can
-            # render the "Stopped" footer — but only when this RequestSuccess is for
-            # the active request (so _finalize_request will move the synthesized
-            # message into completed_chat_messages on the same pass). Synthesizing
-            # for a stale request_id (e.g. the lifecycle RequestSuccess of an
-            # InterruptProcessUserMessage emitted after the active request was
-            # already finalized) leaves the message dangling as in_progress and
-            # freezes the StatusPill in a "thinking" state.
-            #
-            # Also skip synthesis when there's a queued user message waiting to
-            # replace this turn — that's the always-interrupt-and-send / keyboard-
-            # shortcut-interrupt flow where the user is moving on, not stopping.
-            # Surfacing an empty "Interrupted by user" marker for the replaced
-            # turn would leave a dangling assistant message between the two user
-            # turns.
+            # Only run end-of-turn logic when this RequestSuccess belongs to the
+            # active content turn. Lifecycle requests (e.g. RemoveQueuedMessage)
+            # emit their OWN RequestStarted/RequestSuccess pair; running the side
+            # effects below for one of those while a real turn is still open would
+            # corrupt it: attaching the turn's still-pending metrics stamps a
+            # spurious turn footer (token counts) onto the in-progress message,
+            # clearing pending_background_task_ids drops the "waiting for
+            # background task" state, and resetting streaming mid-stream breaks
+            # partial assembly. All of it must wait for the turn's real
+            # RequestSuccess. Mirrors the can_finalize gate in the RequestStopped
+            # branch below.
             can_finalize = current_request_id is not None and current_request_id == msg.request_id
-            has_pending_replacement = bool(queued_chat_messages)
-            if in_progress_chat_message is None and msg.interrupted and can_finalize and not has_pending_replacement:
-                in_progress_chat_message = _create_empty_assistant_message(
-                    chat_message_id=msg.message_id,
-                    approximate_creation_time=msg.approximate_creation_time,
-                )
-            if msg.interrupted:
-                in_progress_chat_message = _mark_stopped(in_progress_chat_message)
-                # Clear any pending AUQs — the agent was interrupted so the questions
-                # are no longer valid and the chat input should reappear.
-                pending_user_questions.clear()
-            in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
-            pending_turn_metrics = None
+            if can_finalize:
+                # When the turn was interrupted before any content was streamed, there may
+                # be no in-progress message yet. Create an empty one so the frontend can
+                # render the "Stopped" footer — _finalize_request will move the synthesized
+                # message into completed_chat_messages on the same pass.
+                #
+                # Skip synthesis when there's a queued user message waiting to
+                # replace this turn — that's the always-interrupt-and-send / keyboard-
+                # shortcut-interrupt flow where the user is moving on, not stopping.
+                # Surfacing an empty "Interrupted by user" marker for the replaced
+                # turn would leave a dangling assistant message between the two user
+                # turns.
+                has_pending_replacement = bool(queued_chat_messages)
+                if in_progress_chat_message is None and msg.interrupted and not has_pending_replacement:
+                    in_progress_chat_message = _create_empty_assistant_message(
+                        chat_message_id=msg.message_id,
+                        approximate_creation_time=msg.approximate_creation_time,
+                    )
+                if msg.interrupted:
+                    in_progress_chat_message = _mark_stopped(in_progress_chat_message)
+                    # Clear any pending AUQs — the agent was interrupted so the questions
+                    # are no longer valid and the chat input should reappear.
+                    pending_user_questions.clear()
+                in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
+                pending_turn_metrics = None
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -693,14 +713,23 @@ def convert_agent_messages_to_task_update(
                 completed_message_by_id,
                 completed_chat_messages,
             )
-            streaming.reset()
-            pending_background_task_ids.clear()
+            if can_finalize:
+                streaming.reset()
+                pending_background_task_ids.clear()
 
         elif isinstance(msg, RequestFailureAgentMessage):
-            in_progress_chat_message = _add_error_to_message(in_progress_chat_message, msg)
-            # Clear any pending AUQs — the agent failed so the questions
-            # are no longer valid and the chat input should reappear.
-            pending_user_questions.clear()
+            # Only surface the failure on the active turn. Lifecycle requests
+            # (e.g. RemoveQueuedMessage) emit their own RequestStarted/Failure
+            # pair when their handler raises; running these side effects for one
+            # of those while a real turn is still open would stamp its error
+            # block onto the in-progress message and reset the live turn's
+            # streaming / background-wait state. See the RequestSuccess branch.
+            can_finalize = current_request_id is not None and current_request_id == msg.request_id
+            if can_finalize:
+                in_progress_chat_message = _add_error_to_message(in_progress_chat_message, msg)
+                # Clear any pending AUQs — the agent failed so the questions
+                # are no longer valid and the chat input should reappear.
+                pending_user_questions.clear()
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -708,8 +737,9 @@ def convert_agent_messages_to_task_update(
                 completed_message_by_id,
                 completed_chat_messages,
             )
-            streaming.reset()
-            pending_background_task_ids.clear()
+            if can_finalize:
+                streaming.reset()
+                pending_background_task_ids.clear()
 
         elif isinstance(msg, RequestStoppedAgentMessage):
             # Only synthesize a stopped message when this stop is for the
@@ -739,10 +769,14 @@ def convert_agent_messages_to_task_update(
                 in_progress_chat_message = _mark_stopped(in_progress_chat_message)
                 in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
                 pending_turn_metrics = None
-                # Clear any pending AUQs — the turn was stopped so the
-                # questions are no longer answerable and the chat input
-                # should reappear.
-                pending_user_questions.clear()
+                # Only a user-initiated stop dismisses pending AUQs — the user is
+                # moving on, so the chat input should reappear. A stop the user
+                # did not ask for (backend shutdown/restart SIGTERM) leaves the
+                # questions pending: they were reconstructed from the persisted
+                # ToolUseBlock above and remain answerable after resume via the
+                # runner's answer-after-turn-ended continuation.
+                if msg.stopped_by_user:
+                    pending_user_questions.clear()
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -750,10 +784,15 @@ def convert_agent_messages_to_task_update(
                 completed_message_by_id,
                 completed_chat_messages,
             )
-            streaming.reset()
-            pending_background_task_ids.clear()
+            if can_finalize:
+                streaming.reset()
+                pending_background_task_ids.clear()
 
         elif isinstance(msg, RequestSkippedAgentMessage):
+            # A skipped request that isn't the active turn (e.g. the agent skips
+            # an already-removed queued message) must not reset the live turn's
+            # streaming / background-wait state. See the RequestSuccess branch.
+            can_finalize = current_request_id is not None and current_request_id == msg.request_id
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -761,8 +800,9 @@ def convert_agent_messages_to_task_update(
                 completed_message_by_id,
                 completed_chat_messages,
             )
-            streaming.reset()
-            pending_background_task_ids.clear()
+            if can_finalize:
+                streaming.reset()
+                pending_background_task_ids.clear()
 
         elif isinstance(msg, ERROR_MESSAGE_TYPES):
             # Add error block to assistant message

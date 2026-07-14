@@ -98,6 +98,17 @@ export const sidebarWorkspaceGroupsAtom = atom<ReadonlyArray<RepoGroup>>((get) =
   groupWorkspacesByRepo(get(workspacesArrayAtom) ?? [], get(projectsArrayAtom), get(sidebarOrderAtom)),
 );
 
+// True while the first workspace snapshot is still in flight, so the sidebar can
+// show a loading skeleton instead of a blank rail (e.g. right after a hard
+// refresh, before the reconnecting WebSocket delivers the first frame).
+//
+// `workspacesArrayAtom` is `undefined` only until that first frame lands — the
+// frame always writes an array, even an empty one — so this cleanly separates
+// "not loaded yet" from "loaded and genuinely empty", a distinction the groups
+// atom above deliberately erases with its `?? []` (keyboard cycling and drag
+// ordering want a concrete array regardless).
+export const isSidebarLoadingAtom = atom<boolean>((get) => get(workspacesArrayAtom) === undefined);
+
 // The sidebar's workspaces flattened into their visible top-to-bottom order, so
 // keyboard cycling steps through the same list the user sees.
 export const sidebarOrderedWorkspacesAtom = atom<ReadonlyArray<Workspace>>((get) =>

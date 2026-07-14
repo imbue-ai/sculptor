@@ -149,8 +149,8 @@ format:
     {{ _quiet_by_default_fn }}
     _do_format() {
       echo "Formatting Python files..."
-      uv run ruff check --select UP006,UP007,I,F401 --fix --force-exclude --config pyproject.toml sculptor/
-      uv run ruff format --force-exclude --config pyproject.toml sculptor/
+      uv run ruff check --select UP006,UP007,I,F401 --fix --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
+      uv run ruff format --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Formatting JS/TS files..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run format .
@@ -167,9 +167,9 @@ lint:
     {{ _quiet_by_default_fn }}
     _do_lint() {
       echo "Checking Python formatting..."
-      uv run ruff format --check --force-exclude --config pyproject.toml sculptor/
+      uv run ruff format --check --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Linting Python files..."
-      uv run ruff check --force-exclude --config pyproject.toml sculptor/
+      uv run ruff check --force-exclude --config pyproject.toml sculptor/ tools/sculpt/
       echo "Linting JS/TS files..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && pnpm run lint .
@@ -364,22 +364,22 @@ _run-check step:
       { echo "=== {{step}} ==="; cat "$step_log"; echo; } >> "$JUST_LOG_FILE"
     fi
 
-# Fail if a bundled plugin squats a reserved dynamic-mount path. The backend
-# serves /plugins/local and /plugins/from-workspace at runtime; a built-in named
-# `local` or `from-workspace` would be shadowed by the mount, so those names are
-# reserved. (The frontend plugin manager also drops such a built-in at runtime
-# as defense in depth; this catches it at build/CI time.)
+# Fail if a bundled extension squats a reserved dynamic-mount path. The backend
+# serves /extensions/local and /extensions/from-workspace at runtime; a built-in
+# named `local` or `from-workspace` would be shadowed by the mount, so those
+# names are reserved. (The frontend extension manager also drops such a built-in
+# at runtime as defense in depth; this catches it at build/CI time.)
 [group("ci")]
-check-reserved-plugin-names:
+check-reserved-extension-names:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
-    _do_check_reserved_plugin_names() {
+    _do_check_reserved_extension_names() {
       cd "{{justfile_directory()}}"
-      echo "Checking for reserved built-in plugin names..."
+      echo "Checking for reserved built-in extension names..."
       reserved=("local" "from-workspace")
       offenders=""
-      for base in sculptor/frontend/public/plugins sculptor/frontend/plugins; do
+      for base in sculptor/frontend/public/extensions sculptor/frontend/extensions; do
         for name in "${reserved[@]}"; do
           if [ -e "$base/$name" ]; then
             offenders="$offenders  $base/$name\n"
@@ -387,14 +387,14 @@ check-reserved-plugin-names:
         done
       done
       if [ -n "$offenders" ]; then
-        echo "ERROR: these built-in plugins use a reserved name (local, from-workspace):"
+        echo "ERROR: these built-in extensions use a reserved name (local, from-workspace):"
         echo -e "$offenders"
-        echo "Rename them — those paths are reserved for backend-served plugins."
+        echo "Rename them — those paths are reserved for backend-served extensions."
         exit 1
       fi
-      echo "No reserved built-in plugin names."
+      echo "No reserved built-in extension names."
     }
-    quiet_by_default check-reserved-plugin-names _do_check_reserved_plugin_names
+    quiet_by_default check-reserved-extension-names _do_check_reserved_extension_names
 
 # Run all checks: format, lint, typecheck, newlines, and ratchets
 # Set JUST_VERBOSE=1 in the environment for full output (used in CI).
@@ -412,7 +412,7 @@ check:
     # Note: check-large-files is not included here as it checks staged files only (for pre-commit hooks)
     # Run checks in parallel (fastest first for quicker feedback).
     ./sculptor/frontend/node_modules/.bin/concurrently \
-      --names check-yaml,check-uv-lock,check-shellcheck,ratchets,typecheck,check-file-hygiene,check-reserved-plugin-names,check-plugin-sdk-dts,lint \
+      --names check-yaml,check-uv-lock,check-shellcheck,ratchets,typecheck,check-file-hygiene,check-reserved-extension-names,check-extension-sdk-dts,lint \
       --prefix-colors auto \
       "just _run-check check-yaml" \
       "just _run-check check-uv-lock" \
@@ -420,8 +420,8 @@ check:
       "just _run-check ratchets" \
       "just _run-check typecheck" \
       "just _run-check check-file-hygiene" \
-      "just _run-check check-reserved-plugin-names" \
-      "just _run-check check-plugin-sdk-dts" \
+      "just _run-check check-reserved-extension-names" \
+      "just _run-check check-extension-sdk-dts" \
       "just _run-check lint" \
       2>&1 | grep -v 'exited with code 0'
 
@@ -959,37 +959,37 @@ generate-api:
     }
     quiet_by_default generate-api _do_generate_api
 
-# Roll up the plugin SDK declarations into the build-sculptor-plugin skill's sdk.d.ts
+# Roll up the extension SDK declarations into the build-sculptor-extension skill's sdk.d.ts
 [group("codegen")]
-generate-plugin-sdk-dts: generate-api
+generate-extension-sdk-dts: generate-api
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
-    _do_generate_plugin_sdk_dts() {
+    _do_generate_extension_sdk_dts() {
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend"
-      pnpm run generate-plugin-sdk-dts
+      pnpm run generate-extension-sdk-dts
     }
-    quiet_by_default generate-plugin-sdk-dts _do_generate_plugin_sdk_dts
+    quiet_by_default generate-extension-sdk-dts _do_generate_extension_sdk_dts
 
-# Verify the checked-in sdk.d.ts rollup matches the plugin SDK source
+# Verify the checked-in sdk.d.ts rollup matches the extension SDK source
 [group("ci")]
-check-plugin-sdk-dts:
+check-extension-sdk-dts:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
-    _do_check_plugin_sdk_dts() {
+    _do_check_extension_sdk_dts() {
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend"
       tmp_file=$(mktemp)
       trap 'rm -f "$tmp_file"' EXIT
-      ./scripts/generate-plugin-sdk-dts.sh "$tmp_file"
-      if ! diff -u ../sculptor-plugin/skills/build-sculptor-plugin/sdk.d.ts "$tmp_file"; then
-        echo "sdk.d.ts is stale - run 'just generate-plugin-sdk-dts' and commit the result."
+      ./scripts/generate-extension-sdk-dts.sh "$tmp_file"
+      if ! diff -u ../sculptor-plugin/skills/build-sculptor-extension/sdk.d.ts "$tmp_file"; then
+        echo "sdk.d.ts is stale - run 'just generate-extension-sdk-dts' and commit the result."
         exit 1
       fi
     }
-    quiet_by_default check-plugin-sdk-dts _do_check_plugin_sdk_dts
+    quiet_by_default check-extension-sdk-dts _do_check_extension_sdk_dts
 
 # Installs all frontend libraries necessary
 [group("install")]
@@ -1696,6 +1696,33 @@ test-unit-offload *args="":
     {{ _require_offload }}
     ulimit -n 8192
     offload run -c offload-unit.toml --trace --show-estimated-cost {{args}} || [ $? -eq 2 ]
+
+# Run the perf scenario suite (sculptor/tests/perf/) on Offload (Modal); see
+# offload-perf.toml. Each sandbox writes measurements to test-results-perf/ as
+# perf-measurements-<token>.jsonl; concatenate them for the compare step
+# (tools/perf/comment.py). retry_count=0 there keeps measurements un-duplicated.
+[group("test")]
+test-offload-perf *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    offload run -c offload-perf.toml --trace {{args}} || [ $? -eq 2 ]
+
+# Fast perf subset on offload (default per-PR lane): deselects the perf_heavy
+# scenarios (long_history ~6.5 min, long_chat_scrolled ~3+ min) that would set
+# the parallel tail; PRs get quick signal (~5-6 min job) from everything else.
+# main — and PRs labeled "performance" — run the full matrix via
+# test-offload-perf. The fast config is derived from offload-perf.toml (single
+# source of truth) rather than committed separately, so the two can't drift.
+[group("test")]
+test-offload-perf-fast *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    python3 tools/perf/make_fast_config.py
+    offload run -c offload-perf-fast.toml --trace {{args}} || [ $? -eq 2 ]
 
 # -------- Sculptor Release Commands --------
 

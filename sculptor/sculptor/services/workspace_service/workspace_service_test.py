@@ -1190,3 +1190,27 @@ class TestExpandNumstatRenamePath:
 
     def test_no_rename(self) -> None:
         assert DefaultWorkspaceService._expand_numstat_rename_path("src/file.py") == "src/file.py"
+
+
+def test_get_cached_current_branch_does_not_create_the_branch_poller(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    """The accessor is a pure cache read: on a service whose poller has never
+    been built it must return None WITHOUT constructing the polling machinery."""
+    fresh_service = DefaultWorkspaceService.build(
+        concurrency_group=test_root_concurrency_group,
+        settings=test_service_collection.settings,
+        data_model_service=test_service_collection.data_model_service,
+        project_service=test_service_collection.project_service,
+        dependency_management_service=test_service_collection.dependency_management_service,
+    )
+
+    assert fresh_service.get_cached_current_branch(WorkspaceID()) is None
+    assert fresh_service._branch_poller_instance is None
+
+
+def test_get_cached_current_branch_returns_none_for_unknown_workspace(
+    test_service_collection: CompleteServiceCollection,
+) -> None:
+    assert test_service_collection.workspace_service.get_cached_current_branch(WorkspaceID()) is None

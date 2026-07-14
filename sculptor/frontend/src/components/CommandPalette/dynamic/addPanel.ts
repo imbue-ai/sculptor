@@ -28,17 +28,18 @@ import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
 
-// The "New {recent} agent" row title for the Cmd+K panel page. The registrations
+// The recent-agent row title for the Cmd+K panel page. The registrations
 // directory isn't available synchronously in this provider (it runs outside React),
 // so a registered terminal-agent program can't resolve to its display name here — the
-// row collapses to a plain "New agent" instead of doubling the word. Built-in types
-// (Claude, pi) title from the stored default via the shared label helper.
+// row shows a generic "New agent" rather than a nameless row. Built-in types
+// (Claude, pi) title from the stored default via the shared label helper, e.g.
+// "New Claude".
 function recentAgentRowTitle(runtime: CommandRuntime): string {
   const stored = runtime.store.get(recentAgentTypeAtom);
   if (stored.startsWith(REGISTERED_AGENT_TYPE_PREFIX)) {
     return "New agent";
   }
-  return `New ${recentAgentLabel(stored, [])} agent`;
+  return `New ${recentAgentLabel(stored, [])}`;
 }
 
 export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider => ({

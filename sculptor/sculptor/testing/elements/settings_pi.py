@@ -96,10 +96,6 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
         """
         return self._page.get_by_test_id(ElementIDs.PI_LOGIN_DIALOG)
 
-    def get_authenticate_button(self) -> Locator:
-        """Get the 'Open pi login' button inside the login modal."""
-        return self._page.get_by_test_id(ElementIDs.PI_PROVIDER_AUTHENTICATE_BUTTON)
-
     def get_disconnect_button(self, provider_id: str) -> Locator:
         """Get a connected card's Disconnect button (auth.json-backed providers only)."""
         return self.get_by_test_id(f"{ElementIDs.PI_PROVIDER_DISCONNECT_BUTTON}-{provider_id}")
@@ -111,15 +107,3 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
     def get_login_done_button(self) -> Locator:
         """Get the Done button that tears down the login session and closes the modal."""
         return self._page.get_by_test_id(ElementIDs.PI_LOGIN_DONE_BUTTON)
-
-    def get_paste_key_switch(self) -> Locator:
-        """Get the 'Paste API key instead' button inside the login modal."""
-        return self._page.get_by_test_id(ElementIDs.PI_PROVIDER_PASTE_KEY_SWITCH)
-
-    def get_paste_key_input(self) -> Locator:
-        """Get the paste-key value input field inside the modal."""
-        return self._page.get_by_test_id(ElementIDs.PI_PASTE_KEY_INPUT)
-
-    def get_paste_key_save(self) -> Locator:
-        """Get the paste-key Save button inside the modal."""
-        return self._page.get_by_test_id(ElementIDs.PI_PASTE_KEY_SAVE)

@@ -59,8 +59,8 @@ describe("recentAgentLabel", () => {
     expect(recentAgentLabel("pi", [])).toBe("Pi");
   });
 
-  it("labels a registered type from its registration's display name", () => {
-    expect(recentAgentLabel("registered:my-agent", [registration])).toBe("My Agent");
+  it("labels a registered type from its display name plus the 'in terminal' marker", () => {
+    expect(recentAgentLabel("registered:my-agent", [registration])).toBe("My Agent in terminal");
   });
 
   it("falls back to the generic 'agent' when the registration is unknown", () => {
@@ -295,7 +295,7 @@ describe("buildAgentTypeOptions", () => {
       stored: "registered:my-agent",
       agentType: "registered",
       registrationId: "my-agent",
-      label: "My Agent",
+      label: "My Agent in terminal",
     });
   });
 });

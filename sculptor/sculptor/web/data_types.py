@@ -30,6 +30,7 @@ from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.messages import EffortLevel
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 
 
 class TaskInterface(StrEnum):
@@ -126,7 +127,11 @@ class RequestModel(SerializableModel):
 class StartTaskRequest(RequestModel):
     prompt: str
     interface: str = TaskInterface.TERMINAL.value
-    model: LLMModel
+    # Mutually exclusive, one per harness's terms — the same pair as
+    # CreateAgentRequest, validated per resolved harness
+    # (`_validate_prompt_model_selection`).
+    model: LLMModel | None = None
+    backend_model: ModelOption | None = None
     files: list[str] = Field(default_factory=list)
     initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE
     name: str | None = None
@@ -173,7 +178,13 @@ class CreateAgentRequest(RequestModel):
     """Create agent request — prompt is optional for the '+' button flow."""
 
     prompt: str | None = None
+    # Mutually exclusive with `backend_model`: a create names its model on
+    # exactly one harness's terms — `model` for Claude's static list,
+    # `backend_model` (the chosen `ModelOption`) for a backend-sourced catalog
+    # (pi). A pi prompt requires `backend_model`; a promptless create must not
+    # carry one (post-start selection owns that case).
     model: LLMModel | None = None
+    backend_model: ModelOption | None = None
     interface: str = TaskInterface.TERMINAL.value
     files: list[str] = Field(default_factory=list)
     name: str | None = None
@@ -237,6 +248,13 @@ class WorkspaceResponse(SerializableModel):
     created_at: datetime.datetime
     workspace_setup_command: str | None = None
     setup: "WorkspaceSetupSnapshot | None" = None
+    # Absolute path of the workspace's checkout: `<environment_id>/code` for
+    # clone/worktree workspaces, the project's local repo path for in-place ones.
+    # None when the environment hasn't been initialized yet.
+    working_directory: str | None = None
+    # Branch currently checked out in that directory, from the workspace
+    # service's branch scan cache. None when not yet scanned.
+    current_branch: str | None = None
 
 
 class PreviewBranchNameResponse(SerializableModel):
@@ -282,6 +300,7 @@ class AuthenticatedProviderEntry(SerializableModel):
     in_auth_json: bool
     env_detected: bool
     env_var_names: tuple[str, ...]
+    supports_subscription: bool
 
 
 class AuthenticatedProvidersResponse(SerializableModel):
@@ -290,11 +309,26 @@ class AuthenticatedProvidersResponse(SerializableModel):
     providers: tuple[AuthenticatedProviderEntry, ...]
 
 
+class PiModelsResponse(SerializableModel):
+    """The host-side pi catalog for pre-workspace surfaces (the New Workspace modal's picker).
+
+    Mirrors the task-state catalog fields: `available_models` is the curated,
+    authenticated-only list and `default_model` is pi's own current model when
+    usable. Empty/None means "no usable model" (or a best-effort probe failure),
+    driving the same empty state the composer shows.
+    """
+
+    available_models: tuple[ModelOption, ...]
+    default_model: ModelOption | None
+
+
 class PiLoginRequest(RequestModel):
     """Start an interactive pi login or logout PTY.
 
-    ``provider_id`` is on-screen guidance / refresh context only — pi's /login and
-    /logout take no provider argument (the user selects in pi's own TUI selector).
+    pi's /login and /logout take no provider argument, so ``provider_id`` is the row
+    the spawned session's keystroke driver selects in pi's own TUI selectors (and the
+    auth.json key whose change marks the session completed). None means pi's selectors
+    are left entirely to the user.
     """
 
     mode: Literal["login", "logout"]
@@ -343,6 +377,13 @@ class RecentWorkspaceResponse(SerializableModel):
     agent_count: int
     is_open: bool
     last_activity_at: datetime.datetime
+    # Absolute path of the workspace's checkout: `<environment_id>/code` for
+    # clone/worktree workspaces, the project's local repo path for in-place ones.
+    # None when the environment hasn't been initialized yet.
+    working_directory: str | None = None
+    # Branch currently checked out in that directory, from the workspace
+    # service's branch scan cache. None when not yet scanned.
+    current_branch: str | None = None
 
 
 class ListWorkspacesResponse(SerializableModel):
@@ -878,28 +919,28 @@ class WebviewCommandUiAction(SerializableModel):
     url: str | None = None
 
 
-PluginCommandOp = Literal["load", "reload", "unload", "inspect", "list"]
+ExtensionCommandOp = Literal["load", "reload", "unload", "inspect", "list"]
 
 
-class PluginCommandUiAction(SerializableModel):
-    """A command broadcast to renderers to act on the frontend plugin system.
+class ExtensionCommandUiAction(SerializableModel):
+    """A command broadcast to renderers to act on the extension system.
 
-    Emitted when an agent runs a `sculpt plugin` command. ``correlation_id``
+    Emitted when an agent runs a `sculpt extension` command. ``correlation_id``
     lets each renderer's reply be matched back to the originating CLI request
-    (see ``sculptor.web.plugin_command_bus``); ``workspace_id`` is the workspace
+    (see ``sculptor.web.extension_command_bus``); ``workspace_id`` is the workspace
     the agent's CLI is running in, and routes the action through the same
     per-user WebSocket fan-out as the other UI actions.
 
     Field meaning by ``op``: ``load`` uses ``source`` (a served manifest URL or
-    a remote URL); ``reload``/``unload``/``inspect`` use ``plugin_id``;
+    a remote URL); ``reload``/``unload``/``inspect`` use ``extension_id``;
     ``reload`` may carry ``cache_bust`` to force a fresh fetch; ``list`` ignores
-    both and asks for every plugin.
+    both and asks for every extension.
     """
 
     workspace_id: WorkspaceID
     correlation_id: str
-    op: PluginCommandOp
-    plugin_id: str | None = None
+    op: ExtensionCommandOp
+    extension_id: str | None = None
     source: str | None = None
     cache_bust: str | None = None
 
@@ -910,7 +951,7 @@ class RendererIdentity(SerializableModel):
     ``environment`` comes from the renderer's own ``isElectron()`` check, not
     from sniffing the WebSocket handshake. ``origin`` is ``window.location``'s
     origin, which determines the localStorage domain — two renderers on
-    different origins can legitimately hold different plugin state.
+    different origins can legitimately hold different extension state.
 
     ``base`` is the bundle's base path within that origin ("/" for the deployed
     app; the OpenHost preview front serves dev bundles under "/proxy/<port>/").
@@ -926,82 +967,82 @@ class RendererIdentity(SerializableModel):
     base: str | None = None
 
 
-class PluginRegistrations(SerializableModel):
-    """Names-only summary of what a plugin registered in a renderer."""
+class ExtensionRegistrations(SerializableModel):
+    """Names-only summary of what an extension registered in a renderer."""
 
     panels: list[str] = []
     has_settings: bool = False
     overlays: list[str] = []
 
 
-class PluginSnapshot(SerializableModel):
-    """A redacted, per-plugin view a renderer assembles for ``inspect``/``list``.
+class ExtensionSnapshot(SerializableModel):
+    """A redacted, per-extension view a renderer assembles for ``inspect``/``list``.
 
     ``config_keys`` lists the persisted setting key names only — never their
-    values, which may be credentials (e.g. a plugin's API key).
+    values, which may be credentials (e.g. an extension's API key).
     """
 
-    plugin_id: str
+    extension_id: str
     source: str
     status: Literal["loading", "loaded", "error", "disabled", "shadowed", "missing"]
     origin: Literal["dev", "installed", "url", "builtin"]
     error_phase: str | None = None
     error_message: str | None = None
     active_source: str | None = None
-    registrations: PluginRegistrations | None = None
+    registrations: ExtensionRegistrations | None = None
     config_keys: list[str] = []
 
 
-class PluginCommandResult(SerializableModel):
-    """One renderer's reply to a ``PluginCommandUiAction``."""
+class ExtensionCommandResult(SerializableModel):
+    """One renderer's reply to an ``ExtensionCommandUiAction``."""
 
     correlation_id: str
     renderer: RendererIdentity
     op: str
     ok: bool
     error: str | None = None
-    plugins: list[PluginSnapshot] = []
+    extensions: list[ExtensionSnapshot] = []
 
 
-class PluginCommandRequest(SerializableModel):
-    """Body for ``POST /api/v1/workspaces/{workspace_id}/plugins/command``."""
+class ExtensionCommandRequest(SerializableModel):
+    """Body for ``POST /api/v1/workspaces/{workspace_id}/extensions/command``."""
 
-    op: PluginCommandOp
-    plugin_id: str | None = None
+    op: ExtensionCommandOp
+    extension_id: str | None = None
     source: str | None = None
     cache_bust: str | None = None
 
 
-class PluginCommandResponse(SerializableModel):
+class ExtensionCommandResponse(SerializableModel):
     """Aggregated per-renderer replies the command endpoint returns to the CLI."""
 
     correlation_id: str
-    results: list[PluginCommandResult] = []
+    results: list[ExtensionCommandResult] = []
 
 
-class PluginFile(SerializableModel):
-    """One file of a packaged plugin, base64-encoded for transport."""
+class ExtensionFile(SerializableModel):
+    """One file of a packaged extension, base64-encoded for transport."""
 
     path: str
     content_base64: str
 
 
-class InstallPluginRequest(SerializableModel):
-    """Body for ``POST /api/v1/workspaces/{workspace_id}/plugins/install``.
+class InstallExtensionRequest(SerializableModel):
+    """Body for ``POST /api/v1/workspaces/{workspace_id}/extensions/install``.
 
     ``persist`` selects the destination: ``False`` (default) writes a dev
-    install under the reserved ``dev/<workspace_id>/<plugin_id>/`` tree;
-    ``True`` writes a permanent install at the top-level ``<plugin_id>/``.
+    install under the reserved ``dev/<workspace_id>/<extension_id>/`` tree;
+    ``True`` writes a permanent install at the top-level ``<extension_id>/``.
     """
 
-    plugin_id: str
-    files: list[PluginFile]
+    extension_id: str
+    files: list[ExtensionFile]
     persist: bool = False
 
 
-class InstallPluginResponse(SerializableModel):
+class InstallExtensionResponse(SerializableModel):
     manifest_url: str
-    plugin_dir: str
+    extension_dir: str
 
 
 # Generic system dependency models for unified frontend rendering
@@ -1030,5 +1071,5 @@ StreamingUpdateSourceTypes = (
     | BtwUpdate
     | OpenFileUiAction
     | WebviewCommandUiAction
-    | PluginCommandUiAction
+    | ExtensionCommandUiAction
 )

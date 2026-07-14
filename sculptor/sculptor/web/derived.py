@@ -36,6 +36,7 @@ from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
+from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
@@ -43,6 +44,7 @@ from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
+from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
 from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
@@ -436,10 +438,10 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         """The switcher's catalog as the frontend gates on it: NOT_FETCHED_YET
         until the start-time probe lands, then the fetched list (empty = the
         harness sources none and the frontend falls back to its built-in list, or
-        pi is authenticated with no providers and shows the login CTA). Runtime
+        pi is authenticated with no providers and shows the empty state). Runtime
         callers that only offer models use `get_available_models`, which coalesces
         the sentinel to []; the switcher needs the distinction so it can show a
-        loading state instead of flashing the CTA while the catalog loads."""
+        loading state instead of flashing the empty state while the catalog loads."""
         return self._resolve_harness().get_model_catalog(self.task_state)
 
     @computed_field
@@ -455,6 +457,15 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         """Whether the harness sources its switcher catalog from a backend (pi);
         when False the frontend uses its built-in Claude list."""
         return self._resolve_harness().sources_backend_models()
+
+    @computed_field
+    @property
+    def configuration_settings_section(self) -> str:
+        """The Settings section the composer's "Go to harness configuration" CTA opens
+        when this harness has no usable model — a frontend `SettingsSection` id, owned by
+        the harness (pi -> "PI", otherwise "DEPENDENCIES") so the composer never branches
+        on harness identity."""
+        return self._resolve_harness().configuration_settings_section()
 
     @computed_field
     @property
@@ -579,19 +590,43 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         accepts any input per its schema, so any tool_use of it surfaces.
 
         Likewise, an AUQ / ExitPlanMode tool block whose surrounding request
-        has since completed (Success / Failure / Stopped) is no longer
-        pending — the agent's process has moved on, so the question can no
-        longer be answered against the same turn (SCU-530 follow-on).
+        has since completed (Success / Failure) is no longer pending — the
+        agent's process has moved on, so the question can no longer be
+        answered against the same turn (SCU-530 follow-on). A non-user
+        ``RequestStopped`` (backend shutdown/restart SIGTERM) is the
+        exception: the question is still answerable after resume via the
+        runner's answer-after-turn-ended continuation, so it keeps pinning
+        WAITING — unless a newer user turn has started since, which
+        supersedes it (mirroring message_conversion's pending-question
+        clearing).
         """
         harness = self._resolve_harness()
         # Check both the ephemeral AskUserQuestionAgentMessage (present during live
         # streaming) and the persistent ToolUseBlock evidence (survives page reloads).
+        started_request_ids: set[AgentMessageID] = set()
         for msg in reversed(self._messages):
             if isinstance(msg, UserQuestionAnswerMessage):
                 break
+            if isinstance(msg, ContextClearedMessage):
+                # A cleared context wipes the session that asked — any older
+                # question (including one preserved across a non-user stop)
+                # can no longer be answered against it.
+                break
+            if isinstance(msg, RequestStartedAgentMessage):
+                started_request_ids.add(msg.request_id)
+            if isinstance(msg, ChatInputUserMessage) and msg.message_id in started_request_ids:
+                # A newer user prompt actually began processing — it supersedes
+                # any older unanswered question. A queued-but-unstarted prompt
+                # (typed while the question was pending) does not: the walk must
+                # continue past it to the question evidence below.
+                break
             if isinstance(msg, PersistentRequestCompleteAgentMessage):
-                # Any AUQ older than the most recent completed request belongs
-                # to a turn the agent has already settled — no pending question.
+                if isinstance(msg, RequestStoppedAgentMessage) and not msg.stopped_by_user:
+                    # Shutdown/restart stop: the question survives — keep walking
+                    # back to find its AUQ evidence.
+                    continue
+                # Any AUQ older than the most recent settled request belongs
+                # to a turn the agent has already finished — no pending question.
                 break
             if isinstance(msg, AskUserQuestionAgentMessage):
                 return TaskStatus.WAITING

@@ -232,6 +232,42 @@ $row-min-height: 30px;
   }
 }
 
+// The item the dragged element will land against carries a drop-side hint ("before" = it
+// lands above this item, "after" = below) while it is the drop target. There is no floating
+// placeholder — the dragged element slides in place — so draw a small accent insertion line
+// on that edge to show where a release will land.
+//
+// The line must sit at the target's OUTER edge, so it's drawn on the element that spans the
+// target's full height: `.repoGroup` for a group drag (its header carries the hint, but the
+// whole group — header + rows — is what's tall, so a line on the header alone would fall
+// inside a tall group), and `.workspaceRow` for a row drag (rows are uniform height). The
+// two hints use different attribute names so `.repoGroup:has(...)` doesn't also match a row
+// drop-side nested inside it.
+.repoGroup:has([data-sidebar-group-drop-side]),
+.workspaceRow:has([data-sidebar-drop-side]) {
+  position: relative;
+}
+
+.repoGroup:has([data-sidebar-group-drop-side])::after,
+.workspaceRow:has([data-sidebar-drop-side])::after {
+  background: var(--accent-9);
+  border-radius: var(--radius-1);
+  content: "";
+  height: 2px;
+  inset-inline: var(--space-2);
+  position: absolute;
+}
+
+.repoGroup:has([data-sidebar-group-drop-side="before"])::after,
+.workspaceRow:has([data-sidebar-drop-side="before"])::after {
+  top: -1px;
+}
+
+.repoGroup:has([data-sidebar-group-drop-side="after"])::after,
+.workspaceRow:has([data-sidebar-drop-side="after"])::after {
+  bottom: -1px;
+}
+
 .workspaceDot {
   align-items: center;
   display: flex;

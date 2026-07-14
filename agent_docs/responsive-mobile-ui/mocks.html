@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sculptor Mobile — Mocks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* =========================================================================
+   SCULPTOR MOBILE — ROUND 3
+   Simplified, flows-first. Warm "sand" light theme (bg #FAE8CA, accent
+   #F50D00) in the Claude-mobile aesthetic. Real Lucide icons (CDN).
+   Pages: Foundations · Chat (components) · Flows (assembled, the focus).
+   Mocks only.
+   ========================================================================= */
+:root{
+  /* Sculptor uses Inter (UI) + JetBrains Mono (code). The old "serif" token now maps to Inter. */
+  --serif:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+.theme-sand{
+  --bg:#FAE8CA; --bg-header:#FAE8CA; --surface:#FFFDF7; --surface-2:#FCF4E2;
+  --press:#F2E6CB; --line:#EAD4A2; --line-soft:#F2E0B6;
+  --ink:#2B2316; --ink-2:#6E5E40; --ink-3:#9E8A63;
+  --accent:#F50D00; --accent-press:#C90A00; --accent-tint:#FBDBD3; --accent-ink:#A60800;
+  --user-bubble:#EFE4CC;
+  --add:#1E7B3D; --add-bg:#D8ECD2; --del:#C5341F; --del-bg:#F6D9CE; --link:#2F6FB3;
+  --term-bg:#231C12; --term-ink:#ECE2CF; --term-dim:#9C8C72; --term-green:#8ECf8f; --term-accent:#ff7d5c;
+  --shadow:0 8px 26px rgba(95,58,12,.16); --shadow-sm:0 2px 8px rgba(95,58,12,.12);
+  color:var(--ink); /* base text color so nothing inherits the dark host-page color */
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:var(--sans);background:#191510;color:#EBDCBE;-webkit-font-smoothing:antialiased;line-height:1.5}
+
+/* host page chrome */
+.doc-head{padding:26px 28px 6px;max-width:1320px;margin:0 auto}
+.doc-head h1{font-size:23px;margin:0 0 6px;font-weight:600;color:#FBEFD6;letter-spacing:-.01em}
+.doc-head p{margin:0;color:#C9B58C;font-size:14px;max-width:860px}
+.doc-head a{color:#F2A48f}
+.doc-head .meta{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#D8C49B;background:#2a2117;border:1px solid #48391f;border-radius:999px;padding:4px 11px}
+.chip b{color:#FBEFD6;font-weight:600} .chip .sw{width:13px;height:13px;border-radius:3px;border:1px solid rgba(255,255,255,.2)}
+.tabs{position:sticky;top:0;z-index:60;background:rgba(25,21,16,.94);backdrop-filter:blur(8px);border-bottom:1px solid #3c3020;padding:11px 28px;display:flex;gap:7px}
+.tabs button{font:inherit;font-size:13.5px;color:#C9B58C;background:transparent;border:1px solid transparent;border-radius:9px;padding:7px 14px;cursor:pointer}
+.tabs button:hover{background:#2a2117;color:#FBEFD6}
+.tabs button.active{background:#F50D00;color:#fff;border-color:#F50D00}
+.panel{display:none;padding:22px 28px 90px;max-width:1320px;margin:0 auto}
+.panel.active{display:block}
+.panel h2{font-size:20px;margin:4px 0 4px;font-weight:600;color:#FBEFD6}
+.panel .lead{color:#C9B58C;font-size:14px;margin:0 0 8px;max-width:900px}
+.section-label{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#9a875f;margin:30px 0 14px;border-bottom:1px solid #3c3020;padding-bottom:8px}
+.section-label .n{color:#F2A48f;font-weight:700;margin-right:8px}
+
+/* gallery spec cards (foundations + chat only) */
+.specs{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start}
+.spec{flex:0 0 auto;width:366px;display:flex;flex-direction:column;gap:9px}
+.spec .sh{font-size:14px;font-weight:600;color:#FBEFD6}
+.spec .sd{font-size:12.5px;color:#B19c72}
+.mini{width:100%;border-radius:24px;overflow:hidden;background:var(--bg);border:1px solid #3c3020;box-shadow:var(--shadow);position:relative}
+
+/* flow rows */
+.flow{margin-bottom:14px}
+.flow .ft{font-size:15px;font-weight:600;color:#FBEFD6;display:flex;align-items:center;gap:10px;margin:0 0 4px}
+.flow .ft .badge{font-size:11px;font-weight:700;color:#191510;background:#E8B45a;border-radius:6px;padding:2px 8px}
+.flow .fd{font-size:13px;color:#B19c72;margin:0 0 14px;max-width:880px}
+.flowrow{display:flex;align-items:center;gap:8px;overflow-x:auto;padding:6px 2px 24px}
+.step{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:11px;width:380px}
+.step .cap{font-size:12.5px;color:#C9B58C;text-align:center}
+.step .cap b{color:#FBEFD6;display:block;font-size:12.5px;margin-bottom:2px}
+.gap{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:6px;color:#7c6a47;width:54px}
+.gap .arr{width:30px;height:30px;border-radius:999px;background:#2a2117;border:1px solid #48391f;display:flex;align-items:center;justify-content:center;color:#E8B45a}
+.gap .lbl{font-size:10.5px;color:#9a875f;text-align:center;line-height:1.25}
+
+/* ---- phone device ---- */
+.device{width:380px;height:792px;border-radius:46px;background:#0b0b0d;padding:10px;box-shadow:0 0 0 2px #34302a,0 22px 50px rgba(0,0,0,.55);position:relative;flex:0 0 auto}
+.device.lg{width:380px;height:792px}
+.device::after{content:"";position:absolute;top:10px;left:50%;transform:translateX(-50%);width:112px;height:24px;background:#0b0b0d;border-radius:0 0 15px 15px;z-index:60}
+.screen{width:100%;height:100%;border-radius:37px;overflow:hidden;background:var(--bg);position:relative;display:flex;flex-direction:column}
+.statusbar{height:42px;flex:0 0 auto;display:flex;align-items:flex-end;justify-content:space-between;padding:0 24px 5px;font-size:13.5px;font-weight:600;color:var(--ink);z-index:5;background:var(--bg-header)}
+.statusbar .sb-r{display:flex;align-items:center;gap:6px}
+.statusbar .sb-r .ic{width:16px;height:16px}
+.home-ind{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);width:120px;height:5px;border-radius:999px;background:rgba(43,35,22,.5);z-index:55}
+
+/* lucide icon sizing (createIcons keeps these classes) */
+.ic{width:22px;height:22px;stroke-width:2;flex:0 0 auto}
+.ic-s{width:18px;height:18px}.ic-xs{width:15px;height:15px}.ic-l{width:25px;height:25px}
+
+/* ===================== WORKSPACE HEADER ===================== */
+.whdr{flex:0 0 auto;display:flex;align-items:center;gap:2px;padding:5px 6px 7px;background:var(--bg-header);border-bottom:1px solid var(--line)}
+.whdr .ibtn{position:relative;width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--ink);background:none;border:none;cursor:pointer}
+.whdr .ibtn svg{width:20px;height:20px}
+.whdr .ibtn:hover{background:var(--press)}
+.whdr .ibtn.on{color:var(--accent)}
+.whdr .ibtn .bdg{position:absolute;top:4px;right:4px;min-width:16px;height:16px;border-radius:999px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;border:1.5px solid var(--bg-header)}
+.whdr .title{flex:1;min-width:0;text-align:center;padding:0 2px}
+.whdr .title .t{font-size:16px;font-weight:700;color:var(--ink);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.whdr .title .s{font-size:12.5px;color:var(--ink-2);display:flex;align-items:center;justify-content:center;gap:6px;margin-top:1px}
+.whdr .title .s .ad{width:7px;height:7px;border-radius:999px;background:var(--accent)}
+/* agent pager dots */
+.adots{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:7px;padding:8px 0 9px;background:var(--bg-header);border-bottom:1px solid var(--line)}
+.adots .d{width:6px;height:6px;border-radius:999px;background:var(--line);cursor:pointer;transition:.22s}
+.adots .d.on{background:var(--accent);width:22px}
+.adots .d:hover{background:var(--ink-3)}
+.adots .d.on:hover{background:var(--accent)}
+
+/* ===================== CHANGES CHIP (small → expand down) ===================== */
+.chgchip{flex:0 0 auto;position:relative;margin:9px 12px 2px;background:var(--surface);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow-sm);z-index:9}
+.chgchip .top{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer}
+.chgchip .top .gi{color:var(--ink-2);display:flex} .chgchip .top .gi .ic{width:18px;height:18px}
+.chgchip .top .lab{flex:1;font-size:13.5px;color:var(--ink);font-weight:600}
+.chgchip .top .stat{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.chgchip .top .add{color:var(--add)} .chgchip .top .del{color:var(--del)}
+.chgchip .top .cv{color:var(--ink-3);display:flex;transition:transform .26s}
+.chgchip.open .top .cv{transform:rotate(180deg)}
+/* expanded changes = a floating dropdown overlaying the chat (input stays put) */
+.chgchip .body{position:absolute;left:0;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);max-height:0;overflow:hidden;opacity:0;pointer-events:none;transition:opacity .18s ease}
+.chgchip.open .body{max-height:330px;overflow-y:auto;opacity:1;pointer-events:auto}
+.chgchip .reviewrow{display:flex;align-items:center;gap:8px;padding:4px 12px 12px}
+.reviewbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--accent);color:#fff;border:none;border-radius:11px;padding:11px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.reviewbtn:hover{background:var(--accent-press)} .reviewbtn .ic{width:18px;height:18px}
+
+/* file rows */
+.filerow{display:flex;align-items:center;gap:11px;padding:10px 14px;border-top:1px solid var(--line-soft);cursor:pointer}
+.filerow:hover{background:var(--press)}
+.filerow .st{width:19px;height:19px;border-radius:6px;font-size:11px;font-weight:800;font-family:var(--mono);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.st.M{background:#F4E1B4;color:#9A6B12}.st.A{background:var(--add-bg);color:var(--add)}.st.D{background:var(--del-bg);color:var(--del)}
+.filerow .fi{flex:1;min-width:0}
+.filerow .fn{font-size:13px;color:var(--ink);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+.filerow .fp{font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+.filerow .ss{font-family:var(--mono);font-size:11px;display:flex;gap:6px;flex:0 0 auto}
+.filerow .ss .add{color:var(--add)} .filerow .ss .del{color:var(--del)}
+
+/* ===================== CHAT STREAM ===================== */
+.stream{flex:1;min-height:0;overflow-y:auto;padding:6px 18px 8px;display:flex;flex-direction:column}
+.stream::-webkit-scrollbar{width:5px}.stream::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.ts-div{display:flex;align-items:center;gap:12px;color:var(--ink-3);font-size:12px;margin:14px 2px 4px}
+.ts-div::before,.ts-div::after{content:"";flex:1;height:1px;background:var(--line)}
+.umsg{align-self:flex-end;max-width:86%;margin:12px 0 2px}
+.ubub{background:var(--user-bubble);border-radius:20px 20px 6px 20px;padding:12px 16px;font-family:var(--serif);font-size:16px;color:var(--ink);line-height:1.45}
+.amsg{font-family:var(--serif);font-size:16.5px;line-height:1.52;color:var(--ink);margin:12px 0;display:flex;flex-direction:column;gap:12px}
+.amsg p{margin:0}
+.amsg ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+.amsg li{position:relative;padding-left:20px}
+.amsg li::before{content:"";position:absolute;left:5px;top:11px;width:5px;height:5px;border-radius:999px;background:var(--ink-3)}
+.amsg strong{font-weight:700}
+.amsg code,.icode{font-family:var(--mono);font-size:13px;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--ink)}
+.amsg .lnk{color:var(--link);text-decoration:underline}
+.cblock{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;white-space:pre;overflow-x:auto;line-height:1.5}
+.cblock .k{color:#9A4FB0}.cblock .s{color:var(--add)}
+.statusline{display:flex;align-items:center;gap:9px;color:var(--ink-3);font-size:14.5px;padding:8px 2px;cursor:pointer}
+.statusline .w{color:var(--ink-2)} .statusline b{color:var(--ink);font-weight:600}
+.statusline .ld{color:var(--ink-3);display:flex} .statusline .ld .ic{width:17px;height:17px}
+.statusline .cv{margin-left:auto;color:var(--ink-3);display:flex} .statusline .cv .ic{width:17px;height:17px}
+.toolcard{margin:6px 0;border:1px solid var(--line);border-radius:13px;background:var(--surface);overflow:hidden}
+.toolcard .h{display:flex;align-items:center;gap:9px;padding:10px 13px;color:var(--ink-2);font-size:14px}
+.toolcard .h .ic{width:17px;height:17px;color:var(--add)} .toolcard .h b{color:var(--ink);font-weight:600}
+.toolcard .h .m{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.toolcard .out{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);background:var(--surface-2);padding:9px 13px;border-top:1px solid var(--line);white-space:pre-wrap}
+@keyframes spin{to{transform:rotate(360deg)}}
+.working{display:flex;align-items:center;gap:11px;padding:8px 2px;color:var(--ink-2);font-size:15px}
+.aster{color:var(--accent);display:flex;animation:spin 3.4s linear infinite}.aster .ic{width:22px;height:22px;stroke-width:2.2}
+.chiprow{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 4px}
+.achip{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer;box-shadow:var(--shadow-sm)}
+.achip .ic{width:16px;height:16px}.achip .p{color:var(--add);font-family:var(--mono)}
+.approve{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin:10px 0;box-shadow:var(--shadow-sm)}
+.approve .ah{display:flex;align-items:center;gap:9px;padding:12px 15px 4px}
+.approve .ah .ic{width:18px;height:18px;color:var(--accent)} .approve .ah .t{font-size:14px;font-weight:700;color:var(--ink)}
+.approve .ab{padding:6px 15px 14px;display:flex;flex-direction:column;gap:11px}
+.approve .q{font-size:14px;color:var(--ink-2)}
+.approve .cmd{font-family:var(--mono);font-size:13px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);word-break:break-all}
+.approve .cmd .pfx{color:var(--ink-3)}
+.approve .acts{display:flex;gap:9px}
+.btn{font:inherit;font-size:14px;font-weight:700;border-radius:12px;padding:11px 14px;cursor:pointer;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn-red{background:var(--accent);color:#fff;flex:1}.btn-red:hover{background:var(--accent-press)}
+.btn-soft{background:var(--surface-2);color:var(--ink);border-color:var(--line);flex:1}.btn-soft:hover{background:var(--press)}
+
+/* ===================== INPUT ===================== */
+.cinput{flex:0 0 auto;padding:8px 12px 4px}
+/* agent switcher — lives UNDER the input: centered dots, dashed new-agent dot (round-2 NA1) */
+.aswitch{flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:8px 16px 12px}
+.aswitch .dots{display:flex;align-items:center;gap:8px}
+.aswitch .dots .d{width:7px;height:7px;border-radius:999px;background:var(--line);cursor:pointer;transition:.22s}
+.aswitch .dots .d.on{background:var(--accent);width:24px}
+.aswitch .dots .d:hover{background:var(--ink-3)} .aswitch .dots .d.on:hover{background:var(--accent)}
+/* new agent = dashed outline circle at the end (NA1 from round 2) */
+.aswitch .dots .d.add{background:transparent;border:1.5px dashed var(--ink-3);width:11px;height:11px;margin-left:4px;cursor:pointer}
+.aswitch .dots .d.add:hover,.aswitch .dots .d.add.on{border-color:var(--accent)}
+/* new-agent compose marker (the new-agent destination) */
+.na-big{width:66px;height:66px;border-radius:999px;border:2px dashed var(--accent);display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.na-big svg{width:30px;height:30px;stroke-width:2}
+/* ===================== LANDING / NEW WORKSPACE (default screen) — minimal ===================== */
+.landing{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;justify-content:center;gap:20px;padding:24px 22px 56px}
+.land-hero{text-align:center}
+.land-hero .lbl{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.land-hero h1{font-size:25px;font-weight:700;color:var(--ink);margin:9px 0 0;letter-spacing:-.01em}
+.name-field{background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:18px 18px;font-size:19px;font-weight:600;color:var(--ink-3);box-shadow:var(--shadow-sm);display:flex;align-items:center}
+.name-field.focus{border-color:var(--accent);color:var(--ink)}
+.name-field .car{width:2px;height:22px;background:var(--accent);margin-left:1px;animation:pulse 1.1s steps(1) infinite}
+.meta-line{display:flex;align-items:center;justify-content:center;gap:9px;font-size:13px;color:var(--ink-3)}
+.meta-line .repo{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-weight:600;cursor:pointer}
+.meta-line .repo svg{width:15px;height:15px;color:var(--ink-3)}
+.meta-line .br{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:12.5px;color:var(--ink-3)}
+.meta-line .br svg{width:14px;height:14px}
+.create-btn{display:flex;align-items:center;justify-content:center;gap:9px;background:var(--accent);color:#fff;border:none;border-radius:14px;padding:16px;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.create-btn:hover{background:var(--accent-press)} .create-btn svg{width:18px;height:18px}
+/* empty states */
+.empty{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:30px 28px}
+.empty .ei{width:60px;height:60px;border-radius:999px;background:var(--press);display:flex;align-items:center;justify-content:center;color:var(--ink-3)}
+.empty .ei svg{width:28px;height:28px}
+.empty .et{font-size:17px;font-weight:600;color:var(--ink)}
+.empty .ed{font-size:13.5px;color:var(--ink-2);max-width:220px;line-height:1.5}
+/* chat intro (empty agent) — quiet detail rows matching AlphaChatIntro */
+.intro{padding:16px 18px;display:flex;flex-direction:column;gap:11px}
+.intro .ir{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--ink-2);line-height:1.45}
+.intro .ir svg{width:16px;height:16px;color:var(--ink-3);flex:0 0 auto;margin-top:2px}
+.intro .ir b{color:var(--ink);font-weight:600}
+.intro .ir .cmd{font-family:var(--mono);font-size:12.5px;color:var(--accent-ink);background:var(--accent-tint);border-radius:5px;padding:1px 6px}
+/* anchored dropdown (⋮ jump menu and + context menu) */
+.dropdown{position:absolute;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);z-index:34;overflow:hidden;min-width:236px;opacity:0;transform:translateY(-6px) scale(.98);transform-origin:top right;pointer-events:none;transition:opacity .15s,transform .15s}
+.dropdown.open{opacity:1;transform:none;pointer-events:auto}
+.dropdown[data-menu="jump"]{top:50px;right:10px}
+.dropdown[data-menu="plus"]{left:12px;bottom:118px;transform-origin:bottom left;min-width:210px}
+.dropdown .menu-item{padding:12px 16px;font-size:15px}
+.dropdown .menu-item .ic{width:19px;height:19px}
+.cbox{background:var(--surface);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow-sm);padding:14px 17px 10px}
+.cbox .ph{font-size:16.5px;color:var(--ink-3)}
+.cbox .row{display:flex;align-items:center;margin-top:11px;gap:14px}
+.cbox .mode{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:700;color:var(--ink)}
+.cbox .mode .ic{width:19px;height:19px}
+.cbox .sp{flex:1}
+.cbox .plusbtn{background:none;border:none;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;padding:0}.cbox .plusbtn svg{width:27px;height:27px}
+.cbox .tools{display:flex;align-items:center;gap:16px;color:var(--ink-2)} .cbox .tools .ic{width:22px;height:22px}
+.send{width:38px;height:38px;border-radius:999px;background:var(--accent);color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.send .ic{width:20px;height:20px;stroke-width:2.4}
+.send.idle{background:var(--accent-tint);color:var(--accent)}
+.stop{width:38px;height:38px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.stop .sq{width:13px;height:13px;border-radius:3px;background:var(--ink)}
+
+/* ===================== OVERLAYS / SHEETS / DRAWER ===================== */
+.backdrop{position:absolute;inset:0;background:rgba(40,28,10,.42);opacity:0;pointer-events:none;transition:opacity .24s;z-index:30}
+.backdrop.clear{background:transparent} /* dropdowns: invisible click-catcher, no dim */
+.backdrop.open{opacity:1;pointer-events:auto}
+.overlay{position:absolute;inset:0;background:var(--bg);transform:translateX(100%);transition:transform .3s cubic-bezier(.16,1,.3,1);z-index:36;display:flex;flex-direction:column}
+.overlay.open{transform:translateX(0)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:22px 22px 0 0;transform:translateY(100%);transition:transform .28s cubic-bezier(.16,1,.3,1);z-index:33;padding:8px 0 26px;box-shadow:0 -10px 30px rgba(40,28,10,.22)}
+.sheet.open{transform:translateY(0)}
+.sheet .grab{width:38px;height:5px;border-radius:999px;background:var(--line);margin:7px auto 8px}
+.menu-item{display:flex;align-items:center;gap:15px;padding:14px 20px;cursor:pointer;font-size:16px;color:var(--ink)}
+.menu-item:hover{background:var(--press)} .menu-item .ic{width:21px;height:21px;color:var(--ink-2)}
+.menu-item .kx{margin-left:auto;font-size:12.5px;color:var(--ink-3)}
+.menu-sep{height:1px;background:var(--line);margin:6px 0}
+
+/* drawer (D1) */
+.drawer{position:absolute;top:0;bottom:0;left:0;width:300px;background:var(--surface);border-right:1px solid var(--line);transform:translateX(-100%);transition:transform .3s cubic-bezier(.16,1,.3,1);z-index:37;display:flex;flex-direction:column;padding-top:8px}
+.drawer.open{transform:translateX(0)}
+.drawer .dh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 12px}
+.drawer .wm{font-family:var(--serif);font-size:25px;font-weight:700;color:var(--ink)}
+.drawer .ava{width:34px;height:34px;border-radius:999px;background:var(--press);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--ink-2)}
+.drawer .nav{padding:4px 10px}
+.drawer .ni{display:flex;align-items:center;gap:14px;padding:11px 12px;border-radius:12px;font-size:16px;color:var(--ink);cursor:pointer}
+.drawer .ni:hover{background:var(--press)} .drawer .ni.cur{background:var(--press);font-weight:600}
+.drawer .ni .ic{width:20px;height:20px;color:var(--ink)}
+.drawer .grp{padding:14px 20px 6px;font-size:12.5px;color:var(--ink-3)}
+.drawer .ws{flex:1;overflow-y:auto;padding:4px 10px}
+/* repo group (collapsible) */
+.drawer .repo{display:flex;align-items:center;gap:9px;padding:11px 12px 7px;cursor:pointer;color:var(--ink);font-size:13.5px;font-weight:700}
+.drawer .repo svg{width:16px;height:16px;color:var(--ink-3);flex:0 0 auto}
+.drawer .repo svg.chev{transition:transform .2s}
+.drawer .repo.collapsed svg.chev{transform:rotate(-90deg)}
+.drawer .repo .ct{margin-left:auto;font-size:12px;color:var(--ink-3);font-weight:600}
+.drawer .repogroup.collapsed .wsi{display:none}
+.drawer .wsi{display:flex;align-items:center;gap:11px;padding:10px 12px 10px 22px;border-radius:12px;cursor:pointer}
+.drawer .wsi:hover{background:var(--press)} .drawer .wsi.cur{background:var(--press)}
+.drawer .wsi .wd{width:8px;height:8px;border-radius:999px;flex:0 0 auto}
+.drawer .wsi .wi{flex:1;min-width:0}
+.drawer .wsi .wn{font-size:14.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawer .wsi .wb{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawer .newpill{margin:12px 14px 18px;align-self:stretch;display:flex;align-items:center;justify-content:center;gap:9px;background:var(--ink);color:var(--surface);border:none;border-radius:14px;padding:14px 20px;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+.drawer .newpill svg{width:18px;height:18px}
+.sdot{width:8px;height:8px;border-radius:999px;flex:0 0 auto}
+.sdot.run{background:var(--accent)}.sdot.idle{background:var(--ink-3)}.sdot.unread{background:var(--link)}.sdot.done{background:var(--add)}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}.pulsing{animation:pulse 1.15s ease-in-out infinite}
+
+/* overlay header (review-all, terminal) */
+.ohead{flex:0 0 auto;display:flex;align-items:center;gap:4px;padding:5px 6px;background:var(--bg-header);border-bottom:1px solid var(--line)}
+.ohead .ibtn{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:var(--ink);background:none;border:none;cursor:pointer}
+.ohead .ibtn:hover{background:var(--press)}
+.ohead .oi{flex:1;min-width:0;text-align:center}
+.ohead .oi .t{font-size:16px;font-weight:700;color:var(--ink)}
+.ohead .oi .s{font-size:12px}.ohead .oi .add{color:var(--add);font-family:var(--mono)}.ohead .oi .del{color:var(--del);font-family:var(--mono)}
+.ohead.dark{background:#1a150e;border-bottom:1px solid #3a2f1f}
+.ohead.dark .ibtn{color:var(--term-ink)} .ohead.dark .oi .t{color:var(--term-ink)} .ohead.dark .oi .s{color:var(--term-dim)}
+
+/* review-all */
+.reviewall{flex:1;min-height:0;overflow-y:auto;background:var(--bg)}
+.ra-file{border-bottom:9px solid var(--press)}
+.ra-fhead{display:flex;align-items:center;gap:9px;padding:11px 14px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1}
+.ra-fhead .fn{flex:1;font-family:var(--mono);font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+.ra-fhead .ss{font-family:var(--mono);font-size:11px}.ra-fhead .add{color:var(--add)}.ra-fhead .del{color:var(--del)}
+.ra-fhead .vw{width:18px;height:18px;border-radius:999px;border:1.6px solid var(--line);flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.ra-fhead .vw.done{background:var(--add);border-color:var(--add)} .ra-fhead .vw.done .ic{width:12px;height:12px;color:#fff;stroke-width:3.5}
+.diff{font-family:var(--mono);font-size:12px;line-height:1.55}
+.dl{display:flex;white-space:pre}
+.dl .g{width:36px;flex:0 0 auto;text-align:right;padding-right:8px;color:var(--ink-3);user-select:none}
+.dl .sg{width:13px;flex:0 0 auto;text-align:center;user-select:none}
+.dl .cd{flex:1;padding-right:12px;color:var(--ink-2)}
+.dl.add{background:var(--add-bg)}.dl.add .sg{color:var(--add)}.dl.add .cd{color:var(--ink)}
+.dl.del{background:var(--del-bg)}.dl.del .sg{color:var(--del)}.dl.del .cd{color:var(--ink)}
+.dl.hunk{background:#EFE0FB}.dl.hunk .cd{color:#7A3A95}.dl.hunk .g{color:#b08fc4}
+.dl .kw{color:#9A4FB0}.dl .ty{color:var(--link)}.dl .st2{color:var(--add)}
+.shownext{padding:9px 14px;color:var(--link);font-size:13px;background:#EAF1FA;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;gap:8px;cursor:pointer}
+.shownext .ic{width:15px;height:15px}
+.finish{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:9px;background:var(--add);color:#fff;border:none;border-radius:999px;padding:13px 22px;font:inherit;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 8px 22px rgba(31,122,61,.4);z-index:6}
+.finish .ic{width:18px;height:18px}
+
+/* terminal */
+.term-bar{flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:9px 14px;background:#1a150e;color:var(--term-dim);font-family:var(--mono);font-size:12px;border-bottom:1px solid #3a2f1f}
+.term-bar .tdot{width:9px;height:9px;border-radius:999px}
+.terminal{flex:1;min-height:0;background:var(--term-bg);color:var(--term-ink);font-family:var(--mono);font-size:12px;line-height:1.5;letter-spacing:0;padding:16px;overflow:auto;white-space:pre;tab-size:2}
+.terminal .dim{color:var(--term-dim)}.terminal .g{color:var(--term-green)}.terminal .a{color:var(--term-accent)}
+.terminal .cur{display:inline-block;width:8px;height:15px;background:var(--term-accent);vertical-align:-2px;animation:pulse 1.1s steps(1) infinite}
+
+.note{font-size:13px;color:#C9B58C;background:#241d12;border:1px solid #3c3020;border-radius:10px;padding:12px 15px;margin:8px 0 20px;max-width:900px}
+.note b{color:#FBEFD6}
+</style>
+</head>
+<body>
+
+<div class="doc-head">
+  <h1>Sculptor Mobile — Mocks</h1>
+  <p>The agreed mobile direction. Real <a href="https://lucide.dev">Lucide</a> icons, warm "sand" light theme applied on
+  mobile only. Two component pages (<b>Foundations</b>, <b>Chat</b>) and a <b>Flows</b> page driven from an
+  already-in-progress chat: open the workspaces drawer, view changes → review-all, open the terminal, switch agents via
+  the pager dots under the chat input. Mocks only — see <code style="font-family:var(--mono)">spec.md</code> for the
+  implementation approach.</p>
+  <div class="meta">
+    <span class="chip"><span class="sw" style="background:#FAE8CA"></span>bg <b>#FAE8CA</b></span>
+    <span class="chip"><span class="sw" style="background:#F50D00"></span>accent <b>#F50D00</b></span>
+    <span class="chip">icons <b>Lucide</b></span>
+    <span class="chip">vibe <b>Claude mobile</b></span>
+  </div>
+</div>
+
+<nav class="tabs" id="topnav">
+  <button data-target="flows" class="active">Flows</button>
+  <button data-target="foundations">Foundations</button>
+  <button data-target="chat">Chat components</button>
+</nav>
+
+<!-- ============================ FLOWS ============================ -->
+<section class="panel active" data-panel="flows">
+  <h2>Flows</h2>
+  <p class="lead">Assume an agent is already working in a workspace. Everything starts from the chat. The home screen
+  below is <b>interactive</b> — tap the ☰ (drawer), the changes chip, the ⋮ (jump menu), or the agent dots. Each flow
+  is then broken into steps.</p>
+
+  <div class="section-label"><span class="n">Default</span> Landing · new workspace (the screen you open to)</div>
+  <p class="lead" style="margin-top:-6px">The default screen. One real input — the workspace name. Branch is always <code style="font-family:var(--mono);background:#241d12;padding:1px 5px;border-radius:4px;color:#E8B45a">origin/main</code> and repo are kept subtle; no recents or shortcut chrome.</p>
+  <div class="flowrow">
+    <div class="step" style="width:380px">
+      <div class="device lg"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr">
+          <button class="ibtn"><i data-lucide="square-menu" class="ic ic-l"></i></button>
+          <div class="title"><div class="t">Sculptor</div></div>
+          <button class="ibtn"><i data-lucide="settings" class="ic ic-l"></i></button>
+        </div>
+        <div class="landing">
+          <div class="land-hero"><h1>Name your workspace</h1></div>
+          <div class="name-field focus">Mobile responsive shell<span class="car"></span></div>
+          <div class="meta-line"><span class="repo"><i data-lucide="folder"></i>sculptor <i data-lucide="chevron-down" style="width:13px;height:13px"></i></span><span>·</span><span class="br"><i data-lucide="git-branch"></i>origin/main</span></div>
+          <button class="create-btn"><i data-lucide="plus"></i>Create workspace</button>
+        </div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="step cap" style="width:auto"><b>Landing · New workspace (default)</b>Name is the only input; repo/branch subtle.</div>
+    </div>
+  </div>
+
+  <div class="section-label"><span class="n">Home</span> In-progress chat (interactive)</div>
+  <div class="flowrow">
+    <div class="step" style="width:380px">
+      <div class="device lg"><div class="screen theme-sand" id="home">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr">
+          <button class="ibtn" data-action="drawer"><i data-lucide="square-menu" class="ic ic-l"></i></button>
+          <div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>Mock · sculptor</div></div>
+          <button class="ibtn" data-action="menu"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button>
+        </div>
+        <div class="chgchip" data-chip>
+          <div class="top" data-action="chip">
+            <span class="gi"><i data-lucide="git-compare" class="ic"></i></span>
+            <span class="lab">Changes</span>
+            <span class="stat"><span class="add">+211</span> <span class="del">−9</span> · 5 files</span>
+            <span class="cv"><i data-lucide="chevron-down" class="ic ic-s"></i></span>
+          </div>
+          <div class="body">
+            <div class="filerow"><span class="st M">M</span><div class="fi"><div class="fn">WorkspacePage.tsx</div><div class="fp">frontend/src/pages/workspace/</div></div><span class="ss"><span class="add">+24</span><span class="del">−6</span></span></div>
+            <div class="filerow"><span class="st A">A</span><div class="fi"><div class="fn">MobileWorkspaceShell.tsx</div><div class="fp">frontend/src/pages/workspace/</div></div><span class="ss"><span class="add">+148</span></span></div>
+            <div class="filerow"><span class="st A">A</span><div class="fi"><div class="fn">useIsMobile.ts</div><div class="fp">frontend/src/common/hooks/</div></div><span class="ss"><span class="add">+19</span></span></div>
+            <div class="filerow"><span class="st M">M</span><div class="fi"><div class="fn">TopBar.tsx</div><div class="fp">frontend/src/components/</div></div><span class="ss"><span class="add">+12</span><span class="del">−3</span></span></div>
+            <div class="filerow"><span class="st M">M</span><div class="fi"><div class="fn">tokens.css</div><div class="fp">frontend/src/styles/</div></div><span class="ss"><span class="add">+8</span></span></div>
+            <div class="reviewrow"><button class="reviewbtn" data-action="open" data-ov="review"><i data-lucide="layers" class="ic"></i>Review all changes</button></div>
+          </div>
+        </div>
+        <div class="stream">
+          <div class="ts-div">2:14 PM</div>
+          <div class="umsg"><div class="ubub">Make the Workspace view usable on a phone — single column. Defer the terminal and side-by-side diff.</div></div>
+          <div class="amsg">
+            <p>Here's the plan for the mobile workspace shell:</p>
+            <ul><li>Add a <code>useIsMobile()</code> hook at the <strong>768px</strong> breakpoint.</li><li>Render <code>MobileWorkspaceShell</code> when narrow.</li></ul>
+            <div class="cblock"><span class="k">const</span> isMobile = useMediaQuery(<span class="s">"(max-width: 767px)"</span>);</div>
+          </div>
+          <div class="statusline"><span class="ld"><i data-lucide="file-text" class="ic"></i></span><span class="w">Read <b>WorkspacePage.tsx</b></span><span class="cv"><i data-lucide="chevron-right" class="ic"></i></span></div>
+          <div class="toolcard">
+            <div class="h"><i data-lucide="terminal" class="ic"></i><span>Ran <b>just check</b></span><span class="m">4.2s</span></div>
+            <div class="out">✓ ruff · tsc · eslint — all passed</div>
+          </div>
+          <div class="working"><span class="aster"><i data-lucide="asterisk" class="ic"></i></span>Working…</div>
+        </div>
+        <div class="cinput"><div class="cbox"><div class="ph">Reply to Mock…</div>
+          <div class="row"><button class="plusbtn" data-action="plusmenu"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="stop"><span class="sq"></span></button></div>
+        </div></div>
+        <div class="aswitch"><div class="dots"><span class="d on" data-action="agent" data-i="0"></span><span class="d" data-action="agent" data-i="1"></span><span class="d" data-action="agent" data-i="2"></span><span class="d add" data-action="newagent" title="New agent"></span></div></div>
+
+        <!-- backdrop + drawer + menu + overlays live in the home screen -->
+        <div class="backdrop" data-action="close"></div>
+        <div class="drawer">
+          <div class="dh"><span class="wm">Sculptor</span><span class="ava">BF</span></div>
+          <div class="nav"><div class="ni"><i data-lucide="house" class="ic"></i>Home</div><div class="ni cur"><i data-lucide="folder" class="ic"></i>Workspaces</div></div>
+          <div class="ws">
+            <div class="repogroup">
+              <div class="repo" data-action="repo"><i data-lucide="chevron-down" class="ic chev"></i><i data-lucide="folder" class="ic"></i><span class="rn">sculptor</span><span class="ct">4</span></div>
+              <div class="wsi cur"><span class="wd"><span class="sdot run pulsing"></span></span><div class="wi"><div class="wn">Mobile responsive shell</div><div class="wb">bryden/mobile-shell</div></div></div>
+              <div class="wsi"><span class="wd"><span class="sdot unread"></span></span><div class="wi"><div class="wn">Fix diff scroll jump</div><div class="wb">saeed/diff-scroll</div></div></div>
+              <div class="wsi"><span class="wd"><span class="sdot idle"></span></span><div class="wi"><div class="wn">Pi compaction chrome</div><div class="wb">danver/pi-compaction</div></div></div>
+              <div class="wsi"><span class="wd"><span class="sdot done"></span></span><div class="wi"><div class="wn">Release notes 0.27</div><div class="wb">release/v0.27</div></div></div>
+            </div>
+            <div class="repogroup collapsed">
+              <div class="repo collapsed" data-action="repo"><i data-lucide="chevron-down" class="ic chev"></i><i data-lucide="folder" class="ic"></i><span class="rn">openhost</span><span class="ct">2</span></div>
+              <div class="wsi"><span class="wd"><span class="sdot idle"></span></span><div class="wi"><div class="wn">Deploy pipeline</div><div class="wb">bryden/deploy</div></div></div>
+              <div class="wsi"><span class="wd"><span class="sdot idle"></span></span><div class="wi"><div class="wn">Compute quotas</div><div class="wb">main</div></div></div>
+            </div>
+          </div>
+          <button class="newpill"><i data-lucide="circle-plus"></i>New workspace</button>
+        </div>
+        <div class="dropdown" data-menu="jump">
+          <div class="menu-item" data-action="open" data-ov="terminal"><i data-lucide="terminal" class="ic"></i>Open terminal</div>
+          <div class="menu-item" data-action="open" data-ov="review"><i data-lucide="layers" class="ic"></i>Review all changes <span class="kx">5 files</span></div>
+          <div class="menu-item"><i data-lucide="git-pull-request" class="ic"></i>View pull request <span class="kx">#35</span></div>
+          <div class="menu-sep"></div>
+          <div class="menu-item"><i data-lucide="square-pen" class="ic"></i>Rename agent</div>
+          <div class="menu-item"><i data-lucide="settings" class="ic"></i>Workspace settings</div>
+        </div>
+        <div class="dropdown" data-menu="plus">
+          <div class="menu-item"><i data-lucide="at-sign" class="ic"></i>Mention</div>
+          <div class="menu-item"><i data-lucide="command" class="ic"></i>Skills &amp; commands</div>
+          <div class="menu-item"><i data-lucide="paperclip" class="ic"></i>Attach files</div>
+          <div class="menu-item"><i data-lucide="image" class="ic"></i>Add image</div>
+        </div>
+
+        <!-- review-all overlay -->
+        <div class="overlay" data-ov="review">
+          <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+          <div class="ohead"><button class="ibtn" data-action="close-ov"><i data-lucide="circle-chevron-left" class="ic ic-l"></i></button><div class="oi"><div class="t">Review all changes</div><div class="s"><span class="add">+211</span> <span class="del">−9</span> · 5 files</div></div><button class="ibtn"><i data-lucide="settings" class="ic"></i></button></div>
+          <div class="reviewall">
+            <div class="ra-file">
+              <div class="ra-fhead"><span class="st M">M</span><span class="fn">WorkspacePage.tsx</span><span class="ss"><span class="add">+24</span> <span class="del">−6</span></span><span class="vw"></span></div>
+              <div class="diff">
+                <div class="dl hunk"><span class="g"></span><span class="sg"></span><span class="cd">@@ -75,7 +75,12 @@ WorkspacePage</span></div>
+                <div class="dl"><span class="g">75</span><span class="sg"> </span><span class="cd">  const { workspaceID } = useParams();</span></div>
+                <div class="dl add"><span class="g">76</span><span class="sg">+</span><span class="cd">  <span class="kw">const</span> isMobile = useIsMobile();</span></div>
+                <div class="dl add"><span class="g">77</span><span class="sg">+</span><span class="cd">  <span class="kw">if</span> (isMobile) <span class="kw">return</span> &lt;<span class="ty">MobileWorkspaceShell</span>/&gt;;</span></div>
+                <div class="dl"><span class="g">78</span><span class="sg"> </span><span class="cd">  <span class="kw">return</span> (</span></div>
+                <div class="dl del"><span class="g">79</span><span class="sg">−</span><span class="cd">    &lt;<span class="ty">Flex</span> className={c}&gt;</span></div>
+                <div class="dl add"><span class="g">79</span><span class="sg">+</span><span class="cd">    &lt;<span class="ty">Flex</span> className={c} overflowY=<span class="st2">"hidden"</span>&gt;</span></div>
+              </div>
+              <div class="shownext"><i data-lucide="chevron-down" class="ic"></i>Show next lines</div>
+            </div>
+            <div class="ra-file">
+              <div class="ra-fhead"><span class="st A">A</span><span class="fn">useIsMobile.ts</span><span class="ss"><span class="add">+19</span></span><span class="vw done"><i data-lucide="check" class="ic"></i></span></div>
+              <div class="diff">
+                <div class="dl hunk"><span class="g"></span><span class="sg"></span><span class="cd">@@ -0,0 +1,6 @@</span></div>
+                <div class="dl add"><span class="g">1</span><span class="sg">+</span><span class="cd"><span class="kw">import</span> { useState } <span class="kw">from</span> <span class="st2">"react"</span>;</span></div>
+                <div class="dl add"><span class="g">2</span><span class="sg">+</span><span class="cd"><span class="kw">export const</span> useIsMobile = () =&gt; {</span></div>
+                <div class="dl add"><span class="g">3</span><span class="sg">+</span><span class="cd">  <span class="kw">return</span> useMedia(<span class="st2">"(max-width:767px)"</span>);</span></div>
+              </div>
+            </div>
+          </div>
+                  </div>
+
+        <!-- terminal overlay -->
+        <div class="overlay" data-ov="terminal">
+          <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+          <div class="ohead"><button class="ibtn" data-action="close-ov"><i data-lucide="circle-chevron-left" class="ic ic-l"></i></button><div class="oi"><div class="t">Terminal</div><div class="s">Mock · bryden/mobile-shell</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic"></i></button></div>
+                    <div class="terminal">$ just check
+<span class="dim">ruff ........... </span><span class="g">passed</span>
+<span class="dim">tsc ............ </span><span class="g">passed</span>
+<span class="dim">eslint ......... </span><span class="g">passed</span>
+<span class="g">✓ all checks passed in 4.2s</span>
+
+$ git push origin bryden/mobile-shell
+<span class="dim">Enumerating objects: 24, done.</span>
+<span class="a">To github.com:imbue-ai/sculptor.git</span>
+   a859bdd..0c0ae85  bryden/mobile-shell
+
+$ <span class="cur"></span></div>
+        </div>
+
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="step cap" style="width:auto"><b>Home · in-progress chat</b>Tap ☰, the changes chip, ⋮, or the agent dots.</div>
+    </div>
+  </div>
+
+  <!-- FLOW A: drawer -->
+  <div class="section-label"><span class="n">Flow A</span> Open the workspaces drawer</div>
+  <div class="flowrow">
+    <div class="step">
+      <div class="device lg"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn on"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>Mock · sculptor</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="chgchip"><div class="top"><span class="gi"><i data-lucide="git-compare" class="ic"></i></span><span class="lab">Changes</span><span class="stat"><span class="add">+211</span> <span class="del">−9</span> · 5 files</span><span class="cv"><i data-lucide="chevron-down" class="ic ic-s"></i></span></div></div>
+        <div class="stream"><div class="umsg"><div class="ubub">Make the Workspace view usable on a phone — single column.</div></div><div class="amsg"><p>Here's the plan:</p><ul><li>Add a <code>useIsMobile()</code> hook at <strong>768px</strong>.</li><li>Render <code>MobileWorkspaceShell</code> when narrow.</li></ul></div><div class="statusline"><span class="ld"><i data-lucide="terminal" class="ic"></i></span><span class="w">Ran <b>just check</b></span><span class="cv"><i data-lucide="chevron-right" class="ic"></i></span></div></div>
+        <div class="cinput"><div class="cbox"><div class="ph">Reply to Mock…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d on"></span><span class="d"></span><span class="d"></span><span class="d add"></span></div></div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>1 · Home</b>Tap the ☰ (top-left).</div>
+    </div>
+    <div class="gap"><div class="arr"><i data-lucide="chevron-right" class="ic ic-s"></i></div></div>
+    <div class="step">
+      <div class="device lg"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn on"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>Mock · sculptor</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="chgchip"><div class="top"><span class="gi"><i data-lucide="git-compare" class="ic"></i></span><span class="lab">Changes</span><span class="stat"><span class="add">+211</span> <span class="del">−9</span> · 5 files</span><span class="cv"><i data-lucide="chevron-down" class="ic ic-s"></i></span></div></div>
+        <div class="stream"><div class="umsg"><div class="ubub">Make the Workspace view usable on a phone — single column.</div></div><div class="amsg"><p>Here's the plan…</p></div></div>
+        <div class="cinput"><div class="cbox"><div class="ph">Reply to Mock…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d on"></span><span class="d"></span><span class="d"></span><span class="d add"></span></div></div>
+        <div class="backdrop open"></div>
+        <div class="drawer open" style="transition:none">
+          <div class="dh"><span class="wm">Sculptor</span><span class="ava">BF</span></div>
+          <div class="nav"><div class="ni"><i data-lucide="house" class="ic"></i>Home</div><div class="ni cur"><i data-lucide="folder" class="ic"></i>Workspaces</div></div>
+          <div class="ws">
+            <div class="repogroup">
+              <div class="repo"><i data-lucide="chevron-down" class="ic chev"></i><i data-lucide="folder" class="ic"></i><span class="rn">sculptor</span><span class="ct">4</span></div>
+              <div class="wsi cur"><span class="wd"><span class="sdot run pulsing"></span></span><div class="wi"><div class="wn">Mobile responsive shell</div><div class="wb">bryden/mobile-shell</div></div></div>
+              <div class="wsi"><span class="wd"><span class="sdot unread"></span></span><div class="wi"><div class="wn">Fix diff scroll jump</div><div class="wb">saeed/diff-scroll</div></div></div>
+              <div class="wsi"><span class="wd"><span class="sdot idle"></span></span><div class="wi"><div class="wn">Pi compaction chrome</div><div class="wb">danver/pi-compaction</div></div></div>
+              <div class="wsi"><span class="wd"><span class="sdot done"></span></span><div class="wi"><div class="wn">Release notes 0.27</div><div class="wb">release/v0.27</div></div></div>
+            </div>
+            <div class="repogroup collapsed">
+              <div class="repo collapsed"><i data-lucide="chevron-down" class="ic chev"></i><i data-lucide="folder" class="ic"></i><span class="rn">openhost</span><span class="ct">2</span></div>
+            </div>
+          </div>
+          <button class="newpill"><i data-lucide="circle-plus"></i>New workspace</button>
+        </div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>2 · Drawer (D1)</b>Slides over the chat; repos collapsible.</div>
+    </div>
+  </div>
+
+  <!-- FLOW B: changes -->
+  <div class="section-label"><span class="n">Flow B</span> View changes → review all → back to chat</div>
+  <p class="lead" style="margin-top:-6px">The changes chip starts small under the header; tap to expand it down to the full file list, then "Review all changes" pushes the combined diff. Back returns to chat.</p>
+  <div class="flowrow">
+    <div class="step">
+      <div class="device"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>Mock · sculptor</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="chgchip"><div class="top"><span class="gi"><i data-lucide="git-compare" class="ic"></i></span><span class="lab">Changes</span><span class="stat"><span class="add">+211</span> <span class="del">−9</span> · 5 files</span><span class="cv"><i data-lucide="chevron-down" class="ic ic-s"></i></span></div></div>
+        <div class="stream"><div class="amsg" style="margin-top:14px"><p>Pushed the branch and opened a PR. The changes chip shows the summary.</p></div></div>
+        <div class="cinput"><div class="cbox"><div class="ph">Reply to Mock…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d on"></span><span class="d"></span><span class="d"></span><span class="d add"></span></div></div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>1 · Changes chip (small)</b>Compact summary under the header.</div>
+    </div>
+    <div class="gap"><div class="arr"><i data-lucide="chevron-right" class="ic ic-s"></i></div><div class="lbl">tap</div></div>
+    <div class="step">
+      <div class="device"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>Mock · sculptor</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="chgchip open">
+          <div class="top"><span class="gi"><i data-lucide="git-compare" class="ic"></i></span><span class="lab">Changes</span><span class="stat"><span class="add">+211</span> <span class="del">−9</span> · 5 files</span><span class="cv"><i data-lucide="chevron-down" class="ic ic-s"></i></span></div>
+          <div class="body">
+            <div class="filerow"><span class="st M">M</span><div class="fi"><div class="fn">WorkspacePage.tsx</div><div class="fp">frontend/src/pages/workspace/</div></div><span class="ss"><span class="add">+24</span><span class="del">−6</span></span></div>
+            <div class="filerow"><span class="st A">A</span><div class="fi"><div class="fn">MobileWorkspaceShell.tsx</div><div class="fp">frontend/src/pages/workspace/</div></div><span class="ss"><span class="add">+148</span></span></div>
+            <div class="filerow"><span class="st A">A</span><div class="fi"><div class="fn">useIsMobile.ts</div><div class="fp">frontend/src/common/hooks/</div></div><span class="ss"><span class="add">+19</span></span></div>
+            <div class="filerow"><span class="st M">M</span><div class="fi"><div class="fn">TopBar.tsx</div><div class="fp">frontend/src/components/</div></div><span class="ss"><span class="add">+12</span><span class="del">−3</span></span></div>
+            <div class="filerow"><span class="st M">M</span><div class="fi"><div class="fn">tokens.css</div><div class="fp">frontend/src/styles/</div></div><span class="ss"><span class="add">+8</span></span></div>
+            <div class="reviewrow"><button class="reviewbtn"><i data-lucide="layers" class="ic"></i>Review all changes</button></div>
+          </div>
+        </div>
+        <div class="stream"><div class="umsg"><div class="ubub">Make the Workspace view usable on a phone — single column.</div></div><div class="amsg"><p>Pushed the branch and opened a PR.</p></div></div>
+        <div class="cinput"><div class="cbox"><div class="ph">Reply to Mock…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d on"></span><span class="d"></span><span class="d"></span><span class="d add"></span></div></div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>2 · Expanded files</b>All files + a Review-all button.</div>
+    </div>
+    <div class="gap"><div class="arr"><i data-lucide="chevron-right" class="ic ic-s"></i></div><div class="lbl">review all</div></div>
+    <div class="step">
+      <div class="device"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="ohead"><button class="ibtn"><i data-lucide="circle-chevron-left" class="ic ic-l"></i></button><div class="oi"><div class="t">Review all changes</div><div class="s"><span class="add">+211</span> <span class="del">−9</span> · 5 files</div></div><button class="ibtn"><i data-lucide="settings" class="ic"></i></button></div>
+        <div class="reviewall">
+          <div class="ra-file">
+            <div class="ra-fhead"><span class="st M">M</span><span class="fn">WorkspacePage.tsx</span><span class="ss"><span class="add">+24</span> <span class="del">−6</span></span><span class="vw"></span></div>
+            <div class="diff">
+              <div class="dl hunk"><span class="g"></span><span class="sg"></span><span class="cd">@@ -75,7 +75,12 @@</span></div>
+              <div class="dl"><span class="g">75</span><span class="sg"> </span><span class="cd">  const { workspaceID } = useParams();</span></div>
+              <div class="dl add"><span class="g">76</span><span class="sg">+</span><span class="cd">  <span class="kw">const</span> isMobile = useIsMobile();</span></div>
+              <div class="dl add"><span class="g">77</span><span class="sg">+</span><span class="cd">  <span class="kw">if</span> (isMobile) <span class="kw">return</span> &lt;<span class="ty">MobileWorkspaceShell</span>/&gt;;</span></div>
+              <div class="dl"><span class="g">78</span><span class="sg"> </span><span class="cd">  <span class="kw">return</span> (</span></div>
+              <div class="dl del"><span class="g">79</span><span class="sg">−</span><span class="cd">    &lt;<span class="ty">Flex</span> className={c}&gt;</span></div>
+              <div class="dl add"><span class="g">79</span><span class="sg">+</span><span class="cd">    &lt;<span class="ty">Flex</span> className={c} overflowY=<span class="st2">"hidden"</span>&gt;</span></div>
+            </div>
+            <div class="shownext"><i data-lucide="chevron-down" class="ic"></i>Show next lines</div>
+          </div>
+          <div class="ra-file">
+            <div class="ra-fhead"><span class="st A">A</span><span class="fn">useIsMobile.ts</span><span class="ss"><span class="add">+19</span></span><span class="vw done"><i data-lucide="check" class="ic"></i></span></div>
+            <div class="diff">
+              <div class="dl hunk"><span class="g"></span><span class="sg"></span><span class="cd">@@ -0,0 +1,6 @@</span></div>
+              <div class="dl add"><span class="g">1</span><span class="sg">+</span><span class="cd"><span class="kw">export const</span> useIsMobile = () =&gt; …</span></div>
+            </div>
+          </div>
+        </div>
+                <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>3 · Review all</b>Combined diff (RV1). Back ↑ returns to chat.</div>
+    </div>
+  </div>
+
+  <!-- FLOW C: terminal -->
+  <div class="section-label"><span class="n">Flow C</span> Open the terminal (via ⋮)</div>
+  <div class="flowrow">
+    <div class="step">
+      <div class="device"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>Mock · sculptor</div></div><button class="ibtn on"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="chgchip"><div class="top"><span class="gi"><i data-lucide="git-compare" class="ic"></i></span><span class="lab">Changes</span><span class="stat"><span class="add">+211</span> <span class="del">−9</span> · 5 files</span><span class="cv"><i data-lucide="chevron-down" class="ic ic-s"></i></span></div></div>
+        <div class="stream"><div class="umsg"><div class="ubub">Make the Workspace view usable on a phone — single column.</div></div><div class="amsg"><p>Here's the plan:</p><ul><li>Add a <code>useIsMobile()</code> hook at <strong>768px</strong>.</li></ul></div></div>
+        <div class="cinput"><div class="cbox"><div class="ph">Reply to Mock…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d on"></span><span class="d"></span><span class="d"></span><span class="d add"></span></div></div>
+        <div class="dropdown open" data-menu="jump" style="transition:none">
+          <div class="menu-item" style="color:var(--accent)"><i data-lucide="terminal" class="ic" style="color:var(--accent)"></i>Open terminal</div>
+          <div class="menu-item"><i data-lucide="layers" class="ic"></i>Review all changes <span class="kx">5 files</span></div>
+          <div class="menu-item"><i data-lucide="git-pull-request" class="ic"></i>View pull request <span class="kx">#35</span></div>
+          <div class="menu-sep"></div>
+          <div class="menu-item"><i data-lucide="square-pen" class="ic"></i>Rename agent</div>
+          <div class="menu-item"><i data-lucide="settings" class="ic"></i>Workspace settings</div>
+        </div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>1 · Tap ⋮ → menu</b>Workspace jumps live here.</div>
+    </div>
+    <div class="gap"><div class="arr"><i data-lucide="chevron-right" class="ic ic-s"></i></div></div>
+    <div class="step">
+      <div class="device"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="ohead"><button class="ibtn"><i data-lucide="circle-chevron-left" class="ic ic-l"></i></button><div class="oi"><div class="t">Terminal</div><div class="s">Mock · bryden/mobile-shell</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic"></i></button></div>
+                <div class="terminal">$ just check
+<span class="dim">ruff ........... </span><span class="g">passed</span>
+<span class="dim">tsc ............ </span><span class="g">passed</span>
+<span class="g">✓ all checks passed in 4.2s</span>
+
+$ git push origin bryden/mobile-shell
+<span class="a">To github.com:imbue-ai/sculptor.git</span>
+   a859bdd..0c0ae85  bryden/mobile-shell
+$ <span class="cur"></span></div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>2 · Terminal (T1)</b>Full-screen. Back ↑ returns to chat.</div>
+    </div>
+  </div>
+
+  <!-- agent switching -->
+  <div class="section-label"><span class="n">Agents</span> Switch with the pager dots</div>
+  <div class="flowrow">
+    <div class="step">
+      <div class="device"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>Mock · sculptor</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="stream"><div class="amsg" style="margin-top:14px"><p>Agent <strong>Mock</strong> — designing the mobile mocks.</p></div></div>
+        <div class="cinput"><div class="cbox"><div class="ph">Reply to Mock…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d on"></span><span class="d"></span><span class="d"></span><span class="d add"></span></div></div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>Agent 1 · Mock</b>Dots show 1 of 3.</div>
+    </div>
+    <div class="gap"><div class="arr"><i data-lucide="chevron-right" class="ic ic-s"></i></div><div class="lbl">swipe / tap dot</div></div>
+    <div class="step">
+      <div class="device"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad" style="background:var(--link)"></span>Spec writer · sculptor</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="stream"><div class="amsg" style="margin-top:14px"><p>Agent <strong>Spec writer</strong> — drafting the responsive shell spec.</p></div></div>
+        <div class="cinput"><div class="cbox"><div class="ph">Reply to Spec writer…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d"></span><span class="d on"></span><span class="d"></span><span class="d add"></span></div></div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>Agent 2 · Spec writer</b>Same header; dots + name update.</div>
+    </div>
+    <div class="gap"><div class="arr"><i data-lucide="chevron-right" class="ic ic-s"></i></div><div class="lbl">swipe past last</div></div>
+    <div class="step">
+      <div class="device lg"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>brave-lynx · sculptor</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="stream">
+          <div class="intro">
+            <div class="ir"><i data-lucide="git-branch"></i><span>Branched off <b>origin/main</b> from <b>sculptor</b> · just now</span></div>
+            <div class="ir"><i data-lucide="bot"></i><span>This is agent <b>brave-lynx</b> in workspace <b>Mobile responsive shell</b></span></div>
+            <div class="ir"><i data-lucide="users"></i><span>All agents in this workspace share the same code and can see each other's changes, but are isolated from other workspaces</span></div>
+            <div class="ir"><i data-lucide="circle-help"></i><span>Type <span class="cmd">/sculptor:help</span> to ask a question</span></div>
+          </div>
+        </div>
+        <div class="cinput"><div class="cbox"><div class="ph">Enter a prompt…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d"></span><span class="d"></span><span class="d"></span><span class="d on"></span><span class="d add"></span></div></div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>New agent → empty chat</b>Creating an agent lands in a fresh chat (same as the empty state).</div>
+    </div>
+  </div>
+
+  <!-- EMPTY STATES -->
+  <div class="section-label"><span class="n">Empty</span> States — drawer with no workspaces · agent with no messages</div>
+  <div class="flowrow">
+    <div class="step">
+      <div class="device"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div style="position:absolute;inset:0;background:rgba(40,28,10,.42)"></div>
+        <div class="drawer open" style="transition:none">
+          <div class="dh"><span class="wm">Sculptor</span><span class="ava">BF</span></div>
+          <div class="nav"><div class="ni"><i data-lucide="house" class="ic"></i>Home</div><div class="ni cur"><i data-lucide="folder" class="ic"></i>Workspaces</div></div>
+          <div class="ws" style="display:flex">
+            <div class="empty">
+              <div class="ei"><i data-lucide="folder-plus"></i></div>
+              <div class="et">No workspaces yet</div>
+              <div class="ed">Create your first workspace to start an agent on a fresh branch.</div>
+            </div>
+          </div>
+          <button class="newpill"><i data-lucide="circle-plus"></i>New workspace</button>
+        </div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>Empty workspaces drawer</b>Friendly empty state + New workspace.</div>
+    </div>
+    <div class="gap" style="width:30px"></div>
+    <div class="step" style="width:380px">
+      <div class="device lg"><div class="screen theme-sand">
+        <div class="statusbar"><span>9:41</span><span class="sb-r"><i data-lucide="signal-high" class="ic"></i><i data-lucide="wifi" class="ic"></i><i data-lucide="battery-full" class="ic"></i></span></div>
+        <div class="whdr"><button class="ibtn"><i data-lucide="square-menu" class="ic ic-l"></i></button><div class="title"><div class="t">Mobile responsive shell</div><div class="s"><span class="ad"></span>Mock · sculptor</div></div><button class="ibtn"><i data-lucide="circle-ellipsis" class="ic ic-l"></i></button></div>
+        <div class="stream">
+          <div class="intro">
+            <div class="ir"><i data-lucide="git-branch"></i><span>Branched off <b>origin/main</b> from <b>sculptor</b> · just now</span></div>
+            <div class="ir"><i data-lucide="bot"></i><span>This is agent <b>Mock</b> in workspace <b>Mobile responsive shell</b></span></div>
+            <div class="ir"><i data-lucide="users"></i><span>All agents in this workspace share the same code and can see each other's changes, but are isolated from other workspaces</span></div>
+            <div class="ir"><i data-lucide="circle-help"></i><span>Type <span class="cmd">/sculptor:help</span> to ask a question</span></div>
+          </div>
+        </div>
+        <div class="cinput"><div class="cbox"><div class="ph">Enter a prompt…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div></div>
+        <div class="aswitch"><div class="dots"><span class="d on"></span><span class="d add"></span></div></div>
+        <div class="home-ind"></div>
+      </div></div>
+      <div class="cap"><b>Agent with no messages</b>The real intro copy + "Enter a prompt…" — no changes chip yet.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ FOUNDATIONS ============================ -->
+<section class="panel" data-panel="foundations">
+  <h2>Foundations</h2>
+  <p class="lead">Warm palette, type, and core surfaces. Body/content is serif (Claude vibe); chrome is sans; code is mono.</p>
+  <div class="section-label">Palette</div>
+  <div class="specs">
+    <div class="spec" style="width:auto">
+      <div class="mini theme-sand" style="width:580px"><div style="padding:18px;display:flex;flex-wrap:wrap;gap:14px;background:var(--bg)">
+        <div style="text-align:center"><div style="width:84px;height:58px;border-radius:12px;background:var(--bg);border:1px solid var(--line)"></div><div style="font-size:11px;color:var(--ink-2);margin-top:6px">bg #FAE8CA</div></div>
+        <div style="text-align:center"><div style="width:84px;height:58px;border-radius:12px;background:var(--surface);border:1px solid var(--line)"></div><div style="font-size:11px;color:var(--ink-2);margin-top:6px">surface</div></div>
+        <div style="text-align:center"><div style="width:84px;height:58px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)"></div><div style="font-size:11px;color:var(--ink-2);margin-top:6px">surface-2</div></div>
+        <div style="text-align:center"><div style="width:84px;height:58px;border-radius:12px;background:var(--accent)"></div><div style="font-size:11px;color:var(--ink-2);margin-top:6px">accent #F50D00</div></div>
+        <div style="text-align:center"><div style="width:84px;height:58px;border-radius:12px;background:var(--accent-tint);border:1px solid var(--line)"></div><div style="font-size:11px;color:var(--ink-2);margin-top:6px">accent tint</div></div>
+        <div style="text-align:center"><div style="width:84px;height:58px;border-radius:12px;background:var(--ink)"></div><div style="font-size:11px;color:var(--ink-2);margin-top:6px">ink</div></div>
+        <div style="text-align:center"><div style="width:84px;height:58px;border-radius:12px;background:var(--add)"></div><div style="font-size:11px;color:var(--ink-2);margin-top:6px">add</div></div>
+        <div style="text-align:center"><div style="width:84px;height:58px;border-radius:12px;background:var(--del)"></div><div style="font-size:11px;color:var(--ink-2);margin-top:6px">del</div></div>
+      </div></div>
+    </div>
+  </div>
+  <div class="section-label">Type · buttons · icons</div>
+  <div class="specs">
+    <div class="spec">
+      <div class="sh">Type scale</div>
+      <div class="mini theme-sand"><div style="padding:18px;background:var(--bg)">
+        <div style="font-family:var(--serif);font-size:24px;font-weight:700;color:var(--ink)">Serif heading</div>
+        <div style="font-family:var(--serif);font-size:16.5px;color:var(--ink);margin-top:8px;line-height:1.5">Serif body — assistant prose, editorial Claude feel.</div>
+        <div style="font-size:14px;color:var(--ink-2);margin-top:10px">Sans label / chrome</div>
+        <div class="icode" style="margin-top:10px;display:inline-block">mono = JetBrains Mono</div>
+      </div></div>
+    </div>
+    <div class="spec">
+      <div class="sh">Buttons &amp; chips</div>
+      <div class="mini theme-sand"><div style="padding:18px;background:var(--bg);display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <button class="btn btn-red" style="flex:0 0 auto">Primary</button>
+        <button class="btn btn-soft" style="flex:0 0 auto">Soft</button>
+        <span class="achip"><i data-lucide="git-compare" class="ic"></i>Diff <span class="p">+3</span></span>
+      </div></div>
+    </div>
+    <div class="spec">
+      <div class="sh">Lucide icons</div>
+      <div class="mini theme-sand"><div style="padding:18px;background:var(--bg);display:flex;flex-wrap:wrap;gap:18px;color:var(--ink)">
+        <i data-lucide="square-menu" class="ic ic-l"></i><i data-lucide="circle-ellipsis" class="ic ic-l"></i><i data-lucide="git-compare" class="ic ic-l"></i><i data-lucide="terminal" class="ic ic-l"></i><i data-lucide="layers" class="ic ic-l"></i><i data-lucide="code-xml" class="ic ic-l"></i><i data-lucide="git-pull-request" class="ic ic-l"></i><i data-lucide="arrow-up" class="ic ic-l"></i><i data-lucide="square-pen" class="ic ic-l"></i><i data-lucide="folder" class="ic ic-l"></i>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ CHAT COMPONENTS ============================ -->
+<section class="panel" data-panel="chat">
+  <h2>Chat components</h2>
+  <p class="lead">The pieces of the stream, in the warm/serif aesthetic. These read well in isolation, so they keep a component view.</p>
+  <div class="specs">
+    <div class="spec">
+      <div class="sh">User &amp; assistant</div>
+      <div class="mini theme-sand"><div style="padding:6px 16px 14px;background:var(--bg)">
+        <div class="umsg"><div class="ubub">Make the Workspace view usable on a phone — single column.</div></div>
+        <div class="amsg"><p>Here's the plan:</p><ul><li>Add a <code>useIsMobile()</code> hook at <strong>768px</strong>.</li><li>Render <code>MobileWorkspaceShell</code> when narrow.</li></ul><div class="cblock"><span class="k">const</span> isMobile = useMediaQuery(<span class="s">"(max-width:767px)"</span>);</div></div>
+      </div></div>
+    </div>
+    <div class="spec">
+      <div class="sh">Status / tool lines</div>
+      <div class="mini theme-sand"><div style="padding:10px 16px;background:var(--bg)">
+        <div class="statusline"><span class="ld"><i data-lucide="git-branch" class="ic"></i></span><span class="w">Cloning <b>1 repository</b></span><span class="cv"><i data-lucide="chevron-right" class="ic"></i></span></div>
+        <div class="statusline"><span class="ld"><i data-lucide="file-text" class="ic"></i></span><span class="w">Read <b>WorkspacePage.tsx</b></span><span class="cv"><i data-lucide="chevron-right" class="ic"></i></span></div>
+        <div class="toolcard"><div class="h"><i data-lucide="terminal" class="ic"></i><span>Ran <b>just check</b></span><span class="m">4.2s</span></div><div class="out">✓ ruff · tsc · eslint — all passed</div></div>
+      </div></div>
+    </div>
+    <div class="spec">
+      <div class="sh">Working · chips · approve</div>
+      <div class="mini theme-sand"><div style="padding:14px 16px;background:var(--bg)">
+        <div class="working"><span class="aster"><i data-lucide="asterisk" class="ic"></i></span>Working…</div>
+        <div class="chiprow"><span class="achip"><i data-lucide="git-compare" class="ic"></i>Diff <span class="p">+3</span></span><span class="achip"><i data-lucide="git-pull-request" class="ic"></i>View PR</span></div>
+        <div class="approve" style="margin-top:6px"><div class="ah"><i data-lucide="shield" class="ic"></i><span class="t">Permission required</span></div><div class="ab"><div class="q">Run a shell command:</div><div class="cmd"><span class="pfx">$ </span>git push origin bryden/mobile-shell</div><div class="acts"><button class="btn btn-soft">Reject</button><button class="btn btn-red"><i data-lucide="check" class="ic ic-s"></i>Approve</button></div></div></div>
+      </div></div>
+    </div>
+    <div class="spec">
+      <div class="sh">Input · idle</div>
+      <div class="mini theme-sand"><div style="padding:16px;background:var(--bg)">
+        <div class="cbox"><div class="ph">Add feedback…</div><div class="row"><button class="plusbtn"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="send idle"><i data-lucide="arrow-up" class="ic"></i></button></div></div>
+      </div></div>
+    </div>
+    <div class="spec">
+      <div class="sh">Input · running (stop)</div>
+      <div class="mini theme-sand"><div style="padding:16px;background:var(--bg)">
+        <div class="cbox"><div class="ph">Reply to Mock…</div><div class="row"><button class="plusbtn" data-action="menu"><i data-lucide="circle-plus"></i></button><div class="sp"></div><button class="stop"><span class="sq"></span></button></div></div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>
+function renderIcons(){ if(window.lucide&&lucide.createIcons) lucide.createIcons(); }
+renderIcons(); window.addEventListener('load',renderIcons);
+
+const nav=document.getElementById('topnav');
+nav.addEventListener('click',e=>{const b=e.target.closest('button[data-target]');if(!b)return;
+  nav.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===b.dataset.target));
+  window.scrollTo({top:0,behavior:'smooth'});});
+
+const home=document.getElementById('home');
+function closeAll(){home.querySelectorAll('.drawer,.sheet,.overlay,.dropdown').forEach(x=>x.classList.remove('open'));
+  home.querySelector('.backdrop').classList.remove('open','clear');}
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-action]');if(!el||!home.contains(el))return;
+  const a=el.dataset.action, bd=home.querySelector('.backdrop');
+  if(a==='drawer'){home.querySelector('.drawer').classList.add('open');bd.classList.add('open');}
+  if(a==='menu'){home.querySelector('.dropdown[data-menu="jump"]').classList.add('open');bd.classList.add('open','clear');}
+  if(a==='plusmenu'){home.querySelector('.dropdown[data-menu="plus"]').classList.add('open');bd.classList.add('open','clear');}
+  if(a==='chip'){el.closest('.chgchip').classList.toggle('open');}
+  if(a==='repo'){const g=el.closest('.repogroup');g.classList.toggle('collapsed');el.classList.toggle('collapsed');}
+  if(a==='open'){closeAll();home.querySelector('.overlay[data-ov="'+el.dataset.ov+'"]').classList.add('open');}
+  if(a==='close-ov'){home.querySelectorAll('.overlay').forEach(x=>x.classList.remove('open'));}
+  if(a==='close'){closeAll();}
+  if(a==='agent'){const i=el.dataset.i;home.querySelectorAll('.aswitch .dots .d').forEach((d,n)=>d.classList.toggle('on',String(n)===i));
+    const names=[['Mock','var(--accent)'],['Spec writer','var(--link)'],['Build','var(--ink-3)']][i];
+    const s=home.querySelector('.whdr .title .s');s.querySelector('.ad').style.background=names[1];
+    s.childNodes[1].nodeValue=' '+names[0]+' · sculptor';}
+});
+</script>
+</body>
+</html>
