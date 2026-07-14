@@ -159,6 +159,18 @@ export const SectionAddPanelControl = ({
     document.addEventListener("pointermove", onMove);
   };
 
+  // Close promptly, with no safe-area grace. Used when leaving the menu itself,
+  // where there is no trigger->popover gap to forgive; a move back into the
+  // trigger or into an open submenu cancels this via their pointer-enter handlers.
+  const scheduleShortClose = (): void => {
+    if (pinnedRef.current) {
+      return; // a pinned menu stays open until it is explicitly toggled off
+    }
+    stopGraceTracking();
+    clearCloseTimer();
+    closeTimer.current = setTimeout(closeMenu, MENU_CLOSE_DELAY_MS);
+  };
+
   const handleEnter = (): void => {
     keepOpen();
     setIsOpen(true); // instant
@@ -168,12 +180,27 @@ export const SectionAddPanelControl = ({
     }
   };
 
-  const handleLeave = (event: ReactPointerEvent): void => {
-    // Clear a stray suppress flag if a press dragged off the button without a click.
+  // Clear the transient trigger UI shared by both leave paths: the tooltip, and a
+  // stray suppress flag left if a press dragged off the button without a click.
+  const resetTriggerTransientState = (): void => {
     suppressToggleRef.current = false;
     clearTooltipTimer();
     setIsTooltipOpen(false);
+  };
+
+  // Leaving the "+" trigger: the pointer may be crossing the gap toward the menu,
+  // so hold the close off while it stays in the safe area (see beginClose).
+  const handleTriggerLeave = (event: ReactPointerEvent): void => {
+    resetTriggerTransientState();
     beginClose({ x: event.clientX, y: event.clientY });
+  };
+
+  // Leaving the menu content or a submenu: close promptly — the safe area only
+  // bridges the trigger->popover gap, so applying it here would just make the
+  // menu linger open after the pointer has left it.
+  const handleMenuLeave = (): void => {
+    resetTriggerTransientState();
+    scheduleShortClose();
   };
 
   // The trigger's primary action: quick-add in the center, pin-toggle elsewhere.
@@ -260,7 +287,7 @@ export const SectionAddPanelControl = ({
             aria-label={isCenter ? "Add agent or panel" : "Add panel"}
             data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
             onPointerEnter={handleEnter}
-            onPointerLeave={handleLeave}
+            onPointerLeave={handleTriggerLeave}
             // Flag the pointer-down (capture phase, so the flag is set before Radix's
             // bubble-phase toggle fires onOpenChange) so handleOpenChange drops Radix's
             // pointer toggle. `activate` is the sole authority for a pointer click. Only a
@@ -281,7 +308,7 @@ export const SectionAddPanelControl = ({
         subSection={subSection}
         contentRef={contentRef}
         onPointerEnter={keepOpen}
-        onPointerLeave={handleLeave}
+        onPointerLeave={handleMenuLeave}
       />
     </DropdownMenu.Root>
   );
