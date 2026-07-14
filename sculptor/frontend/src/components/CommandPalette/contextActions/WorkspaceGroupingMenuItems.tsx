@@ -1,16 +1,20 @@
-// The grouping section at the top of the workspace row's context/dropdown
-// menu (rendered only while the workspace-groups experiment is on): "New
-// group from workspace" wraps the workspace in a fresh group, and the "Add to
-// group" submenu lists the repo's existing groups (each with its color dot,
-// the current membership checked/disabled) with a "New group…" escape hatch.
-// A workspace already in a group also gets "Remove from group".
+// The grouping section of the workspace row's context/dropdown menu, sitting
+// just above "Delete workspace" (rendered only while the workspace-groups
+// experiment is on): "New group from workspace" wraps the workspace in a fresh
+// group, and the "Add to group" submenu lists the repo's existing groups (each
+// with its color dot, the current membership checked/disabled) with a "New
+// group…" escape hatch. A workspace already in a group also gets "Remove from
+// group".
+//
+// Leads with a separator so it reads as its own section between the rename/copy
+// group above and Delete below (which supplies its own separator).
 //
 // Renders through the same dual menu primitives as the rest of the workspace
 // menu (see WorkspaceMenuComponents in menu.tsx), so the right-click menu and
 // the row's "⋯" dropdown stay in lockstep.
 
 import { useAtomValue, useSetAtom } from "jotai";
-import { Check } from "lucide-react";
+import { Check, FolderInput, FolderMinus, FolderPlus } from "lucide-react";
 import type { ReactElement } from "react";
 
 import type { Workspace } from "~/api";
@@ -24,7 +28,7 @@ import {
 } from "~/common/state/mutations/workspaceGroups.ts";
 import { ToastType } from "~/components/Toast.tsx";
 
-import type { WorkspaceMenuComponents } from "./menu.tsx";
+import { ICON_SIZE, type WorkspaceMenuComponents } from "./menu.tsx";
 import styles from "./WorkspaceGroupingMenuItems.module.scss";
 
 export const WorkspaceGroupingMenuItems = ({
@@ -101,11 +105,14 @@ export const WorkspaceGroupingMenuItems = ({
   // JSX and rendering logic
   return (
     <>
+      <menu.Separator />
       <menu.Item data-testid={ElementIds.WORKSPACE_MENU_NEW_GROUP} onSelect={handleNewGroup}>
-        New group from workspace
+        <FolderPlus size={ICON_SIZE} /> New group from workspace
       </menu.Item>
       <menu.Sub>
-        <menu.SubTrigger data-testid={ElementIds.WORKSPACE_MENU_ADD_TO_GROUP}>Add to group</menu.SubTrigger>
+        <menu.SubTrigger data-testid={ElementIds.WORKSPACE_MENU_ADD_TO_GROUP}>
+          <FolderInput size={ICON_SIZE} /> Add to group
+        </menu.SubTrigger>
         <menu.SubContent>
           {groups.length > 0 && <menu.Label>Move to group</menu.Label>}
           {groups.map((group) => {
@@ -126,16 +133,15 @@ export const WorkspaceGroupingMenuItems = ({
           })}
           {groups.length > 0 && <menu.Separator />}
           <menu.Item data-testid={ElementIds.WORKSPACE_MENU_ADD_TO_NEW_GROUP} onSelect={handleNewGroup}>
-            New group…
+            <FolderPlus size={ICON_SIZE} /> New group…
           </menu.Item>
         </menu.SubContent>
       </menu.Sub>
       {workspace.groupId != null && (
         <menu.Item data-testid={ElementIds.WORKSPACE_MENU_REMOVE_FROM_GROUP} onSelect={handleRemoveFromGroup}>
-          Remove from group
+          <FolderMinus size={ICON_SIZE} /> Remove from group
         </menu.Item>
       )}
-      <menu.Separator />
     </>
   );
 };

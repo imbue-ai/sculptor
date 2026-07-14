@@ -13,7 +13,7 @@ import type { WorkspaceAction } from "./types.ts";
 import { WorkspaceGroupingMenuItems } from "./WorkspaceGroupingMenuItems.tsx";
 
 /** Pixel size shared by every icon rendered in these context menus. */
-const ICON_SIZE = 14;
+export const ICON_SIZE = 14;
 
 /**
  * The Radix menu primitives the workspace menu body renders through.
@@ -67,11 +67,13 @@ type RenderMenuProps = {
   /**
    * Optional content to splice into the rendered menu immediately after
    * the action with the given id. Used by `WorkspaceContextMenuContent`
-   * to inject the "Open in..." submenu after `open_pr` and the copy group
-   * after `rename`, inside the existing groups rather than tacking them
-   * onto the end of the menu. Each injected node receives no leading
-   * separator — it inherits the group of the preceding action. Multiple
-   * entries may target the same action id; they render in array order.
+   * to inject the "Open in..." submenu after `open_pr`, and the copy group
+   * plus the grouping section after `rename`, inside the existing groups
+   * rather than tacking them onto the end of the menu. Each injected node
+   * receives no leading separator — it inherits the group of the preceding
+   * action (a node that wants its own section supplies its own leading
+   * separator, as the grouping section does). Multiple entries may target
+   * the same action id; they render in array order.
    */
   injectAfter?: ReadonlyArray<{ actionId: string; content: ReactElement }>;
   /**
@@ -151,9 +153,10 @@ const useWorkspaceMenuItems = (
   // (no fetch). Fall back to the source branch when the live branch hasn't
   // arrived yet.
   const branch = useWorkspaceBranch(workspace.objectId)?.currentBranch ?? workspace.sourceBranch ?? null;
-  // Grouping entries lead the menu while the workspace-groups experiment is
-  // on. Gated by mounting (not by hiding inside the section) so the flag-off
-  // menu performs no group-store reads at all.
+  // The grouping section sits just above Delete while the workspace-groups
+  // experiment is on (injected after the rename group). Gated by mounting (not
+  // by hiding inside the section) so the flag-off menu performs no group-store
+  // reads at all.
   const areWorkspaceGroupsEnabled = useAtomValue(isWorkspaceGroupsEnabledAtom);
   const isOpenInVisible =
     openInRuntime != null && openInRuntime.canOpenInOS() && openInRuntime.isMacUi() && getOpenWithItems().length > 0;
@@ -220,21 +223,28 @@ const useWorkspaceMenuItems = (
       </menu.Sub>
     </>
   );
-  return [
-    ...(areWorkspaceGroupsEnabled
-      ? [<WorkspaceGroupingMenuItems key="workspace-grouping" menu={menu} workspace={workspace} />]
-      : []),
-    ...renderMenuItems({
-      actions,
-      target: workspace,
-      destructiveColor,
-      menu,
-      injectAfter: [
-        ...(openInSub != null ? [{ actionId: "open_pr", content: openInSub }] : []),
-        { actionId: "rename", content: copyGroup },
-      ],
-    }),
-  ];
+  return renderMenuItems({
+    actions,
+    target: workspace,
+    destructiveColor,
+    menu,
+    injectAfter: [
+      ...(openInSub != null ? [{ actionId: "open_pr", content: openInSub }] : []),
+      { actionId: "rename", content: copyGroup },
+      // Grouping lands after the rename/copy group and before Delete (which
+      // brings its own separator); the section supplies its own leading
+      // separator. Injected here rather than prepended so it reads as a late,
+      // occasional action rather than the menu's headline.
+      ...(areWorkspaceGroupsEnabled
+        ? [
+            {
+              actionId: "rename",
+              content: <WorkspaceGroupingMenuItems key="workspace-grouping" menu={menu} workspace={workspace} />,
+            },
+          ]
+        : []),
+    ],
+  });
 };
 
 export const WorkspaceContextMenuContent = ({
