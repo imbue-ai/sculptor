@@ -6837,3 +6837,76 @@ def test_workflow_states_survive_request_success() -> None:
 
     assert "toolu-wf-1" in _workflow_states_of(state)
     assert state.pending_background_task_ids == frozenset()
+
+
+def test_pi_partial_response_extracts_img_tags_into_file_blocks() -> None:
+    """A Pi agent streaming partial whose TextBlock contains <img> tags must
+    produce FileBlocks in the chat content, not raw <img> text.
+
+    Regression test for SCU-1830: _handle_partial_response did not call
+    split_text_and_media() on TextBlocks, so the frontend MarkdownBlock
+    suppressed the <img> tag and no image appeared in chat.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+    assistant_message_id = AssistantMessageID("assistant-pi-img")
+    chat_message_id = AgentMessageID()
+
+    user_message = ChatInputUserMessage(
+        text="Show me the screenshot",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    state = convert_agent_messages_to_task_update(
+        [user_message],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    request_started = RequestStartedAgentMessage(request_id=user_message.message_id)
+
+    partial_with_img = PartialResponseBlockAgentMessage(
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        first_response_message_id=chat_message_id,
+        content=(TextBlock(text="Here is a screenshot:\n\n<img src='/tmp/test.png' alt='test'>\n\nDone."),),
+    )
+
+    response_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=chat_message_id,
+        content=(TextBlock(text="Here is a screenshot:\n\n<img src='/tmp/test.png' alt='test'>\n\nDone."),),
+    )
+
+    request_success = _make_request_success(request_id=user_message.message_id)
+
+    state = convert_agent_messages_to_task_update(
+        [
+            request_started,
+            partial_with_img,
+            response_block,
+            request_success,
+        ],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    # After the full flow (partial → response → request_success), the completed
+    # message should have the <img> tag extracted into a FileBlock.
+    assert len(state.chat_messages) == 2  # user + assistant
+    assistant_reply = state.chat_messages[1]
+
+    file_blocks = [b for b in assistant_reply.content if isinstance(b, FileBlock)]
+    assert len(file_blocks) == 1, f"Expected one FileBlock, got content: {assistant_reply.content}"
+    assert file_blocks[0].source == "/tmp/test.png"
+
+    text_blocks = [b for b in assistant_reply.content if isinstance(b, TextBlock)]
+    text_content = "".join(b.text for b in text_blocks)
+    assert "Here is a screenshot" in text_content
+    assert "Done." in text_content
+    # The <img> tag should NOT be present as raw text
+    assert "<img" not in text_content
