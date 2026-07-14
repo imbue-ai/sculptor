@@ -22,6 +22,7 @@ Sculptor is a desktop app for running coding agents in parallel.
 ## Download
 - [Mac (Apple Silicon)](https://tryimbue.link/sculptor-for-apple-silicon)
 - [Linux](https://tryimbue.link/sculptor-for-linux)
+- [Linux ARM64](https://tryimbue.link/sculptor-for-linux-arm64)
 
 **Getting started:** Connect a repo, create a workspace (an isolated copy of your code), and prompt an agent. Review the changes when it's done and merge back to main. To explore a different project, open another workspace. To collaborate with another agent on the same project, add one to the existing workspace.
 
