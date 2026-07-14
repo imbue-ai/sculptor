@@ -3,6 +3,7 @@ import signal
 from collections.abc import Mapping
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
+from functools import cache
 from functools import wraps
 from threading import Event
 from threading import Thread
@@ -84,8 +85,18 @@ def mount_extension_files(app: FastAPI) -> None:
     )
 
 
-# Note that this is overridden in tests to use the test settings
+# Note that this is overridden in tests to use the test settings (FastAPI
+# dependency overrides bypass the function entirely, so the cache is inert there).
+@cache
 def get_settings() -> SculptorSettings:
+    """Parse settings from the environment once, at first request.
+
+    SculptorSettings is a frozen snapshot of server settings that "do not change
+    during runtime" (see its docstring) — but without the cache each
+    Depends(get_settings) re-parsed os.environ per request, so any runtime env
+    perturbation would silently flip settings-gated behavior mid-session (e.g.
+    the FakeClaude model gate, SCU-1809).
+    """
     return SculptorSettings()
 
 
