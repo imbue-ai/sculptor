@@ -148,9 +148,10 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
           // resolves the hovered element via closest("[data-workspace-tab]")).
           // Marked on the row container, not the name button, so moving the
           // pointer onto the sibling hover-action buttons (menu, delete) stays
-          // inside the tab region and doesn't dismiss the peek.
-          data-workspace-tab
-          data-tab-id={workspace.objectId}
+          // inside the tab region and doesn't dismiss the peek. Omitted while
+          // renaming so the peek doesn't pop out over the inline rename input.
+          data-workspace-tab={isRenaming ? undefined : ""}
+          data-tab-id={isRenaming ? undefined : workspace.objectId}
         >
           {isRenaming ? (
             <span className={styles.workspaceRowButton}>

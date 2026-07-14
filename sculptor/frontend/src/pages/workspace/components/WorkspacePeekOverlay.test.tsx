@@ -141,8 +141,7 @@ describe("WorkspacePeekOverlay", () => {
 
     // Moving from the name button onto the row's menu/delete button is NOT
     // leaving the tab: both live inside the same [data-workspace-tab] row, so
-    // the peek must stay open. (Regression: it used to close because the action
-    // buttons sat outside the tab element that carried the peek attributes.)
+    // the peek must stay open.
     const event = new MouseEvent("mouseout", { bubbles: true });
     Object.defineProperty(event, "target", { value: nameButton });
     Object.defineProperty(event, "relatedTarget", { value: actionButton });
