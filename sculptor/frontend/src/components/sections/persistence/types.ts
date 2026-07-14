@@ -78,6 +78,12 @@ export type SavedLayout = {
   name: string;
   captured: CapturedLayout;
   version: number;
+  // When true, applying this Layout also tidies (closes the static panels it does
+  // not declare) after the additive apply, via the usual Tidy confirmation. A
+  // per-Layout property set at save time or from the ⌘J menu — not part of the
+  // captured arrangement, so it lives on the Layout, not in `captured`. Optional:
+  // Layouts saved before it existed read back without it (treated as false).
+  tidyOnApply?: boolean;
 };
 
 // The sidebar's user-customized drag order. Both lists are materialized on every

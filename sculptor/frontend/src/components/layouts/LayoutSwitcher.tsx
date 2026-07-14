@@ -4,22 +4,27 @@
 // owned by a capture-phase window listener so ⌘⇧L / ⌘J / Enter / Esc beat the global
 // shortcut handler while the switcher is open.
 
-import { Button } from "@radix-ui/themes";
+import { Button, ContextMenu } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { LucideIcon } from "lucide-react";
-import { Check, Pencil, Plus, Sparkles, Star, Trash2 } from "lucide-react";
+import { Check, Keyboard, Pencil, Plus, Sparkles, Star, Trash2 } from "lucide-react";
 import type { RefObject } from "react";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useKeybinding } from "~/common/keybindings";
-import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
+import { layoutShortcutBindingsAtom } from "~/common/keybindings/layoutShortcuts.ts";
+import { useSetLayoutShortcut } from "~/common/keybindings/useLayoutShortcutActions.ts";
+import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { formatShortcutForDisplay, shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
+import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import {
   applyLayoutAtom,
   deleteLayoutAtom,
   renameLayoutAtom,
   setDefaultLayoutAtom,
+  setLayoutTidyOnApplyAtom,
 } from "~/components/sections/layoutActions.ts";
 import type { SavedLayout } from "~/components/sections/persistence/types.ts";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
@@ -32,10 +37,11 @@ import {
 import type { PanelId } from "~/components/sections/sectionTypes.ts";
 import { SYSTEM_DEFAULT_LAYOUT_ID, SYSTEM_DEFAULT_LAYOUT_SUMMARY } from "~/components/sections/systemDefaultLayout.ts";
 import { ShortcutHint } from "~/components/ShortcutHint.tsx";
+import { SettingsSection } from "~/pages/settings/sections.ts";
 
 import { describeLayout } from "./layoutSummary.ts";
 import styles from "./LayoutSwitcher.module.scss";
-import { layoutsSwitcherOpenAtom, layoutTidyTargetAtom, saveLayoutModalOpenAtom } from "./layoutUiAtoms.ts";
+import { layoutsSwitcherOpenAtom, saveLayoutModalOpenAtom } from "./layoutUiAtoms.ts";
 import { LayoutWireframeIcon } from "./LayoutWireframeIcon.tsx";
 import { initialHighlightIndex, orderLayoutsByMru } from "./switcherOrder.ts";
 
@@ -46,7 +52,10 @@ type RowMarker = "default" | "current" | null;
 const LISTBOX_ID = "layouts-switcher-listbox";
 const optionDomId = (layoutId: string): string => `layouts-switcher-option-${layoutId}`;
 
-// The ⌘J popover items, scoped to the highlighted layout.
+// One actionable item scoped to a single layout. The same descriptor list feeds
+// both the ⌘J popover (highlighted layout) and each row's right-click context menu,
+// so the two surfaces can't drift. `shortcut` is a RAW binding string; each surface
+// formats it. `checked` marks a toggle row (the tidy-on-apply option).
 type PopoverItem = {
   key: string;
   label: string;
@@ -56,6 +65,7 @@ type PopoverItem = {
   disabled: boolean;
   danger: boolean;
   separatorBefore: boolean;
+  checked?: boolean;
   run: () => void;
 };
 
@@ -80,11 +90,14 @@ export const LayoutSwitcher = (): ReactElement => {
 
   const setOpen = useSetAtom(layoutsSwitcherOpenAtom);
   const setSaveOpen = useSetAtom(saveLayoutModalOpenAtom);
-  const setTidyTarget = useSetAtom(layoutTidyTargetAtom);
   const applyLayout = useSetAtom(applyLayoutAtom);
   const setDefaultLayout = useSetAtom(setDefaultLayoutAtom);
   const deleteLayout = useSetAtom(deleteLayoutAtom);
   const renameLayout = useSetAtom(renameLayoutAtom);
+  const setTidyOnApply = useSetAtom(setLayoutTidyOnApplyAtom);
+  const layoutShortcutBindings = useAtomValue(layoutShortcutBindingsAtom);
+  const setLayoutShortcut = useSetLayoutShortcut();
+  const { navigateToGlobalSettings } = useImbueNavigate();
 
   // Keybindings (for hints + the capture-phase matcher).
   const openLayoutsBinding = useKeybinding("open_layouts");
@@ -146,15 +159,20 @@ export const LayoutSwitcher = (): ReactElement => {
     [applyLayout, close],
   );
 
-  // Apply, then hand off to the Tidy confirmation (which is silent when nothing
-  // would close). Applying never closes anything; Tidy is the opt-out.
-  const applyAndTidy = useCallback(
+  // Open Settings ▸ Keybindings, where a layout's shortcut is assigned (there is no
+  // bespoke recording surface here — the switcher only links out to it).
+  const openShortcutSettings = useCallback((): void => {
+    close();
+    navigateToGlobalSettings(SettingsSection.KEYBINDINGS);
+  }, [close, navigateToGlobalSettings]);
+
+  // Delete the layout and drop its now-orphaned shortcut override (if any).
+  const removeLayout = useCallback(
     (layout: SavedLayout): void => {
-      applyLayout(layout);
-      setTidyTarget(layout);
-      close();
+      deleteLayout(layout.id);
+      void setLayoutShortcut(layout.id, null);
     },
-    [applyLayout, setTidyTarget, close],
+    [deleteLayout, setLayoutShortcut],
   );
 
   const startRename = useCallback((layout: SavedLayout): void => {
@@ -172,73 +190,102 @@ export const LayoutSwitcher = (): ReactElement => {
 
   const cancelRename = useCallback((): void => setRenamingId(null), []);
 
-  const popoverItems: ReadonlyArray<PopoverItem> = useMemo(() => {
-    if (highlighted === undefined) {
-      return [];
-    }
-    const isSystemDefault = highlighted.id === SYSTEM_DEFAULT_LAYOUT_ID;
-    return [
-      {
-        key: "apply",
-        label: "Apply",
-        icon: Check,
-        shortcut: "Enter",
-        testId: ElementIds.LAYOUTS_MORE_OPTIONS_APPLY,
-        disabled: false,
-        danger: false,
-        separatorBefore: false,
-        run: () => apply(highlighted),
-      },
-      {
-        key: "apply-tidy",
-        label: "Apply & tidy",
-        icon: Sparkles,
-        shortcut: "Meta+Enter",
-        testId: ElementIds.LAYOUTS_MORE_OPTIONS_APPLY_TIDY,
-        disabled: false,
-        danger: false,
-        separatorBefore: false,
-        run: () => applyAndTidy(highlighted),
-      },
-      {
-        key: "set-default",
-        label: "Set as default",
-        icon: Star,
-        testId: ElementIds.LAYOUTS_MORE_OPTIONS_SET_DEFAULT,
-        disabled: highlighted.id === defaultLayoutId,
-        danger: false,
-        separatorBefore: true,
-        run: (): void => {
-          setDefaultLayout(highlighted.id);
-          setIsMoreOptionsOpen(false);
+  // Build the action list for a given layout. Shared by the ⌘J popover (highlighted
+  // layout) and each row's right-click context menu so both stay in lock-step.
+  const buildLayoutItems = useCallback(
+    (layout: SavedLayout): ReadonlyArray<PopoverItem> => {
+      const isSystemDefault = layout.id === SYSTEM_DEFAULT_LAYOUT_ID;
+      return [
+        {
+          key: "apply",
+          label: "Apply",
+          icon: Check,
+          shortcut: "Enter",
+          testId: ElementIds.LAYOUTS_MORE_OPTIONS_APPLY,
+          disabled: false,
+          danger: false,
+          separatorBefore: false,
+          run: () => apply(layout),
         },
-      },
-      {
-        key: "rename",
-        label: "Rename",
-        icon: Pencil,
-        testId: ElementIds.LAYOUTS_MORE_OPTIONS_RENAME,
-        disabled: isSystemDefault,
-        danger: false,
-        separatorBefore: false,
-        run: () => startRename(highlighted),
-      },
-      {
-        key: "delete",
-        label: "Delete",
-        icon: Trash2,
-        shortcut: "Meta+Backspace",
-        testId: ElementIds.LAYOUTS_MORE_OPTIONS_DELETE,
-        disabled: isSystemDefault,
-        danger: true,
-        separatorBefore: false,
-        run: (): void => {
-          deleteLayout(highlighted.id);
-          setIsMoreOptionsOpen(false);
+        {
+          key: "tidy-toggle",
+          label: "Tidy panels when applying",
+          icon: Sparkles,
+          testId: ElementIds.LAYOUTS_MORE_OPTIONS_TIDY_TOGGLE,
+          disabled: isSystemDefault,
+          danger: false,
+          separatorBefore: false,
+          checked: layout.tidyOnApply === true,
+          // Toggle the flag in place — deliberately does NOT close the popover, so the
+          // check flips under the pointer.
+          run: () => setTidyOnApply({ id: layout.id, tidyOnApply: !(layout.tidyOnApply === true) }),
         },
-      },
-    ];
-  }, [highlighted, defaultLayoutId, apply, applyAndTidy, setDefaultLayout, startRename, deleteLayout]);
+        {
+          key: "shortcut",
+          label: "Keyboard shortcut",
+          icon: Keyboard,
+          shortcut: layoutShortcutBindings[layout.id],
+          testId: ElementIds.LAYOUTS_MORE_OPTIONS_SHORTCUT,
+          disabled: false,
+          danger: false,
+          separatorBefore: true,
+          run: () => openShortcutSettings(),
+        },
+        {
+          key: "set-default",
+          label: "Set as default",
+          icon: Star,
+          testId: ElementIds.LAYOUTS_MORE_OPTIONS_SET_DEFAULT,
+          disabled: layout.id === defaultLayoutId,
+          danger: false,
+          separatorBefore: false,
+          run: (): void => {
+            setDefaultLayout(layout.id);
+            setIsMoreOptionsOpen(false);
+          },
+        },
+        {
+          key: "rename",
+          label: "Rename",
+          icon: Pencil,
+          testId: ElementIds.LAYOUTS_MORE_OPTIONS_RENAME,
+          disabled: isSystemDefault,
+          danger: false,
+          separatorBefore: false,
+          run: () => startRename(layout),
+        },
+        {
+          key: "delete",
+          label: "Delete",
+          icon: Trash2,
+          shortcut: "Meta+Backspace",
+          testId: ElementIds.LAYOUTS_MORE_OPTIONS_DELETE,
+          disabled: isSystemDefault,
+          danger: true,
+          separatorBefore: false,
+          run: (): void => {
+            removeLayout(layout);
+            setIsMoreOptionsOpen(false);
+          },
+        },
+      ];
+    },
+    [
+      apply,
+      setTidyOnApply,
+      layoutShortcutBindings,
+      openShortcutSettings,
+      defaultLayoutId,
+      setDefaultLayout,
+      startRename,
+      removeLayout,
+    ],
+  );
+
+  const popoverItems: ReadonlyArray<PopoverItem> = useMemo(
+    () => (highlighted === undefined ? [] : buildLayoutItems(highlighted)),
+    [highlighted, buildLayoutItems],
+  );
 
   const enabledPopoverIndexes = useMemo(
     () =>
@@ -274,12 +321,11 @@ export const LayoutSwitcher = (): ReactElement => {
     openLayoutsBinding,
     moreOptionsBinding,
     apply,
-    applyAndTidy,
     openPopover,
     openSave,
     cancelRename,
     close,
-    deleteLayout,
+    removeLayout,
   });
   useEffect(() => {
     stateRef.current = {
@@ -295,12 +341,11 @@ export const LayoutSwitcher = (): ReactElement => {
       openLayoutsBinding,
       moreOptionsBinding,
       apply,
-      applyAndTidy,
       openPopover,
       openSave,
       cancelRename,
       close,
-      deleteLayout,
+      removeLayout,
     };
   });
 
@@ -387,8 +432,8 @@ export const LayoutSwitcher = (): ReactElement => {
         }
 
         // Plain Enter runs the highlighted popover row (skipping it if it is
-        // disabled); ⌘↵ / ⌘⌫ fall through to their own branches below, so this
-        // must not swallow a modified Enter.
+        // disabled); ⌘⌫ falls through to its own branch below, so this must not
+        // swallow a modified Enter.
         if (event.key === "Enter" && !isMod) {
           event.preventDefault();
           const item = state.popoverItems[state.popoverIndex];
@@ -398,13 +443,7 @@ export const LayoutSwitcher = (): ReactElement => {
           return;
         }
 
-        // ⌘↵ Apply & tidy / ⌘⌫ Delete work directly from the popover too.
-        if (isMod && event.key === "Enter" && state.highlighted !== undefined) {
-          event.preventDefault();
-          state.applyAndTidy(state.highlighted);
-          return;
-        }
-
+        // ⌘⌫ Delete works directly from the popover too.
         if (
           isMod &&
           event.key === "Backspace" &&
@@ -412,7 +451,7 @@ export const LayoutSwitcher = (): ReactElement => {
           state.highlighted.id !== SYSTEM_DEFAULT_LAYOUT_ID
         ) {
           event.preventDefault();
-          state.deleteLayout(state.highlighted.id);
+          state.removeLayout(state.highlighted);
           setIsMoreOptionsOpen(false);
           return;
         }
@@ -436,13 +475,11 @@ export const LayoutSwitcher = (): ReactElement => {
         return;
       }
 
+      // Enter applies the highlighted layout (⌘↵ collapses to the same — tidy is now
+      // a per-layout property applyLayoutAtom honors, not a separate verb).
       if (event.key === "Enter" && state.highlighted !== undefined) {
         event.preventDefault();
-        if (isMod) {
-          state.applyAndTidy(state.highlighted);
-        } else {
-          state.apply(state.highlighted);
-        }
+        state.apply(state.highlighted);
       }
     };
 
@@ -498,6 +535,8 @@ export const LayoutSwitcher = (): ReactElement => {
               layout={layout}
               summary={summaryFor(layout)}
               marker={markerFor(layout, defaultLayoutId, appliedLayoutId)}
+              shortcut={layoutShortcutBindings[layout.id]}
+              items={buildLayoutItems(layout)}
               selected={index === clampedHighlight}
               renaming={renamingId === layout.id}
               renameValue={renameValue}
@@ -579,6 +618,7 @@ export const LayoutSwitcher = (): ReactElement => {
                 {item.shortcut !== undefined ? (
                   <ShortcutHint binding={item.shortcut} className={styles.popoverShortcut} />
                 ) : null}
+                {item.checked === true ? <Check size={14} className={styles.popoverCheck} /> : null}
               </Button>
             </div>
           ))}
@@ -592,6 +632,10 @@ type SwitcherRowProps = {
   layout: SavedLayout;
   summary: string;
   marker: RowMarker;
+  // The layout's assigned keyboard shortcut (raw binding), shown as a trailing hint.
+  shortcut?: string;
+  // The shared action descriptors, rendered as this row's right-click context menu.
+  items: ReadonlyArray<PopoverItem>;
   selected: boolean;
   renaming: boolean;
   renameValue: string;
@@ -607,6 +651,8 @@ const SwitcherRow = ({
   layout,
   summary,
   marker,
+  shortcut,
+  items,
   selected,
   renaming,
   renameValue,
@@ -617,7 +663,13 @@ const SwitcherRow = ({
   onMouseEnter,
   onClick,
 }: SwitcherRowProps): ReactElement => {
-  return (
+  const dangerColor = useThemeDangerColor();
+
+  // Radix Themes' ContextMenu.Trigger already renders its single child as the trigger
+  // (it applies asChild internally), so the option div stays a direct child of the
+  // listbox — the role="listbox" > role="option" tree and aria-activedescendant are
+  // untouched. Root/Content render no inline DOM (Content is portaled).
+  const row = (
     <div
       id={optionDomId(layout.id)}
       role="option"
@@ -659,6 +711,7 @@ const SwitcherRow = ({
             <span className={styles.rowSummary}>{summary}</span>
           </span>
           <span className={styles.rowTrailing}>
+            {shortcut !== undefined ? <ShortcutHint binding={shortcut} className={styles.rowShortcut} /> : null}
             {marker === "default" ? (
               <span className={styles.rowMarker}>
                 <Star size={12} fill="currentColor" />
@@ -671,5 +724,38 @@ const SwitcherRow = ({
         </>
       )}
     </div>
+  );
+
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger>{row}</ContextMenu.Trigger>
+      <ContextMenu.Content size="1" data-testid={ElementIds.LAYOUTS_ROW_CONTEXT_MENU}>
+        {items.map((item) => (
+          <Fragment key={item.key}>
+            {item.separatorBefore ? <ContextMenu.Separator /> : null}
+            {item.checked !== undefined ? (
+              <ContextMenu.CheckboxItem
+                checked={item.checked}
+                disabled={item.disabled}
+                onCheckedChange={() => item.run()}
+                data-testid={item.testId}
+              >
+                {item.label}
+              </ContextMenu.CheckboxItem>
+            ) : (
+              <ContextMenu.Item
+                color={item.danger ? dangerColor : undefined}
+                disabled={item.disabled}
+                shortcut={item.shortcut !== undefined ? formatShortcutForDisplay(item.shortcut) : undefined}
+                onSelect={() => item.run()}
+                data-testid={item.testId}
+              >
+                {item.label}
+              </ContextMenu.Item>
+            )}
+          </Fragment>
+        ))}
+      </ContextMenu.Content>
+    </ContextMenu.Root>
   );
 };

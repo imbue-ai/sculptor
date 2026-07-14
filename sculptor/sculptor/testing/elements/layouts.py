@@ -1,5 +1,5 @@
 """Page Object Models for the Layouts feature: the switcher dialog, the save
-dialog, and the Apply & tidy confirmation."""
+dialog, the ⌘J / right-click actions, and the Tidy confirmation."""
 
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
@@ -19,18 +19,20 @@ class PlaywrightSaveLayoutDialogElement(PlaywrightIntegrationTestElement):
     def get_name_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_NAME_INPUT)
 
-    def save(self, name: str, *, set_as_default: bool = False) -> None:
-        """Name the layout, optionally flip the default switch, submit, and wait
-        for the dialog to close."""
+    def save(self, name: str, *, set_as_default: bool = False, tidy_on_apply: bool = False) -> None:
+        """Name the layout, optionally flip the default / tidy-on-apply switches,
+        submit, and wait for the dialog to close."""
         self.get_name_input().fill(name)
         if set_as_default:
             self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_DEFAULT_SWITCH).click()
+        if tidy_on_apply:
+            self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_TIDY_SWITCH).click()
         self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_SUBMIT).click()
         expect(self._locator).to_be_hidden()
 
 
 class PlaywrightLayoutTidyDialogElement(PlaywrightIntegrationTestElement):
-    """POM for the Apply & tidy confirmation."""
+    """POM for the Tidy confirmation."""
 
     def get_confirm_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.LAYOUT_TIDY_CONFIRM)
@@ -80,13 +82,25 @@ class PlaywrightLayoutsSwitcherElement(PlaywrightIntegrationTestElement):
         expect(popover).to_be_visible()
         return popover
 
-    def apply_and_tidy_highlighted(self) -> None:
-        """Open the ⌘J popover and choose Apply & tidy for the highlighted layout.
-        Applies immediately and closes the switcher; a Tidy confirmation follows
-        only when something would close."""
-        self.open_more_options()
-        self._page.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_APPLY_TIDY).click()
+    def apply_by_name(self, name: str) -> None:
+        """Apply a layout by clicking its row (the user's primary path). Closes the
+        switcher; a Tidy confirmation follows only if the layout opts into tidy and
+        something would close."""
+        self.get_row_by_name(name).click()
         expect(self._locator).to_be_hidden()
+
+    def toggle_tidy_on_highlighted(self) -> None:
+        """Flip the highlighted layout's "Tidy panels when applying" toggle from the
+        ⌘J popover. The popover stays open (the toggle is not a dismissing action)."""
+        self.open_more_options()
+        self._page.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_TIDY_TOGGLE).click()
+
+    def open_row_context_menu(self, name: str) -> Locator:
+        """Right-click a layout row to open its context menu (same actions as ⌘J)."""
+        self.get_row_by_name(name).click(button="right")
+        menu = self._page.get_by_test_id(ElementIDs.LAYOUTS_ROW_CONTEXT_MENU)
+        expect(menu).to_be_visible()
+        return menu
 
 
 def get_layout_tidy_dialog(page: Page) -> PlaywrightLayoutTidyDialogElement:

@@ -18,9 +18,9 @@ import { computeTidyClosure } from "~/components/sections/layoutApply.ts";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
 import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import { toSection } from "~/components/sections/sectionTypes.ts";
+import { layoutTidyTargetAtom } from "~/components/sections/transientAtoms.ts";
 
 import styles from "./LayoutTidyConfirmation.module.scss";
-import { layoutTidyTargetAtom } from "./layoutUiAtoms.ts";
 
 export const LayoutTidyConfirmation = (): ReactElement | undefined => {
   const [target, setTarget] = useAtom(layoutTidyTargetAtom);

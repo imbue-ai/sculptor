@@ -13,7 +13,7 @@ import { appliedLayoutIdAtom, defaultLayoutIdAtom, layoutMruAtom, savedLayoutsAt
 import { closePanelAtom } from "./sectionActions.ts";
 import { workspaceLayoutAtom } from "./sectionAtoms.ts";
 import { isSystemDefaultLayoutId, SYSTEM_DEFAULT_LAYOUT_ID } from "./systemDefaultLayout.ts";
-import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
+import { activeSectionRingNonceAtom, layoutTidyTargetAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 // Move an id to the front of the MRU list (most-recently-applied first),
 // de-duplicating any earlier occurrence.
@@ -23,13 +23,20 @@ function withFront(ids: ReadonlyArray<string>, id: string): Array<string> {
 
 // Apply a Layout to the active workspace: additive arrangement + geometry +
 // maximize, record it as the applied Layout, move it to the front of the MRU, and
-// pulse the active-section ring (applying is a deliberate jump).
+// pulse the active-section ring (applying is a deliberate jump). If the Layout opts
+// into tidy-on-apply, hand off to the Tidy confirmation afterward (which closes the
+// static panels it doesn't declare, and is a silent no-op when nothing would close).
+// This is the single choke point every apply path routes through — switcher, command
+// palette, and per-Layout shortcut — so the flag is honored consistently.
 export const applyLayoutAtom = atom(null, (get, set, layout: SavedLayout) => {
   const result = applyCapturedLayout(get(workspaceLayoutAtom), layout.captured);
   set(workspaceLayoutAtom, { ...result.layout, appliedLayoutId: layout.id });
   set(maximizedSectionAtom, result.maximizedSection);
   set(layoutMruAtom, withFront(get(layoutMruAtom), layout.id));
   set(activeSectionRingNonceAtom, (nonce) => nonce + 1);
+  if (layout.tidyOnApply === true) {
+    set(layoutTidyTargetAtom, layout);
+  }
 });
 
 // Close the static panels the given Layout does not declare (never agents/
@@ -43,19 +50,29 @@ export const tidyToLayoutAtom = atom(null, (get, set, layout: SavedLayout) => {
 
 // Snapshot the active workspace's current arrangement as a new Layout (static-only,
 // via captureLayout), record it as this workspace's applied Layout, and optionally
-// make it the new-workspace default. Returns the new Layout's id.
-export const saveCurrentLayoutAtom = atom(null, (get, set, params: { name: string; setAsDefault: boolean }): string => {
-  const captured = captureLayout(get(workspaceLayoutAtom), get(maximizedSectionAtom));
-  const id = crypto.randomUUID();
-  const layout: SavedLayout = { id, name: params.name.trim(), captured, version: SAVED_LAYOUT_VERSION };
-  set(savedLayoutsAtom, [...get(savedLayoutsAtom), layout]);
-  set(appliedLayoutIdAtom, id);
-  set(layoutMruAtom, withFront(get(layoutMruAtom), id));
-  if (params.setAsDefault) {
-    set(defaultLayoutIdAtom, id);
-  }
-  return id;
-});
+// make it the new-workspace default and opt it into tidy-on-apply. Returns the new
+// Layout's id (so the caller can attach a keyboard shortcut to it).
+export const saveCurrentLayoutAtom = atom(
+  null,
+  (get, set, params: { name: string; setAsDefault: boolean; tidyOnApply: boolean }): string => {
+    const captured = captureLayout(get(workspaceLayoutAtom), get(maximizedSectionAtom));
+    const id = crypto.randomUUID();
+    const layout: SavedLayout = {
+      id,
+      name: params.name.trim(),
+      captured,
+      version: SAVED_LAYOUT_VERSION,
+      tidyOnApply: params.tidyOnApply,
+    };
+    set(savedLayoutsAtom, [...get(savedLayoutsAtom), layout]);
+    set(appliedLayoutIdAtom, id);
+    set(layoutMruAtom, withFront(get(layoutMruAtom), id));
+    if (params.setAsDefault) {
+      set(defaultLayoutIdAtom, id);
+    }
+    return id;
+  },
+);
 
 // Remove a Layout. System Default is undeletable. A default pointer at the deleted
 // Layout falls back to System Default, and the active workspace drops a now-dangling
@@ -95,5 +112,19 @@ export const renameLayoutAtom = atom(null, (get, set, params: { id: string; name
   set(
     savedLayoutsAtom,
     get(savedLayoutsAtom).map((layout) => (layout.id === params.id ? { ...layout, name } : layout)),
+  );
+});
+
+// Toggle whether applying a Layout also tidies. System Default has no stored record
+// to flag, so it is ignored (it never tidies on apply).
+export const setLayoutTidyOnApplyAtom = atom(null, (get, set, params: { id: string; tidyOnApply: boolean }) => {
+  if (isSystemDefaultLayoutId(params.id)) {
+    return;
+  }
+  set(
+    savedLayoutsAtom,
+    get(savedLayoutsAtom).map((layout) =>
+      layout.id === params.id ? { ...layout, tidyOnApply: params.tidyOnApply } : layout,
+    ),
   );
 });

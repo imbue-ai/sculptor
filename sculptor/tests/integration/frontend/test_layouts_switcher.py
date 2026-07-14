@@ -1,8 +1,9 @@
 """Integration tests for the Layouts switcher (SCU-1725).
 
 Cover the switcher end to end the way a user drives it: open it from the sidebar,
-save the current arrangement as a named layout, and use "Apply & tidy" to close a
-panel a layout doesn't include (while agents/terminals stay put).
+save the current arrangement as a named layout (optionally tidy-on-apply), apply a
+layout so its tidy flag closes a panel it doesn't include (while agents/terminals
+stay put), and drive a layout from its right-click context menu.
 
 FakeClaude's default response is enough here — these tests exercise the layout UI,
 not agent behavior.
@@ -10,6 +11,7 @@ not agent behavior.
 
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.layouts import get_layout_tidy_dialog
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
@@ -44,23 +46,29 @@ def test_switcher_opens_and_saves_a_layout(sculptor_instance_: SculptorInstance)
 
 
 @user_story("to tidy a workspace to a layout, closing the panels it doesn't include")
-def test_apply_and_tidy_closes_undeclared_static_panel(sculptor_instance_: SculptorInstance) -> None:
-    """Apply & tidy to System Default closes an undeclared static panel (Notes) after
-    confirmation, while the declared panels — and the agent — stay put."""
+def test_tidy_on_apply_layout_closes_undeclared_static_panel(sculptor_instance_: SculptorInstance) -> None:
+    """A layout saved with "tidy panels when applying" closes an undeclared static panel
+    (Notes) on apply, after confirmation, while its declared panels — and the agent —
+    stay put."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Tidy Layout WS")
 
-    # Add Notes to the left section — System Default declares Files/Changes/Commits
-    # there, so Notes is exactly the residue "tidy" should close.
+    sidebar = get_workspace_sidebar(page)
+
+    # Save the current arrangement (Files/Changes/Commits, no Notes) as a tidy-on-apply
+    # layout, THEN open Notes — the undeclared residue this layout should close.
+    switcher = sidebar.open_layouts_switcher()
+    switcher.open_save_dialog().save("Base", tidy_on_apply=True)
+
     open_panel(page, "notes", "left")
     left = PlaywrightWorkspaceSection(page, "left")
     expect(left.get_panel_tab("notes")).to_be_visible()
 
-    sidebar = get_workspace_sidebar(page)
+    # Applying "Base" honors its tidy flag: something would close, so the confirmation
+    # appears naming Notes.
     switcher = sidebar.open_layouts_switcher()
-    switcher.apply_and_tidy_highlighted()
+    switcher.apply_by_name("Base")
 
-    # Something would close, so the confirmation appears; it names Notes.
     tidy_dialog = get_layout_tidy_dialog(page)
     expect(tidy_dialog).to_be_visible()
     expect(tidy_dialog).to_contain_text("Notes")
@@ -73,3 +81,27 @@ def test_apply_and_tidy_closes_undeclared_static_panel(sculptor_instance_: Sculp
     # Agents are never closed by tidy — the center still holds the agent.
     center = PlaywrightWorkspaceSection(page, "center")
     expect(center.get_agent_tabs()).to_have_count(1)
+
+
+@user_story("to apply a layout from its right-click context menu")
+def test_row_context_menu_applies_layout(sculptor_instance_: SculptorInstance) -> None:
+    """Right-clicking a layout row opens the same actions as ⌘J; choosing Apply switches
+    to that layout (marking it Current)."""
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Context Menu WS")
+    sidebar = get_workspace_sidebar(page)
+
+    switcher = sidebar.open_layouts_switcher()
+    switcher.open_save_dialog().save("Reviewing")
+    switcher = sidebar.open_layouts_switcher()
+    switcher.open_save_dialog().save("Debugging")
+
+    # Right-click "Reviewing" and apply it from the context menu.
+    switcher = sidebar.open_layouts_switcher()
+    menu = switcher.open_row_context_menu("Reviewing")
+    menu.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_APPLY).click()
+    expect(page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_DIALOG)).to_be_hidden()
+
+    # Reopening shows "Reviewing" as the current layout.
+    switcher = sidebar.open_layouts_switcher()
+    expect(switcher.get_row_by_name("Reviewing")).to_contain_text("Current")

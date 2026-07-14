@@ -1,8 +1,9 @@
 // The "Save current arrangement as a layout" dialog, on the PaletteDialog shell.
 // A name field (styled as the heading), a mini capture preview that shows what the
 // layout stores (solid cells = saved static panels; dashed chips mark where default
-// seeding creates an agent/terminal), a "set as default" switch, and Save (⌘↵).
-// Atom-driven host, mounted in AppShell.
+// seeding creates an agent/terminal), then a clean options list — an inline keyboard
+// shortcut, a "tidy panels when applying" toggle, and "set as default" — and Save
+// (⌘↵). Atom-driven host, mounted in AppShell.
 
 import { Button, Switch } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
@@ -10,6 +11,7 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
+import { useLayoutBindingConflict, useSetLayoutShortcut } from "~/common/keybindings/useLayoutShortcutActions.ts";
 import { formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
 import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
 import { saveCurrentLayoutAtom } from "~/components/sections/layoutActions.ts";
@@ -19,6 +21,7 @@ import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.
 import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId, SectionId } from "~/components/sections/sectionTypes.ts";
 import { toSecondary } from "~/components/sections/sectionTypes.ts";
+import { HotkeyChip } from "~/pages/settings/components/HotkeyChip.tsx";
 
 import { saveLayoutModalOpenAtom } from "./layoutUiAtoms.ts";
 import styles from "./SaveLayoutModal.module.scss";
@@ -58,7 +61,14 @@ export const SaveLayoutModal = (): ReactElement | undefined => {
 const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
   const [name, setName] = useState<string>("");
   const [isSetAsDefault, setIsSetAsDefault] = useState<boolean>(false);
+  const [shouldTidyOnApply, setShouldTidyOnApply] = useState<boolean>(false);
+  // The shortcut is held locally while the Layout has no id yet; it's persisted to
+  // userConfig.keybindings (keyed by the new Layout's id) only on Save.
+  const [shortcut, setShortcut] = useState<string | undefined>(undefined);
+  const [shortcutConflict, setShortcutConflict] = useState<string | null>(null);
   const saveCurrentLayout = useSetAtom(saveCurrentLayoutAtom);
+  const setLayoutShortcut = useSetLayoutShortcut();
+  const findBindingConflict = useLayoutBindingConflict();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -71,9 +81,31 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
     if (!canSave) {
       return;
     }
-    saveCurrentLayout({ name: name.trim(), setAsDefault: isSetAsDefault });
+    const id = saveCurrentLayout({ name: name.trim(), setAsDefault: isSetAsDefault, tidyOnApply: shouldTidyOnApply });
+    if (shortcut !== undefined) {
+      void setLayoutShortcut(id, shortcut);
+    }
     onClose();
-  }, [canSave, saveCurrentLayout, name, isSetAsDefault, onClose]);
+  }, [canSave, saveCurrentLayout, name, isSetAsDefault, shouldTidyOnApply, shortcut, setLayoutShortcut, onClose]);
+
+  // No id exists yet, so guard against every existing binding (empty self id).
+  const handleShortcutRecord = useCallback(
+    (chord: string): boolean => {
+      const conflict = findBindingConflict(chord, "");
+      if (conflict !== null) {
+        setShortcutConflict(conflict.name);
+        return false;
+      }
+      setShortcutConflict(null);
+      return true;
+    },
+    [findBindingConflict],
+  );
+
+  const clearShortcut = useCallback((): void => {
+    setShortcut(undefined);
+    setShortcutConflict(null);
+  }, []);
 
   return (
     <div
@@ -94,28 +126,67 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
           data-testid={ElementIds.SAVE_LAYOUT_NAME_INPUT}
           aria-label="Layout name"
         />
-        <div className={styles.caption}>Saves this workspace’s panels and space as a reusable layout.</div>
         <SaveLayoutPreview />
         <div className={styles.legend}>
           An agent is created by default in the center section. A terminal is created by default in the bottom section.
         </div>
+        <div className={styles.options}>
+          <div className={styles.optionRow}>
+            <div className={styles.optionLabel}>
+              <span className={styles.optionTitle}>Keyboard shortcut</span>
+              <span className={styles.optionSub}>Apply this layout with a keypress.</span>
+            </div>
+            <div className={styles.optionControl} data-testid={ElementIds.SAVE_LAYOUT_SHORTCUT}>
+              <HotkeyChip
+                value={shortcut}
+                onSet={setShortcut}
+                onClear={clearShortcut}
+                onRecordComplete={handleShortcutRecord}
+                idleLabel="Set keyboard shortcut"
+                setLabel="Update keyboard shortcut"
+              />
+            </div>
+          </div>
+          {shortcutConflict !== null ? (
+            <div className={styles.shortcutWarning}>Already assigned to “{shortcutConflict}”. Pick another.</div>
+          ) : null}
+          <div className={styles.optionRow}>
+            <div className={styles.optionLabel}>
+              <span className={styles.optionTitle}>Tidy panels when applying</span>
+              <span className={styles.optionSub}>
+                Closes panels this layout doesn’t include — never agents or terminals.
+              </span>
+            </div>
+            <div className={styles.optionControl}>
+              <Switch
+                size="1"
+                checked={shouldTidyOnApply}
+                onCheckedChange={setShouldTidyOnApply}
+                data-testid={ElementIds.SAVE_LAYOUT_TIDY_SWITCH}
+              />
+            </div>
+          </div>
+          <div className={styles.optionRow}>
+            <div className={styles.optionLabel}>
+              <span className={styles.optionTitle}>Set as default for new workspaces</span>
+            </div>
+            <div className={styles.optionControl}>
+              <Switch
+                size="1"
+                checked={isSetAsDefault}
+                onCheckedChange={setIsSetAsDefault}
+                data-testid={ElementIds.SAVE_LAYOUT_DEFAULT_SWITCH}
+              />
+            </div>
+          </div>
+        </div>
+        <div className={styles.optionNote}>Change or clear layout shortcuts anytime in Settings ▸ Keybindings.</div>
       </div>
       <div className={styles.footer}>
-        <label className={styles.switchLabel}>
-          <Switch
-            size="1"
-            checked={isSetAsDefault}
-            onCheckedChange={setIsSetAsDefault}
-            data-testid={ElementIds.SAVE_LAYOUT_DEFAULT_SWITCH}
-          />
-          Set as default for new workspaces
-        </label>
-        <div className={styles.footerRight}>
-          <span className={styles.saveHint}>{SAVE_HINT} to save</span>
-          <Button variant="solid" disabled={!canSave} onClick={handleSave} data-testid={ElementIds.SAVE_LAYOUT_SUBMIT}>
-            Save layout
-          </Button>
-        </div>
+        <span className={styles.saveHint}>{SAVE_HINT} to save</span>
+        <Button variant="solid" disabled={!canSave} onClick={handleSave} data-testid={ElementIds.SAVE_LAYOUT_SUBMIT}>
+          Save layout
+        </Button>
       </div>
     </div>
   );

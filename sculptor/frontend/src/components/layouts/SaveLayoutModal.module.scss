@@ -22,11 +22,6 @@
   }
 }
 
-.caption {
-  color: var(--gray-10);
-  font-size: var(--font-size-2);
-}
-
 // Mini preview: solid cells = saved (static) panels; dashed chips mark the fixed
 // homes where default seeding creates an agent/terminal (never stored in a layout).
 // The bottom section spans the full width, mirroring the real shell, and the box is
@@ -125,30 +120,70 @@
   font-size: var(--font-size-1);
 }
 
+// Options list: label-left / control-right rows (mirrors the settings SettingRow),
+// separated by hairlines. Holds the inline shortcut control, the tidy-on-apply
+// toggle, and set-as-default.
+.options {
+  display: flex;
+  flex-direction: column;
+}
+
+.optionRow {
+  align-items: center;
+  border-top: 1px solid var(--gray-a3);
+  display: flex;
+  gap: var(--space-5);
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+
+  &:first-child {
+    border-top: none;
+    padding-top: var(--space-1);
+  }
+}
+
+.optionLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionTitle {
+  color: var(--gray-12);
+  font-size: var(--font-size-2);
+}
+
+.optionSub {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+}
+
+.optionControl {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.optionNote {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+}
+
+// Inline conflict warning under the shortcut row when a recorded chord is taken.
+.shortcutWarning {
+  color: var(--amber-11);
+  font-size: var(--font-size-1);
+}
+
 .footer {
   align-items: center;
   border-top: 1px solid var(--gray-a3);
   display: flex;
   flex-shrink: 0;
   gap: var(--space-3);
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: var(--space-4) var(--space-5);
-}
-
-.switchLabel {
-  align-items: center;
-  color: var(--gray-10);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: var(--font-size-1);
-  gap: var(--space-2);
-  user-select: none;
-}
-
-.footerRight {
-  align-items: center;
-  display: flex;
-  gap: var(--space-3);
 }
 
 .saveHint {

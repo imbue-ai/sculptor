@@ -147,6 +147,16 @@
   gap: var(--space-1);
 }
 
+// The layout's assigned shortcut, shown as a quiet trailing kbd (plain text, not a
+// boxed key) so it reads like the rest of the row's trailing metadata.
+.rowShortcut {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--font-size-1);
+}
+
 // Bottom bar (Raycast-style): Save on the left, Apply / More options on the right.
 .bar {
   align-items: center;
@@ -273,6 +283,13 @@
   flex-shrink: 0;
   font-family: inherit;
   font-size: var(--font-size-1);
+  margin-left: auto;
+}
+
+// The checkmark on the tidy-on-apply toggle row, pushed to the trailing edge.
+.popoverCheck {
+  color: var(--gray-11);
+  flex-shrink: 0;
   margin-left: auto;
 }
 

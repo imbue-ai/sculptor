@@ -15,6 +15,13 @@ type HotkeyChipProps = {
   onClear: () => void;
   onRecordComplete?: (keys: string) => boolean | void;
   disabled?: boolean;
+  // Label for the idle (unset) button. Defaults to "Click to set" (the settings
+  // rows). The save dialog passes "Set keyboard shortcut".
+  idleLabel?: string;
+  // When provided, the set state renders the combo as a chip followed by a button
+  // with this label (e.g. "Update keyboard shortcut") instead of the bare combo +
+  // clear. The whole button re-records; the trailing ✕ still clears.
+  setLabel?: string;
 };
 
 const formatHotkey = (keys: Array<string>): string =>
@@ -41,6 +48,8 @@ export const HotkeyChip = ({
   onClear,
   onRecordComplete,
   disabled = false,
+  idleLabel = "Click to set",
+  setLabel,
 }: HotkeyChipProps): ReactElement => {
   // `recording` is the only genuinely local state; idle/set are derived from `value`.
   const [isRecording, setIsRecording] = useState(false);
@@ -137,7 +146,7 @@ export const HotkeyChip = ({
         style={opacityStyle}
         data-testid={ElementIds.SETTINGS_HOTKEY_SET_BUTTON}
       >
-        Click to set
+        {idleLabel}
       </Button>
     );
   }
@@ -157,6 +166,39 @@ export const HotkeyChip = ({
       </Flex>
     );
   }
+
+  // Save-dialog variant: the combo as a standalone chip followed by a labeled
+  // ("Update keyboard shortcut") re-record button and a clear ✕.
+  if (setLabel !== undefined) {
+    return (
+      <Flex align="center" gap="2">
+        <Text size="2" className={styles.hotkeyChipValue}>
+          {formatShortcutForDisplay(value)}
+        </Text>
+        <Button
+          variant="soft"
+          size="1"
+          onClick={handleClick}
+          disabled={disabled}
+          style={opacityStyle}
+          data-testid={ElementIds.SETTINGS_HOTKEY_SET_BUTTON}
+        >
+          {setLabel}
+        </Button>
+        <Button
+          variant="ghost"
+          size="1"
+          onClick={handleClear}
+          disabled={disabled}
+          className={styles.hotkeyClear}
+          data-testid={ElementIds.SETTINGS_HOTKEY_CLEAR_BUTTON}
+        >
+          <X size={14} />
+        </Button>
+      </Flex>
+    );
+  }
+
   return (
     <Flex
       className={styles.hotkeySet}

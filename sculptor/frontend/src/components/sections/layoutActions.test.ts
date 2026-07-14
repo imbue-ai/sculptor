@@ -7,6 +7,7 @@ import {
   renameLayoutAtom,
   saveCurrentLayoutAtom,
   setDefaultLayoutAtom,
+  setLayoutTidyOnApplyAtom,
   tidyToLayoutAtom,
 } from "./layoutActions.ts";
 import type { SavedLayout, WorkspaceLayoutState } from "./persistence/types.ts";
@@ -14,7 +15,7 @@ import { EMPTY_WORKSPACE_LAYOUT, SAVED_LAYOUT_VERSION } from "./persistence/type
 import { appliedLayoutIdAtom, defaultLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "./savedLayoutAtoms.ts";
 import { activeWorkspaceIdAtom, panelsInSubSectionAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID } from "./systemDefaultLayout.ts";
-import { activeSectionRingNonceAtom, maximizedSectionAtom } from "./transientAtoms.ts";
+import { activeSectionRingNonceAtom, layoutTidyTargetAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 function storeWith(layout: Partial<WorkspaceLayoutState>, workspaceId = "ws-1"): ReturnType<typeof createStore> {
   const store = createStore();
@@ -62,6 +63,17 @@ describe("applyLayoutAtom", () => {
     );
     expect(store.get(maximizedSectionAtom)).toBe("left");
   });
+
+  it("hands off to the Tidy confirmation only when the layout opts into tidy-on-apply", () => {
+    const plain = storeWith({ placement: { browser: "right" }, expanded: { right: true } });
+    plain.set(applyLayoutAtom, makeLayout("plain", { tidyOnApply: false }));
+    expect(plain.get(layoutTidyTargetAtom)).toBeNull();
+
+    const tidy = storeWith({ placement: { browser: "right" }, expanded: { right: true } });
+    const flagged = makeLayout("flagged", { tidyOnApply: true });
+    tidy.set(applyLayoutAtom, flagged);
+    expect(tidy.get(layoutTidyTargetAtom)).toBe(flagged);
+  });
 });
 
 describe("tidyToLayoutAtom", () => {
@@ -89,12 +101,13 @@ describe("saveCurrentLayoutAtom", () => {
       activeSubSection: "center",
     });
 
-    const id = store.set(saveCurrentLayoutAtom, { name: "  My layout  ", setAsDefault: true });
+    const id = store.set(saveCurrentLayoutAtom, { name: "  My layout  ", setAsDefault: true, tidyOnApply: true });
 
     const saved = store.get(savedLayoutsAtom);
     expect(saved).toHaveLength(1);
     expect(saved[0].id).toBe(id);
     expect(saved[0].name).toBe("My layout");
+    expect(saved[0].tidyOnApply).toBe(true);
     // The agent is dynamic — never captured.
     expect(saved[0].captured.placement).toEqual({ files: "left" });
     expect(store.get(appliedLayoutIdAtom)).toBe(id);
@@ -104,8 +117,27 @@ describe("saveCurrentLayoutAtom", () => {
 
   it("does not set default when the flag is off", () => {
     const store = storeWith({ placement: { files: "left" } });
-    store.set(saveCurrentLayoutAtom, { name: "Plain", setAsDefault: false });
+    store.set(saveCurrentLayoutAtom, { name: "Plain", setAsDefault: false, tidyOnApply: false });
     expect(store.get(defaultLayoutIdAtom)).toBe(SYSTEM_DEFAULT_LAYOUT_ID);
+  });
+});
+
+describe("setLayoutTidyOnApplyAtom", () => {
+  it("toggles a saved layout's tidyOnApply flag", () => {
+    const store = storeWith({ placement: { files: "left" } });
+    store.set(savedLayoutsAtom, [makeLayout("a", { tidyOnApply: false })]);
+
+    store.set(setLayoutTidyOnApplyAtom, { id: "a", tidyOnApply: true });
+    expect(store.get(savedLayoutsAtom)[0].tidyOnApply).toBe(true);
+
+    store.set(setLayoutTidyOnApplyAtom, { id: "a", tidyOnApply: false });
+    expect(store.get(savedLayoutsAtom)[0].tidyOnApply).toBe(false);
+  });
+
+  it("is a no-op for System Default (it has no stored record)", () => {
+    const store = storeWith({ placement: { files: "left" } });
+    store.set(setLayoutTidyOnApplyAtom, { id: SYSTEM_DEFAULT_LAYOUT_ID, tidyOnApply: true });
+    expect(store.get(savedLayoutsAtom)).toHaveLength(0);
   });
 });
 

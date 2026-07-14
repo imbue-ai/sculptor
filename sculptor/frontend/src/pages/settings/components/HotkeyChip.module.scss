@@ -14,6 +14,15 @@
   min-width: 100px;
 }
 
+// Standalone accent chip for the assigned combo in the labeled (save-dialog)
+// variant, where the re-record affordance is a separate button beside it.
+.hotkeyChipValue {
+  background: var(--accent-4);
+  border-radius: var(--radius-2);
+  color: var(--accent-12);
+  padding: 2px var(--space-2);
+}
+
 .hotkeyClear {
   color: var(--accent-10);
   padding: var(--space-1);
