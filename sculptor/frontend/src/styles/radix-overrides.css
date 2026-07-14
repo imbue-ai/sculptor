@@ -44,9 +44,9 @@
    highlight is the bright solid --accent-9. Restyle EVERY highlight state to the
    same subtle --accent-3 (and keep :hover for the brief window before Radix sets
    [data-highlighted]) so the item never flashes between the two backgrounds as the
-   states toggle out of sync (e.g. the instant a submenu opens), and so keyboard
-   focus reads the same as mouse hover. Prefixed with .rt-BaseMenuContent so it
-   out-specifies Radix's own highlight rules without relying on stylesheet order. */
+   states toggle out of sync (e.g. the instant a submenu opens). Prefixed with
+   .rt-BaseMenuContent so it out-specifies Radix's own highlight rules without
+   relying on stylesheet order. */
 .rt-BaseMenuContent
   .rt-BaseMenuItem:where(:hover, [data-highlighted], [data-state="open"]):where(:not([data-disabled])) {
   background: var(--accent-3);
@@ -58,6 +58,17 @@
     :not([data-disabled])
   ) {
   color: var(--accent-a11);
+}
+
+/* With the highlight background now subtle for every state, keyboard navigation
+   would otherwise lose its cue (the cursor marks position for pointer users, but
+   keyboard-only users have only the highlight). Radix focuses the highlighted
+   item, so add a ring for keyboard focus specifically: :focus-visible matches
+   keyboard-driven focus but not pointer hover, so the mouse highlight stays flat
+   while arrow-key navigation gets a clear indicator. */
+.rt-BaseMenuContent .rt-BaseMenuItem:where(:focus-visible) {
+  outline: 2px solid var(--accent-8);
+  outline-offset: -2px;
 }
 
 .rt-Link:where(a:not([href])) {
