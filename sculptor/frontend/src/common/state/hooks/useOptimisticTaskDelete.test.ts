@@ -114,6 +114,45 @@ describe("useOptimisticTaskDelete", () => {
     );
   });
 
+  it("sends the DELETE even when the task is missing from the cache (SCU-1832)", async () => {
+    // A stale reference (route, palette action) can outlive the cache entry.
+    // The cache's ignorance must not silently swallow the user's delete —
+    // the server is the authority on deletability.
+    const store = createStore();
+    mockDeleteWorkspaceAgent.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useOptimisticTaskDelete({ workspaceId: "ws-1" }), {
+      wrapper: makeWrapper(store),
+    });
+
+    result.current.execute("task-ghost", "Ghost Task");
+    await flushMicrotasks();
+
+    expect(mockDeleteWorkspaceAgent).toHaveBeenCalledOnce();
+    expect(mockDeleteWorkspaceAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ path: expect.objectContaining({ agent_id: "task-ghost" }) }),
+    );
+    expect(store.get(deleteErrorToastAtom)).toBeNull();
+  });
+
+  it("skips the snapshot-dependent navigation callback when there was nothing to snapshot", async () => {
+    // The custom callback's contract is a real pre-delete snapshot (it computes
+    // sibling positions from it) — with no snapshot it must not run at all.
+    const store = createStore();
+    mockDeleteWorkspaceAgent.mockResolvedValue(undefined);
+    const onNavigateAfterDelete = vi.fn();
+
+    const { result } = renderHook(() => useOptimisticTaskDelete({ workspaceId: "ws-1", onNavigateAfterDelete }), {
+      wrapper: makeWrapper(store),
+    });
+
+    result.current.execute("task-ghost", "Ghost Task");
+    await flushMicrotasks();
+
+    expect(onNavigateAfterDelete).not.toHaveBeenCalled();
+    expect(mockDeleteWorkspaceAgent).toHaveBeenCalledOnce();
+  });
+
   it("tombstones the task before the navigation callback observes it", () => {
     // The removal must be visible in every store by the time callbacks run, so
     // a callback reading the cache sees the tombstone, not the live task.

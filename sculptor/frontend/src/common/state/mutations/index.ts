@@ -25,6 +25,7 @@ import {
   renameWorkspaceAgent,
   restoreWorkspaceAgent,
 } from "../../../api";
+import { HTTPException } from "../../Errors.ts";
 import { getTaskSyncVersion, queryClient, taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
 import { clearUnreadOverride, setUnreadOverride } from "../atoms/unreadOverrides";
 
@@ -77,16 +78,25 @@ export const rollbackOptimisticTaskUpdate = (agentId: string, ctx: TaskMutationC
  * has its own apply/rollback pair. Exported so the delete hook can apply the
  * tombstone synchronously before its navigation callbacks run — `onMutate` is
  * a microtask behind `.mutate()`, and callbacks read the post-delete store.
+ *
+ * When the cache never had the task (or already holds a tombstone), nothing is
+ * applied — writing a tombstone for an unknown entry would fake "deleted", and
+ * the untouched context keeps the rollback a no-op. The caller still sends the
+ * DELETE: the server is the authority on deletability.
  */
 export const applyOptimisticTaskDelete = (agentId: string): TaskMutationContext => {
   const prev = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(agentId));
+  const context = { prev, syncVersion: getTaskSyncVersion(agentId) };
+  if (!prev) {
+    return context;
+  }
   queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(agentId), null);
   const ids = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()) ?? [];
   queryClient.setQueryData<ReadonlyArray<string>>(
     taskIdsQueryKey(),
     ids.filter((id) => id !== agentId),
   );
-  return { prev, syncVersion: getTaskSyncVersion(agentId) };
+  return context;
 };
 
 /**
@@ -203,11 +213,22 @@ type DeleteVars = {
  */
 export const useDeleteTaskMutation = (): UseMutationResult<unknown, Error, DeleteVars, unknown> =>
   useMutation({
-    mutationFn: (vars: DeleteVars) =>
-      deleteWorkspaceAgent({
-        path: { workspace_id: vars.workspaceId, agent_id: vars.agentId },
-        meta: { skipWsAck: true, timeout: MUTATION_SETTLE_TIMEOUT_MS },
-      }),
+    mutationFn: async (vars: DeleteVars): Promise<void> => {
+      try {
+        await deleteWorkspaceAgent({
+          path: { workspace_id: vars.workspaceId, agent_id: vars.agentId },
+          meta: { skipWsAck: true, timeout: MUTATION_SETTLE_TIMEOUT_MS },
+        });
+      } catch (error) {
+        // An already-deleted agent is a success for the user's intent — let
+        // the tombstone stand instead of restoring something the server no
+        // longer has.
+        if (error instanceof HTTPException && error.status === 404) {
+          return;
+        }
+        throw error;
+      }
+    },
     onError: (_e, vars): void => {
       rollbackOptimisticTaskDelete(vars.agentId, vars.deleteContext);
     },

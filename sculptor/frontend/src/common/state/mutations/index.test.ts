@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
 import { TaskStatus } from "../../../api";
+import { HTTPException } from "../../Errors.ts";
 import {
   queryClient as sharedQueryClient,
   syncTasksToQueryCache,
@@ -17,6 +18,7 @@ import { isUnreadOverrideActive, resetUnreadOverridesForTesting } from "../atoms
 import {
   applyOptimisticTaskDelete,
   MUTATION_SETTLE_TIMEOUT_MS,
+  rollbackOptimisticTaskDelete,
   useDeleteTaskMutation,
   useMarkReadMutation,
   useMarkUnreadMutation,
@@ -446,6 +448,35 @@ describe("useDeleteTaskMutation", () => {
     seedForDelete();
 
     applyOptimisticTaskDelete(AGENT_ID);
+
+    expect(getCachedTask(AGENT_ID)).toBeNull();
+    expect(getIds()).toEqual([]);
+  });
+
+  it("applies nothing for a task the cache never had, so rollback stays a no-op", () => {
+    // A ghost apply must not write a tombstone (that would fake "deleted" for
+    // an unknown entry) nor touch the ids list. The caller still sends the
+    // DELETE; there is just nothing local to undo.
+    const context = applyOptimisticTaskDelete("agent-ghost");
+
+    expect(context.prev).toBeUndefined();
+    expect(getCachedTask("agent-ghost")).toBeUndefined();
+    expect(getIds()).toBeUndefined();
+
+    rollbackOptimisticTaskDelete("agent-ghost", context);
+    expect(getCachedTask("agent-ghost")).toBeUndefined();
+  });
+
+  it("treats a 404 as success: the agent is already gone, so the tombstone stands", async () => {
+    seedForDelete();
+    mockDelete.mockRejectedValueOnce(new HTTPException(404, "Agent agent-1 not found"));
+
+    const deleteContext = applyOptimisticTaskDelete(AGENT_ID);
+    const { result } = renderHook(() => useDeleteTaskMutation(), { wrapper: makeWrapper() });
+
+    await act(async () => {
+      await result.current.mutateAsync({ workspaceId: WS_ID, agentId: AGENT_ID, deleteContext });
+    });
 
     expect(getCachedTask(AGENT_ID)).toBeNull();
     expect(getIds()).toEqual([]);
