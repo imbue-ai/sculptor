@@ -13,6 +13,7 @@ from sculptor.database.models import Task
 from sculptor.foundation.errors import ImbueError
 from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.pydantic_serialization import FrozenModel
+from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
@@ -25,9 +26,11 @@ from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import SIGINT_EXIT_CODES
 from sculptor.interfaces.agents.constants import SIGTERM_EXIT_CODES
 from sculptor.interfaces.agents.errors import AgentClientError
+from sculptor.interfaces.agents.harness import Harness
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
+from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
 from sculptor.state.messages import PersistentAgentMessage
@@ -131,6 +134,11 @@ class HistoryScan(FrozenModel):
     dangling_chat_message_id: AgentMessageID | None
     # The last user chat message the agent started processing.
     last_user_chat_message_id: AgentMessageID | None
+    # That same message in full: it carries the conversation's launch settings
+    # (model, fast mode, effort), which model-less turns (question answers,
+    # answer-continuation resumes) continue with, so the runner re-seeds the
+    # agent wrapper from it on startup.
+    last_started_chat_message: ChatInputUserMessage | None
     # Every persistent message replayed in log order: user messages the agent
     # started processing plus the agent's own non-killed messages. The loop keeps
     # appending to (a copy of) this as the run produces more messages.
@@ -141,7 +149,7 @@ class HistoryScan(FrozenModel):
     last_processed_message_id: AgentMessageID | None
 
 
-def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
+def scan_message_history(all_messages: Sequence[Message], harness: Harness) -> HistoryScan:
     """Replay a task's persisted message log to reconstruct the loop's startup state.
 
     The scan is the single authority on which persisted user messages are settled
@@ -149,6 +157,10 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
     ``RequestStartedAgentMessage`` references it and the scan does not leave it in
     flight. ``last_processed_message_id`` is derived from the same pass state as
     the in-flight ids, so the dedup cursor and the resume tracking cannot diverge.
+
+    ``harness`` identifies AskUserQuestion / ExitPlanMode tool blocks in the log:
+    a killed turn that is blocked on an unanswered question is settled rather
+    than left in flight (see the question gate below).
     """
     persistent_user_message_by_id: dict[AgentMessageID, PersistentUserMessage] = {}
     # ids of user messages some RequestStartedAgentMessage references — i.e. user
@@ -157,6 +169,7 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
     # the last user chat message that we *started* processing — tracked in case we
     # never *finished* processing it, so that the agent can resume where it left off
     last_user_chat_message_id: AgentMessageID | None = None
+    last_started_chat_message: ChatInputUserMessage | None = None
     in_flight_chat_message_id: AgentMessageID | None = None
     in_flight_answer_message_id: AgentMessageID | None = None
     # Track whether the agent emitted any visible response for the in-flight chat
@@ -164,6 +177,14 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
     # rather just resend the original prompt than send a "continue where you left
     # off" instruction with no prior content. Reset on each new RequestStarted.
     is_partial_agent_response = False
+    # tool_use ids of AUQ / ExitPlanMode calls the user has not answered. Kept in
+    # lockstep with the web layer's pending-question derivation (derived
+    # ``_ready_or_waiting`` and message_conversion): a newer started user turn, a
+    # settled completion, a user-initiated stop, or a context clear dismisses
+    # them; a stop the user did not ask for (shutdown/restart SIGTERM) preserves
+    # them, because the question is restored in the UI and stays answerable via
+    # the answer-after-turn-ended continuation.
+    unanswered_question_tool_use_ids: set[str] = set()
     persistent_message_history: list[PersistentUserMessage | PersistentAgentMessage] = []
     for message in all_messages:
         # just remember the last chat message from the user (that the agent started processing)
@@ -173,8 +194,12 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
                 started_user_message_ids.add(message.request_id)
                 if isinstance(persistent_message, ChatInputUserMessage):
                     last_user_chat_message_id = message.request_id
+                    last_started_chat_message = persistent_message
                     in_flight_chat_message_id = message.request_id
                     is_partial_agent_response = False
+                    # A newer user prompt began processing — it supersedes any
+                    # older unanswered question.
+                    unanswered_question_tool_use_ids.clear()
                 elif isinstance(persistent_message, UserQuestionAnswerMessage):
                     in_flight_answer_message_id = message.request_id
                 # add the user message to the history as well
@@ -196,18 +221,40 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
                 isinstance(message, RequestSuccessAgentMessage) and (not message.interrupted or message.turn_abandoned)
             ):
                 in_flight_answer_message_id = None
+            # Any settled completion means the asking turn is over and its
+            # questions can no longer be answered against it — except a stop the
+            # user did not ask for, which preserves them (see the set's comment).
+            if not (isinstance(message, RequestStoppedAgentMessage) and not message.stopped_by_user):
+                unanswered_question_tool_use_ids.clear()
         # used above so that we can figure out which user messages started being processed so far
         if isinstance(message, PersistentUserMessage):
             persistent_user_message_by_id[message.message_id] = message
+            if isinstance(message, UserQuestionAnswerMessage):
+                unanswered_question_tool_use_ids.discard(message.tool_use_id)
         # remember all messages that have been emitted so far by the agent
         if isinstance(message, PersistentAgentMessage):
             was_killed = get_killed_exit_code(message)
             if not was_killed:
                 persistent_message_history.append(message)
+            if isinstance(message, ContextClearedMessage):
+                # A cleared context wipes the session that asked — any older
+                # question can no longer be answered against it.
+                unanswered_question_tool_use_ids.clear()
             # A ResponseBlockAgentMessage from the in-flight turn means Claude
             # produced visible content that we'd want to continue from on resume.
             if isinstance(message, ResponseBlockAgentMessage):
                 is_partial_agent_response = True
+                for block in message.content:
+                    if not isinstance(block, ToolUseBlock):
+                        continue
+                    # Invalid AUQ inputs were rejected by the MCP server, so the
+                    # agent has already moved on — mirror the web layer and skip
+                    # them. ExitPlanMode accepts any input per its schema.
+                    if (
+                        harness.is_ask_user_question_tool(block.name)
+                        and harness.is_valid_ask_user_question_input(block.name, block.input)
+                    ) or harness.is_exit_plan_mode_tool(block.name):
+                        unanswered_question_tool_use_ids.add(block.id)
     # The pre-gate value: dangling means "no accepted terminal completion", even
     # when there is no partial output to resume from.
     dangling_chat_message_id = in_flight_chat_message_id
@@ -218,6 +265,17 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
     # converts the push into a resume and Claude continues its --resume session.
     if not is_partial_agent_response:
         in_flight_chat_message_id = None
+
+    # The question gate: a killed turn blocked on an unanswered question is
+    # settled, not resumable. The UI restores the question and pins the task at
+    # WAITING, and the user's late answer drives the continuation — so the turn
+    # must not be auto-resumed here (a "continue" turn would settle or re-issue
+    # the question out from under the user) nor terminalized by the orphan
+    # synthesis (a turn_abandoned completion would dismiss the question in the
+    # web layer's derivations).
+    if unanswered_question_tool_use_ids:
+        in_flight_chat_message_id = None
+        dangling_chat_message_id = None
 
     # Derive the dedup cursor: the latest user message (in log order) that was
     # started and did not end the scan in flight. In-flight messages stay ahead of
@@ -237,6 +295,7 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
         is_partial_agent_response=is_partial_agent_response,
         dangling_chat_message_id=dangling_chat_message_id,
         last_user_chat_message_id=last_user_chat_message_id,
+        last_started_chat_message=last_started_chat_message,
         persistent_message_history=persistent_message_history,
         last_processed_message_id=last_processed_message_id,
     )

@@ -184,7 +184,7 @@ def run_agent_task_v1(
         # input_message_queue.
         with services.data_model_service.open_task_transaction() as transaction:
             all_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
-        history_scan = scan_message_history(all_messages)
+        history_scan = scan_message_history(all_messages, get_harness_for_config(task_data.agent_config))
 
         # Subscribe to the message queue, set up the environment, then wait for the initial message.
         # Environment setup happens before the initial message wait so that prompt-less agents
@@ -378,6 +378,17 @@ def _run_agent_in_environment(
         agent_wrapper.start(secrets)
         if on_agent_started is not None:
             on_agent_started()
+
+        # The last chat turn the agent started processing carries the
+        # conversation's launch settings (model, fast mode, effort); model-less
+        # turns (question answers) continue with them, so they are re-seeded
+        # into the agent wrapper from the replayed history.
+        if history_scan.last_started_chat_message is not None:
+            agent_wrapper.set_conversation_launch_settings(
+                model_name=history_scan.last_started_chat_message.model_name,
+                fast_mode=history_scan.last_started_chat_message.fast_mode,
+                effort=history_scan.last_started_chat_message.effort,
+            )
 
         logger.debug("Initial in-flight user chat message ID: {}", initial_in_flight_user_chat_message_id)
         logger.debug("Derived last processed message id:      {}", history_scan.last_processed_message_id)

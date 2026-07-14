@@ -84,7 +84,7 @@ def _scan_history(local_task: Task, services: ServiceCollectionForTask) -> Histo
     """Fetch the task's saved messages and scan them, as run_agent_task_v1 does."""
     with services.data_model_service.open_task_transaction() as transaction:
         saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
-    return scan_message_history(saved_messages)
+    return scan_message_history(saved_messages, CLAUDE_CODE_HARNESS)
 
 
 def _make_in_flight_chat_message() -> ChatInputUserMessage:
@@ -561,7 +561,9 @@ def test_killed_stop_with_partial_and_empty_queue_synthesizes_settlement(
 
     # The synthesized completion settles the chat message for the next restart's
     # derived cursor, so it will be dropped rather than re-queued.
-    assert scan_message_history(saved_messages).last_processed_message_id == chat_message.message_id
+    assert (
+        scan_message_history(saved_messages, CLAUDE_CODE_HARNESS).last_processed_message_id == chat_message.message_id
+    )
 
 
 def test_killed_stop_with_partial_and_queued_chat_is_resumed_not_synthesized(
