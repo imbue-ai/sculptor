@@ -21,6 +21,7 @@ class ProviderAuthStatus(FrozenModel):
     in_auth_json: bool
     env_detected: bool
     env_var_names: tuple[str, ...]
+    supports_subscription: bool
 
 
 def resolve_pi_auth_json_path() -> Path:
@@ -128,6 +129,7 @@ def get_provider_auth_statuses() -> tuple[ProviderAuthStatus, ...]:
             in_auth_json=entry.provider_id in auth_json_provider_ids,
             env_detected=entry.provider_id in env_detected_provider_ids,
             env_var_names=entry.env_var_names,
+            supports_subscription=entry.supports_subscription,
         )
         for entry in get_provider_catalog()
     )

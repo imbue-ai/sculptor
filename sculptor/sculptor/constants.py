@@ -435,16 +435,11 @@ class ElementIDs(StrEnum):
     PI_PROVIDER_ADD_CELL = "pi-provider-add-cell"
     # Mount point for the in-modal Authenticate/Disconnect actions and the login terminal.
     PI_PROVIDER_ACTIONS = "pi-provider-actions"
-    PI_PROVIDER_AUTHENTICATE_BUTTON = "pi-provider-authenticate-button"
     PI_PROVIDER_DISCONNECT_BUTTON = "pi-provider-disconnect-button"
     # Centered modal that hosts the interactive pi /login (or /logout) session.
     PI_LOGIN_DIALOG = "pi-login-dialog"
     PI_LOGIN_TERMINAL = "pi-login-terminal"
     PI_LOGIN_DONE_BUTTON = "pi-login-done-button"
-    # Unused paste-key UI test IDs; drop with a `just generate-api` pass.
-    PI_PROVIDER_PASTE_KEY_SWITCH = "pi-provider-paste-key-switch"
-    PI_PASTE_KEY_INPUT = "pi-paste-key-input"
-    PI_PASTE_KEY_SAVE = "pi-paste-key-save"
     # Model-picker disabled "no models available" state when a harness (pi) has no
     # authenticated providers; the fix-it action lives on the composer send slot.
     PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"

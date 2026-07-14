@@ -96,10 +96,6 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
         """
         return self._page.get_by_test_id(ElementIDs.PI_LOGIN_DIALOG)
 
-    def get_authenticate_button(self) -> Locator:
-        """Get the 'Open pi login' button inside the login modal."""
-        return self._page.get_by_test_id(ElementIDs.PI_PROVIDER_AUTHENTICATE_BUTTON)
-
     def get_disconnect_button(self, provider_id: str) -> Locator:
         """Get a connected card's Disconnect button (auth.json-backed providers only)."""
         return self.get_by_test_id(f"{ElementIDs.PI_PROVIDER_DISCONNECT_BUTTON}-{provider_id}")

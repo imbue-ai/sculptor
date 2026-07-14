@@ -1,8 +1,8 @@
 import { Cross1Icon } from "@radix-ui/react-icons";
-import { Button, Dialog, Flex, IconButton, Spinner, Text } from "@radix-ui/themes";
+import { Dialog, Flex, IconButton, Spinner, Text } from "@radix-ui/themes";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
 
-import { ElementIds, finishPiLogin, getPiLoginStatus, startPiLogin } from "~/api";
+import { ElementIds, finishPiLogin, getPiLoginStatus, ProviderGroup, startPiLogin } from "~/api";
 
 import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
 
@@ -12,14 +12,18 @@ const PI_LOGIN_STATUS_POLL_INTERVAL_MS = 1200;
 
 /** What the Providers area hands the modal: which provider and which direction.
  *  `providerId` is null for the empty-state "Authenticate a provider" CTA (pi's own
- *  TUI picks the provider). */
+ *  TUI picks the provider). `group` + `supportsSubscription` mirror the provider's
+ *  catalog entry and select the login guidance: the backend drives pi straight to
+ *  the provider's single credential step (API key input, or the subscription
+ *  sign-in for a subscription-only provider) and leaves the method choice to the
+ *  user only when the provider supports both. */
 export type PiLoginRequestView = {
   providerId: string | null;
   displayName: string;
   mode: "login" | "logout";
+  group: ProviderGroup | null;
+  supportsSubscription: boolean;
 };
-
-type DialogView = "intro" | "terminal";
 
 type PiLoginDialogProps = {
   request: PiLoginRequestView;
@@ -28,49 +32,35 @@ type PiLoginDialogProps = {
 };
 
 /**
- * Centered modal hosting the interactive pi /login (or /logout) session. Login shows a
- * short intro whose single "Open pi login" action launches the terminal; logout starts
- * the /logout terminal immediately. While the terminal is live, Escape and
- * outside-clicks are suppressed (Escape is a keystroke pi consumes) — the user leaves
- * via Done, which tears the PTY down. pi writes ~/.pi/agent/auth.json itself.
+ * Centered modal hosting the interactive pi /login (or /logout) session, which starts
+ * as soon as the modal mounts. While the terminal is live, Escape and outside-clicks
+ * are suppressed (Escape is a keystroke pi consumes) — the user leaves via Done, which
+ * tears the PTY down. pi writes ~/.pi/agent/auth.json itself.
  */
 export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactElement => {
-  const [view, setView] = useState<DialogView>(request.mode === "logout" ? "terminal" : "intro");
   const [activeLoginId, setActiveLoginId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const startSession = useCallback(async (): Promise<void> => {
-    setErrorMessage(null);
-    try {
-      const response = await startPiLogin({
-        body: { mode: request.mode, providerId: request.providerId ?? undefined },
-        meta: { skipWsAck: true },
-      });
-      if (response.data) {
-        setActiveLoginId(response.data.loginId);
-        setView("terminal");
-      }
-    } catch {
-      setErrorMessage("Could not start the pi session. Check that pi is installed in Settings → Pi.");
-    }
-  }, [request]);
-
-  // pi /logout has no intro step — kick off its interactive terminal as soon as the modal
-  // mounts (the parent remounts the dialog per request, so this fires once per open).
+  // Kick off the interactive terminal as soon as the modal mounts (the parent remounts
+  // the dialog per request, so this fires once per open). A session that resolves after
+  // the effect is torn down (dialog closed, or a StrictMode remount) is never adopted,
+  // so reap its PTY instead of leaking it.
   useEffect(() => {
-    if (request.mode !== "logout") {
-      return;
-    }
-
     let isActive = true;
     void (async (): Promise<void> => {
       try {
         const response = await startPiLogin({
-          body: { mode: "logout", providerId: request.providerId ?? undefined },
+          body: { mode: request.mode, providerId: request.providerId ?? undefined },
           meta: { skipWsAck: true },
         });
-        if (isActive && response.data) {
+        if (!response.data) {
+          return;
+        }
+
+        if (isActive) {
           setActiveLoginId(response.data.loginId);
+        } else {
+          await finishPiLogin({ path: { login_id: response.data.loginId }, meta: { skipWsAck: true } });
         }
       } catch {
         if (isActive) {
@@ -101,11 +91,18 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
   // the credential change (provider added on login / removed on logout). On completion
   // the modal closes and the Providers area refetches — no manual Done.
   useEffect(() => {
-    if (view !== "terminal" || activeLoginId === null) {
+    if (activeLoginId === null) {
       return;
     }
     let isCancelled = false;
+    let isInFlight = false;
     const interval = window.setInterval(() => {
+      // Single-flight: a status request outliving the interval must not stack
+      // duplicates behind it.
+      if (isInFlight) {
+        return;
+      }
+      isInFlight = true;
       void (async (): Promise<void> => {
         try {
           const response = await getPiLoginStatus({ path: { login_id: activeLoginId }, meta: { skipWsAck: true } });
@@ -116,6 +113,8 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
           }
         } catch {
           // Transient (e.g. the session is briefly not found) — keep polling until teardown.
+        } finally {
+          isInFlight = false;
         }
       })();
     }, PI_LOGIN_STATUS_POLL_INTERVAL_MS);
@@ -123,14 +122,40 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
       isCancelled = true;
       window.clearInterval(interval);
     };
-  }, [view, activeLoginId, teardown]);
+  }, [activeLoginId, teardown]);
+
+  // The live session's last-resort reap: Done, the X button, and the status poll all
+  // tear down explicitly, but the dialog can also unmount from above (the parent view
+  // goes away) before the terminal's WebSocket-close backstop is armed. finishPiLogin
+  // is idempotent across all of these paths.
+  useEffect(() => {
+    if (activeLoginId === null) {
+      return;
+    }
+
+    return (): void => {
+      void (async (): Promise<void> => {
+        try {
+          await finishPiLogin({ path: { login_id: activeLoginId }, meta: { skipWsAck: true } });
+        } catch {
+          // Best-effort reap; the PTY is also reaped on WebSocket close.
+        }
+      })();
+    };
+  }, [activeLoginId]);
 
   const isLogin = request.mode === "login";
   const title = isLogin ? `Authenticate ${request.displayName}` : `Disconnect ${request.displayName}`;
-  const terminalGuidance = isLogin
-    ? request.providerId === null
+  const loginGuidance =
+    request.providerId === null
       ? "Select a provider in the pi login screen below and complete sign-in. This window closes automatically when done."
-      : `Choose ${request.displayName} in the pi login screen below and complete sign-in. This window closes automatically when done.`
+      : request.group === ProviderGroup.SUBSCRIPTION_ONLY
+        ? `Complete the ${request.displayName} subscription sign-in below — pi opens your browser to authorize. This window closes automatically when done.`
+        : request.supportsSubscription
+          ? `Choose how to sign in — subscription or API key — and complete the ${request.displayName} sign-in below. This window closes automatically when done.`
+          : `Enter your ${request.displayName} API key in the pi screen below. This window closes automatically when done.`;
+  const terminalGuidance = isLogin
+    ? loginGuidance
     : `Disconnecting ${request.displayName} from pi — this window closes automatically when done.`;
 
   return (
@@ -138,8 +163,8 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
       <Dialog.Content
         maxWidth="640px"
         data-testid={ElementIds.PI_LOGIN_DIALOG}
-        onEscapeKeyDown={(event) => view === "terminal" && event.preventDefault()}
-        onPointerDownOutside={(event) => view === "terminal" && event.preventDefault()}
+        onEscapeKeyDown={(event) => activeLoginId !== null && event.preventDefault()}
+        onPointerDownOutside={(event) => activeLoginId !== null && event.preventDefault()}
       >
         <Flex align="center" gap="3" mb="3">
           <Dialog.Title size="3" mb="0" style={{ flexGrow: 1 }}>
@@ -152,40 +177,22 @@ export const PiLoginDialog = ({ request, onClose }: PiLoginDialogProps): ReactEl
           </Dialog.Close>
         </Flex>
 
-        {view === "intro" && (
-          <Flex direction="column" gap="3">
+        {errorMessage !== null ? (
+          <Text size="2" color="red">
+            {errorMessage}
+          </Text>
+        ) : activeLoginId !== null ? (
+          <Flex direction="column" gap="2" data-testid={ElementIds.PI_PROVIDER_ACTIONS}>
             <Text size="2" color="gray">
-              Continue your login with a pi interactive session.
+              {terminalGuidance}
             </Text>
-            <Button
-              variant="solid"
-              onClick={() => void startSession()}
-              data-testid={ElementIds.PI_PROVIDER_AUTHENTICATE_BUTTON}
-              style={{ alignSelf: "flex-start" }}
-            >
-              Open pi login
-            </Button>
-            {errorMessage !== null && (
-              <Text size="2" color="red">
-                {errorMessage}
-              </Text>
-            )}
+            <PiLoginTerminal loginId={activeLoginId} onDone={() => void teardown()} />
+          </Flex>
+        ) : (
+          <Flex align="center" justify="center" p="5">
+            <Spinner />
           </Flex>
         )}
-
-        {view === "terminal" &&
-          (activeLoginId !== null ? (
-            <Flex direction="column" gap="2" data-testid={ElementIds.PI_PROVIDER_ACTIONS}>
-              <Text size="2" color="gray">
-                {terminalGuidance}
-              </Text>
-              <PiLoginTerminal loginId={activeLoginId} onDone={() => void teardown()} />
-            </Flex>
-          ) : (
-            <Flex align="center" justify="center" p="5">
-              <Spinner />
-            </Flex>
-          ))}
       </Dialog.Content>
     </Dialog.Root>
   );
