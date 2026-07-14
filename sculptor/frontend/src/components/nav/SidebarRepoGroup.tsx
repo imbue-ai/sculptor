@@ -39,12 +39,13 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { Workspace } from "~/api";
-import { ElementIds, updateWorkspace } from "~/api";
+import { ElementIds } from "~/api";
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
-import { workspaceGroupErrorToastAtom, workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { workspaceGroupErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
 import {
   useAddWorkspaceGroupMemberMutation,
   useRemoveWorkspaceGroupMemberMutation,
@@ -142,7 +143,6 @@ export const SidebarRepoGroup = ({
   const isRepoCollapsed = useAtomValue(isRepoCollapsedAtomFamily(group.projectId));
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
   const collapsedGroups = useAtomValue(collapsedWorkspaceGroupsAtom);
-  const setRenameErrorToast = useSetAtom(workspaceRenameErrorToastAtom);
   const setGroupErrorToast = useSetAtom(workspaceGroupErrorToastAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
@@ -150,6 +150,7 @@ export const SidebarRepoGroup = ({
   const commitSectionDrop = useSetAtom(commitSectionDropAtom);
   const restoreSectionOrder = useSetAtom(restoreSectionOrderAtom);
   const store = useStore();
+  const renameWorkspace = useWorkspaceRename();
 
   const collapsedGroupIds = useMemo(
     () => new Set(Object.keys(collapsedGroups).filter((id) => collapsedGroups[id])),
@@ -212,7 +213,16 @@ export const SidebarRepoGroup = ({
     transition: groupTransition,
     isDragging: isGroupDragging,
     isOver: isGroupOver,
+    activeIndex: groupActiveIndex,
+    overIndex: groupOverIndex,
   } = useSortable({ id: group.projectId });
+
+  // Which edge of this group the dragged group will land against, for the
+  // drop-indicator line during repo-group drags: "after" (below) when dragging
+  // down onto it, "before" (above) when dragging up. Only meaningful while
+  // this group is the drop target.
+  const groupDropSide =
+    isGroupOver && !isGroupDragging ? (groupActiveIndex < groupOverIndex ? "after" : "before") : undefined;
 
   const sectionChildrenRef = useRef<HTMLDivElement | null>(null);
 
@@ -642,36 +652,23 @@ export const SidebarRepoGroup = ({
     };
   }, [isRepoCollapsed, endOwnedDrag]);
 
+  const handleBeginRename = useCallback(
+    (workspaceId: string): void => {
+      setRenamingWorkspaceId(workspaceId);
+    },
+    [setRenamingWorkspaceId],
+  );
+
   // Reference-stable (the rows are memoized on their props): the rename
-  // callbacks depend only on reference-stable atom setters and the store.
+  // callbacks depend only on reference-stable atom setters and hooks.
+  // Optimistic write + rollback + error toast live in the shared
+  // useWorkspaceRename, the ONE rename path for every surface.
   const handleRenameCommit = useCallback(
     (workspaceId: string, newName: string): void => {
       setRenamingWorkspaceId(null);
-      const workspaceAtom = workspaceAtomFamily(workspaceId);
-      const previous = store.get(workspaceAtom);
-      // Optimistically show the new name and let the WebSocket frame reconcile
-      // with the server-authoritative value; roll back and surface a toast if the
-      // write is rejected so the rename never fails silently.
-      if (previous !== null) {
-        store.set(workspaceAtom, { ...previous, description: newName });
-      }
-      updateWorkspace({
-        path: { workspace_id: workspaceId },
-        body: { description: newName },
-      }).catch((error: unknown) => {
-        console.error("Failed to rename workspace:", error);
-        if (previous !== null) {
-          store.set(workspaceAtom, previous);
-        }
-        setRenameErrorToast({
-          title: `Failed to rename "${previous?.description ?? "workspace"}"`,
-          description: "The name has been restored. Try again or check your connection.",
-          type: ToastType.ERROR_PROMINENT,
-          action: null,
-        });
-      });
+      renameWorkspace(workspaceId, newName);
     },
-    [setRenamingWorkspaceId, setRenameErrorToast, store],
+    [setRenamingWorkspaceId, renameWorkspace],
   );
 
   const handleRenameCancel = useCallback((): void => {
@@ -758,6 +755,7 @@ export const SidebarRepoGroup = ({
           data-project-id={group.projectId}
           data-sidebar-dragging={isGroupDragging ? "true" : undefined}
           data-sidebar-drop-target={isGroupOver && !isGroupDragging ? "true" : undefined}
+          data-sidebar-group-drop-side={groupDropSide}
         >
           <Chevron size={16} className={styles.repoChevron} />
           <Text className={styles.repoName} truncate>
@@ -839,6 +837,7 @@ export const SidebarRepoGroup = ({
                   destructiveColor={dangerColor}
                   onNavigate={onWorkspaceClick}
                   onHover={onWorkspaceHover}
+                  onBeginRename={handleBeginRename}
                   onRenameCommit={handleRenameCommit}
                   onRenameCancel={handleRenameCancel}
                   onBeginDelete={onBeginDelete}
@@ -856,6 +855,7 @@ export const SidebarRepoGroup = ({
                   activeWorkspaceId={activeWorkspaceId}
                   onWorkspaceClick={onWorkspaceClick}
                   onWorkspaceHover={onWorkspaceHover}
+                  onWorkspaceBeginRename={handleBeginRename}
                   onWorkspaceRenameCommit={handleRenameCommit}
                   onWorkspaceRenameCancel={handleRenameCancel}
                   onBeginDelete={onBeginDelete}

@@ -23,6 +23,7 @@ import { type AgentTypeName, createWorkspaceAgent, type TerminalAgentRegistratio
 import {
   AGENT_TYPE_LABELS,
   encodeRegisteredAgentType,
+  formatRegisteredAgentLabel,
   lastUsedAgentTypeAtom,
   parseStoredAgentType,
   REGISTERED_AGENT_TYPE_PREFIX,
@@ -129,16 +130,20 @@ export function normalizeRecentAgentType(stored: StoredAgentType): StoredAgentTy
 // Display label for the pinned "New {recent} agent" row, shared by the section "+"
 // dropdown and the Cmd+K "Add panel" flow so the two surfaces label the row
 // identically: built-in labels for Claude/pi/terminal, the registration's display
-// name for a registered terminal agent, and the generic "agent" when the
-// registration is unknown (removed since it was stored, or the caller has no
-// registrations list — the Cmd+K provider runs outside React and passes none).
+// name plus the "in terminal" marker for a registered terminal agent, and the
+// generic "agent" when the registration is unknown (removed since it was stored,
+// or the caller has no registrations list — the Cmd+K provider runs outside React
+// and passes none).
 export function recentAgentLabel(
   stored: StoredAgentType,
   registrations: ReadonlyArray<TerminalAgentRegistration>,
 ): string {
   if (stored.startsWith(REGISTERED_AGENT_TYPE_PREFIX)) {
     const { registrationId } = parseStoredAgentType(stored);
-    return registrations.find((registration) => registration.registrationId === registrationId)?.displayName ?? "agent";
+    const displayName = registrations.find(
+      (registration) => registration.registrationId === registrationId,
+    )?.displayName;
+    return displayName === undefined ? "agent" : formatRegisteredAgentLabel(displayName);
   }
   return AGENT_TYPE_LABELS[stored as Exclude<AgentTypeName, "registered">];
 }
@@ -223,7 +228,9 @@ export type AgentTypeOption = {
 
 // The agent-type sub-menu options: Claude, pi, and each registered terminal-agent
 // program. No bare "Terminal" agent type — terminal creation belongs to the
-// dedicated "New terminal" row.
+// dedicated "New terminal" row. A registered option's label carries the "in
+// terminal" origin marker (via formatRegisteredAgentLabel) so it reads as
+// terminal-configured wherever the option is shown.
 export function buildAgentTypeOptions(inputs: {
   registrations: ReadonlyArray<TerminalAgentRegistration>;
 }): ReadonlyArray<AgentTypeOption> {
@@ -250,7 +257,7 @@ export function buildAgentTypeOptions(inputs: {
       stored: encodeRegisteredAgentType(registration.registrationId),
       agentType: "registered",
       registrationId: registration.registrationId,
-      label: registration.displayName,
+      label: formatRegisteredAgentLabel(registration.displayName),
     });
   }
   return options;

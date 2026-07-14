@@ -262,6 +262,38 @@ $row-min-height: 28px;
   }
 }
 
+// The repo group the dragged group will land against carries a drop-side hint
+// ("before" = it lands above this group, "after" = below) while it is the drop
+// target. There is no floating placeholder at this level — the dragged group
+// slides in place — so draw a small accent insertion line on that edge to show
+// where a release will land. Rows need none of this: a row drag holds a real
+// gap open at the projected slot, so the lane itself shows the landing spot.
+//
+// The line must sit at the target's OUTER edge, so it's drawn on `.repoGroup`,
+// the element that spans the target's full height (its header carries the
+// hint, but the whole group — header + rows — is what's tall, so a line on the
+// header alone would fall inside a tall group).
+.repoGroup:has([data-sidebar-group-drop-side]) {
+  position: relative;
+}
+
+.repoGroup:has([data-sidebar-group-drop-side])::after {
+  background: var(--accent-9);
+  border-radius: var(--radius-1);
+  content: "";
+  height: 2px;
+  inset-inline: var(--space-2);
+  position: absolute;
+}
+
+.repoGroup:has([data-sidebar-group-drop-side="before"])::after {
+  top: -1px;
+}
+
+.repoGroup:has([data-sidebar-group-drop-side="after"])::after {
+  bottom: -1px;
+}
+
 // The status dot sits in a fixed-width column the same width as a group
 // header's chevron box, with the dot centered. This keeps every leading glyph
 // on one vertical axis and starts every row's label at the same offset, so a

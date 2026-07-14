@@ -44,10 +44,15 @@ class WorkspaceListingRow(FrozenModel):
     description: str
     initialization_strategy: WorkspaceInitializationStrategy
     source_branch: str | None
+    environment_id: str | None
     is_deleted: bool
     is_open: bool
     created_at: datetime.datetime
     project_name: str
+    # The project's user_git_repo_url (a file:// URL when set), denormalized so
+    # the web layer can derive the workspace's working directory without a
+    # per-row project lookup.
+    project_git_repo_url: str | None
     agent_count: int
     last_activity_at: datetime.datetime
 

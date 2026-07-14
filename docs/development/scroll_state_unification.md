@@ -98,6 +98,19 @@ data-scroll-settled = (authority is userControlled OR following) AND layout is s
   clobbering a scroll the user just made — the original flake. The deferred
   restore re-assert re-checks that the phase is still `restoring` before
   re-applying, so a mid-restore user scroll cancels it.
+- **The restore settles pre-paint.** `restore()` applies the saved anchor
+  against the estimated heights, synchronously sweeps every mounted row through
+  `measureElement` (virtual-core resizes its cache immediately), hands the
+  virtualizer the restored offset (it would otherwise learn it only from the
+  async scroll event), and forces one settle render — a layout-effect setState
+  commits before paint — whose layout effect re-applies against the swept
+  geometry. The first painted frame of the incoming task is therefore already
+  the settled one; the deferred double-rAF re-assert remains only as a safety
+  net for measurements that land late (images, fonts) and is normally a no-op.
+  The anchor is resolved to one absolute `scrollTop` write, never via
+  `scrollToIndex` — that would arm TanStack's scroll-reconcile loop, which
+  keeps re-driving `scrollTop` toward the bare item start and clobbers the
+  pixel offset when a measurement shifts.
 - **`taskSwitched` is global.** A switch from any phase — even mid-`restoring` —
   restarts `restoring`, so rapid tab switches can't strand the machine.
 - **`anchoringTurn → userControlled` on `streamingStopped`.** A short response

@@ -104,7 +104,7 @@ Every optimistic write must name its healing mechanism for both outcomes. On **s
 
 **Fix:** Use the shared helpers in `sculptor/frontend/src/common/state/mutations/` (`applyOptimisticTaskUpdate` / `rollbackOptimisticTaskUpdate`) or follow their shape: snapshot in `onMutate`, restore in `onError` (subject to [`unsound_optimistic_rollback`](#unsound_optimistic_rollback)), never write in `onSuccess`.
 
-**Exceptions:** Fire-and-forget without a local optimistic write (telemetry, analytics, reply-POSTs like plugin-command results) is fine — there is no local state to heal. The rule triggers only when a local write preceded the swallowed failure.
+**Exceptions:** Fire-and-forget without a local optimistic write (telemetry, analytics, reply-POSTs like extension-command results) is fine — there is no local state to heal. The rule triggers only when a local write preceded the swallowed failure.
 
 ---
 
@@ -157,7 +157,7 @@ One operation gets one implementation. A second path — e.g. a direct API call 
 
 **Question:** Does this TanStack query (or mutation) key start with the reserved `SCULPTOR_QUERY_KEY_PREFIX` (`"sculptor"`) as its first element?
 
-The shared `queryClient` is handed to runtime-loaded frontend plugins through an import map, so the cache key space is partitioned by namespace: host-owned queries live under `["sculptor", …]`, while each plugin keys its queries under its own plugin id. A host key that omits the prefix sits in the unreserved root of the cache, where a plugin keyed on the same first element could read it, invalidate it, or evict it out from under the host (and vice versa). Reserving `"sculptor"` as the first element keeps the two cleanly isolated no matter what a plugin does. Every host query and mutation key — including the partial-key filters passed to `invalidateQueries` / `removeQueries` / `getQueryData` / `setQueryData` / `fetchQuery` — must start with this prefix.
+The shared `queryClient` is handed to runtime-loaded extensions through an import map, so the cache key space is partitioned by namespace: host-owned queries live under `["sculptor", …]`, while each extension keys its queries under its own extension id. A host key that omits the prefix sits in the unreserved root of the cache, where an extension keyed on the same first element could read it, invalidate it, or evict it out from under the host (and vice versa). Reserving `"sculptor"` as the first element keeps the two cleanly isolated no matter what an extension does. Every host query and mutation key — including the partial-key filters passed to `invalidateQueries` / `removeQueries` / `getQueryData` / `setQueryData` / `fetchQuery` — must start with this prefix.
 
 Reference the exported `SCULPTOR_QUERY_KEY_PREFIX` constant from `queryClient.ts` rather than a bare `"sculptor"` literal, so the namespace has a single source of truth, and build keys through the per-query `…QueryKey` helper (see [`use_tanstack_querykey_bundle`](#use_tanstack_querykey_bundle)) so producers and the filters that target them can't drift apart.
 
@@ -169,14 +169,14 @@ Reference the exported `SCULPTOR_QUERY_KEY_PREFIX` constant from `queryClient.ts
 **Fix:** Prepend `SCULPTOR_QUERY_KEY_PREFIX` as the first element of the key, leaving the rest unchanged, and update every consumer of that key (the `useQuery` and the `invalidateQueries`/`removeQueries` that target it) in the same change.
 
 ```ts
-// Bad: lands in the unreserved cache root — a plugin keyed on "telemetry" collides
+// Bad: lands in the unreserved cache root — an extension keyed on "telemetry" collides
 key: ["telemetry", workspaceId] as const,
 
 // Good: under the host's reserved namespace
 key: [SCULPTOR_QUERY_KEY_PREFIX, "telemetry", workspaceId] as const,
 ```
 
-**Exceptions:** Plugin-authored queries are keyed under the plugin's own id, not `"sculptor"` — this rule governs host-owned keys only.
+**Exceptions:** Extension-authored queries are keyed under the extension's own id, not `"sculptor"` — this rule governs host-owned keys only.
 
 ---
 
@@ -407,8 +407,8 @@ The deterministic shape: the action only records intent (a ref or a pending atom
 **What to look for:**
 - A menu `onSelect` or palette `perform` that sets state which mounts an auto-focusing component (a rename-target atom, `setIsRenaming(true)`) instead of stashing intent for `onCloseAutoFocus`
 - `requestAnimationFrame` / `setTimeout` wrapped around `.focus()` to "run after the menu closes"
-- A new rename entry point that bypasses the existing handoff patterns (`pendingRenameRef` in `SectionHeader`, `palettePendingRenameAtom` in the command palette)
+- A new rename entry point that bypasses the existing handoff patterns (`pendingRenameRef` in `SectionHeader`, `palettePendingRenameAtom` in the command palette, `pendingWorkspaceRenameIdAtom` in the sidebar row menus)
 
-**Fix:** Record intent in `onSelect`/`perform`; in the overlay's `onCloseAutoFocus`, call `event.preventDefault()` and start the focus-sensitive UI. See `SectionHeader`'s panel-tab context menu and the command palette's `palettePendingRenameAtom` for the two reference implementations.
+**Fix:** Record intent in `onSelect`/`perform`; in the overlay's `onCloseAutoFocus`, call `event.preventDefault()` and start the focus-sensitive UI. See `SectionHeader`'s panel-tab context menu, the command palette's `palettePendingRenameAtom`, and the sidebar row menus' `pendingWorkspaceRenameIdAtom` for reference implementations.
 
-**Exceptions:** Follow-up UI that owns a focus scope (e.g. a menu item opening a Radix Dialog) needs no deferral — the dialog's focus trap wins the handoff on its own. Non-focus side effects (clipboard copies, navigation, atom writes that don't mount focused UI) are unaffected. Menus whose items never hand off focus may keep an unconditional `onCloseAutoFocus={(e) => e.preventDefault()}` (the workspace row menus do) when returning focus to the trigger is not useful.
+**Exceptions:** Follow-up UI that owns a focus scope (e.g. a menu item opening a Radix Dialog) needs no deferral — the dialog's focus trap wins the handoff on its own. Non-focus side effects (clipboard copies, navigation, atom writes that don't mount focused UI) are unaffected. Menus whose items never hand off focus may keep an unconditional `onCloseAutoFocus={(e) => e.preventDefault()}` when returning focus to the trigger is not useful.

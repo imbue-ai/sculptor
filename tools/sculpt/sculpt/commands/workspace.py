@@ -1,4 +1,5 @@
 import json
+import os
 
 import httpx
 import typer
@@ -13,6 +14,7 @@ from sculpt.client.api.default import update_workspace
 from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.update_workspace_request import UpdateWorkspaceRequest
+from sculpt.client.types import Unset
 from sculpt.commands._group_helpers import group_new_workspace_or_warn
 from sculpt.commands._group_helpers import resolve_group_for_join
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
@@ -29,8 +31,8 @@ from sculpt.formatting import format_datetime
 from sculpt.formatting import format_table
 from sculpt.formatting import handle_connection_error
 from sculpt.formatting import truncate
-from sculpt.resolve import fetch_repo_path_lookup
 from sculpt.resolve import fetch_recent_workspaces
+from sculpt.resolve import fetch_repo_path_lookup
 from sculpt.resolve import resolve_by_prefix
 from sculpt.resolve import resolve_project
 
@@ -44,6 +46,11 @@ workspace_app = typer.Typer(
 _RECENT_REPO_DISPLAY_MAX_LENGTH = 30
 _RECENT_DESCRIPTION_DISPLAY_MAX_LENGTH = 30
 _PROJECT_DESCRIPTION_DISPLAY_MAX_LENGTH = 40
+
+
+def _optional_str(value: None | str | Unset) -> str | None:
+    """Collapse the generated client's UNSET (field absent on older servers) to None."""
+    return value if isinstance(value, str) else None
 
 
 @workspace_app.command("create")
@@ -93,8 +100,8 @@ def create(
     if group is not None and no_group:
         cli_error("--group and --no-group are mutually exclusive", json_output=json_output)
 
-    client = get_authenticated_client(base_url)
-    project_id = resolve_project(repo, client)
+    client = get_authenticated_client(base_url, json_output)
+    project_id = resolve_project(repo, client, json_output)
 
     # Resolve an explicit --group target before creating anything, so an
     # unknown group (or the disabled workspace-groups experiment) fails with
@@ -177,18 +184,19 @@ def list_cmd(
 ) -> None:
     """List workspaces."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
 
     if show_all:
         _list_all(client, json_output)
     else:
-        project_id = resolve_project(repo, client)
+        project_id = resolve_project(repo, client, json_output)
         _list_for_project(client, project_id, json_output)
 
 
 def _list_all(client: Client, json_output: bool) -> None:
     workspaces = fetch_recent_workspaces(client, json_output)
     repo_lookup = fetch_repo_path_lookup(client)  # type: ignore[arg-type]
+    self_workspace_id = os.environ.get("SCULPT_WORKSPACE_ID")
 
     if json_output:
         items = [
@@ -196,6 +204,8 @@ def _list_all(client: Client, json_output: bool) -> None:
                 id=w.object_id,
                 repo_id=w.project_id,
                 repo_path=repo_lookup.get(w.project_id, w.project_name),
+                working_directory=_optional_str(w.working_directory),
+                current_branch=_optional_str(w.current_branch),
                 description=w.description,
                 strategy=w.initialization_strategy.value,
                 source_branch=w.source_branch,
@@ -203,6 +213,7 @@ def _list_all(client: Client, json_output: bool) -> None:
                 is_open=w.is_open,
                 created_at=w.created_at.isoformat(),
                 last_activity_at=w.last_activity_at.isoformat(),
+                is_self=w.object_id == self_workspace_id,
             )
             for w in workspaces
         ]
@@ -216,16 +227,20 @@ def _list_all(client: Client, json_output: bool) -> None:
     headers = ["ID", "REPO", "STRATEGY", "BRANCH", "AGENTS", "DESCRIPTION"]
     rows = [
         [
-            w.object_id,
+            w.object_id + (" *" if w.object_id == self_workspace_id else ""),
             truncate(repo_lookup.get(w.project_id, w.project_name), _RECENT_REPO_DISPLAY_MAX_LENGTH),
             w.initialization_strategy.value,
-            w.source_branch or "-",
+            # Prefer the live checked-out branch; fall back to the source branch
+            # for workspaces whose checkout hasn't been scanned (or built) yet.
+            _optional_str(w.current_branch) or w.source_branch or "-",
             str(w.agent_count),
             truncate(w.description, _RECENT_DESCRIPTION_DISPLAY_MAX_LENGTH),
         ]
         for w in workspaces
     ]
     typer.echo(format_table(headers, rows))
+    if any(w.object_id == self_workspace_id for w in workspaces):
+        typer.echo("* = this workspace (SCULPT_WORKSPACE_ID)", err=True)
 
 
 def _list_for_project(client: Client, project_id: str, json_output: bool) -> None:
@@ -240,17 +255,22 @@ def _list_for_project(client: Client, project_id: str, json_output: bool) -> Non
     if isinstance(result, HTTPValidationError):
         cli_error("Validation error", detail=str(result), json_output=json_output)
 
+    self_workspace_id = os.environ.get("SCULPT_WORKSPACE_ID")
+
     if json_output:
         items = [
             WorkspaceListProjectItem(
                 id=w.object_id,
                 repo_id=w.project_id,
+                working_directory=_optional_str(w.working_directory),
+                current_branch=_optional_str(w.current_branch),
                 description=w.description,
                 strategy=w.initialization_strategy.value,
                 source_branch=w.source_branch,
                 target_branch=w.target_branch,
                 requested_branch_name=w.requested_branch_name,
                 is_deleted=w.is_deleted,
+                is_self=w.object_id == self_workspace_id,
             )
             for w in result
         ]
@@ -264,28 +284,46 @@ def _list_for_project(client: Client, project_id: str, json_output: bool) -> Non
     headers = ["ID", "STRATEGY", "BRANCH", "DESCRIPTION"]
     rows = [
         [
-            w.object_id,
+            w.object_id + (" *" if w.object_id == self_workspace_id else ""),
             w.initialization_strategy.value,
-            w.source_branch or "-",
+            # Prefer the live checked-out branch, then the workspace's own branch
+            # name, then the branch it was cut from.
+            _optional_str(w.current_branch) or w.requested_branch_name or w.source_branch or "-",
             truncate(w.description, _PROJECT_DESCRIPTION_DISPLAY_MAX_LENGTH),
         ]
         for w in result
     ]
     typer.echo(format_table(headers, rows))
+    if any(w.object_id == self_workspace_id for w in result):
+        typer.echo("* = this workspace (SCULPT_WORKSPACE_ID)", err=True)
 
 
 @workspace_app.command("show")
 def show(
-    workspace_id: str = typer.Argument(..., help="Workspace ID or prefix"),
+    workspace_id: str | None = typer.Argument(None, help="Workspace ID or prefix (defaults to SCULPT_WORKSPACE_ID)"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
-    """Show details of a workspace."""
+    """Show details of a workspace (with no argument: this shell's own workspace)."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
+
+    if workspace_id is None:
+        env_value = os.environ.get("SCULPT_WORKSPACE_ID")
+        if not env_value:
+            cli_error("WORKSPACE_ID is required (or set SCULPT_WORKSPACE_ID)", json_output=json_output)
+        typer.echo("Using workspace from SCULPT_WORKSPACE_ID", err=True)
+        workspace_id = env_value
 
     workspaces = fetch_recent_workspaces(client, json_output)
-    ws = resolve_by_prefix(workspace_id, workspaces, lambda w: w.object_id)
+    ws = resolve_by_prefix(
+        workspace_id,
+        workspaces,
+        lambda w: w.object_id,
+        resource_noun="workspace",
+        json_output=json_output,
+        label_getter=lambda w: w.description,
+    )
 
     repo_lookup = fetch_repo_path_lookup(client)  # type: ignore[arg-type]
     repo_path = repo_lookup.get(ws.project_id, ws.project_name)
@@ -295,6 +333,8 @@ def show(
             id=ws.object_id,
             repo_id=ws.project_id,
             repo_path=repo_path,
+            working_directory=_optional_str(ws.working_directory),
+            current_branch=_optional_str(ws.current_branch),
             description=ws.description,
             strategy=ws.initialization_strategy.value,
             source_branch=ws.source_branch,
@@ -310,7 +350,15 @@ def show(
         f"Workspace: {ws.object_id}",
         f"Repo: {repo_path} ({ws.project_id})",
         f"Strategy: {ws.initialization_strategy.value}",
-        f"Branch: {ws.source_branch or '-'}",
+    ]
+    working_directory = _optional_str(ws.working_directory)
+    if working_directory:
+        lines.append(f"Path: {working_directory}")
+    current_branch = _optional_str(ws.current_branch)
+    if current_branch:
+        lines.append(f"Current Branch: {current_branch}")
+    lines += [
+        f"Source Branch: {ws.source_branch or '-'}",
         f"Description: {ws.description}",
         f"Created: {format_datetime(ws.created_at)}",
         f"Agents: {ws.agent_count}",
@@ -328,10 +376,17 @@ def rename(
 ) -> None:
     """Rename a workspace (update its description)."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
 
     workspaces = fetch_recent_workspaces(client, json_output)
-    ws = resolve_by_prefix(workspace_id, workspaces, lambda w: w.object_id)
+    ws = resolve_by_prefix(
+        workspace_id,
+        workspaces,
+        lambda w: w.object_id,
+        resource_noun="workspace",
+        json_output=json_output,
+        label_getter=lambda w: w.description,
+    )
     resolved_id = ws.object_id
 
     request = UpdateWorkspaceRequest(description=description)
@@ -364,13 +419,25 @@ def delete(
 ) -> None:
     """Delete a workspace and all its agents."""
     base_url = base_url or get_default_base_url()
-    client = get_authenticated_client(base_url)
+    client = get_authenticated_client(base_url, json_output)
 
     workspaces = fetch_recent_workspaces(client, json_output)
-    ws = resolve_by_prefix(workspace_id, workspaces, lambda w: w.object_id)
+    ws = resolve_by_prefix(
+        workspace_id,
+        workspaces,
+        lambda w: w.object_id,
+        resource_noun="workspace",
+        json_output=json_output,
+        label_getter=lambda w: w.description,
+    )
     resolved_id = ws.object_id
 
     if not yes:
+        # An interactive prompt would corrupt the JSON stream (typer.confirm
+        # writes to stdout) and EOF-abort with plain text in scripts; fail
+        # with the structured error contract instead.
+        if json_output:
+            cli_error("Confirmation required: pass --yes/-y to delete", json_output=True)
         typer.confirm(f"Delete workspace {resolved_id}?", abort=True)
 
     try:

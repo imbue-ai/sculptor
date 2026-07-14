@@ -156,3 +156,45 @@ def test_user_config_tolerates_and_drops_stale_keys() -> None:
     dumped = config.model_dump(by_alias=True)
     for key in stale_keys:
         assert key not in dumped
+
+
+def test_pre_rename_extension_keys_populate_the_renamed_fields() -> None:
+    """Configs persisted before extensions were renamed keep their settings.
+
+    The extension settings were previously stored as enable_frontend_plugins /
+    allow_agent_plugin_loading (camelCase over the frontend API); the migration
+    validator copies them onto the renamed fields.
+    """
+    for old_keys in (
+        {"enableFrontendPlugins": False, "allowAgentPluginLoading": True},
+        {"enable_frontend_plugins": False, "allow_agent_plugin_loading": True},
+    ):
+        config = UserConfig.model_validate(
+            {
+                "userEmail": "test@example.com",
+                "userId": "user123",
+                "organizationId": "org123",
+                "instanceId": "inst123",
+                **old_keys,
+            }
+        )
+        assert config.enable_extensions is False
+        assert config.allow_agent_extension_loading is True
+
+
+def test_new_extension_keys_win_over_pre_rename_keys() -> None:
+    # When both spellings are present, the renamed key is authoritative.
+    config = UserConfig.model_validate(
+        {
+            "userEmail": "test@example.com",
+            "userId": "user123",
+            "organizationId": "org123",
+            "instanceId": "inst123",
+            "enableFrontendPlugins": False,
+            "enableExtensions": True,
+            "allowAgentPluginLoading": True,
+            "allowAgentExtensionLoading": False,
+        }
+    )
+    assert config.enable_extensions is True
+    assert config.allow_agent_extension_loading is False

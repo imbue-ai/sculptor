@@ -488,9 +488,11 @@ def test_settings_selector_lists_only_driveable_harnesses(sculptor_instance_: Sc
 
         expect(ci_section.get_agent_option("Most recently used")).to_be_visible()
         expect(ci_section.get_agent_option("Claude")).to_be_visible()
-        expect(ci_section.get_agent_option("Opt In Agent")).to_be_visible()
-        # Non-opt-in registration and plain terminals are never selectable.
-        expect(ci_section.get_agent_option("No Opt In Agent")).to_have_count(0)
+        # Registered terminal agents carry the "in terminal" origin marker.
+        expect(ci_section.get_agent_option("Opt In Agent in terminal")).to_be_visible()
+        # Non-opt-in registration and plain terminals are never selectable (asserted
+        # against the marked label the option would carry if it wrongly appeared).
+        expect(ci_section.get_agent_option("No Opt In Agent in terminal")).to_have_count(0)
         expect(ci_section.get_agent_option("Terminal")).to_have_count(0)
     finally:
         opt_in.unlink(missing_ok=True)

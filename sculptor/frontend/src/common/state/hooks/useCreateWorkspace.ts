@@ -2,7 +2,7 @@ import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useState } from "react";
 
-import type { EffortLevel, LlmModel, TerminalAgentRegistration } from "~/api";
+import type { EffortLevel, LlmModel, ModelOption, TerminalAgentRegistration } from "~/api";
 import { createWorkspaceAgent, createWorkspaceV2, WorkspaceInitializationStrategy } from "~/api";
 import { HTTPException } from "~/common/Errors.ts";
 import { useImbueNavigate } from "~/common/NavigateUtils.ts";
@@ -22,8 +22,9 @@ type CreateWorkspaceArgs = {
   /** Workspace title; falls back to "Untitled workspace" when blank. */
   workspaceName: string;
   /**
-   * First-agent prompt; empty seeds an agent with no prompt. Only sent for
-   * Claude agents — other agent types always start in the waiting state.
+   * First-agent prompt; empty seeds an agent with no prompt. Sent for Claude and
+   * pi (both take an initial prompt); terminal/registered agents ignore it and
+   * always start in the waiting state.
    */
   prompt: string;
   mode: WorkspaceInitializationStrategy;
@@ -37,6 +38,12 @@ type CreateWorkspaceArgs = {
   registrations: ReadonlyArray<TerminalAgentRegistration>;
   /** Creation-time model for Claude agents. */
   defaultModel: string;
+  /**
+   * The pi model selection (provider + model_id) for a pi agent created WITH a
+   * prompt, sent as `backend_model`. A pi prompt requires it; a promptless pi
+   * create omits it. Ignored for Claude/terminal/registered.
+   */
+  piBackendModel?: ModelOption;
   /** Per-prompt thinking effort for the first Claude agent (defaults apply when omitted). */
   effort?: EffortLevel;
   /** Whether the first Claude agent starts in fast mode. */
@@ -146,13 +153,12 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         const isClaudeAgent = effectiveAgentType === "claude";
         const isPiAgent = effectiveAgentType === "pi";
         const initialPrompt = isClaudeAgent || isPiAgent ? args.prompt.trim() || undefined : undefined;
-        // Claude seeds its model at create and consumes the per-prompt agent
-        // settings (effort / fast / plan). pi ignores all of them: it picks its
-        // model from its own in-task catalog and enters plan mode from the chat.
-        // The backend still requires a model whenever a prompt is present, so pi
-        // rides a placeholder default in that case only — the same Claude
-        // model_name every live pi message already carries and pi discards.
-        const shouldSendModel = isClaudeAgent || (isPiAgent && initialPrompt !== undefined);
+        // Each harness names its model on its own terms: Claude seeds `model` and
+        // consumes the per-prompt settings (effort / fast / plan); pi seeds
+        // `backend_model` (the chosen provider + model_id) and ignores the rest.
+        // A pi prompt requires the selection; a promptless pi create sends
+        // neither field, and the two are mutually exclusive on the backend.
+        const backendModel = isPiAgent && initialPrompt !== undefined ? args.piBackendModel : undefined;
 
         // Create the first agent in the background — the caller's create flow
         // is done once the workspace exists. Failures surface via the global
@@ -163,7 +169,8 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
             const agentResponse = await createWorkspaceAgent({
               path: { workspace_id: workspaceId },
               body: {
-                model: shouldSendModel ? (args.defaultModel as LlmModel) : undefined,
+                model: isClaudeAgent ? (args.defaultModel as LlmModel) : undefined,
+                backendModel,
                 effort: isClaudeAgent ? args.effort : undefined,
                 fastMode: isClaudeAgent ? args.fastMode : undefined,
                 enterPlanMode: isClaudeAgent ? args.enterPlanMode : undefined,

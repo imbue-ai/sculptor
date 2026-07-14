@@ -530,14 +530,24 @@ jobs:
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#sculptor-v}"
           PIPELINE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          # Dedupe by filename (publish prints from multiple buckets); keep
-          # the last URL per name (the stable bucket is printed last).
+          # Dedupe per (arch, filename): publish prints each file from both the
+          # slim-rc and slim buckets, and the x64/arm64 AppImages share a
+          # basename, differing only by the /x64/ vs /arm64/ path segment, so
+          # keying on basename alone would drop one arch. Last-wins keeps the
+          # stable URL (stable is printed last).
           # `|| true`: a dry-run publish prints no https URLs, so grep would exit
           # non-zero and abort the step under `set -o pipefail`. Tolerate an empty
           # match and create the release with whatever notes we have.
           ASSETS_MD="$(grep -E '^\s+https://' "${GITHUB_WORKSPACE}/publish_output.log" \
             | sed 's/^ *//' \
-            | awk '{n=split($0,a,"/"); name=a[n]; map[name]=$0} END {for (k in map) print "- [" k "](" map[k] ")"}' || true)"
+            | awk '{
+                n = split($0, a, "/"); name = a[n]; arch = ""
+                for (i = 1; i < n; i++) if (a[i] == "x64" || a[i] == "arm64") arch = a[i]
+                key = arch "\t" name; url[key] = $0
+                label[key] = (arch == "" ? name : name " (" arch ")")
+              }
+              END { for (k in url) print "- [" label[k] "](" url[k] ")" }' \
+            | sort || true)"
           NOTES=$(printf 'Sculptor %s — [pipeline](%s)\n\n## Assets\n%s\n' \
             "$VERSION" "$PIPELINE_URL" "$ASSETS_MD")
           PRERELEASE=""

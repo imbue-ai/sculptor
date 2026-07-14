@@ -19,8 +19,8 @@ import { primaryOf } from "~/components/sections/sectionTypes.ts";
 import { isDropTargetAtom } from "~/components/sections/transientAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getCollapsedSidebarToggleClearance } from "~/electron/utils.ts";
+import { extensionWorkspaceWidgetsAtom } from "~/extensions/extensionRegistry.ts";
 import { getBranchName } from "~/pages/home/Utils";
-import { pluginWorkspaceWidgetsAtom } from "~/plugins/pluginRegistry.ts";
 
 import { DiffSummary } from "./components/DiffSummary";
 import { PrButton } from "./components/PrButton";
@@ -87,7 +87,7 @@ const SectionToggle = ({ section, icon, label, testId }: SectionToggleProps): Re
 const WorkspaceHeaderComponent = (): ReactElement | null => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
-  const workspaceWidgets = useAtomValue(pluginWorkspaceWidgetsAtom);
+  const workspaceWidgets = useAtomValue(extensionWorkspaceWidgetsAtom);
 
   // External hooks
   const { workspaceID } = useWorkspacePageParams();
@@ -184,10 +184,10 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
     [hasMismatch, prStatus?.mismatchedPrTargetBranch, prStatus?.mismatchedPrIid],
   );
 
-  // Plugin-contributed workspace widgets sit in the banner's action row beside the
-  // PR button (see pluginWorkspaceWidgetsAtom). Higher collapsePriority is the more
+  // Extension-contributed workspace widgets sit in the banner's action row beside the
+  // PR button (see extensionWorkspaceWidgetsAtom). Higher collapsePriority is the more
   // protected slot, so order it nearest the PR button (rendered last). Each widget
-  // component already carries its own error boundary + Plugin/WorkspacePluginContext.
+  // component already carries its own error boundary + Extension/WorkspaceExtensionContext.
   const orderedWorkspaceWidgets = useMemo(
     () => [...workspaceWidgets].sort((a, b) => a.collapsePriority - b.collapsePriority),
     [workspaceWidgets],

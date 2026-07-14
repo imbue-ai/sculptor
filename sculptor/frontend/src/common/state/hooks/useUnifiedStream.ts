@@ -1,11 +1,11 @@
 import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
-import { type PluginCommandResult, type PluginCommandUiAction, postPluginCommandResult } from "~/api";
+import { type ExtensionCommandResult, type ExtensionCommandUiAction, postExtensionCommandResult } from "~/api";
+import { extensionManager } from "~/extensions/extensionManager.tsx";
+import { getRendererIdentity } from "~/extensions/rendererIdentity.ts";
 import { openFileFromUiEventAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { agentWebviewStateAtomFamily } from "~/pages/workspace/panels/browser/atoms.ts";
-import { pluginManager } from "~/plugins/pluginManager.tsx";
-import { getRendererIdentity } from "~/plugins/rendererIdentity.ts";
 
 import type { StreamingUpdate } from "../../../api";
 import { syncTasksToQueryCache } from "../../queryClient.ts";
@@ -16,7 +16,7 @@ import { updateProjectsAtom } from "../atoms/projects";
 import { updatePrStatusAtom } from "../atoms/prStatus";
 import { sculptorSettingsAtom } from "../atoms/sculptorSettings";
 import { getEmptyTaskDetailState, updateTaskDetailAtom, updateTaskUpdatedArtifactsAtom } from "../atoms/taskDetails";
-import { isAgentPluginLoadingAllowedAtom, isFrontendPluginsEnabledAtom } from "../atoms/userConfig";
+import { isAgentExtensionLoadingAllowedAtom, isExtensionsEnabledAtom } from "../atoms/userConfig";
 import { updateWorkspaceBranchAtom } from "../atoms/workspaceBranch";
 import { updateWorkspaceGroupsAtom } from "../atoms/workspaceGroups";
 import { updateWorkspacesAtom } from "../atoms/workspaces";
@@ -31,35 +31,35 @@ import { useWebsocket } from "./useWebsocket";
 const API_BASE_URL = "/api/v1";
 
 /**
- * Run one agent-issued plugin command against this renderer and POST the result
- * so the originating `sculpt plugin` CLI can report a per-renderer outcome.
+ * Run one agent-issued extension command against this renderer and POST the result
+ * so the originating `sculpt extension` CLI can report a per-renderer outcome.
  *
  * Fire-and-forget: the caller does not await it, so the stream handler stays
- * cheap. Whatever happens — the command throwing, the plugin runtime being
+ * cheap. Whatever happens — the command throwing, the extension runtime being
  * disabled, even the POST itself failing — we always *try* to send a reply
  * (with `ok: false` on failure), because the CLI blocks waiting on a reply from
  * every connected renderer; a silent renderer would hang it until timeout.
  *
- * Two flags gate execution. `enableFrontendPlugins` is whether this renderer's
- * plugin runtime bootstrapped at all; `allowAgentPluginLoading` is whether the
+ * Two flags gate execution. `enableExtensions` is whether this renderer's
+ * extension runtime bootstrapped at all; `allowAgentExtensionLoading` is whether the
  * user lets *agents* drive it. If either is off we reply with an explicit
  * `ok: false` error (naming which one) rather than staying silent — the agent
  * gets a clear signal instead of an opaque timeout.
  */
-const respondToPluginCommand = (
+const respondToExtensionCommand = (
   store: ReturnType<typeof useStore>,
-  action: PluginCommandUiAction,
-  isPluginsEnabled: boolean,
+  action: ExtensionCommandUiAction,
+  isExtensionsEnabled: boolean,
   isAgentLoadingAllowed: boolean,
 ): void => {
   void (async (): Promise<void> => {
-    const reject = (error: string): PluginCommandResult => ({
+    const reject = (error: string): ExtensionCommandResult => ({
       correlationId: action.correlationId,
       renderer: getRendererIdentity(),
       op: action.op,
       ok: false,
       error,
-      plugins: [],
+      extensions: [],
     });
     // Write ops (load/reload/unload) require the agent-loading switch; read-only
     // inspect/list stay ungated so an agent can always check state, matching the
@@ -67,19 +67,19 @@ const respondToPluginCommand = (
     // here is defense-in-depth — the backend normally rejects those before they
     // ever reach a renderer.
     const isWriteOp = action.op === "load" || action.op === "reload" || action.op === "unload";
-    const result = !isPluginsEnabled
-      ? reject("frontend plugins are disabled in this renderer")
+    const result = !isExtensionsEnabled
+      ? reject("extensions are disabled in this renderer")
       : isWriteOp && !isAgentLoadingAllowed
-        ? reject("agent plugin loading is not allowed in this renderer")
-        : await pluginManager.handlePluginCommand(store, action);
+        ? reject("agent extension loading is not allowed in this renderer")
+        : await extensionManager.handleExtensionCommand(store, action);
     try {
-      await postPluginCommandResult({
+      await postExtensionCommandResult({
         path: { correlation_id: action.correlationId },
         body: result,
         meta: { skipWsAck: true },
       });
     } catch (e) {
-      console.error("[plugins] failed to POST plugin command result", e);
+      console.error("[extensions] failed to POST extension command result", e);
     }
   })();
 };
@@ -281,15 +281,15 @@ export const useUnifiedStream = (): void => {
         });
       }
 
-      // Handle agent plugin commands (sculpt plugin load/reload/unload/inspect/list).
-      // Each renderer runs the op against its own plugin system and POSTs a
+      // Handle agent extension commands (sculpt extension load/reload/unload/inspect/list).
+      // Each renderer runs the op against its own extension system and POSTs a
       // result back so the CLI can report a per-renderer outcome. The work is
       // fired off without awaiting so the stream handler stays cheap.
-      if (data.uiPluginCommandByWorkspaceId && Object.keys(data.uiPluginCommandByWorkspaceId).length > 0) {
-        const isPluginsEnabled = store.get(isFrontendPluginsEnabledAtom);
-        const isAgentLoadingAllowed = store.get(isAgentPluginLoadingAllowedAtom);
-        Object.values(data.uiPluginCommandByWorkspaceId).forEach((action) => {
-          respondToPluginCommand(store, action, isPluginsEnabled, isAgentLoadingAllowed);
+      if (data.uiExtensionCommandByWorkspaceId && Object.keys(data.uiExtensionCommandByWorkspaceId).length > 0) {
+        const isExtensionsEnabled = store.get(isExtensionsEnabledAtom);
+        const isAgentLoadingAllowed = store.get(isAgentExtensionLoadingAllowedAtom);
+        Object.values(data.uiExtensionCommandByWorkspaceId).forEach((action) => {
+          respondToExtensionCommand(store, action, isExtensionsEnabled, isAgentLoadingAllowed);
         });
       }
     },

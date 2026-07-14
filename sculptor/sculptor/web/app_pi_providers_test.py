@@ -64,6 +64,16 @@ def test_authenticated_providers_cover_full_catalog_with_groups(
     by_id = {entry["providerId"]: entry for entry in providers}
     assert by_id["amazon-bedrock"]["group"] == "session_only"
     assert by_id["anthropic"]["group"] == "single_key"
+    # anthropic accepts both an API key and pi's subscription (OAuth) login; the
+    # platform-API openai provider is API-key only.
+    assert by_id["anthropic"]["supportsSubscription"] is True
+    assert by_id["openai"]["supportsSubscription"] is False
+    # pi's subscription-only OAuth providers are catalog entries with no key/env form.
+    assert by_id["openai-codex"]["group"] == "subscription_only"
+    assert by_id["openai-codex"]["supportsSubscription"] is True
+    assert by_id["openai-codex"]["envVarNames"] == []
+    assert by_id["github-copilot"]["group"] == "subscription_only"
+    assert by_id["github-copilot"]["supportsSubscription"] is True
 
 
 def test_paste_key_writes_entry_and_broadcasts(
@@ -91,6 +101,19 @@ def test_paste_key_rejects_session_only_provider(
     response = client.post(
         "/api/v1/pi/providers/paste-key",
         json={"providerId": "amazon-bedrock", "keyValue": "x"},
+    )
+    assert response.status_code == 400
+    assert not (tmp_path / "auth.json").exists()
+
+
+def test_paste_key_rejects_subscription_only_provider(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No API key exists for a subscription-only provider — only pi's OAuth login.
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+    response = client.post(
+        "/api/v1/pi/providers/paste-key",
+        json={"providerId": "openai-codex", "keyValue": "x"},
     )
     assert response.status_code == 400
     assert not (tmp_path / "auth.json").exists()

@@ -391,3 +391,21 @@ describe("hasVisibleToolContent", () => {
     expect(hasVisibleToolContent([])).toBe(false);
   });
 });
+
+describe("buildSubagentTree / buildSubagentMetadataMap memoization", () => {
+  // Reused on every agent-switch remount; memoized by input-array reference so an
+  // unchanged message array reuses the prior tree/map instead of rebuilding it.
+  it("buildSubagentTree caches by input-array reference", () => {
+    const messages = [makeMessage("a", [])];
+    const first = buildSubagentTree(messages);
+    expect(buildSubagentTree(messages)).toBe(first); // same reference -> cached tree
+    expect(buildSubagentTree([...messages])).not.toBe(first); // new reference -> rebuilt
+  });
+
+  it("buildSubagentMetadataMap caches by input-array reference", () => {
+    const messages = [makeMessage("a", [])];
+    const first = buildSubagentMetadataMap(messages);
+    expect(buildSubagentMetadataMap(messages)).toBe(first);
+    expect(buildSubagentMetadataMap([...messages])).not.toBe(first);
+  });
+});

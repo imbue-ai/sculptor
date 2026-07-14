@@ -103,9 +103,7 @@ class TestGroupCreate:
         _mock_session()
         _mock_recent_workspaces(_recent_workspace_dict())
         create_route = respx.post(f"{_BASE_URL}/api/v1/workspace-groups").mock(
-            return_value=Response(
-                200, json=_group_response_dict(created_via_cli=True, workspace_ids=["ws_member1"])
-            )
+            return_value=Response(200, json=_group_response_dict(created_via_cli=True, workspace_ids=["ws_member1"]))
         )
 
         result = runner.invoke(app, ["group", "create", "--workspace", "ws_member1"])
@@ -122,9 +120,7 @@ class TestGroupCreate:
         _mock_session()
         _mock_recent_workspaces(_recent_workspace_dict())
         respx.post(f"{_BASE_URL}/api/v1/workspace-groups").mock(
-            return_value=Response(
-                200, json=_group_response_dict(created_via_cli=True, workspace_ids=["ws_member1"])
-            )
+            return_value=Response(200, json=_group_response_dict(created_via_cli=True, workspace_ids=["ws_member1"]))
         )
 
         result = runner.invoke(app, ["group", "create", "--workspace", "ws_member1", "--json"])
@@ -164,9 +160,7 @@ class TestGroupCreate:
             _recent_workspace_dict(object_id="ws_beta2222"),
         )
         create_route = respx.post(f"{_BASE_URL}/api/v1/workspace-groups").mock(
-            return_value=Response(
-                200, json=_group_response_dict(workspace_ids=["ws_alpha111", "ws_beta2222"])
-            )
+            return_value=Response(200, json=_group_response_dict(workspace_ids=["ws_alpha111", "ws_beta2222"]))
         )
 
         result = runner.invoke(app, ["group", "create", "--workspace", "ws_alpha", "--workspace", "ws_beta"])
@@ -198,9 +192,7 @@ class TestGroupCreate:
         """Explicit group intent surfaces the disabled-experiment error (REQ-FLAG-4)."""
         _mock_session()
         _mock_recent_workspaces(_recent_workspace_dict())
-        respx.post(f"{_BASE_URL}/api/v1/workspace-groups").mock(
-            return_value=Response(409, json=_DISABLED_ERROR_BODY)
-        )
+        respx.post(f"{_BASE_URL}/api/v1/workspace-groups").mock(return_value=Response(409, json=_DISABLED_ERROR_BODY))
 
         result = runner.invoke(app, ["group", "create", "--workspace", "ws_member1"])
 
@@ -212,9 +204,7 @@ class TestGroupCreate:
     def test_create_disabled_flag_errors_json_carries_code(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_recent_workspaces(_recent_workspace_dict())
-        respx.post(f"{_BASE_URL}/api/v1/workspace-groups").mock(
-            return_value=Response(409, json=_DISABLED_ERROR_BODY)
-        )
+        respx.post(f"{_BASE_URL}/api/v1/workspace-groups").mock(return_value=Response(409, json=_DISABLED_ERROR_BODY))
 
         result = runner.invoke(app, ["group", "create", "--workspace", "ws_member1", "--json"])
 
@@ -281,9 +271,7 @@ class TestGroupList:
     def test_list_disabled_flag_errors(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_initialize_project()
-        respx.get(f"{_BASE_URL}/api/v1/workspace-groups").mock(
-            return_value=Response(409, json=_DISABLED_ERROR_BODY)
-        )
+        respx.get(f"{_BASE_URL}/api/v1/workspace-groups").mock(return_value=Response(409, json=_DISABLED_ERROR_BODY))
 
         result = runner.invoke(app, ["group", "list", "--repo", "/tmp/test"])
 
@@ -423,9 +411,9 @@ class TestGroupRemove:
     def test_remove_success(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_list_groups(_group_response_dict(workspace_ids=["ws_member1", "ws_member2"]))
-        remove_route = respx.delete(
-            f"{_BASE_URL}/api/v1/workspace-groups/wsg_test123/workspaces/ws_member1"
-        ).mock(return_value=Response(200, content=b"null"))
+        remove_route = respx.delete(f"{_BASE_URL}/api/v1/workspace-groups/wsg_test123/workspaces/ws_member1").mock(
+            return_value=Response(200, content=b"null")
+        )
 
         result = runner.invoke(app, ["group", "remove", "wsg_test", "ws_member1"])
 
@@ -505,9 +493,7 @@ class TestGroupUngroup:
     @respx.mock
     def test_ungroup_disabled_flag_errors(self, runner: CliRunner) -> None:
         _mock_session()
-        respx.get(f"{_BASE_URL}/api/v1/workspace-groups").mock(
-            return_value=Response(409, json=_DISABLED_ERROR_BODY)
-        )
+        respx.get(f"{_BASE_URL}/api/v1/workspace-groups").mock(return_value=Response(409, json=_DISABLED_ERROR_BODY))
 
         result = runner.invoke(app, ["group", "ungroup", "wsg_test"])
 

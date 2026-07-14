@@ -1,5 +1,5 @@
 import { ContextMenu, DropdownMenu } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useStore } from "jotai";
 import { Copy, FolderOpenIcon, GitBranch, Stethoscope } from "lucide-react";
 import type { ComponentType, ReactElement, ReactNode } from "react";
 import { Fragment } from "react";
@@ -9,6 +9,7 @@ import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
 import { isWorkspaceGroupsEnabledAtom } from "../../../common/state/atoms/userConfig.ts";
 import { useWorkspaceBranch } from "../../../common/state/hooks/useWorkspaceBranch.ts";
+import { pendingWorkspaceRenameIdAtom, renamingWorkspaceIdAtom } from "./atoms.ts";
 import type { WorkspaceAction } from "./types.ts";
 import { WorkspaceGroupingMenuItems } from "./WorkspaceGroupingMenuItems.tsx";
 
@@ -247,6 +248,30 @@ const useWorkspaceMenuItems = (
   });
 };
 
+/**
+ * The close-time focus handoff shared by both workspace row menu surfaces.
+ * Radix restores focus to the trigger when a menu closes, which would blur —
+ * and cancel — an inline rename input mounted while the menu was still open. So
+ * the Rename action only records intent in `pendingWorkspaceRenameIdAtom`; this
+ * handler, run from the menu's `onCloseAutoFocus` after the focus scope is torn
+ * down, suppresses the restore and only then enters rename mode, so the input
+ * takes focus with nothing competing for it. The `preventDefault` is
+ * unconditional — these menus never want focus bounced back to the row after a
+ * copy/diagnostics action either. See the `use_close_auto_focus_for_focus_handoff`
+ * review rule.
+ */
+const useWorkspaceMenuCloseAutoFocus = (): ((event: Event) => void) => {
+  const store = useStore();
+  return (event: Event): void => {
+    event.preventDefault();
+    const pendingId = store.get(pendingWorkspaceRenameIdAtom);
+    if (pendingId !== null) {
+      store.set(pendingWorkspaceRenameIdAtom, null);
+      store.set(renamingWorkspaceIdAtom, pendingId);
+    }
+  };
+};
+
 export const WorkspaceContextMenuContent = ({
   actions,
   workspace,
@@ -269,8 +294,9 @@ export const WorkspaceContextMenuContent = ({
     destructiveColor,
     openInRuntime,
   });
+  const onCloseAutoFocus = useWorkspaceMenuCloseAutoFocus();
   return (
-    <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+    <ContextMenu.Content size="1" onCloseAutoFocus={onCloseAutoFocus}>
       {items}
     </ContextMenu.Content>
   );
@@ -299,8 +325,9 @@ export const WorkspaceDropdownMenuContent = ({
     destructiveColor,
     openInRuntime,
   });
+  const onCloseAutoFocus = useWorkspaceMenuCloseAutoFocus();
   return (
-    <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+    <DropdownMenu.Content size="1" onCloseAutoFocus={onCloseAutoFocus}>
       {items}
     </DropdownMenu.Content>
   );

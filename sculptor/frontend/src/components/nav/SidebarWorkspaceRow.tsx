@@ -57,6 +57,7 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   destructiveColor,
   onNavigate,
   onHover,
+  onBeginRename,
   onRenameCommit,
   onRenameCancel,
   onBeginDelete,
@@ -71,6 +72,7 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   destructiveColor: ReturnType<typeof useThemeDangerColor>;
   onNavigate: (workspaceId: string) => void;
   onHover: (workspaceId: string) => void;
+  onBeginRename: (workspaceId: string) => void;
   onRenameCommit: (workspaceId: string, newName: string) => void;
   onRenameCancel: () => void;
   onBeginDelete: (workspace: Workspace) => void;
@@ -144,7 +146,15 @@ export const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               // After the listeners spread so this composed handler REPLACES the
               // sensor's raw onKeyDown (it delegates every non-Enter key back to it).
               onKeyDown={handleKeyDown}
-              onClick={() => onNavigate(workspace.objectId)}
+              // Ignore the second click of a double-click (event.detail > 1) so the
+              // rename gesture doesn't also navigate a second time on its way in.
+              onClick={(event) => {
+                if (event.detail > 1) {
+                  return;
+                }
+                onNavigate(workspace.objectId);
+              }}
+              onDoubleClick={() => onBeginRename(workspace.objectId)}
               onMouseEnter={() => onHover(workspace.objectId)}
               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
               data-workspace-id={workspace.objectId}

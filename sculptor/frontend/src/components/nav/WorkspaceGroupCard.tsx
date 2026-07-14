@@ -183,6 +183,7 @@ type WorkspaceGroupCardProps = {
   activeWorkspaceId: string | null;
   onWorkspaceClick: (workspaceId: string) => void;
   onWorkspaceHover: (workspaceId: string) => void;
+  onWorkspaceBeginRename: (workspaceId: string) => void;
   onWorkspaceRenameCommit: (workspaceId: string, newName: string) => void;
   onWorkspaceRenameCancel: () => void;
   onBeginDelete: (workspace: Workspace) => void;
@@ -199,6 +200,7 @@ export const WorkspaceGroupCard = ({
   activeWorkspaceId,
   onWorkspaceClick,
   onWorkspaceHover,
+  onWorkspaceBeginRename,
   onWorkspaceRenameCommit,
   onWorkspaceRenameCancel,
   onBeginDelete,
@@ -443,6 +445,7 @@ export const WorkspaceGroupCard = ({
               destructiveColor={destructiveColor}
               onNavigate={onWorkspaceClick}
               onHover={onWorkspaceHover}
+              onBeginRename={onWorkspaceBeginRename}
               onRenameCommit={onWorkspaceRenameCommit}
               onRenameCancel={onWorkspaceRenameCancel}
               onBeginDelete={onBeginDelete}

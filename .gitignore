@@ -284,6 +284,10 @@ modal_ssh_key.pub
 **/test-results/
 **/test-results-*/
 
+# Perf-scenario measurements (sculptor/tests/perf/); kept outside test-results/
+# because pytest-playwright wipes that directory at session start
+**/perf-results/
+
 # Development Sculptor data directory (used when running dev builds locally)
 /.dev_sculptor/
 
@@ -330,3 +334,11 @@ scan-reports/
 
 # auto-qa-changes / manual-test harness screenshot + pid artifacts
 .claude/skills/attachments/
+
+# Generated per-PR perf config (derived from offload-perf.toml by tools/perf/make_fast_config.py)
+offload-perf-fast.toml
+
+# Personal, per-repo overrides of committed .sculptor/ config docs (e.g. naming.local.md).
+# The .local. infix marks a doc as yours-only; it layers over the committed one and is never
+# shared. Extension-agnostic so any future .sculptor/<name>.local.<ext> is ignored too.
+/.sculptor/*.local.*

@@ -29,7 +29,7 @@ type MigrationStore = {
  * One-time migration of renderer localStorage from the legacy file:// origin
  * (opaque — all file URLs share the single "file://" storage key) to the new
  * sculptor://app origin. localStorage is partitioned by origin, so without this
- * an in-place upgrade resets layout, theme, tabs, zoom, plugin sources, etc.
+ * an in-place upgrade resets layout, theme, tabs, zoom, extension sources, etc.
  *
  * No API reads another origin's localStorage, so we do it at the web layer:
  * load a throwaway file:// doc to read, then the sculptor://app blank sentinel

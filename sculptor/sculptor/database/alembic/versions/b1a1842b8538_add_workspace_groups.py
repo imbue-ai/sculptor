@@ -6,7 +6,7 @@ column to workspace / workspace_latest. Membership lives on the workspace so
 a workspace structurally belongs to at most one group.
 
 Revision ID: b1a1842b8538
-Revises: 5cb094ae1d22
+Revises: 6026c03dc852
 Create Date: 2026-07-07 12:00:00.000000
 
 """
@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b1a1842b8538"
-down_revision: str | None = "5cb094ae1d22"
+down_revision: str | None = "6026c03dc852"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
