@@ -22,16 +22,16 @@ reproduce — SIGKILL at a precise point, or shutdown timed inside a
 millisecond-scale window. Those are covered by backend unit tests in
 ``sculptor/sculptor/tasks/handlers/run_agent/v1_test.py``.
 
-Both tests use ``fake_claude:sleep`` (or the AUQ-emitting equivalent) for a
-deterministic long-running turn so that any replay would keep the agent in
-``RUNNING`` for at least 120 seconds. The mid-turn test asserts the
-post-restart status reaches ``READY`` within a generous timeout — only true
-if the restart scan (``scan_message_history``) derives the killed prompt as
-settled (no partial output, nothing to resume) and dedup therefore drops it
-so the loop has nothing to dispatch. The AUQ test instead settles to
-``WAITING`` (the unanswered question survives the restart and pins the
-status), so it discriminates a replay by the AUQ tool block count: a
-replayed chat would re-emit the question as a second tool block.
+The mid-turn test uses ``fake_claude:sleep`` for a deterministic long-running
+turn, so any replay would keep the agent in ``RUNNING`` for at least 120
+seconds; it asserts the post-restart status reaches ``READY`` within a
+generous timeout — only true if the restart scan (``scan_message_history``)
+derives the killed prompt as settled (no partial output, nothing to resume)
+and dedup therefore drops it so the loop has nothing to dispatch. The AUQ
+test parks the agent on an unanswered question instead: that turn survives
+the restart and pins the status at ``WAITING`` either way, so it
+discriminates a replay by the AUQ tool block count — a replayed chat would
+re-emit the question as a second tool block.
 
 Note on user-clicked Stop: the Stop button does NOT trigger this bug
 class, because Claude's clean exit on a stdin interrupt control_request

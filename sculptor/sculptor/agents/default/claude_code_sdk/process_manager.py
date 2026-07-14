@@ -174,12 +174,12 @@ class ClaudeProcessManager:
         """Seed the conversation's CLI launch settings from replayed history.
 
         Model-less turns (UserQuestionAnswerMessage, answer-continuation
-        resumes) continue the conversation with the in-memory settings, which
-        start as defaults on a manager constructed after a backend restart.
-        The runner calls this with the last processed chat turn's settings so
-        such turns relaunch the CLI the same way the conversation has been
-        running — without it, a fake_claude conversation's resumed turn would
-        launch the real-claude command shape and die on the stubbed binary.
+        resumes) continue the conversation with the in-memory launch settings
+        — the command shape (real vs fake CLI), fast mode, and effort — which a
+        manager constructed after a backend restart would otherwise reset to
+        defaults. The runner calls this with the last processed chat turn's
+        settings so such turns relaunch the CLI the same way the conversation
+        has been running.
         """
         if model_name is None:
             return
