@@ -73,11 +73,9 @@ export const SectionAddPanelControl = ({
   // The open popover element, measured on pointer-leave to build the hover safe area.
   const contentRef = useRef<HTMLDivElement>(null);
   // The document pointermove listener that watches the safe area while a close is
-  // pending, plus whether the pointer is currently inside it. Inside moves refresh
-  // the (generous) close so a slow crossing never times out; the flag makes leaving
-  // the area arm the short close just once, so continued outward motion still closes.
+  // pending, held in a ref so it can be torn down from any code path. (Whether the
+  // pointer is currently inside the area is closure-local to each beginClose cycle.)
   const graceMoveRef = useRef<((event: PointerEvent) => void) | null>(null);
-  const graceInsideRef = useRef<boolean | null>(null);
 
   const clearCloseTimer = (): void => {
     if (closeTimer.current) {
@@ -98,7 +96,6 @@ export const SectionAddPanelControl = ({
       document.removeEventListener("pointermove", graceMoveRef.current);
       graceMoveRef.current = null;
     }
-    graceInsideRef.current = null;
   };
 
   // The pointer is safely over the "+"/menu: cancel any pending close and tear down
@@ -138,8 +135,8 @@ export const SectionAddPanelControl = ({
 
     const safeArea = buildSafeTriangle(apex, popover, SAFE_AREA_BASE_PADDING_PX);
     // Assume the pointer is heading for the menu the instant it leaves; the first
-    // move refines that.
-    graceInsideRef.current = true;
+    // move refines that. Tracked closure-locally for this one close cycle.
+    let isInsideArea = true;
     armClose(SAFE_AREA_GRACE_MS);
 
     const onMove = (event: PointerEvent): void => {
@@ -149,12 +146,12 @@ export const SectionAddPanelControl = ({
         // refreshing the generous close on every move so a SLOW crossing never times
         // out; if the pointer instead stops moving, no more moves fire and the last
         // timer lapses, closing it.
-        graceInsideRef.current = true;
+        isInsideArea = true;
         armClose(SAFE_AREA_GRACE_MS);
-      } else if (graceInsideRef.current !== false) {
+      } else if (isInsideArea) {
         // Just crossed out of the wedge → treat as leaving: arm the short close once,
         // and don't keep pushing it out while the pointer continues outward.
-        graceInsideRef.current = false;
+        isInsideArea = false;
         armClose(MENU_CLOSE_DELAY_MS);
       }
     };
