@@ -361,7 +361,7 @@ export const WorkspaceGroupCard = ({
           <div ref={setHeaderNodeRef} className={styles.groupHeader}>
             {isRenaming ? (
               <span className={styles.groupHeaderButton}>
-                <Chevron size={15} className={styles.groupChevron} />
+                <Chevron size={16} className={styles.groupChevron} />
                 <InlineRenameInput
                   value={group.name}
                   onCommit={handleRenameCommit}
@@ -385,7 +385,7 @@ export const WorkspaceGroupCard = ({
                 data-sidebar-dragging={isGroupDragging ? "true" : undefined}
               >
                 <Chevron
-                  size={15}
+                  size={16}
                   className={styles.groupChevron}
                   data-testid={ElementIds.SIDEBAR_WORKSPACE_GROUP_CHEVRON}
                 />

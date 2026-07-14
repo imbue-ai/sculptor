@@ -49,7 +49,7 @@ $row-min-height: 28px;
   cursor: pointer;
   display: flex;
   flex-grow: 1;
-  gap: var(--space-2);
+  gap: var(--space-1);
   min-width: 0;
   padding: 0;
 }
@@ -116,7 +116,7 @@ $row-min-height: 28px;
   display: flex;
   flex-grow: 1;
   font-size: var(--font-size-2);
-  gap: var(--space-2);
+  gap: var(--space-1);
   min-height: $row-min-height;
   min-width: 0;
   padding: 0;
@@ -262,10 +262,16 @@ $row-min-height: 28px;
   }
 }
 
+// The status dot sits in a fixed-width column the same width as a group
+// header's chevron box, with the dot centered. This keeps every leading glyph
+// on one vertical axis and starts every row's label at the same offset, so a
+// group's chevron and a workspace's dot line up regardless of glyph size.
 .workspaceDot {
   align-items: center;
   display: flex;
   flex-shrink: 0;
+  justify-content: center;
+  width: var(--space-4);
 }
 
 .workspaceName {
