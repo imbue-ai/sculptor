@@ -16,6 +16,7 @@ import {
 import { isUnreadOverrideActive, resetUnreadOverridesForTesting } from "../atoms/unreadOverrides";
 import {
   applyOptimisticTaskDelete,
+  MUTATION_SETTLE_TIMEOUT_MS,
   useDeleteTaskMutation,
   useMarkReadMutation,
   useMarkUnreadMutation,
@@ -437,7 +438,7 @@ describe("useDeleteTaskMutation", () => {
     expect(mockDelete).toHaveBeenCalledOnce();
     expect(mockDelete).toHaveBeenCalledWith({
       path: { workspace_id: WS_ID, agent_id: AGENT_ID },
-      meta: { skipWsAck: true },
+      meta: { skipWsAck: true, timeout: MUTATION_SETTLE_TIMEOUT_MS },
     });
   });
 

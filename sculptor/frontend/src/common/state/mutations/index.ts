@@ -28,6 +28,19 @@ import {
 import { getTaskSyncVersion, queryClient, taskIdsQueryKey, taskQueryKey } from "../../queryClient.ts";
 import { clearUnreadOverride, setUnreadOverride } from "../atoms/unreadOverrides";
 
+/**
+ * Settle deadline for optimistic state mutations, passed as `meta.timeout`
+ * (which gives the request an AbortSignal — without it a request to a wedged
+ * backend never settles, so the rollback/toast failure path is unreachable
+ * and the optimistic value sticks on screen forever, SCU-1833).
+ *
+ * Must exceed the backend's 15s SQLite writer-lock wait
+ * (`_SQLITE_BUSY_TIMEOUT_SEC` in `sculptor/database/core.py`) so writer
+ * contention surfaces as the backend's own error response, not a frontend
+ * abort racing it.
+ */
+export const MUTATION_SETTLE_TIMEOUT_MS = 30_000;
+
 export type TaskMutationContext = {
   prev: CodingAgentTaskView | null | undefined;
   syncVersion: number;
@@ -193,7 +206,7 @@ export const useDeleteTaskMutation = (): UseMutationResult<unknown, Error, Delet
     mutationFn: (vars: DeleteVars) =>
       deleteWorkspaceAgent({
         path: { workspace_id: vars.workspaceId, agent_id: vars.agentId },
-        meta: { skipWsAck: true },
+        meta: { skipWsAck: true, timeout: MUTATION_SETTLE_TIMEOUT_MS },
       }),
     onError: (_e, vars): void => {
       rollbackOptimisticTaskDelete(vars.agentId, vars.deleteContext);

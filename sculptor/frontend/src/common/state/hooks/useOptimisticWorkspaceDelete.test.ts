@@ -8,6 +8,7 @@ import type * as api from "../../../api";
 import type { Workspace } from "../../../api";
 import { workspaceDeleteErrorToastAtom } from "../atoms/toasts";
 import { updateWorkspacesAtom } from "../atoms/workspaces";
+import { MUTATION_SETTLE_TIMEOUT_MS } from "../mutations";
 import { useOptimisticWorkspaceDelete } from "./useOptimisticWorkspaceDelete";
 
 // Mock the delete endpoint so we can force failures and inspect retry targets.
@@ -52,6 +53,24 @@ afterEach(() => {
 });
 
 describe("useOptimisticWorkspaceDelete", () => {
+  it("bounds the delete request's settle time so a hung backend eventually reaches the failure path (SCU-1833)", async () => {
+    const store = createStore();
+    store.set(updateWorkspacesAtom, [mockWorkspace("ws-A")]);
+    const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
+      createElement(Provider, { store }, children);
+    const { result } = renderHook(() => useOptimisticWorkspaceDelete({ onNavigateAfterDelete: vi.fn() }), { wrapper });
+
+    mockDeleteWorkspace.mockResolvedValue(undefined);
+    result.current.execute("ws-A", "Workspace A");
+    await flushMicrotasks();
+
+    expect(mockDeleteWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({ skipWsAck: true, timeout: MUTATION_SETTLE_TIMEOUT_MS }),
+      }),
+    );
+  });
+
   it("retries the workspace captured per-call, not the most recently failed workspace", async () => {
     // Regression for the shared-ref bug: the toast's Retry used to re-delete
     // whichever workspace failed most recently, so retrying the FIRST failure

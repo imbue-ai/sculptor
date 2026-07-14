@@ -9,6 +9,7 @@ import { deleteWorkspace } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
 import { workspaceDeleteErrorToastAtom } from "../atoms/toasts";
 import { optimisticDeleteWorkspaceAtom, rollbackDeleteWorkspaceAtom } from "../atoms/workspaces";
+import { MUTATION_SETTLE_TIMEOUT_MS } from "../mutations";
 
 type UseOptimisticWorkspaceDeleteInputs = {
   onNavigateAfterDelete: (workspaceId: string) => void;
@@ -46,7 +47,7 @@ export const useOptimisticWorkspaceDelete = (
 
       void deleteWorkspace({
         path: { workspace_id: workspaceId },
-        meta: { skipWsAck: true },
+        meta: { skipWsAck: true, timeout: MUTATION_SETTLE_TIMEOUT_MS },
       })
         .then(() => {
           // Drop the workspace's persisted layout only once the server delete commits,
