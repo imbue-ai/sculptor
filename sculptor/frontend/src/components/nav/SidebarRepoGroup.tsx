@@ -25,7 +25,7 @@
 // mutation apply optimistically, and a server rejection rolls both back with
 // an error toast (REQ-DND-7).
 
-import type { DragMoveEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
+import type { DragEndEvent, DragMoveEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import { closestCenter, DndContext, DragOverlay, MeasuringStrategy } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import type { SortingStrategy } from "@dnd-kit/sortable";
@@ -35,7 +35,7 @@ import { DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes"
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
@@ -174,6 +174,10 @@ export const SidebarRepoGroup = ({
   // without re-subscribing mid-drag.
   const [dragState, setDragState] = useState<SectionDragState | null>(null);
   const dragStateRef = useRef<SectionDragState | null>(null);
+  // The pointer's last known y, while a POINTER drag is active (null for
+  // keyboard drags): the per-commit re-resolution below must never replay a
+  // stale pointer against a drag the keyboard is driving.
+  const lastPointerYRef = useRef<number | null>(null);
   const updateDragState = useCallback((next: SectionDragState | null): void => {
     dragStateRef.current = next;
     setDragState(next);
@@ -252,6 +256,7 @@ export const SidebarRepoGroup = ({
   const handleSectionDragStart = useCallback(
     (event: DragStartEvent): void => {
       beginOwnedDrag();
+      lastPointerYRef.current = null;
       const activeId = String(event.active.id);
       const isGroupHeader = group.children.some((child) => child.kind === "group" && child.group.objectId === activeId);
       updateDragState({
@@ -326,23 +331,21 @@ export const SidebarRepoGroup = ({
     [collapsedGroupIds, acceptProjection],
   );
 
-  // Every pointer-geometric decision lives on the move stream (level-
-  // triggered): a dragged group's whole slot resolution, and a dragged row's
-  // parent and depth intent below. Move events fire on every pointer sample,
-  // so a wrong intermediate state self-heals on the next sample — unlike the
-  // edge-triggered over stream, which stays silent until the collision target
-  // changes and can strand a stale projection under a parked pointer.
-  const handleSectionDragMove = useCallback(
-    (event: DragMoveEvent): void => {
+  // THE pointer-geometry resolution: a dragged group's whole slot, and a
+  // dragged row's parent and slot below. It is a pure function of the pointer
+  // position and the lane's committed layout (the FLIP pass's stamps), and it
+  // runs whenever EITHER input changes: every pointer sample
+  // (handleSectionDragMove), and once per commit after the stamps refresh
+  // (the layout effect below) — a rapid gesture's last sample can outrun
+  // React and compute against the previous commit's stamps, and with the
+  // pointer then parked, no further move event would ever correct it.
+  const resolveSectionPointer = useCallback(
+    (pointerY: number): void => {
       const state = dragStateRef.current;
       const section = sectionChildrenRef.current;
-      const activator = event.activatorEvent;
-      // Keyboard drags flip depth via Left/Right (see useSidebarDndSensors);
-      // only pointer drags carry a live position.
-      if (state === null || section === null || !(activator instanceof PointerEvent)) {
+      if (state === null || section === null) {
         return;
       }
-      const pointerY = activator.clientY + event.delta.y;
 
       // A dragged GROUP resolves its slot geometrically against every OTHER
       // top-level item — group boxes AND loose rows — on EVERY move, and this
@@ -470,8 +473,24 @@ export const SidebarRepoGroup = ({
     [acceptProjection],
   );
 
+  const handleSectionDragMove = useCallback(
+    (event: DragMoveEvent): void => {
+      const activator = event.activatorEvent;
+      // Keyboard drags flip depth via Left/Right (see useSidebarDndSensors);
+      // only pointer drags carry a live position.
+      if (!(activator instanceof PointerEvent)) {
+        return;
+      }
+      const pointerY = activator.clientY + event.delta.y;
+      lastPointerYRef.current = pointerY;
+      resolveSectionPointer(pointerY);
+    },
+    [resolveSectionPointer],
+  );
+
   const resetSectionDrag = useCallback((): void => {
     endOwnedDrag();
+    lastPointerYRef.current = null;
     updateDragState(null);
   }, [endOwnedDrag, updateDragState]);
 
@@ -482,85 +501,98 @@ export const SidebarRepoGroup = ({
   // event's own `over` is deliberately unused: it goes null whenever the
   // pointer rests outside any target, but the drop must land at the last
   // previewed gap — exactly what the drag state holds.
-  const handleSectionDragEnd = useCallback((): void => {
-    const state = dragStateRef.current;
-    resetSectionDrag();
-    if (state === null) {
-      return;
-    }
-    const final = state.pending === null ? state.display : applySectionProjection(state.display, state.pending);
-    if (final === group.children) {
-      // Reference-untouched: the drag never accepted a projection.
-      return;
-    }
+  const handleSectionDragEnd = useCallback(
+    (event: DragEndEvent): void => {
+      // One last resolution at the drop's OWN coordinates before committing:
+      // when the main thread stalls, the final move's dispatch can coalesce
+      // into the drop itself, leaving the drag state one pointer sample
+      // behind the position the user actually released at — and a drop is
+      // final, so no later re-resolution could heal it.
+      const activator = event.activatorEvent;
+      if (activator instanceof PointerEvent) {
+        resolveSectionPointer(activator.clientY + event.delta.y);
+      }
+      const state = dragStateRef.current;
+      resetSectionDrag();
+      if (state === null) {
+        return;
+      }
+      const final = state.pending === null ? state.display : applySectionProjection(state.display, state.pending);
+      if (final === group.children) {
+        // Reference-untouched: the drag never accepted a projection.
+        return;
+      }
 
-    const findWorkspaceName = (workspaceId: string): string => {
-      const workspace = store.get(workspaceAtomFamily(workspaceId));
-      return workspace?.description ?? "workspace";
-    };
+      const findWorkspaceName = (workspaceId: string): string => {
+        const workspace = store.get(workspaceAtomFamily(workspaceId));
+        return workspace?.description ?? "workspace";
+      };
 
-    const findGroupName = (groupId: string): string => {
-      const child = final.find((candidate) => candidate.kind === "group" && candidate.group.objectId === groupId);
-      return child?.kind === "group" ? child.group.name : "group";
-    };
+      const findGroupName = (groupId: string): string => {
+        const child = final.find((candidate) => candidate.kind === "group" && candidate.group.objectId === groupId);
+        return child?.kind === "group" ? child.group.name : "group";
+      };
 
-    const snapshot = commitSectionDrop({ projectId: group.projectId, children: final });
-    if (state.kind !== "row") {
-      return;
-    }
-    const finalParent = locateWorkspaceParent(final, state.activeId);
-    if (finalParent === state.startParentGroupId) {
-      return;
-    }
+      const snapshot = commitSectionDrop({ projectId: group.projectId, children: final });
+      if (state.kind !== "row") {
+        return;
+      }
+      const finalParent = locateWorkspaceParent(final, state.activeId);
+      if (finalParent === state.startParentGroupId) {
+        return;
+      }
 
-    if (finalParent !== null) {
-      // One mutation covers loose→group AND group→group: the backend moves a
-      // workspace that is already in another group, dissolving the source if
-      // that empties it.
-      addGroupMember(
-        { groupId: finalParent, workspaceId: state.activeId },
-        {
-          onError: (): void => {
-            restoreSectionOrder(snapshot);
-            setGroupErrorToast({
-              title: `Failed to move "${findWorkspaceName(state.activeId)}" into "${findGroupName(finalParent)}"`,
-              description: "The workspace was put back where it was. Try again or check your connection.",
-              type: ToastType.ERROR_PROMINENT,
-              action: null,
-            });
+      if (finalParent !== null) {
+        // One mutation covers loose→group AND group→group: the backend moves a
+        // workspace that is already in another group, dissolving the source if
+        // that empties it.
+        addGroupMember(
+          { groupId: finalParent, workspaceId: state.activeId },
+          {
+            onError: (): void => {
+              restoreSectionOrder(snapshot);
+              setGroupErrorToast({
+                title: `Failed to move "${findWorkspaceName(state.activeId)}" into "${findGroupName(finalParent)}"`,
+                description: "The workspace was put back where it was. Try again or check your connection.",
+                type: ToastType.ERROR_PROMINENT,
+                action: null,
+              });
+            },
           },
-        },
-      );
-      return;
-    }
+        );
+        return;
+      }
 
-    if (state.startParentGroupId !== null) {
-      removeGroupMember(
-        { groupId: state.startParentGroupId, workspaceId: state.activeId },
-        {
-          onError: (): void => {
-            restoreSectionOrder(snapshot);
-            setGroupErrorToast({
-              title: `Failed to remove "${findWorkspaceName(state.activeId)}" from its group`,
-              description: "The workspace was put back where it was. Try again or check your connection.",
-              type: ToastType.ERROR_PROMINENT,
-              action: null,
-            });
+      if (state.startParentGroupId !== null) {
+        removeGroupMember(
+          { groupId: state.startParentGroupId, workspaceId: state.activeId },
+          {
+            onError: (): void => {
+              restoreSectionOrder(snapshot);
+              setGroupErrorToast({
+                title: `Failed to remove "${findWorkspaceName(state.activeId)}" from its group`,
+                description: "The workspace was put back where it was. Try again or check your connection.",
+                type: ToastType.ERROR_PROMINENT,
+                action: null,
+              });
+            },
           },
-        },
-      );
-    }
-  }, [
-    resetSectionDrag,
-    group.children,
-    group.projectId,
-    store,
-    commitSectionDrop,
-    restoreSectionOrder,
-    addGroupMember,
-    removeGroupMember,
-    setGroupErrorToast,
-  ]);
+        );
+      }
+    },
+    [
+      resolveSectionPointer,
+      resetSectionDrag,
+      group.children,
+      group.projectId,
+      store,
+      commitSectionDrop,
+      restoreSectionOrder,
+      addGroupMember,
+      removeGroupMember,
+      setGroupErrorToast,
+    ],
+  );
 
   const rowDndSensors = useSidebarDndSensors(applyDepthIntent);
 
@@ -568,6 +600,17 @@ export const SidebarRepoGroup = ({
   // commit (see sidebarFlip.ts). The drag's own element — the invisible
   // placeholder holding the gap — is excluded; its movement IS the projection.
   useSectionFlipAnimation(sectionChildrenRef, dragState?.activeId);
+
+  // Re-resolve a parked pointer once per commit, AFTER the FLIP pass above
+  // has restamped the lane (layout effects run in hook order). The chain is
+  // bounded: a resolution that changes nothing returns the projections' null
+  // fixed point, accepts no state, and triggers no further render.
+  useLayoutEffect(() => {
+    const pointerY = lastPointerYRef.current;
+    if (dragStateRef.current !== null && pointerY !== null) {
+      resolveSectionPointer(pointerY);
+    }
+  });
 
   // Functions and callbacks
   const handleToggleCollapsed = (): void => {

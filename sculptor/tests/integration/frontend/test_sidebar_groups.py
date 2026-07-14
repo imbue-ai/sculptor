@@ -415,7 +415,7 @@ def test_pointer_drop_on_collapsed_group_appends(
     sidebar = _create_single_group(page, ["WS Alpha", "WS Bravo"], "WS Bravo")
     group_one = sidebar.get_group_card_by_name("Group 1")
     members = sidebar.get_group_member_rows(group_one)
-    sidebar.get_group_chevron(group_one).click()
+    sidebar.set_group_collapsed_via_chevron(group_one, collapsed=True)
     expect(members).to_have_count(0)
 
     # Step 2: Drop Alpha on the collapsed header.
@@ -425,7 +425,7 @@ def test_pointer_drop_on_collapsed_group_appends(
     )
 
     # Step 3: The append committed; expanding shows Alpha at the tail.
-    sidebar.get_group_chevron(group_one).click()
+    sidebar.set_group_collapsed_via_chevron(group_one, collapsed=False)
     expect(members).to_have_count(2)
     expect(members).to_contain_text(["WS Bravo", "WS Alpha"])
 
@@ -524,6 +524,14 @@ def test_pointer_drag_row_lands_in_box_under_pointer(
     sidebar.create_group_from_workspace(sidebar.get_workspace_row_by_name("WS Delta"))
     expect(sidebar.get_group_cards()).to_have_count(2)
     group_two = sidebar.get_group_card_by_name("Group 2")
+    expect(sidebar.get_group_member_rows(group_one)).to_have_count(2)
+    expect(sidebar.get_group_member_rows(group_two)).to_have_count(1)
+    # The optimistic group writes race their server heals: on a loaded run, a
+    # stale workspace refetch can momentarily revert a membership AFTER the
+    # counts above pass, corrupting the lane mid-drag (the drag snapshots the
+    # lane at pickup). Give the heals a beat to land and re-check, so the
+    # drag below starts from a lane that has stopped moving.
+    page.wait_for_timeout(750)
     expect(sidebar.get_group_member_rows(group_one)).to_have_count(2)
     expect(sidebar.get_group_member_rows(group_two)).to_have_count(1)
 

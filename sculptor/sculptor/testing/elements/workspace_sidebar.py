@@ -254,9 +254,13 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         The lane's pointer-geometric decisions ride the move-event stream, so a
         target that lands exactly where the pointer rests would otherwise emit
         nothing — the wiggle forces a fresh evaluation against the settled
-        layout, the way a real hand is never perfectly still.
+        layout, the way a real hand is never perfectly still. The two moves are
+        separated by a beat: back-to-back moves that sum to zero within one
+        frame get coalesced into a single same-position pointer event, which
+        can silently defeat the wiggle on a loaded machine.
         """
         self._page.mouse.move(x, y + 1)
+        self._page.wait_for_timeout(60)
         self._page.mouse.move(x, y)
         self._page.wait_for_timeout(250)
 
@@ -477,6 +481,25 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
     def get_group_header(self, group_card: Locator) -> Locator:
         """The card's header button: the drag activator and collapse toggle."""
         return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_HEADER)
+
+    def set_group_collapsed_via_chevron(self, group_card: Locator, collapsed: bool) -> None:
+        """Click the chevron until the card actually reaches the wanted state.
+
+        The click is verified and retried: one landing in the same tick as a
+        drop's re-render can be swallowed, and a caller asserting against a
+        card that silently kept its old state reads as a product failure.
+        """
+        for attempt in range(3):
+            self.get_group_chevron(group_card).click()
+            try:
+                if collapsed:
+                    expect(group_card).to_have_attribute("data-collapsed", "true", timeout=3_000)
+                else:
+                    expect(group_card).not_to_have_attribute("data-collapsed", "true", timeout=3_000)
+                return
+            except AssertionError:
+                if attempt == 2:
+                    raise
 
     def get_group_chevron(self, group_card: Locator) -> Locator:
         """The collapse chevron; it sits inside the header button, so clicking it toggles collapse."""

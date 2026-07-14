@@ -209,10 +209,15 @@ export const useSectionFlipAnimation = (
       if (Math.abs(startY) < 1 && !shouldAnimateHeight) {
         continue;
       }
+      // The height values are getBoundingClientRect measurements — border-box
+      // heights — so the keyframes pin box-sizing for the animation's
+      // duration: on a content-box element the browser would add the padding
+      // on top of every frame, rendering the box one padding too tall until
+      // the animation's inline height clears.
       const keyframes: Array<Keyframe> = shouldAnimateHeight
         ? [
-            { transform: `translateY(${startY}px)`, height: `${startHeight}px` },
-            { transform: "translateY(0px)", height: `${layout.height}px` },
+            { transform: `translateY(${startY}px)`, height: `${startHeight}px`, boxSizing: "border-box" },
+            { transform: "translateY(0px)", height: `${layout.height}px`, boxSizing: "border-box" },
           ]
         : [{ transform: `translateY(${startY}px)` }, { transform: "translateY(0px)" }];
       animations.set(key, element.animate(keyframes, { duration: FLIP_DURATION_MS, easing: FLIP_EASING }));

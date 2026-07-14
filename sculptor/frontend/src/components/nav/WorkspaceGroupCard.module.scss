@@ -19,6 +19,10 @@
 
   background: var(--group-surface);
   border-radius: var(--radius-3);
+  // The lane's FLIP pass animates this box's height between measured
+  // (border-box) values; content-box would render every animated frame one
+  // padding taller, flashing a phantom band under the last member row.
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 2px;
