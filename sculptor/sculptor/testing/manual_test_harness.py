@@ -25,9 +25,11 @@ from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
 
 import sculptor.primitives.ids
+from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.user_config.user_config import save_config
+from sculptor.testing.dependency_stubs import install_default_pi_stub
 from sculptor.testing.frontend_utils import configure_page
 from sculptor.testing.mock_repo import MockRepoState
 from sculptor.testing.playwright_utils import navigate_to_frontend
@@ -75,7 +77,7 @@ def _chromium_shared_memory_args() -> list[str]:
     return []
 
 
-def _make_test_user_config() -> UserConfig:
+def _make_test_user_config(pi_path: Path) -> UserConfig:
     """Create a UserConfig with test defaults (mirrors resources.py)."""
     test_email = "test@imbue.com"
     return UserConfig(
@@ -88,6 +90,11 @@ def _make_test_user_config() -> UserConfig:
         is_session_recording_enabled=True,
         is_privacy_policy_consented=True,
         is_telemetry_level_set=True,
+        # Pin pi to the provisioned stub's absolute path. The harness backend
+        # inherits the developer's PATH unchanged, so an absolute path (rather
+        # than a bare "pi" + PATH shadowing, as the pytest fixtures use) keeps
+        # any real pi on PATH out of the resolution entirely.
+        dependency_paths=DependencyPaths(pi=str(pi_path)),
     )
 
 
@@ -95,8 +102,17 @@ def _populate_sculptor_folder(folder_path: Path) -> None:
     """Write a pre-filled config.toml so onboarding is already complete."""
     internal_dir = folder_path / "internal"
     internal_dir.mkdir(parents=True, exist_ok=True)
+    # Sculptor gates pi on an exact version pin (PI_VERSION_RANGE has
+    # min == max == recommended), so whatever real pi is on the developer's
+    # PATH is essentially always missing or out of range, and the agent
+    # picker shows "Install Pi". Provision the same pinned-version stub the
+    # pytest fixtures use so the dependency gate passes and Pi agents are
+    # selectable in the UI.
+    fake_bin_dir = folder_path / "fake_bin"
+    fake_bin_dir.mkdir(parents=True, exist_ok=True)
+    pi_stub_path = install_default_pi_stub(fake_bin_dir)
     config_path = internal_dir / "config.toml"
-    config = _make_test_user_config()
+    config = _make_test_user_config(pi_path=pi_stub_path)
     save_config(config, config_path)
 
 
