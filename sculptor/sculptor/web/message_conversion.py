@@ -1249,12 +1249,17 @@ def _handle_partial_response(
     # via the partial first, and the later final ResponseBlockAgentMessage skips it
     # as a duplicate — so without stamping on this path the live turn never gets a role.
     committed_tool_use_ids = {b.id for b in committed_content if isinstance(b, ToolUseBlock)}
-    deduplicated = tuple(
-        _stamp_interactive_role(b, harness)
-        for b in content
-        if not (isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids)
-    )
-    new_content = committed_content + deduplicated
+    # Extract <img>/<video> tags from TextBlocks into FileBlocks during streaming.
+    # The _handle_response_blocks path already does this for persisted messages.
+    expanded: list[ContentBlockTypes] = []
+    for b in content:
+        if isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids:
+            continue
+        if isinstance(b, TextBlock):
+            expanded.extend(split_text_and_media(b.text))
+        else:
+            expanded.append(_stamp_interactive_role(b, harness))
+    new_content = committed_content + tuple(expanded)
 
     return in_progress.model_copy(update={"content": new_content})
 
