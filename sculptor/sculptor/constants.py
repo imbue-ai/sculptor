@@ -629,6 +629,30 @@ class ElementIDs(StrEnum):
     # list is known to be empty or populated.
     SIDEBAR_LOADING_SKELETON = "SIDEBAR_LOADING_SKELETON"
 
+    # Workspace groups (experimental): the group run nested inside a sidebar
+    # repo section (its wrapper "card" paints the always-visible container
+    # surface), its header chrome, and its menu items. Drops resolve by
+    # position in the section's flat lane, so there are no separate drop-zone
+    # elements; the card's data-drop-active attribute marks the projected
+    # target group mid-drag.
+    SIDEBAR_WORKSPACE_GROUP_CARD = "SIDEBAR_WORKSPACE_GROUP_CARD"
+    SIDEBAR_WORKSPACE_GROUP_HEADER = "SIDEBAR_WORKSPACE_GROUP_HEADER"
+    SIDEBAR_WORKSPACE_GROUP_CHEVRON = "SIDEBAR_WORKSPACE_GROUP_CHEVRON"
+    SIDEBAR_WORKSPACE_GROUP_MENU_TRIGGER = "SIDEBAR_WORKSPACE_GROUP_MENU_TRIGGER"
+    SIDEBAR_WORKSPACE_GROUP_CLI_BADGE = "SIDEBAR_WORKSPACE_GROUP_CLI_BADGE"
+    WORKSPACE_GROUP_MENU_NEW_WORKSPACE = "WORKSPACE_GROUP_MENU_NEW_WORKSPACE"
+    WORKSPACE_GROUP_MENU_RENAME = "WORKSPACE_GROUP_MENU_RENAME"
+    WORKSPACE_GROUP_MENU_COLLAPSE = "WORKSPACE_GROUP_MENU_COLLAPSE"
+    WORKSPACE_GROUP_MENU_SWATCH_ROW = "WORKSPACE_GROUP_MENU_SWATCH_ROW"
+    WORKSPACE_GROUP_MENU_SWATCH = "WORKSPACE_GROUP_MENU_SWATCH"
+    WORKSPACE_GROUP_MENU_UNGROUP = "WORKSPACE_GROUP_MENU_UNGROUP"
+    # Grouping entries in the workspace row's context/dropdown menu.
+    WORKSPACE_MENU_NEW_GROUP = "WORKSPACE_MENU_NEW_GROUP"
+    WORKSPACE_MENU_ADD_TO_GROUP = "WORKSPACE_MENU_ADD_TO_GROUP"
+    WORKSPACE_MENU_ADD_TO_GROUP_ITEM = "WORKSPACE_MENU_ADD_TO_GROUP_ITEM"
+    WORKSPACE_MENU_ADD_TO_NEW_GROUP = "WORKSPACE_MENU_ADD_TO_NEW_GROUP"
+    WORKSPACE_MENU_REMOVE_FROM_GROUP = "WORKSPACE_MENU_REMOVE_FROM_GROUP"
+
     # The PaletteDialog shell's dimmed overlay, rendered for every open.
     PALETTE_DIALOG_OVERLAY = "PALETTE_DIALOG_OVERLAY"
 
@@ -761,6 +785,9 @@ class ElementIDs(StrEnum):
 
     # Entity Mentions (experimental)
     SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE = "SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE"
+
+    # Workspace Groups (experimental)
+    SETTINGS_ENABLE_WORKSPACE_GROUPS_TOGGLE = "SETTINGS_ENABLE_WORKSPACE_GROUPS_TOGGLE"
 
     # Auto-rename workspace + agent from the first prompt (experimental)
     SETTINGS_ENABLE_AUTO_RENAME_TOGGLE = "SETTINGS_ENABLE_AUTO_RENAME_TOGGLE"

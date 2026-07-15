@@ -272,6 +272,10 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, typing % in the chat input opens entity mention completions for repositories, workspaces, and agents",
     )
+    enable_workspace_groups: bool = Field(
+        default=False,
+        description="When enabled, workspaces can be organized into named, colored groups in the sidebar and via the sculpt CLI",
+    )
     enable_auto_rename: bool = Field(
         default=False,
         description="When enabled, a first-message system reminder asks the agent to rename its workspace and itself to concise, task-derived names (via the sculpt CLI) once it understands the task. Naming conventions can be supplied at three tiers, most-specific wins: ~/.sculptor/naming.md (yours, all repos), .sculptor/naming.md (this repo, shared), and .sculptor/naming.local.md (yours, this repo only). Experimental; off by default.",

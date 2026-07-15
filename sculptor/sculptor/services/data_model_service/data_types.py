@@ -16,6 +16,7 @@ from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
+from sculptor.database.models import WorkspaceGroup
 from sculptor.database.workspace_enums import DiffStatus
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import FrozenModel
@@ -26,6 +27,7 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TransactionID
 from sculptor.primitives.ids import UserReference
+from sculptor.primitives.ids import WorkspaceGroupID
 from sculptor.primitives.ids import WorkspaceID
 
 
@@ -123,6 +125,7 @@ class WorkspaceFieldUpdate(TypedDict, total=False):
     diff_status: DiffStatus
     diff_updated_at: datetime.datetime | None
     ci_babysitter_paused: bool
+    group_id: WorkspaceGroupID | None
 
 
 class DataModelTransaction(MutableModel, ABC):
@@ -220,6 +223,21 @@ class DataModelTransaction(MutableModel, ABC):
     @abstractmethod
     def get_all_workspaces(self) -> list[WorkspaceListingRow]:
         """Get cross-project workspace listing with denormalized fields, ordered by recent activity."""
+
+    @abstractmethod
+    def get_workspace_group(self, workspace_group_id: WorkspaceGroupID) -> WorkspaceGroup | None:
+        """Get a live (non-deleted) workspace group by ID."""
+
+    @abstractmethod
+    def get_workspace_groups(
+        self,
+        project_id: ProjectID | None = None,
+        organization_reference: OrganizationReference | None = None,
+    ) -> tuple[WorkspaceGroup, ...]:
+        """Get all live (non-deleted) workspace groups, optionally filtered by project or organization."""
+
+    @abstractmethod
+    def upsert_workspace_group(self, workspace_group: WorkspaceGroup) -> WorkspaceGroup: ...
 
 
 class TaskAndDataModelTransaction(DataModelTransaction, ABC):

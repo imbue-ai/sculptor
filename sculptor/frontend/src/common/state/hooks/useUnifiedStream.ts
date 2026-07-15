@@ -18,6 +18,7 @@ import { sculptorSettingsAtom } from "../atoms/sculptorSettings";
 import { getEmptyTaskDetailState, updateTaskDetailAtom, updateTaskUpdatedArtifactsAtom } from "../atoms/taskDetails";
 import { isAgentExtensionLoadingAllowedAtom, isExtensionsEnabledAtom } from "../atoms/userConfig";
 import { updateWorkspaceBranchAtom } from "../atoms/workspaceBranch";
+import { updateWorkspaceGroupsAtom } from "../atoms/workspaceGroups";
 import { updateWorkspacesAtom } from "../atoms/workspaces";
 import { appendSetupOutputChunkAtom } from "../atoms/workspaceSetupOutput";
 import { updateWorkspaceSetupStatusAtom } from "../atoms/workspaceSetupStatus";
@@ -101,6 +102,7 @@ export const useUnifiedStream = (): void => {
   useTaskQueryMirror();
   const updateProjects = useSetAtom(updateProjectsAtom);
   const updateWorkspaces = useSetAtom(updateWorkspacesAtom);
+  const updateWorkspaceGroups = useSetAtom(updateWorkspaceGroupsAtom);
   const setNotifications = useSetAtom(notificationsAtom);
   const setSculptorSettings = useSetAtom(sculptorSettingsAtom);
   const updateTaskDetail = useSetAtom(updateTaskDetailAtom);
@@ -190,6 +192,10 @@ export const useUnifiedStream = (): void => {
 
         if (userUpdate.workspaces) {
           updateWorkspaces(userUpdate.workspaces);
+        }
+
+        if (userUpdate.workspaceGroups) {
+          updateWorkspaceGroups(userUpdate.workspaceGroups);
         }
 
         if (userUpdate.settings) {
@@ -290,6 +296,7 @@ export const useUnifiedStream = (): void => {
     [
       updateProjects,
       updateWorkspaces,
+      updateWorkspaceGroups,
       setNotifications,
       setSculptorSettings,
       updateTaskDetail,

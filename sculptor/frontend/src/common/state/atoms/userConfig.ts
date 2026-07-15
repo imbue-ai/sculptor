@@ -191,6 +191,11 @@ export const workspaceBranchDeletionPolicyAtom = atom<"never" | "delete_if_safe"
 // Entity mentions (experimental — off by default)
 export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableEntityMentions ?? false);
 
+// Workspace groups (experimental — off by default). Gates the sidebar group
+// UI and menu actions; group data survives the flag being off (hidden, not
+// deleted) and the backend 409s group mutations while disabled.
+export const isWorkspaceGroupsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableWorkspaceGroups ?? false);
+
 // Auto-rename workspace + agent from the first prompt (experimental — off by default)
 export const isAutoRenameEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableAutoRename ?? false);
 

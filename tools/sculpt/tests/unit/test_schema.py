@@ -51,6 +51,9 @@ def test_schema_derived_from_pydantic_models() -> None:
     assert "workspace_id" in run_schema["properties"]
     assert "agent_id" in run_schema["properties"]
     assert "prompt" in run_schema["properties"]
+    assert "group_id" in run_schema["properties"]
+
+    assert "group_id" in ws_schema["properties"]
 
 
 def test_schema_models_produce_valid_json_roundtrip() -> None:
@@ -61,6 +64,7 @@ def test_schema_models_produce_valid_json_roundtrip() -> None:
         description="test",
         strategy="clone",
         source_branch="main",
+        group_id=None,
     )
     roundtripped = WorkspaceCreateOutput.model_validate_json(output.model_dump_json())
     assert roundtripped == output

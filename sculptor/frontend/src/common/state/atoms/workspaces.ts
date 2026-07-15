@@ -16,6 +16,22 @@ import { viewedAgentIdAtom } from "./viewedAgent.ts";
 import type { SetupStatusSnapshot } from "./workspaceSetupStatus";
 import { workspaceSetupStatusAtomFamily } from "./workspaceSetupStatus";
 
+// Monotonic per-workspace stream-write counters. Module scope, not atoms: the
+// only consumers are optimistic-mutation rollbacks, which need a point-in-time
+// read at snapshot/rollback time, never a subscription. A rollback whose
+// captured version no longer matches knows a stream frame wrote the workspace
+// mid-request and must not clobber it. Mirrors the workspace-group versions in
+// atoms/workspaceGroups.ts.
+const workspaceSyncVersions = new Map<string, number>();
+
+/** The count of stream writes applied to this workspace so far this session. */
+export const getWorkspaceSyncVersion = (workspaceId: string): number => workspaceSyncVersions.get(workspaceId) ?? 0;
+
+/** Module-level state leaks across tests without an explicit reset. */
+export const resetWorkspaceSyncVersionsForTesting = (): void => {
+  workspaceSyncVersions.clear();
+};
+
 export const workspaceAtomFamily = atomFamily<string, PrimitiveAtom<Workspace | null>>(() =>
   atom<Workspace | null>(null),
 );
@@ -490,6 +506,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
 
   workspaces.forEach((incoming) => {
     if (incoming.isDeleted) {
+      workspaceSyncVersions.set(incoming.objectId, getWorkspaceSyncVersion(incoming.objectId) + 1);
       // Mirror task deletion pattern: remove from IDs and null out atom
       currentWorkspaceIds.delete(incoming.objectId);
       set(workspaceAtomFamily(incoming.objectId), null);
@@ -527,6 +544,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     // equality rather than a hand-picked field list, so a new backend field
     // can never be silently dropped from the comparison.
     if (previous === null || !isEqual(previous, workspace)) {
+      workspaceSyncVersions.set(workspace.objectId, getWorkspaceSyncVersion(workspace.objectId) + 1);
       set(workspaceAtomFamily(workspace.objectId), workspace);
     }
     const isNew = !currentWorkspaceIds.has(workspace.objectId);

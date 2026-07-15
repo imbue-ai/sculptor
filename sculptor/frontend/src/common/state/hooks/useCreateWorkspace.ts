@@ -60,6 +60,8 @@ export type CreateWorkspaceError = {
   cause: unknown;
 };
 
+// Success carries the created workspace id so callers can chain follow-up
+// writes to it (e.g. joining the new workspace to a workspace group).
 type CreateWorkspaceResult = { ok: true; workspaceId: string } | { ok: false; error: CreateWorkspaceError };
 
 type UseCreateWorkspaceReturn = {

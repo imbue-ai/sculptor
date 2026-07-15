@@ -20,6 +20,23 @@ export const isRepoCollapsedAtomFamily = atomFamily((projectId: string) =>
   atom((get) => get(collapsedRepoGroupsAtom)[projectId] ?? false),
 );
 
+// Per-workspace-group collapse state, keyed by group id — the workspace-group
+// analog of collapsedRepoGroupsAtom above. Persisted so a collapsed group card
+// stays collapsed across reloads. Stale ids (dissolved groups) are harmless:
+// they are never read once no card renders for them.
+export const collapsedWorkspaceGroupsAtom = atomWithStorage<Record<string, boolean>>(
+  "sculptor-collapsed-workspace-groups",
+  {},
+  undefined,
+  { getOnInit: true },
+);
+
+// One group's collapse flag, sliced out of the shared record so a group card
+// only re-renders when its own state flips (mirrors isRepoCollapsedAtomFamily).
+export const isWorkspaceGroupCollapsedAtomFamily = atomFamily((groupId: string) =>
+  atom((get) => get(collapsedWorkspaceGroupsAtom)[groupId] ?? false),
+);
+
 // Count of in-flight sidebar drags. A count, not a boolean, because the sidebar
 // hosts many independent drag contexts (one per repo group's rows plus the group
 // list) and a parked keyboard drag in one can coexist with a drag in another —

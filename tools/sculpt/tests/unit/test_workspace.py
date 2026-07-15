@@ -45,6 +45,38 @@ def _mock_preview_branch_name(base_url: str = "http://localhost:5050") -> None:
     )
 
 
+def _group_response_dict(
+    object_id: str = "wsg_auto123",
+    project_id: str = "prj_test123",
+    workspace_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "objectId": object_id,
+        "projectId": project_id,
+        "name": "Group 1",
+        "color": "blue",
+        "createdViaCli": True,
+        "createdAt": "2025-01-01T00:00:00",
+        "workspaceIds": workspace_ids if workspace_ids is not None else ["ws_test123"],
+    }
+
+
+_GROUPS_DISABLED_BODY = {
+    "detail": {
+        "error": "workspace_groups_disabled",
+        "message": "Workspace groups are an experimental feature; enable them in Settings first.",
+    }
+}
+
+
+def _mock_auto_group(base_url: str = "http://localhost:5050") -> respx.Route:
+    # Workspace-creating commands auto-group by default, so every happy-path
+    # create needs the group-create endpoint mocked.
+    return respx.post(f"{base_url}/api/v1/workspace-groups").mock(
+        return_value=Response(200, json=_group_response_dict())
+    )
+
+
 def _mock_projects_list(base_url: str = "http://localhost:5050") -> None:
     respx.get(f"{base_url}/api/v1/projects").mock(
         return_value=Response(
@@ -123,6 +155,7 @@ class TestWorkspaceCreate:
         _mock_session()
         _mock_initialize_project()
         _mock_preview_branch_name()
+        _mock_auto_group()
         respx.post("http://localhost:5050/api/v1/workspaces").mock(
             return_value=Response(200, json=_workspace_response_dict())
         )
@@ -137,6 +170,7 @@ class TestWorkspaceCreate:
         _mock_session()
         _mock_initialize_project()
         _mock_preview_branch_name()
+        _mock_auto_group()
         respx.post("http://localhost:5050/api/v1/workspaces").mock(
             return_value=Response(200, json=_workspace_response_dict())
         )
@@ -153,6 +187,7 @@ class TestWorkspaceCreate:
     def test_create_in_place_strategy(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_initialize_project()
+        _mock_auto_group()
         respx.post("http://localhost:5050/api/v1/workspaces").mock(
             return_value=Response(200, json=_workspace_response_dict(strategy="IN_PLACE"))
         )
@@ -166,6 +201,7 @@ class TestWorkspaceCreate:
         """When --branch-name is supplied, the CLI sends it through unchanged and skips the preview call."""
         _mock_session()
         _mock_initialize_project()
+        _mock_auto_group()
         preview_route = respx.get("http://localhost:5050/api/v1/workspaces/preview-branch-name").mock(
             return_value=Response(200, json={"branchName": "should-not-be-used"})
         )
@@ -205,6 +241,7 @@ class TestWorkspaceCreate:
         """When --branch-name is omitted for worktree, the CLI auto-fills it via preview-branch-name."""
         _mock_session()
         _mock_initialize_project()
+        _mock_auto_group()
         preview_route = respx.get("http://localhost:5050/api/v1/workspaces/preview-branch-name").mock(
             return_value=Response(200, json={"branchName": "dev/auto-generated"})
         )
@@ -241,6 +278,7 @@ class TestWorkspaceCreate:
         _mock_session()
         _mock_initialize_project()
         _mock_preview_branch_name()
+        _mock_auto_group()
         create_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
             return_value=Response(200, json=_workspace_response_dict())
         )
@@ -295,6 +333,124 @@ class TestWorkspaceCreate:
         result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test"])
 
         assert result.exit_code == 1
+
+
+class TestWorkspaceCreateGrouping:
+    """Grouping behavior of `sculpt workspace create` (REQ-CLI-2/3/4, REQ-FLAG-4)."""
+
+    @respx.mock
+    def test_create_auto_creates_cli_group_by_default(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        group_route = _mock_auto_group()
+
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test", "--json"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert group_route.called
+        request_body = json.loads(group_route.calls.last.request.content)
+        assert request_body["projectId"] == "prj_test123"
+        assert request_body["workspaceIds"] == ["ws_test123"]
+        assert request_body["createdViaCli"] is True
+        data = json.loads(result.stdout)
+        assert data["group_id"] == "wsg_auto123"
+
+    @respx.mock
+    def test_create_no_group_skips_grouping(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        group_route = _mock_auto_group()
+
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test", "--no-group", "--json"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert not group_route.called
+        data = json.loads(result.stdout)
+        assert data["group_id"] is None
+
+    @respx.mock
+    def test_create_group_joins_existing_group(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.get("http://localhost:5050/api/v1/workspace-groups").mock(
+            return_value=Response(
+                200,
+                json={"groups": [_group_response_dict(object_id="wsg_existing1", workspace_ids=["ws_sibling"])]},
+            )
+        )
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        add_route = respx.post("http://localhost:5050/api/v1/workspace-groups/wsg_existing1/workspaces").mock(
+            return_value=Response(
+                200,
+                json=_group_response_dict(object_id="wsg_existing1", workspace_ids=["ws_sibling", "ws_test123"]),
+            )
+        )
+
+        result = runner.invoke(
+            app, ["workspace", "create", "--repo", "/tmp/test", "--group", "wsg_existing", "--json"]
+        )
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert add_route.called
+        request_body = json.loads(add_route.calls.last.request.content)
+        assert request_body["workspaceId"] == "ws_test123"
+        data = json.loads(result.stdout)
+        assert data["group_id"] == "wsg_existing1"
+
+    def test_create_group_and_no_group_are_mutually_exclusive(self, runner: CliRunner) -> None:
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test", "--group", "wsg_x", "--no-group"])
+
+        assert result.exit_code == 1
+        assert "mutually exclusive" in result.stderr
+
+    @respx.mock
+    def test_create_proceeds_loose_when_groups_disabled(self, runner: CliRunner) -> None:
+        """Implicit auto-group swallows the disabled-experiment 409 (REQ-FLAG-4)."""
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        respx.post("http://localhost:5050/api/v1/workspace-groups").mock(
+            return_value=Response(409, json=_GROUPS_DISABLED_BODY)
+        )
+
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert "ws_test123" in result.output
+        assert "ungrouped" in result.stderr
+        assert "Group:" not in result.output
+
+    @respx.mock
+    def test_create_explicit_group_fails_when_groups_disabled(self, runner: CliRunner) -> None:
+        """Explicit --group surfaces the disabled error before creating anything."""
+        _mock_session()
+        _mock_initialize_project()
+        respx.get("http://localhost:5050/api/v1/workspace-groups").mock(
+            return_value=Response(409, json=_GROUPS_DISABLED_BODY)
+        )
+        ws_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+
+        result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test", "--group", "wsg_x"])
+
+        assert result.exit_code == 1
+        assert "disabled" in result.stderr
+        assert not ws_route.called
 
 
 class TestWorkspaceList:

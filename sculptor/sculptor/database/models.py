@@ -23,6 +23,7 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID as AgentTaskID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import UserSettingsID
+from sculptor.primitives.ids import WorkspaceGroupID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.state.messages import AgentMessageSource
 from sculptor.state.messages import LLMModel
@@ -120,6 +121,35 @@ class Workspace(DatabaseModel):
     # here so it survives a backend restart (the coordinator's in-memory state is
     # rebuilt lazily and would otherwise revert to the default).
     ci_babysitter_paused: bool = False
+    # The workspace group this workspace belongs to, if any. Membership lives
+    # here (not on the group) so a workspace structurally belongs to at most
+    # one group and membership changes stream with the workspace itself.
+    group_id: WorkspaceGroupID | None = None
+
+
+class WorkspaceGroup(DatabaseModel):
+    """
+    A named, colored collection of workspaces within a single project.
+
+    Groups are purely an organizational container for the sidebar and the
+    sculpt CLI: they never own their members' lifecycle. Membership lives on
+    ``Workspace.group_id``; a group with no live members must not exist, so
+    any operation that empties a group soft-deletes it in the same
+    transaction.
+    """
+
+    object_id: WorkspaceGroupID
+    organization_reference: OrganizationReference
+    # Groups are repo-scoped: every member workspace must belong to this project.
+    project_id: ProjectID
+    name: str
+    # A Radix accent color name. Any accent name is accepted (not just the
+    # curated palette in sculptor.web.data_types) so rows written under a
+    # future palette still load.
+    color: str
+    # Whether the group was created by the sculpt CLI; drives the CLI badge in the sidebar.
+    created_via_cli: bool = False
+    is_deleted: bool = False
 
 
 # Runtime tables

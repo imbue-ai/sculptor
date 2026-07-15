@@ -9,14 +9,14 @@ from sculpt.auth import get_default_base_url
 from sculpt.client import Client
 from sculpt.client.api.default import create_workspace_v2
 from sculpt.client.api.default import delete_workspace
-from sculpt.client.api.default import list_recent_workspaces
 from sculpt.client.api.default import list_workspaces
 from sculpt.client.api.default import update_workspace
 from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
 from sculpt.client.models.http_validation_error import HTTPValidationError
-from sculpt.client.models.recent_workspace_response import RecentWorkspaceResponse
 from sculpt.client.models.update_workspace_request import UpdateWorkspaceRequest
 from sculpt.client.types import Unset
+from sculpt.commands._group_helpers import group_new_workspace_or_warn
+from sculpt.commands._group_helpers import resolve_group_for_join
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
 from sculpt.commands._workspace_helpers import resolve_strategy
@@ -31,6 +31,7 @@ from sculpt.formatting import format_datetime
 from sculpt.formatting import format_table
 from sculpt.formatting import handle_connection_error
 from sculpt.formatting import truncate
+from sculpt.resolve import fetch_recent_workspaces
 from sculpt.resolve import fetch_repo_path_lookup
 from sculpt.resolve import resolve_by_prefix
 from sculpt.resolve import resolve_project
@@ -80,13 +81,34 @@ def create(
         help="Diff/merge target branch (auto-resolved from the repo if omitted)",
     ),
     name: str | None = typer.Option(None, "--name", help="Workspace description"),
+    group: str | None = typer.Option(
+        None,
+        "--group",
+        help="Add the new workspace to this existing group (ID or prefix) instead of auto-creating one",
+    ),
+    no_group: bool = typer.Option(
+        False,
+        "--no-group",
+        help="Skip the default auto-grouping and create the workspace loose",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
     """Create a new workspace."""
     base_url = base_url or get_default_base_url()
+
+    if group is not None and no_group:
+        cli_error("--group and --no-group are mutually exclusive", json_output=json_output)
+
     client = get_authenticated_client(base_url, json_output)
     project_id = resolve_project(repo, client, json_output)
+
+    # Resolve an explicit --group target before creating anything, so an
+    # unknown group (or the disabled workspace-groups experiment) fails with
+    # no side effects.
+    target_group = None
+    if group is not None:
+        target_group = resolve_group_for_join(client, group, project_id=project_id, json_output=json_output)
 
     strategy_enum = resolve_strategy(strategy, json_output=json_output)
 
@@ -119,6 +141,17 @@ def create(
     if isinstance(result, HTTPValidationError):
         cli_error("Validation error", detail=str(result), json_output=json_output)
 
+    if no_group:
+        group_id = None
+    else:
+        group_id = group_new_workspace_or_warn(
+            client,
+            project_id=project_id,
+            workspace_id=result.object_id,
+            target_group_id=target_group.object_id if target_group is not None else None,
+            json_output=json_output,
+        )
+
     if json_output:
         output = WorkspaceCreateOutput(
             id=result.object_id,
@@ -126,6 +159,7 @@ def create(
             description=result.description,
             strategy=result.initialization_strategy.value,
             source_branch=result.source_branch,
+            group_id=group_id,
         )
         typer.echo(output.model_dump_json(indent=2))
         return
@@ -137,6 +171,8 @@ def create(
         typer.echo(f"Branch: {result.source_branch}")
     if result.description:
         typer.echo(f"Description: {result.description}")
+    if group_id is not None:
+        typer.echo(f"Group: {group_id}")
 
 
 @workspace_app.command("list")
@@ -158,7 +194,7 @@ def list_cmd(
 
 
 def _list_all(client: Client, json_output: bool) -> None:
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     repo_lookup = fetch_repo_path_lookup(client)  # type: ignore[arg-type]
     self_workspace_id = os.environ.get("SCULPT_WORKSPACE_ID")
 
@@ -205,18 +241,6 @@ def _list_all(client: Client, json_output: bool) -> None:
     typer.echo(format_table(headers, rows))
     if any(w.object_id == self_workspace_id for w in workspaces):
         typer.echo("* = this workspace (SCULPT_WORKSPACE_ID)", err=True)
-
-
-def _fetch_recent_workspaces(client: Client, json_output: bool) -> list[RecentWorkspaceResponse]:
-    try:
-        result = list_recent_workspaces.sync(client=client)  # type: ignore[arg-type]
-    except httpx.ConnectError:
-        handle_connection_error(json_output)
-
-    if result is None:
-        cli_error("Failed to list workspaces", detail="No response from server", json_output=json_output)
-
-    return result.workspaces
 
 
 def _list_for_project(client: Client, project_id: str, json_output: bool) -> None:
@@ -291,7 +315,7 @@ def show(
         typer.echo("Using workspace from SCULPT_WORKSPACE_ID", err=True)
         workspace_id = env_value
 
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(
         workspace_id,
         workspaces,
@@ -354,7 +378,7 @@ def rename(
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url, json_output)
 
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(
         workspace_id,
         workspaces,
@@ -397,7 +421,7 @@ def delete(
     base_url = base_url or get_default_base_url()
     client = get_authenticated_client(base_url, json_output)
 
-    workspaces = _fetch_recent_workspaces(client, json_output)
+    workspaces = fetch_recent_workspaces(client, json_output)
     ws = resolve_by_prefix(
         workspace_id,
         workspaces,

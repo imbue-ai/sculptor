@@ -74,6 +74,7 @@ from sculptor.database.models import Project
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
+from sculptor.database.models import WorkspaceGroup
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.constants import ExceptionPriority
@@ -112,6 +113,7 @@ from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TypeIDPrefixMismatchError
+from sculptor.primitives.ids import WorkspaceGroupID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.ids import create_organization_id
 from sculptor.primitives.ids import create_user_id
@@ -194,6 +196,7 @@ from sculptor.web.access_log_filter import should_suppress_access_log
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import SessionTokenMiddleware
 from sculptor.web.auth import UserSession
+from sculptor.web.data_types import AddWorkspaceGroupMemberRequest
 from sculptor.web.data_types import AgentDiagnosticsResponse
 from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import AnswerQuestionRequest
@@ -211,6 +214,7 @@ from sculptor.web.data_types import CommitInfo
 from sculptor.web.data_types import ConfigStatusResponse
 from sculptor.web.data_types import CreateAgentRequest
 from sculptor.web.data_types import CreateInitialCommitRequest
+from sculptor.web.data_types import CreateWorkspaceGroupRequest
 from sculptor.web.data_types import CreateWorkspaceRequestV2
 from sculptor.web.data_types import CurrentBranchInfo
 from sculptor.web.data_types import DependenciesStatus
@@ -227,6 +231,7 @@ from sculptor.web.data_types import InitializeGitRepoRequest
 from sculptor.web.data_types import InstallExtensionRequest
 from sculptor.web.data_types import InstallExtensionResponse
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
+from sculptor.web.data_types import ListWorkspaceGroupsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingPatternRequest
 from sculptor.web.data_types import NewBranchNameValidationResponse
@@ -259,16 +264,19 @@ from sculptor.web.data_types import StartTaskRequest
 from sculptor.web.data_types import SubmitAuthCodeRequest
 from sculptor.web.data_types import TerminalInputRequest
 from sculptor.web.data_types import UpdateUserConfigRequest
+from sculptor.web.data_types import UpdateWorkspaceGroupRequest
 from sculptor.web.data_types import UpdateWorkspaceRequest
 from sculptor.web.data_types import UploadDiagnosticsRequest
 from sculptor.web.data_types import UploadDiagnosticsResponse
 from sculptor.web.data_types import UploadFileResponse
+from sculptor.web.data_types import WORKSPACE_GROUP_COLOR_PALETTE
 from sculptor.web.data_types import WebviewCommandUiAction
 from sculptor.web.data_types import WebviewNavigateRequest
 from sculptor.web.data_types import WorkspaceDiffResponse
 from sculptor.web.data_types import WorkspaceFileEntry
 from sculptor.web.data_types import WorkspaceFileListResponse
 from sculptor.web.data_types import WorkspaceGitOperationResponse
+from sculptor.web.data_types import WorkspaceGroupResponse
 from sculptor.web.data_types import WorkspaceResponse
 from sculptor.web.data_types import WorkspaceSetupCommandRequest
 from sculptor.web.data_types import WorkspaceSetupSnapshot
@@ -357,6 +365,23 @@ def validate_workspace_id(workspace_id: str) -> WorkspaceID:
         ) from e
 
 
+def validate_workspace_group_id(workspace_group_id: str) -> WorkspaceGroupID:
+    """Validate and return a WorkspaceGroupID, raising HTTPException if invalid."""
+    try:
+        return WorkspaceGroupID(workspace_group_id)
+    except (typeid.errors.TypeIDException, TypeIDPrefixMismatchError, ValueError) as e:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["path", "group_id"],
+                    "msg": f"Invalid workspace group ID format: {workspace_group_id}",
+                    "type": "value_error",
+                }
+            ],
+        ) from e
+
+
 def _project_path_from_git_repo_url(user_git_repo_url: str | None) -> str | None:
     """Convert a project's file:// repo URL to a local filesystem path.
 
@@ -407,6 +432,7 @@ def _workspace_to_response(
         target_branch=workspace.target_branch,
         requested_branch_name=workspace.requested_branch_name,
         environment_id=workspace.environment_id,
+        group_id=workspace.group_id,
         is_deleted=workspace.is_deleted,
         is_open=workspace.is_open,
         created_at=workspace.created_at,
@@ -1207,6 +1233,279 @@ def delete_workspace(
 
         services.workspace_service.delete_workspace(validated_workspace_id, transaction)
         logger.info("Deleted workspace {} with {} agents", workspace_id, len(workspace_tasks))
+
+        # A group never exists empty: if this was its group's last live member,
+        # dissolve the group in the same transaction. This integrity rule runs
+        # regardless of the workspace-groups experiment flag so hidden groups
+        # can't be left empty while the feature is off.
+        if workspace.group_id is not None:
+            _dissolve_workspace_group_if_empty(workspace.group_id, transaction)
+
+
+def _require_workspace_groups_enabled() -> None:
+    """Reject group API calls with HTTP 409 while the experiment flag is off.
+
+    The "workspace_groups_disabled" code is a stable contract: the sculpt CLI
+    keys on it to distinguish "feature disabled" from other conflicts (failing
+    loudly on explicit group intent, proceeding loose on implicit auto-group).
+    """
+    if not get_user_config_instance().enable_workspace_groups:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "workspace_groups_disabled",
+                "message": "Workspace groups are an experimental feature; enable them in Settings first.",
+            },
+        )
+
+
+def _get_workspace_group_or_404(group_id: str, transaction: DataModelTransaction) -> WorkspaceGroup:
+    validated_group_id = validate_workspace_group_id(group_id)
+    group = transaction.get_workspace_group(validated_group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail=f"Workspace group {group_id} not found")
+    return group
+
+
+def _get_group_member_workspace_or_error(
+    workspace_id: str, project_id: ProjectID, transaction: DataModelTransaction
+) -> Workspace:
+    """Resolve a prospective group member: it must exist and belong to the group's project."""
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    workspace = transaction.get_workspace(validated_workspace_id)
+    if workspace is None or workspace.is_deleted:
+        raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
+    if workspace.project_id != project_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Workspace {workspace_id} belongs to a different project than the group",
+        )
+    return workspace
+
+
+def _workspace_group_responses(
+    groups: list[WorkspaceGroup], transaction: DataModelTransaction
+) -> list[WorkspaceGroupResponse]:
+    """Convert WorkspaceGroup models to responses, resolving member ids in one workspace scan."""
+    member_ids_by_group_id: dict[WorkspaceGroupID, list[WorkspaceID]] = {}
+    for workspace in transaction.get_workspaces():
+        if workspace.group_id is not None:
+            member_ids_by_group_id.setdefault(workspace.group_id, []).append(workspace.object_id)
+    return [
+        WorkspaceGroupResponse(
+            object_id=group.object_id,
+            project_id=group.project_id,
+            name=group.name,
+            color=group.color,
+            created_via_cli=group.created_via_cli,
+            created_at=group.created_at,
+            workspace_ids=tuple(member_ids_by_group_id.get(group.object_id, [])),
+        )
+        for group in groups
+    ]
+
+
+def _workspace_group_to_response(group: WorkspaceGroup, transaction: DataModelTransaction) -> WorkspaceGroupResponse:
+    return _workspace_group_responses([group], transaction)[0]
+
+
+def _dissolve_workspace_group_if_empty(group_id: WorkspaceGroupID, transaction: DataModelTransaction) -> None:
+    """Soft-delete the group when no live workspace holds membership.
+
+    A group must never exist empty, so every operation that clears a
+    workspace's group_id (remove, ungroup, move, workspace delete) calls this
+    within the same transaction.
+    """
+    group = transaction.get_workspace_group(group_id)
+    if group is None:
+        return
+    workspaces = transaction.get_workspaces(project_id=group.project_id)
+    if any(workspace.group_id == group_id for workspace in workspaces):
+        return
+    transaction.upsert_workspace_group(group.evolve(group.ref().is_deleted, True))
+    logger.info("Dissolved workspace group {} after its last member left", group_id)
+
+
+def _move_workspace_into_group(workspace: Workspace, group: WorkspaceGroup, transaction: DataModelTransaction) -> None:
+    """Make the workspace a member of `group`, dissolving its previous group if that empties it."""
+    previous_group_id = workspace.group_id
+    if previous_group_id == group.object_id:
+        return
+    transaction.update_workspace_fields(workspace.object_id, group_id=group.object_id)
+    if previous_group_id is not None:
+        _dissolve_workspace_group_if_empty(previous_group_id, transaction)
+
+
+def _next_default_group_name(live_groups: tuple[WorkspaceGroup, ...]) -> str:
+    """Return "Group N" where N is the count-based per-project index, skipping collisions with live group names."""
+    existing_names = {group.name for group in live_groups}
+    index = len(live_groups) + 1
+    while f"Group {index}" in existing_names:
+        index += 1
+    return f"Group {index}"
+
+
+def _next_default_group_color(live_groups: tuple[WorkspaceGroup, ...]) -> str:
+    """Cycle the curated palette by the project's live-group count."""
+    return WORKSPACE_GROUP_COLOR_PALETTE[len(live_groups) % len(WORKSPACE_GROUP_COLOR_PALETTE)].value
+
+
+@router.post("/api/v1/workspace-groups")
+def create_workspace_group(
+    request: Request,
+    group_request: CreateWorkspaceGroupRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> WorkspaceGroupResponse:
+    """Create a workspace group around one or more initial member workspaces."""
+    _require_workspace_groups_enabled()
+    validated_project_id = validate_project_id(group_request.project_id)
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        project = transaction.get_project(validated_project_id)
+        if project is None or project.is_deleted:
+            raise HTTPException(status_code=404, detail=f"Project {group_request.project_id} not found")
+
+        member_workspaces = [
+            _get_group_member_workspace_or_error(workspace_id, validated_project_id, transaction)
+            for workspace_id in group_request.workspace_ids
+        ]
+
+        live_groups = transaction.get_workspace_groups(project_id=validated_project_id)
+        # Same trimming contract as rename: a whitespace-only name falls back
+        # to the server-assigned default rather than storing a blank header.
+        requested_name = group_request.name.strip() if group_request.name else ""
+        group = WorkspaceGroup(
+            object_id=WorkspaceGroupID(),
+            organization_reference=user_session.organization_reference,
+            project_id=validated_project_id,
+            name=requested_name if requested_name else _next_default_group_name(live_groups),
+            color=group_request.color if group_request.color else _next_default_group_color(live_groups),
+            created_via_cli=group_request.created_via_cli,
+        )
+        transaction.upsert_workspace_group(group)
+        for workspace in member_workspaces:
+            _move_workspace_into_group(workspace, group, transaction)
+        logger.info("Created workspace group {} for project {}", group.object_id, validated_project_id)
+        return _workspace_group_to_response(group, transaction)
+
+
+@router.get("/api/v1/workspace-groups")
+def list_workspace_groups(
+    request: Request,
+    project_id: str | None = None,
+    user_session: UserSession = Depends(get_user_session),
+) -> ListWorkspaceGroupsResponse:
+    """List live workspace groups, optionally scoped to a project."""
+    _require_workspace_groups_enabled()
+    validated_project_id = validate_project_id(project_id) if project_id else None
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        groups = transaction.get_workspace_groups(project_id=validated_project_id)
+        return ListWorkspaceGroupsResponse(groups=_workspace_group_responses(list(groups), transaction))
+
+
+@router.get("/api/v1/workspace-groups/{group_id}")
+def get_workspace_group(
+    group_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> WorkspaceGroupResponse:
+    """Get a workspace group by ID, including its member workspace ids."""
+    _require_workspace_groups_enabled()
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        group = _get_workspace_group_or_404(group_id, transaction)
+        return _workspace_group_to_response(group, transaction)
+
+
+@router.patch("/api/v1/workspace-groups/{group_id}")
+def update_workspace_group(
+    group_id: str,
+    request: Request,
+    update_request: UpdateWorkspaceGroupRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> WorkspaceGroupResponse:
+    """Rename and/or recolor a workspace group."""
+    _require_workspace_groups_enabled()
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        group = _get_workspace_group_or_404(group_id, transaction)
+        if update_request.name is not None:
+            name = update_request.name.strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="Workspace group name must not be empty")
+            group = group.evolve(group.ref().name, name)
+        if update_request.color is not None:
+            group = group.evolve(group.ref().color, update_request.color)
+        transaction.upsert_workspace_group(group)
+        return _workspace_group_to_response(group, transaction)
+
+
+@router.post("/api/v1/workspace-groups/{group_id}/workspaces")
+def add_workspace_group_member(
+    group_id: str,
+    request: Request,
+    member_request: AddWorkspaceGroupMemberRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> WorkspaceGroupResponse:
+    """Add a workspace from the group's project as a member; a workspace in another group moves."""
+    _require_workspace_groups_enabled()
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        group = _get_workspace_group_or_404(group_id, transaction)
+        workspace = _get_group_member_workspace_or_error(member_request.workspace_id, group.project_id, transaction)
+        _move_workspace_into_group(workspace, group, transaction)
+        return _workspace_group_to_response(group, transaction)
+
+
+@router.delete("/api/v1/workspace-groups/{group_id}/workspaces/{workspace_id}")
+def remove_workspace_group_member(
+    group_id: str,
+    workspace_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> None:
+    """Release a workspace from the group; the group dissolves if that empties it."""
+    _require_workspace_groups_enabled()
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        group = _get_workspace_group_or_404(group_id, transaction)
+        validated_workspace_id = validate_workspace_id(workspace_id)
+        workspace = transaction.get_workspace(validated_workspace_id)
+        if workspace is None or workspace.is_deleted or workspace.group_id != group.object_id:
+            raise HTTPException(
+                status_code=404, detail=f"Workspace {workspace_id} is not a member of group {group_id}"
+            )
+        transaction.update_workspace_fields(validated_workspace_id, group_id=None)
+        _dissolve_workspace_group_if_empty(group.object_id, transaction)
+
+
+@router.delete("/api/v1/workspace-groups/{group_id}")
+def ungroup_workspace_group(
+    group_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> None:
+    """Ungroup: release all members back to the loose list and soft-delete the group.
+
+    Never deletes workspaces — a group is purely an organizational container.
+    """
+    _require_workspace_groups_enabled()
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        group = _get_workspace_group_or_404(group_id, transaction)
+        for workspace in transaction.get_workspaces(project_id=group.project_id):
+            if workspace.group_id == group.object_id:
+                transaction.update_workspace_fields(workspace.object_id, group_id=None)
+        transaction.upsert_workspace_group(group.evolve(group.ref().is_deleted, True))
+        logger.info("Ungrouped workspace group {}", group_id)
 
 
 @router.get("/api/v1/workspaces/{workspace_id}/diff")

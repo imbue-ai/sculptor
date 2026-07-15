@@ -40,11 +40,7 @@ import { NavItem } from "./NavItem.tsx";
 import { sidebarCollisionDetection, sidebarDndModifiers, useSidebarDndSensors } from "./sidebarDnd.ts";
 import { SidebarLoadingSkeleton } from "./SidebarLoadingSkeleton.tsx";
 import { SidebarRepoGroup } from "./SidebarRepoGroup.tsx";
-import {
-  isSidebarLoadingAtom,
-  reorderSidebarRepoGroupAtom,
-  sidebarWorkspaceGroupsAtom,
-} from "./sidebarWorkspaceOrder.ts";
+import { isSidebarLoadingAtom, reorderSidebarRepoGroupAtom, sidebarRepoGroupsAtom } from "./sidebarWorkspaceOrder.ts";
 import styles from "./WorkspaceSidebar.module.scss";
 
 /** Smallest sidebar width the resize handle allows, in pixels. */
@@ -68,7 +64,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // Grouped + sorted repo groups (one per repo, including repos with no
   // workspaces yet), shared with keyboard workspace cycling so the two can't
   // drift (see sidebarWorkspaceOrder).
-  const repoGroups = useAtomValue(sidebarWorkspaceGroupsAtom);
+  const repoGroups = useAtomValue(sidebarRepoGroupsAtom);
   // True only while the first workspace snapshot is still in flight. Lets the
   // repo list show a skeleton instead of a blank rail during that window
   // (notably after a hard refresh), without conflating it with a genuinely

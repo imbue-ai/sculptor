@@ -72,6 +72,48 @@ def test_reorder_workspace_row_via_keyboard_drag(
     expect(rows).to_contain_text(["Reorder WS B", "Reorder WS A", "Reorder WS C"])
 
 
+@user_story("to re-order my workspaces in the sidebar by dragging a row with the mouse")
+def test_reorder_workspace_row_via_pointer_drag(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Pointer-dragging a row to another row's bottom/top half re-orders the list.
+
+    The pointer path resolves the slot geometrically on the move stream — the
+    row lands on whichever side of the target row's midpoint the pointer rests
+    on — so both parks aim off-center: the midpoint itself is the ambiguous
+    point the rule splits on.
+
+    Steps:
+    1. Create three workspaces; they render alphabetically (A, B, C).
+    2. Pointer-drag row A to row B's bottom half and drop → B, A, C.
+    3. Pointer-drag row A back to row B's top half and drop → A, B, C.
+    """
+    page = sculptor_instance_.page
+
+    # Step 1: Three workspaces, alphabetical by name.
+    _create_workspaces(page, ["Pointer WS A", "Pointer WS B", "Pointer WS C"])
+    sidebar = PlaywrightTaskPage(page).get_workspace_sidebar()
+    rows = sidebar.get_workspace_rows()
+    expect(rows).to_have_count(3)
+    expect(rows).to_contain_text(["Pointer WS A", "Pointer WS B", "Pointer WS C"])
+
+    # Step 2: Park in B's bottom half — A lands after B.
+    sidebar.drag_via_pointer(
+        item=sidebar.get_workspace_row_by_name("Pointer WS A"),
+        waypoints=[sidebar.get_workspace_row_by_name("Pointer WS B")],
+        y_offsets=[8],
+    )
+    expect(rows).to_contain_text(["Pointer WS B", "Pointer WS A", "Pointer WS C"])
+
+    # Step 3: Park in B's top half — A lands back before B.
+    sidebar.drag_via_pointer(
+        item=sidebar.get_workspace_row_by_name("Pointer WS A"),
+        waypoints=[sidebar.get_workspace_row_by_name("Pointer WS B")],
+        y_offsets=[-8],
+    )
+    expect(rows).to_contain_text(["Pointer WS A", "Pointer WS B", "Pointer WS C"])
+
+
 @user_story("to cancel a sidebar drag with Escape without changing anything")
 def test_escape_cancels_drag_and_releases_drag_state(
     sculptor_instance_: SculptorInstance,

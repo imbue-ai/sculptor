@@ -269,7 +269,10 @@ def _assert_subset(expected: dict[str, Any], actual: dict[str, Any]) -> None:
 
 # -- Expected key sets for each command's JSON output --------------------------
 
-WORKSPACE_CREATE_KEYS = {"id", "repo_id", "description", "strategy", "source_branch"}
+# group_id is always present in the JSON output (REQ-CLI-4); it is None here
+# because the workspace-groups experiment is off by default, so the implicit
+# auto-group step proceeds ungrouped (REQ-FLAG-4).
+WORKSPACE_CREATE_KEYS = {"id", "repo_id", "description", "strategy", "source_branch", "group_id"}
 
 WORKSPACE_SHOW_KEYS = {
     "id",
@@ -330,7 +333,9 @@ AGENT_STATUS_KEYS = {
     "current_task_subject",
 }
 
-RUN_KEYS = {"workspace_id", "agent_id", "strategy", "model", "prompt"}
+# group_id mirrors WORKSPACE_CREATE_KEYS above: always present, None while
+# the workspace-groups experiment is off.
+RUN_KEYS = {"workspace_id", "agent_id", "strategy", "model", "prompt", "group_id"}
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +354,7 @@ def test_workspace_create_via_cli(sculptor_instance_: SculptorInstance) -> None:
 
     assert set(created.keys()) == WORKSPACE_CREATE_KEYS
     _assert_subset(
-        {"description": "CLI Created", "strategy": "CLONE", "source_branch": None},
+        {"description": "CLI Created", "strategy": "CLONE", "source_branch": None, "group_id": None},
         created,
     )
 
@@ -929,7 +934,7 @@ def test_run_command_creates_workspace_and_agent(sculptor_instance_: SculptorIns
 
     assert set(result.keys()) == RUN_KEYS
     _assert_subset(
-        {"strategy": "CLONE", "model": "CLAUDE-4-HAIKU", "prompt": "Do something"},
+        {"strategy": "CLONE", "model": "CLAUDE-4-HAIKU", "prompt": "Do something", "group_id": None},
         result,
     )
 

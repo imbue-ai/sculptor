@@ -1,57 +1,41 @@
 // The workspace sidebar's visible ordering, in one place so the rendered rail and
 // keyboard workspace cycling (Meta+] / Meta+[) can never disagree: workspaces are
-// grouped by repo (project), and both the groups and the workspaces within them
-// render in the user's stored drag order first (sidebarOrder in the global layout
-// snapshot), with anything not yet reordered following alphabetically — the
-// default order a user reads top-to-bottom before ever dragging.
+// grouped by repo (project), and each repo section's children — loose workspace
+// rows interleaved with workspace-group cards — render in the user's stored drag
+// order first (sidebarOrder in the global layout snapshot), with anything not yet
+// reordered following alphabetically — the default order a user reads
+// top-to-bottom before ever dragging. The composition itself lives in
+// workspaceGroupComposition.ts; this module binds it to the stores and owns the
+// write atoms that commit drops.
 
 import { arrayMove } from "@dnd-kit/sortable";
 import { atom } from "jotai";
 import { selectAtom } from "jotai/utils";
 
-import type { Project, Workspace } from "~/api";
+import type { Project, Workspace, WorkspaceGroup } from "~/api";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
+import { isWorkspaceGroupsEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { workspaceGroupsArrayAtom } from "~/common/state/atoms/workspaceGroups.ts";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import type { SidebarOrderState } from "~/components/sections/persistence/types.ts";
 import { globalLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 
-// A repo (project) and the workspaces that live in it, in visible order.
-// SidebarRepoGroup renders one of these.
+import type { RepoSectionChild } from "./workspaceGroupComposition.ts";
+import { applyStoredOrder, composeRepoSectionChildren, repoSectionChildKey } from "./workspaceGroupComposition.ts";
+
+// A repo (project) and its children in visible order. SidebarRepoGroup renders
+// one of these: `children` is the mixed lane it renders top-to-bottom, and
+// `workspaces` is the same tree flattened (group members expanded in place) so
+// keyboard cycling steps through exactly what the user sees.
 export type RepoGroup = {
   projectId: string;
   name: string;
+  children: ReadonlyArray<RepoSectionChild>;
   workspaces: ReadonlyArray<Workspace>;
 };
 
 const EMPTY_SIDEBAR_ORDER: SidebarOrderState = { repos: [], workspaces: {} };
-
-// Stored-first ordering: items whose keys appear in `storedKeys` come first, in
-// that stored order; the rest keep their incoming (alphabetical) order after them.
-// Stored keys that no longer resolve to an item are skipped, so deletions never
-// require cleaning the stored list; a key stored twice (a hand-edited or corrupt
-// snapshot) takes its first slot only, so an item is never rendered twice.
-function applyStoredOrder<T>(
-  items: ReadonlyArray<T>,
-  storedKeys: ReadonlyArray<string> | undefined,
-  keyOf: (item: T) => string,
-): Array<T> {
-  if (storedKeys === undefined || storedKeys.length === 0) {
-    return [...items];
-  }
-  // Taking each matched item OUT of the map makes duplicate stored keys miss on
-  // their second occurrence, and leaves the map holding exactly the unstored items.
-  const remainingByKey = new Map(items.map((item) => [keyOf(item), item]));
-  const stored: Array<T> = [];
-  for (const key of storedKeys) {
-    const item = remainingByKey.get(key);
-    if (item !== undefined) {
-      stored.push(item);
-      remainingByKey.delete(key);
-    }
-  }
-  const unstored = items.filter((item) => remainingByKey.has(keyOf(item)));
-  return [...stored, ...unstored];
-}
+const NO_WORKSPACE_GROUPS: ReadonlyArray<WorkspaceGroup> = [];
 
 // Build the sidebar's repo groups and apply the stored drag order. Seeds a group
 // for every known project first, so a repo with no workspaces still shows (e.g.
@@ -63,6 +47,7 @@ export function groupWorkspacesByRepo(
   workspaces: ReadonlyArray<Workspace>,
   projects: ReadonlyArray<Project>,
   order: SidebarOrderState = EMPTY_SIDEBAR_ORDER,
+  workspaceGroups: ReadonlyArray<WorkspaceGroup> = NO_WORKSPACE_GROUPS,
 ): ReadonlyArray<RepoGroup> {
   const projectsById = new Map(projects.map((project) => [project.objectId, project]));
   const byProject = new Map<string, Array<Workspace>>();
@@ -76,15 +61,20 @@ export function groupWorkspacesByRepo(
     byProject.set(ws.projectId, list);
   }
   const groups = [...byProject.entries()]
-    .map(([projectId, wsList]) => ({
-      projectId,
-      name: projectsById.get(projectId)?.name ?? "Other",
-      workspaces: applyStoredOrder(
-        wsList.sort((a, b) => (a.description ?? "").localeCompare(b.description ?? "")),
+    .map(([projectId, wsList]) => {
+      const children = composeRepoSectionChildren(
+        wsList,
+        workspaceGroups.filter((group) => group.projectId === projectId),
         order.workspaces[projectId],
-        (ws) => ws.objectId,
-      ),
-    }))
+        order.groupMembers,
+      );
+      return {
+        projectId,
+        name: projectsById.get(projectId)?.name ?? "Other",
+        children,
+        workspaces: children.flatMap((child) => (child.kind === "workspace" ? [child.workspace] : child.members)),
+      };
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
   return applyStoredOrder(groups, order.repos, (group) => group.projectId);
 }
@@ -94,8 +84,18 @@ export function groupWorkspacesByRepo(
 const sidebarOrderAtom = selectAtom(globalLayoutAtom, (global) => global.sidebarOrder);
 
 // The sidebar's repo groups in render order. WorkspaceSidebar renders these.
-export const sidebarWorkspaceGroupsAtom = atom<ReadonlyArray<RepoGroup>>((get) =>
-  groupWorkspacesByRepo(get(workspacesArrayAtom) ?? [], get(projectsArrayAtom), get(sidebarOrderAtom)),
+// "Repo group" = one repo (project) section and its children — distinct from
+// the backend WorkspaceGroup entity (user-created groups WITHIN a repo).
+// With the workspace-groups flag off this must not touch the group store at
+// all (the conditional get skips the subscription), so the sidebar renders
+// exactly the pre-groups tree.
+export const sidebarRepoGroupsAtom = atom<ReadonlyArray<RepoGroup>>((get) =>
+  groupWorkspacesByRepo(
+    get(workspacesArrayAtom) ?? [],
+    get(projectsArrayAtom),
+    get(sidebarOrderAtom),
+    get(isWorkspaceGroupsEnabledAtom) ? (get(workspaceGroupsArrayAtom) ?? NO_WORKSPACE_GROUPS) : NO_WORKSPACE_GROUPS,
+  ),
 );
 
 // True while the first workspace snapshot is still in flight, so the sidebar can
@@ -112,43 +112,74 @@ export const isSidebarLoadingAtom = atom<boolean>((get) => get(workspacesArrayAt
 // The sidebar's workspaces flattened into their visible top-to-bottom order, so
 // keyboard cycling steps through the same list the user sees.
 export const sidebarOrderedWorkspacesAtom = atom<ReadonlyArray<Workspace>>((get) =>
-  get(sidebarWorkspaceGroupsAtom).flatMap((group) => group.workspaces),
+  get(sidebarRepoGroupsAtom).flatMap((group) => group.workspaces),
 );
 
-// Commit a workspace-row drop: move the dragged workspace to the drop target's slot
-// within its repo group and store the group's full resulting order (materialized
-// from the current visible order, so a partially-stored group resolves to exactly
-// what the user saw when they dropped).
-export const reorderSidebarWorkspaceAtom = atom(
+// What commitSectionDropAtom overwrote, so a drop whose membership mutation
+// the server later rejects can put the stored lanes back exactly (the
+// membership flip itself is rolled back by the mutation hook). `undefined`
+// lane values are meaningful: they mean "was never stored" and restore to that.
+export type SectionOrderSnapshot = {
+  projectId: string;
+  childLane: Array<string> | undefined;
+  memberLanes: Record<string, Array<string> | undefined>;
+};
+
+// Commit a drop's resulting order for one repo section: materialize the FULL
+// projected tree — the mixed children lane plus every group's member lane — in
+// one write, so the lanes always describe exactly what the user saw land
+// (REQ-DND-7). Membership is a backend fact the caller flips through the
+// canonical mutation alongside this write; a lane id whose membership write
+// fails simply stops resolving and is skipped on read, and the returned
+// snapshot lets the caller restore the previous lanes precisely.
+export const commitSectionDropAtom = atom(
   null,
-  (get, set, params: { projectId: string; activeWorkspaceId: string; overWorkspaceId: string }) => {
-    const group = get(sidebarWorkspaceGroupsAtom).find((candidate) => candidate.projectId === params.projectId);
-    if (group === undefined) {
-      return;
+  (get, set, params: { projectId: string; children: ReadonlyArray<RepoSectionChild> }): SectionOrderSnapshot => {
+    const prev = get(globalLayoutAtom).sidebarOrder;
+    const snapshot: SectionOrderSnapshot = {
+      projectId: params.projectId,
+      childLane: prev.workspaces[params.projectId],
+      memberLanes: {},
+    };
+    const nextMemberLanes: Record<string, Array<string>> = {};
+    for (const child of params.children) {
+      if (child.kind === "group") {
+        snapshot.memberLanes[child.group.objectId] = prev.groupMembers?.[child.group.objectId];
+        nextMemberLanes[child.group.objectId] = child.members.map((member) => member.objectId);
+      }
     }
-    const ids = group.workspaces.map((ws) => ws.objectId);
-    const from = ids.indexOf(params.activeWorkspaceId);
-    const to = ids.indexOf(params.overWorkspaceId);
-    if (from === -1 || to === -1 || from === to) {
-      return;
-    }
-    const next = arrayMove(ids, from, to);
-    set(globalLayoutAtom, (prev) => ({
-      ...prev,
+    set(globalLayoutAtom, (layout) => ({
+      ...layout,
       sidebarOrder: {
-        ...prev.sidebarOrder,
-        workspaces: { ...prev.sidebarOrder.workspaces, [params.projectId]: next },
+        ...layout.sidebarOrder,
+        workspaces: { ...layout.sidebarOrder.workspaces, [params.projectId]: params.children.map(repoSectionChildKey) },
+        groupMembers: { ...layout.sidebarOrder.groupMembers, ...nextMemberLanes },
       },
     }));
+    return snapshot;
   },
 );
 
+// Restore the lanes a commitSectionDropAtom write replaced (the drop's
+// membership mutation failed). Writes back exactly the snapshot, including
+// never-stored (`undefined`) lanes.
+export const restoreSectionOrderAtom = atom(null, (_get, set, snapshot: SectionOrderSnapshot) => {
+  set(globalLayoutAtom, (layout) => ({
+    ...layout,
+    sidebarOrder: {
+      ...layout.sidebarOrder,
+      workspaces: { ...layout.sidebarOrder.workspaces, [snapshot.projectId]: snapshot.childLane },
+      groupMembers: { ...layout.sidebarOrder.groupMembers, ...snapshot.memberLanes },
+    },
+  }));
+});
+
 // Commit a repo-group drop: same materialize-the-visible-order contract as
-// reorderSidebarWorkspaceAtom, for the group list.
+// commitSectionDropAtom, for the repo list.
 export const reorderSidebarRepoGroupAtom = atom(
   null,
   (get, set, params: { activeProjectId: string; overProjectId: string }) => {
-    const ids = get(sidebarWorkspaceGroupsAtom).map((group) => group.projectId);
+    const ids = get(sidebarRepoGroupsAtom).map((group) => group.projectId);
     const from = ids.indexOf(params.activeProjectId);
     const to = ids.indexOf(params.overProjectId);
     if (from === -1 || to === -1 || from === to) {

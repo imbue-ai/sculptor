@@ -15,13 +15,14 @@ $row-min-height: 28px;
   margin-bottom: var(--space-1);
 }
 
-// The workspace rows of one group, in their own container: a dragged row's
-// movement is clamped to its parent element, so this box (not the whole group)
-// is what keeps a sliding row off the group header. Mirrors .repoGroup's row gap.
+// One repo section's children — loose workspace rows and workspace-group runs —
+// in their own container. One uniform gap between every child (loose row or
+// group box) so the rhythm around groups matches the rhythm between rows;
+// the boxes carry no margins of their own.
 .repoRows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 // Repo header and workspace rows share the same pill height and full width.
@@ -48,7 +49,7 @@ $row-min-height: 28px;
   cursor: pointer;
   display: flex;
   flex-grow: 1;
-  gap: var(--space-2);
+  gap: var(--space-1);
   min-width: 0;
   padding: 0;
 }
@@ -86,6 +87,24 @@ $row-min-height: 28px;
   }
 }
 
+// A member row inside a workspace-group box: one level deeper than loose rows
+// so the nesting reads at a glance (REQ-UI-1). Its hover pill is one accent
+// step lighter than the box surface (the box stamps the group's accent scale)
+// rather than the loose rows' gray, so hovering inside the box reads as a
+// lift within the group's own hue; the box's padding keeps the pill inset
+// from the box edges. The selected treatment is NOT group-hued — the row pins
+// the app accent back (see SidebarWorkspaceRow) so a selected member looks
+// exactly like a selected loose row.
+.workspaceRowNested {
+  padding-left: var(--space-7);
+
+  // One step above the box's HOVER shade (hovering a member also hovers the
+  // box to a3), so the pill always reads lighter than the surface under it.
+  &:hover {
+    background: var(--accent-a4);
+  }
+}
+
 // The clickable part of a workspace row (dot + name). Kept separate from the
 // row container so the hover action buttons aren't nested inside a button.
 .workspaceRowButton {
@@ -97,7 +116,7 @@ $row-min-height: 28px;
   display: flex;
   flex-grow: 1;
   font-size: var(--font-size-2);
-  gap: var(--space-2);
+  gap: var(--space-1);
   min-height: $row-min-height;
   min-width: 0;
   padding: 0;
@@ -187,65 +206,78 @@ $row-min-height: 28px;
   visibility: visible;
 }
 
+// The selected workspace's pill. A SOLID step (not the alpha step the hover
+// states use): inside a group box an alpha background would composite over
+// the group tint and read as the group's color, while the solid step covers
+// it — so a selected member looks exactly like a selected loose row
+// (REQ-UI-1/4; the row also re-pins the app accent, see SidebarWorkspaceRow).
 .workspaceRowActive {
-  background: var(--accent-a3);
+  background: var(--accent-3);
   color: var(--accent-11);
 
   &:hover {
-    background: var(--accent-a3);
+    background: var(--accent-3);
   }
 }
 
-// A row or repo group mid-drag. There is no floating overlay copy — the element
-// itself slides with the cursor (translate-only transform), so it is lifted above
-// its siblings with a solid surface so the rows it passes over can't show
-// through; the shadow carries the "picked up" read.
+// A workspace row mid-drag: the visible dragged card is the section's
+// DragOverlay copy, so the in-flow row becomes an invisible placeholder whose
+// reserved space IS the drop gap — the geometry stays (droppable rects are
+// measured mid-drag), only the pixels go.
 .rowDragging {
+  opacity: 0%;
+
+  // The dragged row keeps keyboard focus for the whole drag (the sensor
+  // listens on it); an invisible element's focus ring would float as a stray
+  // outline over the gap.
+  :focus-visible {
+    outline: none;
+  }
+}
+
+// A repo group mid-drag (the outer repo list). There is no overlay copy at
+// this level — the element itself slides on its axis-locked lane — so it is
+// lifted above its siblings with a solid surface so the rows it passes over
+// can't show through; the shadow carries the "picked up" read.
+.repoGroupDragging {
   // The sidebar's own surface color (.sidebar in WorkspaceSidebar.module.scss),
-  // not an elevated tint: an element clamped at the rail's edge sits away from
-  // the pointer, where an off-color surface reads as a stray band.
+  // not an elevated tint: the group is a plain container, and an off-color
+  // surface would read as a stray band.
   background: var(--gray-2);
-  // Rounds the drag surface and its shadow ring on whichever element carries it:
-  // workspace rows are already rounded, but a dragged repo group is a plain
-  // container whose sharp-cornered box would read as a different treatment.
   border-radius: var(--radius-2);
   box-shadow: var(--shadow-4);
   position: relative;
   z-index: var(--z-above);
 
   // The pointer rides the dragged element, whose hover style would otherwise
-  // replace the drag surface mid-move — and pop back at the rail's edge where
-  // the clamp separates the element from the pointer.
+  // replace the drag surface mid-move.
   &:hover {
     background: var(--gray-2);
   }
 
-  // The dragged element keeps keyboard focus for the whole drag (the sensor
-  // listens on it); the elevation is the drag indicator, so the focus ring
-  // riding along only adds noise.
+  // The elevation is the drag indicator; the focus ring riding along only
+  // adds noise.
   :focus-visible {
     outline: none;
   }
 }
 
-// The item the dragged element will land against carries a drop-side hint ("before" = it
-// lands above this item, "after" = below) while it is the drop target. There is no floating
-// placeholder — the dragged element slides in place — so draw a small accent insertion line
-// on that edge to show where a release will land.
+// The repo group the dragged group will land against carries a drop-side hint
+// ("before" = it lands above this group, "after" = below) while it is the drop
+// target. There is no floating placeholder at this level — the dragged group
+// slides in place — so draw a small accent insertion line on that edge to show
+// where a release will land. Rows need none of this: a row drag holds a real
+// gap open at the projected slot, so the lane itself shows the landing spot.
 //
-// The line must sit at the target's OUTER edge, so it's drawn on the element that spans the
-// target's full height: `.repoGroup` for a group drag (its header carries the hint, but the
-// whole group — header + rows — is what's tall, so a line on the header alone would fall
-// inside a tall group), and `.workspaceRow` for a row drag (rows are uniform height). The
-// two hints use different attribute names so `.repoGroup:has(...)` doesn't also match a row
-// drop-side nested inside it.
-.repoGroup:has([data-sidebar-group-drop-side]),
-.workspaceRow:has([data-sidebar-drop-side]) {
+// The line must sit at the target's OUTER edge, so it's drawn on `.repoGroup`,
+// the element that spans the target's full height (its header carries the
+// hint, but the whole group — header + rows — is what's tall, so a line on the
+// header alone would fall inside a tall group).
+.repoGroup:has([data-sidebar-group-drop-side]) {
   position: relative;
 }
 
-.repoGroup:has([data-sidebar-group-drop-side])::after,
-.workspaceRow:has([data-sidebar-drop-side])::after {
+.repoGroup:has([data-sidebar-group-drop-side])::after {
   background: var(--accent-9);
   border-radius: var(--radius-1);
   content: "";
@@ -254,20 +286,24 @@ $row-min-height: 28px;
   position: absolute;
 }
 
-.repoGroup:has([data-sidebar-group-drop-side="before"])::after,
-.workspaceRow:has([data-sidebar-drop-side="before"])::after {
+.repoGroup:has([data-sidebar-group-drop-side="before"])::after {
   top: -1px;
 }
 
-.repoGroup:has([data-sidebar-group-drop-side="after"])::after,
-.workspaceRow:has([data-sidebar-drop-side="after"])::after {
+.repoGroup:has([data-sidebar-group-drop-side="after"])::after {
   bottom: -1px;
 }
 
+// The status dot sits in a fixed-width column the same width as a group
+// header's chevron box, with the dot centered. This keeps every leading glyph
+// on one vertical axis and starts every row's label at the same offset, so a
+// group's chevron and a workspace's dot line up regardless of glyph size.
 .workspaceDot {
   align-items: center;
   display: flex;
   flex-shrink: 0;
+  justify-content: center;
+  width: var(--space-4);
 }
 
 .workspaceName {

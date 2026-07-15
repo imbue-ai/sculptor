@@ -1,0 +1,42 @@
+// Floating drag-preview cards for the sidebar (see sidebarDragPreviews.tsx).
+// These render inside dnd-kit's DragOverlay and clone the real row/card
+// chrome via those elements' own SCSS modules — only the lift treatment
+// (solid surface, shadow, grabbing cursor) lives here. Backgrounds are SOLID
+// steps standing in for the in-flow alpha tints: the floating card crosses
+// other rows, which an alpha surface would let show through.
+
+// A dragged workspace row, lifted.
+.rowPreview {
+  background: var(--gray-2);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-4);
+  box-sizing: border-box;
+  color: var(--gray-12);
+  cursor: grabbing;
+  transition: background-color var(--duration-fast) ease;
+}
+
+// The drop is projected inside a group: the card borrows the target group's
+// accent (stamped as data-accent-color) as the membership cue, at the same
+// half-step shade as the group box it would join. Tint only — the dragged
+// content's layout never changes mid-drag.
+.rowPreviewNested {
+  background: color-mix(in srgb, var(--accent-2), var(--accent-3));
+}
+
+// A dragged group run, lifted. The solid mix mirrors the box's resting
+// half-step alpha surface (see .groupCard). It overrides the --group-surface
+// custom property rather than `background` directly: the card's drag-time
+// state rules (hover suppression, drop fade) set their backgrounds through
+// that property at higher specificity, and the floating card is always under
+// the cursor — overriding the property keeps every one of those states
+// resolving to this solid surface. Doubled selector to beat .groupCard's own
+// property declaration regardless of CSS-module emit order.
+.groupPreview.groupPreview {
+  --group-surface: color-mix(in srgb, var(--accent-2), var(--accent-3));
+
+  background: var(--group-surface);
+  box-shadow: var(--shadow-4);
+  box-sizing: border-box;
+  cursor: grabbing;
+}

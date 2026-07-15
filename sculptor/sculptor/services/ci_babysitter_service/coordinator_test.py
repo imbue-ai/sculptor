@@ -127,6 +127,15 @@ class _StubTransaction(DataModelTransaction):
     def get_all_workspaces(self) -> Any:
         return _stub()
 
+    def get_workspace_group(self, workspace_group_id: Any) -> Any:
+        return _stub(workspace_group_id)
+
+    def get_workspace_groups(self, project_id: Any = None, organization_reference: Any = None) -> Any:
+        return _stub(project_id, organization_reference)
+
+    def upsert_workspace_group(self, workspace_group: Any) -> Any:
+        return _stub(workspace_group)
+
 
 class _StubDataModelService(DataModelService):
     @contextmanager

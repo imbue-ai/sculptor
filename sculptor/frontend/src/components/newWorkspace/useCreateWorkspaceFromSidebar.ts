@@ -25,8 +25,12 @@ type UseCreateWorkspaceFromSidebarReturn = {
    * branch is fetched and the last mode/agent type (or the defaults) are
    * reused. Falls back to opening the dialog pre-selecting the repo when the
    * branch can't be resolved or the create fails.
+   *
+   * Resolves to the created workspace's id, or null when the flow deferred to
+   * the dialog (whose eventual outcome this call can't observe) — callers
+   * chaining follow-up writes onto the new workspace only act on a non-null id.
    */
-  createFromSidebar: (projectId: string) => Promise<void>;
+  createFromSidebar: (projectId: string) => Promise<string | null>;
 };
 
 /**
@@ -49,7 +53,7 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
 
   // Functions and callbacks
   const createFromSidebar = useCallback(
-    async (projectId: string): Promise<void> => {
+    async (projectId: string): Promise<string | null> => {
       // Last settings only transfer wholesale when they were made for THIS
       // repo — a source branch remembered from another repo may not exist here.
       const sameRepoSettings = lastSettings?.projectId === projectId ? lastSettings : null;
@@ -90,7 +94,7 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
       const doesNeedBranchName = mode !== WorkspaceInitializationStrategy.IN_PLACE;
       if (!sourceBranch || (doesNeedBranchName && !branchName)) {
         setModalState({ open: true, presetProjectId: projectId });
-        return;
+        return null;
       }
 
       const createResult = await createWorkspace({
@@ -116,7 +120,9 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
           action: null,
         });
         setModalState({ open: true, presetProjectId: projectId });
+        return null;
       }
+      return createResult.workspaceId;
     },
     [
       lastSettings,

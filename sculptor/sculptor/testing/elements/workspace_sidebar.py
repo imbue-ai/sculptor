@@ -134,11 +134,19 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
     def reorder_via_keyboard_drag(self, item: Locator, target: Locator, direction: str) -> None:
         """Drag a workspace row or repo-group header to another slot via the KeyboardSensor.
 
-        ``item`` and ``target`` are drag activators of the same sortable list (two
-        workspace rows of one repo group, or two repo-group headers); ``direction``
-        is "up" or "down". Mirrors section_helpers' panel drag: pick the item up
-        (``pickup_via_keyboard``), one arrow per slot until ``target``'s slot
-        reports ``data-sidebar-drop-target``, Space to drop.
+        ``item`` and ``target`` are drag activators of the same drag context (two
+        rows of one repo section's flat lane, or two repo-group headers);
+        ``direction`` is "up" or "down". Picks the item up
+        (``pickup_via_keyboard``), presses one arrow per slot until the drag has
+        arrived at ``target``'s slot, then Space to drop.
+
+        Arrival shows up through one of two signals, matching the sidebar's two
+        drag surfaces: a repo-list press previews via transforms and lights the
+        targeted header with ``data-sidebar-drop-target``, while a flat-lane
+        press re-renders the lane with the dragged row's placeholder AT the
+        projected slot — nothing lights (the lane registers no droppables, so
+        there is no over-target to mark); the row's geometry passing the target
+        is the signal instead.
 
         Pass stably-identified locators (by-name helpers), not positional
         ``nth(...)`` ones: positional locators re-resolve against the post-drop
@@ -147,33 +155,33 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         self.pickup_via_keyboard(item)
 
         arrow = {"up": "ArrowUp", "down": "ArrowDown"}[direction]
-        # Each arrow press is confirmed applied before the next fires: every press
-        # moves the drag exactly one slot, so a press fired while a slow re-render
-        # is still applying the previous one overshoots the target — and in a
-        # sortable list the target slot then never lights up. Right after pickup no
-        # slot is lit (the drag sits over its own slot), so the first press is
-        # confirmed by any slot lighting up; later presses by the lit slot's
-        # identity changing (rows stamp data-workspace-id, group headers
-        # data-project-id). A drag that exhausts its presses raises rather than
-        # dropping blind, so the failure surfaces here and not as a downstream
-        # order-assertion mismatch.
-        lit_slot = self._page.locator('[data-sidebar-drop-target="true"]')
+
+        # Each arrow press is confirmed applied before the next fires: every
+        # press moves the drag exactly one slot, so a press fired while a slow
+        # re-render is still applying the previous one overshoots the target. A
+        # drag that exhausts its presses raises rather than dropping blind, so
+        # the failure surfaces here and not as a downstream order-assertion
+        # mismatch.
         for _press in range(_REORDER_MAX_ARROW_PRESSES):
-            previous_slot_id = None
-            if lit_slot.count() == 1:
-                previous_slot_id = lit_slot.get_attribute("data-workspace-id") or lit_slot.get_attribute(
-                    "data-project-id"
-                )
+            before = self._drag_snapshot(item)
             self._page.keyboard.press(arrow)
-            if previous_slot_id is None:
-                expect(lit_slot).to_have_count(1)
-            else:
-                moved_slot = self._page.locator(
-                    f'[data-sidebar-drop-target="true"]'
-                    f':not([data-workspace-id="{previous_slot_id}"]):not([data-project-id="{previous_slot_id}"])'
-                )
-                expect(moved_slot).to_have_count(1)
-            if target.get_attribute("data-sidebar-drop-target") == "true":
+            for _wait in range(40):
+                if self._drag_snapshot(item) != before:
+                    break
+                self._page.wait_for_timeout(50)
+            # The arrival check is retried over a settle window: a re-slot
+            # moves the dragged placeholder instantly, but its displaced
+            # neighbor FLIP-animates from its old position — an instant
+            # geometry read right after press-confirmation can catch the
+            # neighbor mid-flight and wrongly conclude the target wasn't
+            # reached, firing an overshoot press.
+            is_reached = False
+            for _settle in range(8):
+                if self._has_drag_reached_target(item, target, direction):
+                    is_reached = True
+                    break
+                self._page.wait_for_timeout(50)
+            if is_reached:
                 break
         else:
             raise AssertionError(
@@ -184,6 +192,178 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         # The drop clears the drag flag once the reorder commits; asserting it here
         # keeps callers from racing their order assertions against the commit.
         expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
+
+    def _drag_snapshot(self, item: Locator) -> float | None:
+        """The dragged row's own position, for press confirmation.
+
+        Geometry ONLY, deliberately: in both drag contexts an applied press
+        moves the dragged element (the repo list transforms it toward the
+        targeted slot; the flat lane re-renders its placeholder at the
+        projected slot), whereas the lit drop-target slot can flash BEFORE the
+        lane re-render lands — counting it would confirm a press whose layout
+        effect hasn't applied yet, and the arrival check would then read stale
+        geometry and overshoot with an extra press.
+        """
+        box = item.bounding_box()
+        return None if box is None else round(box["y"])
+
+    def _has_drag_reached_target(self, item: Locator, target: Locator, direction: str) -> bool:
+        """Whether the parked drag has arrived at ``target``'s slot (either preview regime)."""
+        if target.get_attribute("data-sidebar-drop-target") == "true":
+            return True
+        item_box = item.bounding_box()
+        target_box = target.bounding_box()
+        if item_box is None or target_box is None:
+            return False
+        return item_box["y"] > target_box["y"] if direction == "down" else item_box["y"] < target_box["y"]
+
+    def drag_workspace_into_group_via_keyboard(self, item: Locator, group_card: Locator, direction: str) -> None:
+        """Drag a workspace row from outside a group into that group via the
+        KeyboardSensor.
+
+        The same drive as ``reorder_via_keyboard_drag`` (pickup, one arrow per
+        slot, Space to drop), but the stop condition is the group's membership
+        affordance: ``group_card`` stamps ``data-drop-active`` while the active
+        drag's projected drop would land inside the group, and it stays lit for
+        as long as the projection holds — so watching the card is agnostic to
+        which slot inside the run the arrow reached.
+        """
+        self.pickup_via_keyboard(item)
+
+        arrow = {"up": "ArrowUp", "down": "ArrowDown"}[direction]
+        # Same press-confirmation discipline as reorder_via_keyboard_drag: a
+        # press fired while a slow re-render is still applying the previous one
+        # would overshoot — stepping straight through a small group's run
+        # without its affordance ever being observed lit.
+        for _press in range(_REORDER_MAX_ARROW_PRESSES):
+            before = self._drag_snapshot(item)
+            self._page.keyboard.press(arrow)
+            for _wait in range(40):
+                if self._drag_snapshot(item) != before:
+                    break
+                self._page.wait_for_timeout(50)
+            if group_card.get_attribute("data-drop-active") == "true":
+                break
+        else:
+            raise AssertionError(
+                f"keyboard drag never lit the group card's drop affordance within {_REORDER_MAX_ARROW_PRESSES} presses"
+            )
+        self._page.keyboard.press("Space")  # drop
+
+        # The drop clears the drag flag; asserting it here keeps callers from
+        # racing their membership assertions against the drop commit.
+        expect(item).not_to_have_attribute("data-sidebar-dragging", "true")
+
+    def _pointer_activate_drag(self, item: Locator) -> tuple[float, float]:
+        """Press on ``item``'s center and run the activation nudge, returning the
+        pointer's resting (x, y) afterward.
+
+        The nudge (far enough to cross the sensor's distance constraint, small
+        enough to stay on the grabbed element) is load-bearing: activating the
+        drag reflows the lane — a picked-up group's members collapse into the
+        drag — so anything measured pre-activation aims at a stale position.
+        """
+        box = item.bounding_box()
+        if box is None:
+            raise AssertionError("pointer drag item is not visible")
+        start_x = box["x"] + box["width"] / 2
+        start_y = box["y"] + box["height"] / 2
+        self._page.mouse.move(start_x, start_y)
+        self._page.mouse.down()
+        nudged_y = start_y + 12
+        self._page.mouse.move(start_x, nudged_y, steps=4)
+        self._page.wait_for_timeout(250)
+        return start_x, nudged_y
+
+    def _pointer_settle(self, x: float, y: float) -> None:
+        """Wiggle one pixel and pause so a position the pointer already sits at
+        still emits a move event.
+
+        The lane's pointer-geometric decisions ride the move-event stream, so a
+        target that lands exactly where the pointer rests would otherwise emit
+        nothing — the wiggle forces a fresh evaluation against the settled
+        layout, the way a real hand is never perfectly still. The two moves are
+        separated by a beat: back-to-back moves that sum to zero within one
+        frame get coalesced into a single same-position pointer event, which
+        can silently defeat the wiggle on a loaded machine.
+        """
+        self._page.mouse.move(x, y + 1)
+        self._page.wait_for_timeout(60)
+        self._page.mouse.move(x, y)
+        self._page.wait_for_timeout(250)
+
+    def drag_via_pointer(self, item: Locator, waypoints: list[Locator], y_offsets: list[float] | None = None) -> None:
+        """Drag ``item`` with the real PointerSensor: press on its center, move
+        through each waypoint's center (parking + settling at each), release.
+
+        Each waypoint re-resolves against the LIVE lane right before its move —
+        the drag's own projections re-slot rows mid-flight, so a position
+        captured up front would aim at where a row used to be. The pointer
+        parks briefly at every waypoint: the sidebar's flat lane previews by
+        re-rendering real layout under a measuring drag context, so a parked
+        pointer is exactly where a projection feedback loop would spin, and
+        pausing there gives one time to surface as a crash instead of being
+        skated over.
+
+        ``y_offsets`` (one per waypoint) nudges each park point vertically off
+        the waypoint's center, positive = down. The lane's geometric rules key
+        on which half of a row or box the pointer rests in, so a gesture
+        aiming for "the bottom half of that row" cannot park dead on the
+        midpoint — that is the ambiguous point the rules split on.
+        """
+        offsets = [0.0] * len(waypoints) if y_offsets is None else y_offsets
+        if len(offsets) != len(waypoints):
+            raise AssertionError("y_offsets must align one-to-one with waypoints")
+        start_x, _ = self._pointer_activate_drag(item)
+        for waypoint, y_offset in zip(waypoints, offsets):
+            waypoint_box = waypoint.bounding_box()
+            if waypoint_box is None:
+                raise AssertionError("pointer drag waypoint is not visible")
+            target_x = waypoint_box["x"] + waypoint_box["width"] / 2
+            target_y = waypoint_box["y"] + waypoint_box["height"] / 2 + y_offset
+            self._page.mouse.move(target_x, target_y, steps=8)
+            self._page.wait_for_timeout(250)
+            self._pointer_settle(target_x, target_y)
+        self._page.mouse.up()
+
+        # The drop clears the drag flag once the reorder commits; asserting
+        # rail-wide keeps callers from racing their order assertions against
+        # it. (Not on `item` itself: a row dropped into a collapsed group
+        # unmounts, and a locator that resolves nothing can't pass an
+        # attribute check.)
+        expect(self._page.locator('[data-sidebar-dragging="true"]')).to_have_count(0)
+
+    def flick_group_below_all_via_pointer(self, item: Locator) -> None:
+        """Flick a group header straight down PAST every group box in ONE jump
+        and drop in the empty space beneath the lane.
+
+        Unlike ``drag_via_pointer``, this never parks the pointer inside a box:
+        the move from the header to below the lane is a single step, so no
+        intermediate pointer position lands in a target box's interior. That is
+        the fast hand that never dwells over the target — and the case that
+        silently no-ops unless the group's drop side resolves for a pointer
+        below every box, not just one inside a box's vertical extent.
+        """
+        cards = self.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_CARD)
+        # The lowest card's bottom edge, measured BEFORE the drag lifts
+        # anything: on pickup the boxes only shift up (the dragged group's slot
+        # collapses), so this stays safely below every box for the whole drag.
+        lowest_bottom = 0.0
+        for index in range(cards.count()):
+            card_box = cards.nth(index).bounding_box()
+            if card_box is not None:
+                lowest_bottom = max(lowest_bottom, card_box["y"] + card_box["height"])
+
+        start_x, _ = self._pointer_activate_drag(item)
+        drop_y = lowest_bottom + 30
+        # Single step (no intermediate moves) so the pointer never samples a
+        # box interior on the way down — the whole point of the gesture.
+        self._page.mouse.move(start_x, drop_y, steps=1)
+        self._page.wait_for_timeout(250)
+        self._pointer_settle(start_x, drop_y)
+        self._page.mouse.up()
+
+        expect(self._page.locator('[data-sidebar-dragging="true"]')).to_have_count(0)
 
     def reorder_via_pointer_drag(self, item: Locator, target: Locator, *, overshoot: bool = False) -> None:
         """Drag one drag activator past another with a real mouse drag (PointerSensor).
@@ -370,6 +550,131 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         expect(delete_icon).to_be_visible()
         delete_icon.click()
         self.confirm_delete()
+
+    # -- Workspace-group cards --
+    #
+    # A workspace group (the experimental workspace-groups feature) renders
+    # Dia-style inside its repo section: a header row (chevron + color swatch +
+    # name + hover "⋯" menu trigger) with the member workspace rows — ordinary
+    # ``SIDEBAR_WORKSPACE_ROW`` elements — indented beneath it. The wrapper
+    # "card" element paints the hover/drop container surface and stamps the
+    # group's identity and state as data attributes (``data-group-id``,
+    # ``data-accent-color``, ``data-collapsed``, ``data-drop-active``), so
+    # tests assert state through attributes rather than styles.
+
+    def get_group_cards(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_CARD)
+
+    def get_group_card_by_name(self, name: str) -> Locator:
+        """Get a group card by its header name.
+
+        Filters on the header's text (not the whole card's) so a member
+        workspace whose name contains ``name`` can never match the card.
+        """
+        header = self._page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_HEADER).filter(has_text=name)
+        return self.get_group_cards().filter(has=header)
+
+    def get_group_header(self, group_card: Locator) -> Locator:
+        """The card's header button: the drag activator and collapse toggle."""
+        return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_HEADER)
+
+    def set_group_collapsed_via_chevron(self, group_card: Locator, collapsed: bool) -> None:
+        """Click the chevron until the card actually reaches the wanted state.
+
+        The click is verified and retried: one landing in the same tick as a
+        drop's re-render can be swallowed, and a caller asserting against a
+        card that silently kept its old state reads as a product failure.
+        """
+        for attempt in range(3):
+            self.get_group_chevron(group_card).click()
+            try:
+                if collapsed:
+                    expect(group_card).to_have_attribute("data-collapsed", "true", timeout=3_000)
+                else:
+                    expect(group_card).not_to_have_attribute("data-collapsed", "true", timeout=3_000)
+                return
+            except AssertionError:
+                if attempt == 2:
+                    raise
+
+    def get_group_chevron(self, group_card: Locator) -> Locator:
+        """The collapse chevron; it sits inside the header button, so clicking it toggles collapse."""
+        return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_CHEVRON)
+
+    def get_group_member_rows(self, group_card: Locator) -> Locator:
+        """The workspace rows rendered inside the card (its members; empty while collapsed)."""
+        return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
+
+    def get_group_menu_trigger(self, group_card: Locator) -> Locator:
+        """The hover-revealed "⋯" trigger on the group header."""
+        return group_card.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_GROUP_MENU_TRIGGER)
+
+    def open_group_menu(self, group_card: Locator) -> None:
+        """Hover the group header and click its "⋯" trigger to open the group menu."""
+        self.get_group_header(group_card).hover()
+        trigger = self.get_group_menu_trigger(group_card)
+        expect(trigger).to_be_visible()
+        trigger.click()
+
+    # -- Group menu items (portaled to the page, like the row context menu) --
+
+    def get_group_menu_rename(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_GROUP_MENU_RENAME)
+
+    def get_group_menu_collapse(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_GROUP_MENU_COLLAPSE)
+
+    def get_group_menu_ungroup(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_GROUP_MENU_UNGROUP)
+
+    def get_group_menu_swatch(self, color: str) -> Locator:
+        # The swatch row renders one item per palette color, each stamped with
+        # ``data-color``; this raw CSS-attribute scope stays inside the POM so
+        # the integration-test css-locator ratchet is honoured at call sites.
+        return self._page.locator(f'[data-testid="{ElementIDs.WORKSPACE_GROUP_MENU_SWATCH}"][data-color="{color}"]')
+
+    # -- Workspace-row grouping menu items --
+    #
+    # The workspace row's context/dropdown menu gains a grouping section while
+    # the workspace-groups flag is on: "New group from workspace", the "Add to
+    # group" submenu (one entry per existing group plus "New group…"), and
+    # "Remove from group" on member rows.
+
+    def get_workspace_menu_new_group(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_MENU_NEW_GROUP)
+
+    def get_workspace_menu_add_to_group_trigger(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_MENU_ADD_TO_GROUP)
+
+    def get_workspace_menu_add_to_group_items(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_MENU_ADD_TO_GROUP_ITEM)
+
+    def get_workspace_menu_remove_from_group(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_MENU_REMOVE_FROM_GROUP)
+
+    def create_group_from_workspace(self, workspace_row: Locator) -> None:
+        """Right-click a row and pick "New group from workspace"."""
+        self.open_row_context_menu(workspace_row)
+        new_group_item = self.get_workspace_menu_new_group()
+        expect(new_group_item).to_be_visible()
+        new_group_item.click()
+
+    def add_workspace_to_group_via_menu(self, workspace_row: Locator, group_name: str) -> None:
+        """Right-click a row, hover "Add to group", and pick the named group from the submenu."""
+        self.open_row_context_menu(workspace_row)
+        trigger = self.get_workspace_menu_add_to_group_trigger()
+        expect(trigger).to_be_visible()
+        trigger.hover()
+        group_item = self.get_workspace_menu_add_to_group_items().filter(has_text=group_name)
+        expect(group_item).to_be_visible()
+        group_item.click()
+
+    def remove_workspace_from_group_via_menu(self, workspace_row: Locator) -> None:
+        """Right-click a member row and pick "Remove from group"."""
+        self.open_row_context_menu(workspace_row)
+        remove_item = self.get_workspace_menu_remove_from_group()
+        expect(remove_item).to_be_visible()
+        remove_item.click()
 
     # -- Bottom links + chrome --
 

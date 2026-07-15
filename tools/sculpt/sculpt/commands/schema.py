@@ -20,6 +20,13 @@ from sculpt.commands.data_types import AgentSendOutput
 from sculpt.commands.data_types import AgentShowOutput
 from sculpt.commands.data_types import AgentStatusOutput
 from sculpt.commands.data_types import ErrorOutput
+from sculpt.commands.data_types import GroupAddOutput
+from sculpt.commands.data_types import GroupCreateOutput
+from sculpt.commands.data_types import GroupListItem
+from sculpt.commands.data_types import GroupRemoveOutput
+from sculpt.commands.data_types import GroupRenameOutput
+from sculpt.commands.data_types import GroupShowOutput
+from sculpt.commands.data_types import GroupUngroupOutput
 from sculpt.commands.data_types import RepoItem
 from sculpt.commands.data_types import RunOutput
 from sculpt.commands.data_types import WorkspaceCreateOutput
@@ -116,6 +123,34 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
     "agent.interrupt": _object_schema(
         AgentInterruptOutput,
         "Output of `sculpt agent interrupt --json`",
+    ),
+    "group.create": _object_schema(
+        GroupCreateOutput,
+        "Output of `sculpt group create --json`",
+    ),
+    "group.list": _array_schema(
+        GroupListItem,
+        "Output of `sculpt group list --json`",
+    ),
+    "group.show": _object_schema(
+        GroupShowOutput,
+        "Output of `sculpt group show --json`",
+    ),
+    "group.rename": _object_schema(
+        GroupRenameOutput,
+        "Output of `sculpt group rename --json`",
+    ),
+    "group.add": _object_schema(
+        GroupAddOutput,
+        "Output of `sculpt group add --json`",
+    ),
+    "group.remove": _object_schema(
+        GroupRemoveOutput,
+        "Output of `sculpt group remove --json`",
+    ),
+    "group.ungroup": _object_schema(
+        GroupUngroupOutput,
+        "Output of `sculpt group ungroup --json`",
     ),
     "run": _object_schema(
         RunOutput,
