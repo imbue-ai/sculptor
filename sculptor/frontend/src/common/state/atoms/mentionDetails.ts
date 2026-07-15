@@ -5,7 +5,7 @@ import { atomFamily } from "jotai/utils";
 import type { CodingAgentTaskView, Project, TaskStatus, Workspace } from "../../../api";
 import { projectAtomFamily } from "./projects";
 import { taskAtomFamily, tasksArrayAtom, taskStatusAtomFamily } from "./tasks";
-import { workspaceAtomFamily, workspacesArrayAtom } from "./workspaces";
+import { asLiveWorkspace, workspaceAtomFamily, workspacesArrayAtom } from "./workspaces";
 
 // Maximum agent / workspace titles surfaced by the detail pane. Keeps the
 // hover-card compact and bounds the work done on every arrow-key tick
@@ -47,7 +47,7 @@ export const agentDetailAtomFamily = atomFamily<string, Atom<AgentDetail | null>
       // Task may not yet be associated with a workspace (Phase 1 implicit
       // 1:1 creation hasn't finished, or the link was cleared). Fall back
       // to null so the detail pane can skip the workspace-description row.
-      workspace: task.workspaceId === null ? null : get(workspaceAtomFamily(task.workspaceId)),
+      workspace: task.workspaceId === null ? null : asLiveWorkspace(get(workspaceAtomFamily(task.workspaceId))),
     };
   }),
 );
@@ -60,7 +60,7 @@ export const agentDetailAtomFamily = atomFamily<string, Atom<AgentDetail | null>
  */
 export const workspaceDetailAtomFamily = atomFamily<string, Atom<WorkspaceDetail | null>>((workspaceId) =>
   atom<WorkspaceDetail | null>((get) => {
-    const workspace = get(workspaceAtomFamily(workspaceId));
+    const workspace = asLiveWorkspace(get(workspaceAtomFamily(workspaceId)));
     if (workspace === null) return null;
     const allTasks = get(tasksArrayAtom) ?? [];
     const agents = allTasks.filter((t) => t.workspaceId === workspaceId);

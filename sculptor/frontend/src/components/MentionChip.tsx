@@ -10,7 +10,7 @@ import { ElementIds } from "~/api";
 import { useImbueNavigate } from "~/common/NavigateUtils";
 import { projectAtomFamily } from "~/common/state/atoms/projects";
 import { taskAtomFamily } from "~/common/state/atoms/tasks";
-import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
+import { asLiveWorkspace, workspaceAtomFamily } from "~/common/state/atoms/workspaces";
 import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms";
 import { revealFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms";
 import { getFileIcon } from "~/pages/workspace/panels/fileBrowser/fileIcons";
@@ -285,7 +285,7 @@ const EntityMentionChip = ({
   // change. The unused keys (e.g. projectAtomFamily for an agent chip) are
   // gated to "" so Jotai's atomFamily doesn't create new instances per id.
   const project = useAtomValue(projectAtomFamily(entityType === "repository" ? entityId : ""));
-  const workspace = useAtomValue(workspaceAtomFamily(entityType === "workspace" ? entityId : ""));
+  const workspace = asLiveWorkspace(useAtomValue(workspaceAtomFamily(entityType === "workspace" ? entityId : "")));
   const task = useAtomValue(taskAtomFamily(entityType === "agent" ? entityId : ""));
 
   const isDeleted =

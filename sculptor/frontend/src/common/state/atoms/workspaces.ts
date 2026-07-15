@@ -16,8 +16,34 @@ import { viewedAgentIdAtom } from "./viewedAgent.ts";
 import type { SetupStatusSnapshot } from "./workspaceSetupStatus";
 import { workspaceSetupStatusAtomFamily } from "./workspaceSetupStatus";
 
-export const workspaceAtomFamily = atomFamily<string, PrimitiveAtom<Workspace | null>>(() =>
-  atom<Workspace | null>(null),
+/**
+ * Sentinel marking a workspace the store knows is being deleted (optimistic
+ * apply) or confirmed deleted (a stream frame carrying `isDeleted`). Kept
+ * distinct from `null` — the family's initial value, meaning "never delivered
+ * to this session" — so views can render a real "Deleting…" state instead of
+ * conflating it with "unknown". The distinction is load-bearing for pulled
+ * lists: a stale Home row whose workspace was confirmed deleted must keep
+ * classifying as deleting until its refetch lands, even after the id leaves
+ * `workspaceIdsAtom`, or the row flashes back to normal for a paint.
+ */
+export const TOMBSTONE: unique symbol = Symbol("deleting-workspace-tombstone");
+export type Tombstone = typeof TOMBSTONE;
+
+/** What a workspace family atom can hold: a live model, a deleting tombstone, or never-delivered. */
+export type WorkspaceEntry = Workspace | Tombstone | null;
+
+/**
+ * Narrow a family entry to a live workspace model; a tombstone reads as null,
+ * same as never-delivered. The one mapping consumers use so their
+ * `Workspace | null` contracts survive the tombstone's existence.
+ */
+export const asLiveWorkspace = (entry: WorkspaceEntry): Workspace | null => (entry === TOMBSTONE ? null : entry);
+
+export const workspaceAtomFamily = atomFamily<string, PrimitiveAtom<WorkspaceEntry>>(() => atom<WorkspaceEntry>(null));
+
+/** Whether this workspace is mid-delete (or confirmed deleted) — drives the "Deleting…" row state. */
+export const isWorkspaceDeletingAtomFamily = atomFamily<string, Atom<boolean>>((workspaceId) =>
+  atom((get) => get(workspaceAtomFamily(workspaceId)) === TOMBSTONE),
 );
 
 export const workspaceIdsAtom = atom<ReadonlyArray<string> | undefined>(undefined);
@@ -47,47 +73,13 @@ const bumpWorkspaceSyncVersion = (workspaceId: string): void => {
   workspaceSyncVersionByWorkspaceId.set(workspaceId, getWorkspaceSyncVersion(workspaceId) + 1);
 };
 
-const areSetsEqual = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => {
-  if (a.size !== b.size) return false;
-  for (const value of a) {
-    if (!b.has(value)) return false;
-  }
-  return true;
-};
-
-const tombstonedWorkspaceIdsUnstableAtom = atom<ReadonlySet<string>>((get) => {
-  const ids = get(workspaceIdsAtom);
-  const tombstoned = new Set<string>();
-  for (const id of ids ?? []) {
-    if (get(workspaceAtomFamily(id)) === null) {
-      tombstoned.add(id);
-    }
-  }
-  return tombstoned;
-});
-
-/**
- * Ids the canonical store knows but currently holds as `null` tombstones — an
- * optimistic delete in flight. Components with their own workspace lists (the
- * Home recent list, which is pulled over REST) hide these rows. Because the
- * set is derived from the one written store, a rollback or an authoritative
- * frame un-hides the row everywhere at once. Equality-guarded so the frequent
- * per-frame family writes don't re-render subscribers unless membership
- * actually changes.
- */
-export const tombstonedWorkspaceIdsAtom = selectAtom(
-  tombstonedWorkspaceIdsUnstableAtom,
-  (tombstoned) => tombstoned,
-  areSetsEqual,
-);
-
 export const workspacesArrayAtom = atom<ReadonlyArray<Workspace> | undefined>((get) => {
   const workspaceIds = get(workspaceIdsAtom);
   if (workspaceIds === undefined) {
     return undefined;
   }
   return workspaceIds
-    .map((id) => get(workspaceAtomFamily(id)))
+    .map((id) => asLiveWorkspace(get(workspaceAtomFamily(id))))
     .filter((workspace): workspace is Workspace => workspace !== null && !workspace.isDeleted);
 });
 
@@ -534,9 +526,11 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     bumpWorkspaceSyncVersion(incoming.objectId);
 
     if (incoming.isDeleted) {
-      // Mirror task deletion pattern: remove from IDs and null out atom
+      // Mirror task deletion pattern: remove from IDs and tombstone the atom.
+      // TOMBSTONE (not null) so consumers holding a stale reference — a pulled
+      // Home row awaiting its refetch — still classify it as deleting.
       currentWorkspaceIds.delete(incoming.objectId);
-      set(workspaceAtomFamily(incoming.objectId), null);
+      set(workspaceAtomFamily(incoming.objectId), TOMBSTONE);
       nextTabsState = applyClose(nextTabsState, incoming.objectId);
       return;
     }
@@ -559,7 +553,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     // (e.g. future PR status) live outside the `git` subtree and are
     // unaffected. We compare against the prior atom value here rather than
     // tracking the previous snapshot externally.
-    const previous = get(workspaceAtomFamily(workspace.objectId));
+    const previous = asLiveWorkspace(get(workspaceAtomFamily(workspace.objectId)));
     if (previous !== null && previous.diffUpdatedAt !== workspace.diffUpdatedAt) {
       invalidateWorkspaceGitQueries(workspace.objectId);
     }
@@ -568,7 +562,8 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     // Workspace objects, and an unconditional write would re-render each
     // workspace's subscribers (sidebar row, header, peek) per frame. Deep
     // equality rather than a hand-picked field list, so a new backend field
-    // can never be silently dropped from the comparison.
+    // can never be silently dropped from the comparison. A tombstoned entry
+    // reads as null here, so an authoritative live frame always overwrites it.
     if (previous === null || !isEqual(previous, workspace)) {
       set(workspaceAtomFamily(workspace.objectId), workspace);
     }
@@ -661,7 +656,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
         // No saved tab order (first-time or cleared localStorage) — initialize
         // tab order from all open workspaces, preserving any existing pseudo-tabs.
         const openIds = Array.from(currentWorkspaceIds).filter((id) => {
-          const ws = get(workspaceAtomFamily(id));
+          const ws = asLiveWorkspace(get(workspaceAtomFamily(id)));
           return ws !== null && !ws.isDeleted && ws.isOpen;
         });
         nextTabsState = {
@@ -680,7 +675,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
 });
 
 export type WorkspaceDeleteContext = {
-  /** The pre-delete workspace, or null when the store never had it (nothing was applied). */
+  /** The pre-delete workspace, or null when the store had no live model (never delivered, or already tombstoned) and nothing was applied. */
   snapshot: Workspace | null;
   /** WS sync version at apply time; rollback yields if a frame bumped it since. */
   syncVersion: number;
@@ -695,12 +690,14 @@ export type WorkspaceDeleteContext = {
  * Home row the stream never delivered must not be silently undeletable).
  */
 export const optimisticDeleteWorkspaceAtom = atom(null, (get, set, workspaceId: string): WorkspaceDeleteContext => {
-  const snapshot = get(workspaceAtomFamily(workspaceId));
+  // A tombstone (delete already in flight) has no live model to snapshot —
+  // same as never-delivered: apply nothing, let the request proceed.
+  const snapshot = asLiveWorkspace(get(workspaceAtomFamily(workspaceId)));
   const context: WorkspaceDeleteContext = { snapshot, syncVersion: getWorkspaceSyncVersion(workspaceId) };
   if (snapshot === null) {
     return context;
   }
-  set(workspaceAtomFamily(workspaceId), null);
+  set(workspaceAtomFamily(workspaceId), TOMBSTONE);
   // Keep workspaceId in workspaceIdsAtom so that a WebSocket snapshot
   // arriving before the server confirms deletion doesn't treat it as
   // a "new" workspace and auto-open it as a tab. workspacesArrayAtom
@@ -799,7 +796,7 @@ export const convertHomeTabToWorkspaceAtom = atom(null, (get, set, workspaceId: 
   }
 
   // Ensure the workspace is open on the backend (it may have been closed).
-  const workspace = get(workspaceAtomFamily(workspaceId));
+  const workspace = asLiveWorkspace(get(workspaceAtomFamily(workspaceId)));
   if (workspace !== null && workspace.isOpen === false) {
     // Drop any prior close intent and record the open intent so the tab
     // appears immediately and stays visible through any stale snapshot.

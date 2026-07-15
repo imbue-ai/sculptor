@@ -149,3 +149,20 @@
 }
 
 /* stylelint-enable no-descending-specificity */
+
+// A delete in flight: the row stays visible but reads as pending — dimmed,
+// default cursor, and its interactive affordances replaced by the label.
+.deleting {
+  cursor: default;
+  opacity: 55%;
+}
+
+.deletingLabel {
+  align-items: center;
+  color: var(--gray-a11);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  white-space: nowrap;
+}

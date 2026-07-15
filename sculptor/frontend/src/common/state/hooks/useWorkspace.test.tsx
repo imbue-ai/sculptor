@@ -7,7 +7,13 @@ import { describe, expect, it } from "vitest";
 
 import type { Workspace } from "../../../api";
 import { WorkspaceInitializationStrategy } from "../../../api";
-import { updateWorkspacesAtom, workspaceAtomFamily, workspaceIdsAtom, workspacesArrayAtom } from "../atoms/workspaces";
+import {
+  TOMBSTONE,
+  updateWorkspacesAtom,
+  workspaceAtomFamily,
+  workspaceIdsAtom,
+  workspacesArrayAtom,
+} from "../atoms/workspaces";
 import { useIsWorkspaceDeleted, useWorkspace } from "./useWorkspace";
 
 const createMockWorkspace = (overrides: Partial<Workspace> = {}): Workspace => ({
@@ -214,5 +220,19 @@ describe("useIsWorkspaceDeleted", () => {
       ]),
     });
     expect(result.current).toBe(false);
+  });
+
+  it("treats a deleting (tombstoned) workspace as deleted, and useWorkspace maps it to null", () => {
+    const { result } = renderHook(
+      () => ({ deleted: useIsWorkspaceDeleted("ws_tomb"), workspace: useWorkspace("ws_tomb") }),
+      {
+        wrapper: createWrapper([
+          [workspaceIdsAtom, ["ws_tomb"]],
+          [workspaceAtomFamily("ws_tomb"), TOMBSTONE],
+        ]),
+      },
+    );
+    expect(result.current.workspace).toBeNull();
+    expect(result.current.deleted).toBe(true);
   });
 });

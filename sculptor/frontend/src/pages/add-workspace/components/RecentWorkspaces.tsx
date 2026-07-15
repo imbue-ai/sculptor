@@ -1,13 +1,13 @@
 import { ScrollArea, Spinner } from "@radix-ui/themes";
 import { useQuery } from "@tanstack/react-query";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useStore } from "jotai";
 import type { ReactElement, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { RecentWorkspaceResponse } from "../../../api";
 import { listRecentWorkspaces } from "../../../api";
 import { queryClient, recentWorkspacesQueryKey } from "../../../common/queryClient.ts";
-import { tombstonedWorkspaceIdsAtom, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
+import { isWorkspaceDeletingAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
 import { EmptyState } from "./EmptyState.tsx";
@@ -39,10 +39,11 @@ export const RecentWorkspaces = ({
 
   const areaRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const store = useStore();
 
   const { execute: executeDelete } = useOptimisticWorkspaceDelete({
-    // Deleting from Home stays on Home: the row hides via the tombstone
-    // derivation below, and a failed delete un-hides it with the store.
+    // Deleting from Home stays on Home: the row renders as "Deleting…" until
+    // the refreshed list drops it, and a failed delete un-dims it in place.
     onNavigateAfterDelete: useCallback((): void => {}, []),
   });
 
@@ -87,14 +88,11 @@ export const RecentWorkspaces = ({
     void queryClient.invalidateQueries({ queryKey: recentWorkspacesQueryKey() });
   }, [liveMembershipKey]);
 
-  // Hide rows the canonical store holds as tombstones (optimistic delete in
-  // flight). Derived from the one written store, so a rollback or an
-  // authoritative frame un-hides the row here and in the sidebar at once.
-  const tombstonedIds = useAtomValue(tombstonedWorkspaceIdsAtom);
-  const enrichedWorkspaces = useMemo(
-    () => (workspaces ?? []).filter((ws) => !tombstonedIds.has(ws.objectId)),
-    [workspaces, tombstonedIds],
-  );
+  // Rows the canonical store holds as tombstones stay in the list and render
+  // as "Deleting…" (see WorkspaceRow) rather than being filtered out — the
+  // pending state is visible, and the row leaves the DOM only when the
+  // refreshed server list confirms the deletion.
+  const enrichedWorkspaces = useMemo(() => workspaces ?? [], [workspaces]);
 
   const filteredWorkspaces = useMemo(() => {
     if (!searchQuery.trim()) return enrichedWorkspaces;
@@ -154,7 +152,9 @@ export const RecentWorkspaces = ({
       } else if (e.key === "Enter" && focusedIndex !== null) {
         e.preventDefault();
         const workspace = visibleWorkspaces[focusedIndex];
-        if (workspace) {
+        // A row mid-delete is non-interactive: don't navigate into a
+        // workspace that is going away.
+        if (workspace && !store.get(isWorkspaceDeletingAtomFamily(workspace.objectId))) {
           onWorkspaceClick(workspace);
         }
       } else if (e.key === "Escape") {
@@ -170,7 +170,7 @@ export const RecentWorkspaces = ({
       areaElement.addEventListener("keydown", handleKeyDown);
       return (): void => areaElement.removeEventListener("keydown", handleKeyDown);
     }
-  }, [focusedIndex, visibleWorkspaces, onWorkspaceClick, searchInputRef, onEscapeToTitle]);
+  }, [focusedIndex, visibleWorkspaces, onWorkspaceClick, searchInputRef, onEscapeToTitle, store]);
 
   // Scroll focused row into view
   useEffect(() => {

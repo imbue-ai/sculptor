@@ -10,7 +10,13 @@ import type { Workspace } from "../../../api";
 import { HTTPException } from "../../Errors.ts";
 import { queryClient } from "../../queryClient.ts";
 import { workspaceDeleteErrorToastAtom } from "../atoms/toasts";
-import { tombstonedWorkspaceIdsAtom, updateWorkspacesAtom, workspaceAtomFamily } from "../atoms/workspaces";
+import {
+  asLiveWorkspace,
+  isWorkspaceDeletingAtomFamily,
+  TOMBSTONE,
+  updateWorkspacesAtom,
+  workspaceAtomFamily,
+} from "../atoms/workspaces";
 import { MUTATION_SETTLE_TIMEOUT_MS } from "../mutations";
 import { useOptimisticWorkspaceDelete } from "./useOptimisticWorkspaceDelete";
 
@@ -108,10 +114,10 @@ describe("useOptimisticWorkspaceDelete", () => {
     await flushMicrotasks();
 
     expect(store.get(workspaceDeleteErrorToastAtom)).toBeNull();
-    expect(store.get(workspaceAtomFamily("ws-A"))).toBeNull();
+    expect(store.get(workspaceAtomFamily("ws-A"))).toBe(TOMBSTONE);
   });
 
-  it("restores everything on a failed delete — the workspace atom AND the Home tombstone (SCU-1834)", async () => {
+  it("restores everything on a failed delete — the workspace atom AND the deleting state (SCU-1834)", async () => {
     const store = createStore();
     store.set(updateWorkspacesAtom, [mockWorkspace("ws-A")]);
     const { execute } = renderDeleteHook(store);
@@ -121,10 +127,10 @@ describe("useOptimisticWorkspaceDelete", () => {
     await flushMicrotasks();
 
     expect(store.get(workspaceDeleteErrorToastAtom)?.title).toContain("Failed to delete");
-    expect(store.get(workspaceAtomFamily("ws-A"))).not.toBeNull();
-    // The Home list derives its hiding from the same store, so the row is
-    // back everywhere at once — no add-only overlay left behind.
-    expect(store.get(tombstonedWorkspaceIdsAtom).has("ws-A")).toBe(false);
+    expect(asLiveWorkspace(store.get(workspaceAtomFamily("ws-A")))).not.toBeNull();
+    // The Home row derives its "Deleting…" state from the same store, so it
+    // un-dims everywhere at once — no add-only overlay left behind.
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-A"))).toBe(false);
   });
 
   it("keeps every view consistent when a frame arrives mid-delete: the workspace is back everywhere (SCU-1834)", async () => {
@@ -136,17 +142,17 @@ describe("useOptimisticWorkspaceDelete", () => {
     execute("ws-A", "Workspace A");
     await flushMicrotasks();
 
-    // Tombstoned: hidden on Home, gone from sidebar.
-    expect(store.get(workspaceAtomFamily("ws-A"))).toBeNull();
-    expect(store.get(tombstonedWorkspaceIdsAtom).has("ws-A")).toBe(true);
+    // Tombstoned: "Deleting…" on Home, gone from sidebar.
+    expect(store.get(workspaceAtomFamily("ws-A"))).toBe(TOMBSTONE);
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-A"))).toBe(true);
 
     // An authoritative frame lands while the request is in flight.
     store.set(updateWorkspacesAtom, [mockWorkspace("ws-A")]);
 
-    // Server truth wins in EVERY view: restored in the store and un-hidden on
-    // Home — one store, one answer.
-    expect(store.get(workspaceAtomFamily("ws-A"))).not.toBeNull();
-    expect(store.get(tombstonedWorkspaceIdsAtom).has("ws-A")).toBe(false);
+    // Server truth wins in EVERY view: restored in the store and no longer
+    // deleting on Home — one store, one answer.
+    expect(asLiveWorkspace(store.get(workspaceAtomFamily("ws-A")))).not.toBeNull();
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-A"))).toBe(false);
   });
 
   it("yields the rollback to an authoritative frame that landed mid-request (SCU-1834)", async () => {
@@ -170,7 +176,7 @@ describe("useOptimisticWorkspaceDelete", () => {
     await flushMicrotasks();
 
     // The rollback must not clobber the frame with the stale mutate-time snapshot.
-    expect(store.get(workspaceAtomFamily("ws-A"))?.description).toBe("fresh");
+    expect(asLiveWorkspace(store.get(workspaceAtomFamily("ws-A")))?.description).toBe("fresh");
   });
 
   it("retries the workspace captured per-call, not the most recently failed workspace", async () => {
