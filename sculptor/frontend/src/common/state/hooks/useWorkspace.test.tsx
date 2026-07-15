@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { Workspace } from "../../../api";
 import { WorkspaceInitializationStrategy } from "../../../api";
 import {
-  TOMBSTONE,
+  Tombstone,
   updateWorkspacesAtom,
   workspaceAtomFamily,
   workspaceIdsAtom,
@@ -228,7 +228,7 @@ describe("useIsWorkspaceDeleted", () => {
       {
         wrapper: createWrapper([
           [workspaceIdsAtom, ["ws_tomb"]],
-          [workspaceAtomFamily("ws_tomb"), TOMBSTONE],
+          [workspaceAtomFamily("ws_tomb"), new Tombstone(createMockWorkspace({ objectId: "ws_tomb" }))],
         ]),
       },
     );

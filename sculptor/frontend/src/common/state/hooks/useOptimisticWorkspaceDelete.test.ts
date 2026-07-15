@@ -13,7 +13,7 @@ import { workspaceDeleteErrorToastAtom } from "../atoms/toasts";
 import {
   asLiveWorkspace,
   isWorkspaceDeletingAtomFamily,
-  TOMBSTONE,
+  Tombstone,
   updateWorkspacesAtom,
   workspaceAtomFamily,
 } from "../atoms/workspaces";
@@ -114,7 +114,7 @@ describe("useOptimisticWorkspaceDelete", () => {
     await flushMicrotasks();
 
     expect(store.get(workspaceDeleteErrorToastAtom)).toBeNull();
-    expect(store.get(workspaceAtomFamily("ws-A"))).toBe(TOMBSTONE);
+    expect(store.get(workspaceAtomFamily("ws-A"))).toBeInstanceOf(Tombstone);
   });
 
   it("restores everything on a failed delete — the workspace atom AND the deleting state (SCU-1834)", async () => {
@@ -143,7 +143,7 @@ describe("useOptimisticWorkspaceDelete", () => {
     await flushMicrotasks();
 
     // Tombstoned: "Deleting…" on Home, gone from sidebar.
-    expect(store.get(workspaceAtomFamily("ws-A"))).toBe(TOMBSTONE);
+    expect(store.get(workspaceAtomFamily("ws-A"))).toBeInstanceOf(Tombstone);
     expect(store.get(isWorkspaceDeletingAtomFamily("ws-A"))).toBe(true);
 
     // An authoritative frame lands while the request is in flight.

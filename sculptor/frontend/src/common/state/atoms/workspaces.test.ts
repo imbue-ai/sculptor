@@ -15,16 +15,18 @@ import {
   INVALID_ACTIVE_INDEX,
   isWorkspaceDeletingAtomFamily,
   isWorkspaceKnownAtomFamily,
+  listedWorkspacesArrayAtom,
   openWorkspaceTabAtom,
   optimisticDeleteWorkspaceAtom,
   rollbackDeleteWorkspaceAtom,
   tabOrderAtom,
   tabsAtom,
-  TOMBSTONE,
+  Tombstone,
   updateWorkspacesAtom,
   workspaceAtomFamily,
   workspaceDotStatusAtomFamily,
   workspaceIdsAtom,
+  workspacesArrayAtom,
 } from "./workspaces";
 
 vi.mock("../../../api", async () => {
@@ -603,17 +605,36 @@ describe("workspace sync versions and the deleting tombstone (SCU-1834)", () => 
     expect(getWorkspaceSyncVersion("ws-1")).toBe(before + 2);
   });
 
-  it("distinguishes deleting (TOMBSTONE) from never-delivered (null)", () => {
-    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1" })], ["ws-1"]);
+  it("distinguishes deleting (Tombstone) from never-delivered (null), carrying the last-known model", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", description: "My workspace" })], ["ws-1"]);
     expect(store.get(isWorkspaceDeletingAtomFamily("ws-1"))).toBe(false);
 
     store.set(optimisticDeleteWorkspaceAtom, "ws-1");
-    expect(store.get(workspaceAtomFamily("ws-1"))).toBe(TOMBSTONE);
+    const entry = store.get(workspaceAtomFamily("ws-1"));
+    expect(entry).toBeInstanceOf(Tombstone);
+    // The tombstone keeps the model it replaced — the sidebar has no other
+    // data source for rendering a "Deleting…" row.
+    expect((entry as Tombstone).workspace.description).toBe("My workspace");
     expect(store.get(isWorkspaceDeletingAtomFamily("ws-1"))).toBe(true);
 
     // An id the store never loaded is unknown, not deleting.
     expect(store.get(workspaceAtomFamily("ws-unknown"))).toBeNull();
     expect(store.get(isWorkspaceDeletingAtomFamily("ws-unknown"))).toBe(false);
+  });
+
+  it("lists a delete in flight with its last-known model, and drops it when the server confirms", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", description: "My workspace" })], ["ws-1"]);
+
+    store.set(optimisticDeleteWorkspaceAtom, "ws-1");
+
+    // Still listed (the sidebar renders it as "Deleting…"), excluded from the
+    // live/actionable array (palette actions, mentions, shortcuts).
+    expect(store.get(listedWorkspacesArrayAtom)?.map((ws) => ws.objectId)).toEqual(["ws-1"]);
+    expect(store.get(workspacesArrayAtom)).toEqual([]);
+
+    // The confirming frame removes the id — the listed row leaves with it.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isDeleted: true })]);
+    expect(store.get(listedWorkspacesArrayAtom)).toEqual([]);
   });
 
   it("keeps classifying as deleting after the confirmation frame drops the id (no Home un-dim flash)", () => {
@@ -626,7 +647,7 @@ describe("workspace sync versions and the deleting tombstone (SCU-1834)", () => 
     store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isDeleted: true })]);
 
     expect(store.get(workspaceIdsAtom)).not.toContain("ws-1");
-    expect(store.get(workspaceAtomFamily("ws-1"))).toBe(TOMBSTONE);
+    expect(store.get(workspaceAtomFamily("ws-1"))).toBeInstanceOf(Tombstone);
     expect(store.get(isWorkspaceDeletingAtomFamily("ws-1"))).toBe(true);
   });
 

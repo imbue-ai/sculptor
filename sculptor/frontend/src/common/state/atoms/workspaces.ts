@@ -17,17 +17,23 @@ import type { SetupStatusSnapshot } from "./workspaceSetupStatus";
 import { workspaceSetupStatusAtomFamily } from "./workspaceSetupStatus";
 
 /**
- * Sentinel marking a workspace the store knows is being deleted (optimistic
- * apply) or confirmed deleted (a stream frame carrying `isDeleted`). Kept
- * distinct from `null` — the family's initial value, meaning "never delivered
- * to this session" — so views can render a real "Deleting…" state instead of
- * conflating it with "unknown". The distinction is load-bearing for pulled
- * lists: a stale Home row whose workspace was confirmed deleted must keep
- * classifying as deleting until its refetch lands, even after the id leaves
- * `workspaceIdsAtom`, or the row flashes back to normal for a paint.
+ * A workspace the store knows is being deleted (optimistic apply) or confirmed
+ * deleted (a stream frame carrying `isDeleted`). Kept distinct from `null` —
+ * the family's initial value, meaning "never delivered to this session" — so
+ * views can render a real "Deleting…" state instead of conflating it with
+ * "unknown". The distinction is load-bearing for pulled lists: a stale Home
+ * row whose workspace was confirmed deleted must keep classifying as deleting
+ * until its refetch lands, even after the id leaves `workspaceIdsAtom`, or
+ * the row flashes back to normal for a paint.
+ *
+ * The tombstone carries the last-known model: the sidebar has no other data
+ * source for a deleting row (its rows render from this store alone), and both
+ * writers already hold the model — the optimistic apply has the snapshot it
+ * replaced, and a confirming frame IS the model.
  */
-export const TOMBSTONE: unique symbol = Symbol("deleting-workspace-tombstone");
-export type Tombstone = typeof TOMBSTONE;
+export class Tombstone {
+  constructor(readonly workspace: Workspace) {}
+}
 
 /** What a workspace family atom can hold: a live model, a deleting tombstone, or never-delivered. */
 export type WorkspaceEntry = Workspace | Tombstone | null;
@@ -37,13 +43,13 @@ export type WorkspaceEntry = Workspace | Tombstone | null;
  * same as never-delivered. The one mapping consumers use so their
  * `Workspace | null` contracts survive the tombstone's existence.
  */
-export const asLiveWorkspace = (entry: WorkspaceEntry): Workspace | null => (entry === TOMBSTONE ? null : entry);
+export const asLiveWorkspace = (entry: WorkspaceEntry): Workspace | null => (entry instanceof Tombstone ? null : entry);
 
 export const workspaceAtomFamily = atomFamily<string, PrimitiveAtom<WorkspaceEntry>>(() => atom<WorkspaceEntry>(null));
 
 /** Whether this workspace is mid-delete (or confirmed deleted) — drives the "Deleting…" row state. */
 export const isWorkspaceDeletingAtomFamily = atomFamily<string, Atom<boolean>>((workspaceId) =>
-  atom((get) => get(workspaceAtomFamily(workspaceId)) === TOMBSTONE),
+  atom((get) => get(workspaceAtomFamily(workspaceId)) instanceof Tombstone),
 );
 
 export const workspaceIdsAtom = atom<ReadonlyArray<string> | undefined>(undefined);
@@ -80,6 +86,29 @@ export const workspacesArrayAtom = atom<ReadonlyArray<Workspace> | undefined>((g
   }
   return workspaceIds
     .map((id) => asLiveWorkspace(get(workspaceAtomFamily(id))))
+    .filter((workspace): workspace is Workspace => workspace !== null && !workspace.isDeleted);
+});
+
+/**
+ * Workspaces for list surfaces (the sidebar): the live models plus the
+ * last-known models of deletes in flight, whose rows render as "Deleting…"
+ * (classified per row via {@link isWorkspaceDeletingAtomFamily}). A confirmed
+ * deletion leaves the list with its frame — the id drops from
+ * `workspaceIdsAtom` — and a failed one un-dims in place via the rollback.
+ * Action surfaces (command palette, mentions, shortcuts) keep using
+ * {@link workspacesArrayAtom}: a workspace mid-delete is displayable but not
+ * actionable.
+ */
+export const listedWorkspacesArrayAtom = atom<ReadonlyArray<Workspace> | undefined>((get) => {
+  const workspaceIds = get(workspaceIdsAtom);
+  if (workspaceIds === undefined) {
+    return undefined;
+  }
+  return workspaceIds
+    .map((id) => {
+      const entry = get(workspaceAtomFamily(id));
+      return entry instanceof Tombstone ? entry.workspace : entry;
+    })
     .filter((workspace): workspace is Workspace => workspace !== null && !workspace.isDeleted);
 });
 
@@ -527,10 +556,10 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
 
     if (incoming.isDeleted) {
       // Mirror task deletion pattern: remove from IDs and tombstone the atom.
-      // TOMBSTONE (not null) so consumers holding a stale reference — a pulled
-      // Home row awaiting its refetch — still classify it as deleting.
+      // A Tombstone (not null) so consumers holding a stale reference — a
+      // pulled Home row awaiting its refetch — still classify it as deleting.
       currentWorkspaceIds.delete(incoming.objectId);
-      set(workspaceAtomFamily(incoming.objectId), TOMBSTONE);
+      set(workspaceAtomFamily(incoming.objectId), new Tombstone(incoming));
       nextTabsState = applyClose(nextTabsState, incoming.objectId);
       return;
     }
@@ -697,7 +726,7 @@ export const optimisticDeleteWorkspaceAtom = atom(null, (get, set, workspaceId: 
   if (snapshot === null) {
     return context;
   }
-  set(workspaceAtomFamily(workspaceId), TOMBSTONE);
+  set(workspaceAtomFamily(workspaceId), new Tombstone(snapshot));
   // Keep workspaceId in workspaceIdsAtom so that a WebSocket snapshot
   // arriving before the server confirms deletion doesn't treat it as
   // a "new" workspace and auto-open it as a tab. workspacesArrayAtom

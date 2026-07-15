@@ -16,7 +16,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ContextMenu, DropdownMenu, Flex, IconButton, Text, Tooltip } from "@radix-ui/themes";
+import { ContextMenu, DropdownMenu, Flex, IconButton, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -25,7 +25,7 @@ import { memo, useCallback, useEffect, useRef } from "react";
 import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
-import { workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { isWorkspaceDeletingAtomFamily, workspaceDotStatusAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
@@ -90,6 +90,11 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   onBeginDelete: (workspace: Workspace) => void;
 }): ReactElement {
   const status = useAtomValue(workspaceDotStatusAtomFamily(workspace.objectId));
+  // A delete in flight renders the row dimmed and non-interactive with a
+  // "Deleting…" label — same treatment as the Home list's rows. The row's
+  // model is the tombstone's last-known snapshot (see listedWorkspacesArrayAtom);
+  // a failed delete un-dims it in place, a confirmed one removes it.
+  const isDeleting = useAtomValue(isWorkspaceDeletingAtomFamily(workspace.objectId));
   const {
     attributes,
     listeners,
@@ -103,7 +108,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
     overIndex,
   } = useSortable({
     id: workspace.objectId,
-    disabled: isRenaming,
+    disabled: isRenaming || isDeleting,
   });
 
   // Which edge of this row the dragged row will land against, for the drop-indicator
@@ -118,7 +123,7 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
   // sensor's drop-commit key, so it is left alone rather than navigating out
   // from under the drag.
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
-    if (event.key === "Enter" && event.target === event.currentTarget && !isDragging) {
+    if (event.key === "Enter" && event.target === event.currentTarget && !isDragging && !isDeleting) {
       event.preventDefault();
       onNavigate(workspace.objectId);
       return;
@@ -130,13 +135,14 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
     styles.workspaceRow,
     isActive ? styles.workspaceRowActive : "",
     isDragging ? styles.rowDragging : "",
+    isDeleting ? styles.workspaceRowDeleting : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
     <ContextMenu.Root>
-      <ContextMenu.Trigger>
+      <ContextMenu.Trigger disabled={isDeleting}>
         {/* Translate-only (never CSS.Transform): rows and groups vary in height, and
             the scale component dnd-kit folds into transforms would stretch the
             element toward the hovered slot's size. */}
@@ -149,9 +155,10 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
           // Marked on the row container, not the name button, so moving the
           // pointer onto the sibling hover-action buttons (menu, delete) stays
           // inside the tab region and doesn't dismiss the peek. Omitted while
-          // renaming so the peek doesn't pop out over the inline rename input.
-          data-workspace-tab={isRenaming ? undefined : ""}
-          data-tab-id={isRenaming ? undefined : workspace.objectId}
+          // renaming (the peek must not pop out over the inline rename input)
+          // and while deleting (a pending row is non-interactive, peek included).
+          data-workspace-tab={isRenaming || isDeleting ? undefined : ""}
+          data-tab-id={isRenaming || isDeleting ? undefined : workspace.objectId}
         >
           {isRenaming ? (
             <span className={styles.workspaceRowButton}>
@@ -178,13 +185,14 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               // Ignore the second click of a double-click (event.detail > 1) so the
               // rename gesture doesn't also navigate a second time on its way in.
               onClick={(event) => {
-                if (event.detail > 1) {
+                if (event.detail > 1 || isDeleting) {
                   return;
                 }
                 onNavigate(workspace.objectId);
               }}
-              onDoubleClick={() => onBeginRename(workspace.objectId)}
-              onMouseEnter={() => onHover(workspace.objectId)}
+              onDoubleClick={isDeleting ? undefined : (): void => onBeginRename(workspace.objectId)}
+              onMouseEnter={isDeleting ? undefined : (): void => onHover(workspace.objectId)}
+              aria-disabled={isDeleting || undefined}
               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
               data-workspace-id={workspace.objectId}
               data-has-unread={String(status.hasUnread)}
@@ -201,45 +209,52 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
               <span className={styles.workspaceName}>{workspace.description ?? "Untitled"}</span>
             </button>
           )}
-          <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="2">
-            <DropdownMenu.Root>
-              <Tooltip content="Workspace actions" side="bottom">
-                <DropdownMenu.Trigger>
-                  <IconButton
-                    variant="ghost"
-                    size="1"
-                    color="gray"
-                    className={styles.rowActionButton}
-                    aria-label="Workspace actions"
-                    data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_MENU}
-                    data-workspace-id={workspace.objectId}
-                  >
-                    <MoreHorizontal size={12} />
-                  </IconButton>
-                </DropdownMenu.Trigger>
+          {isDeleting ? (
+            <span className={styles.deletingLabel}>
+              <Spinner size="1" />
+              Deleting…
+            </span>
+          ) : (
+            <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="2">
+              <DropdownMenu.Root>
+                <Tooltip content="Workspace actions" side="bottom">
+                  <DropdownMenu.Trigger>
+                    <IconButton
+                      variant="ghost"
+                      size="1"
+                      color="gray"
+                      className={styles.rowActionButton}
+                      aria-label="Workspace actions"
+                      data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_MENU}
+                      data-workspace-id={workspace.objectId}
+                    >
+                      <MoreHorizontal size={12} />
+                    </IconButton>
+                  </DropdownMenu.Trigger>
+                </Tooltip>
+                <WorkspaceDropdownMenuContent
+                  actions={actions}
+                  workspace={workspace}
+                  destructiveColor={destructiveColor}
+                  openInRuntime={openInRuntime}
+                />
+              </DropdownMenu.Root>
+              <Tooltip content="Delete workspace" side="bottom">
+                <IconButton
+                  variant="ghost"
+                  size="1"
+                  color="gray"
+                  className={styles.rowActionButton}
+                  onClick={() => onBeginDelete(workspace)}
+                  aria-label="Delete workspace"
+                  data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
+                  data-workspace-id={workspace.objectId}
+                >
+                  <Trash2 size={12} />
+                </IconButton>
               </Tooltip>
-              <WorkspaceDropdownMenuContent
-                actions={actions}
-                workspace={workspace}
-                destructiveColor={destructiveColor}
-                openInRuntime={openInRuntime}
-              />
-            </DropdownMenu.Root>
-            <Tooltip content="Delete workspace" side="bottom">
-              <IconButton
-                variant="ghost"
-                size="1"
-                color="gray"
-                className={styles.rowActionButton}
-                onClick={() => onBeginDelete(workspace)}
-                aria-label="Delete workspace"
-                data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
-                data-workspace-id={workspace.objectId}
-              >
-                <Trash2 size={12} />
-              </IconButton>
-            </Tooltip>
-          </Flex>
+            </Flex>
+          )}
         </div>
       </ContextMenu.Trigger>
       <WorkspaceContextMenuContent
