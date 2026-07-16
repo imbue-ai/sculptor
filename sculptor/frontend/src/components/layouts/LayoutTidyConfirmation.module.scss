@@ -1,48 +1,47 @@
+// Stacks the description, section-grid preview, reassurance, and edit link with even
+// spacing; the "don't show again" opt-out and the buttons live in the dialog footer.
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 .body {
   color: var(--gray-11);
   font-size: var(--font-size-2);
   line-height: 1.5;
 }
 
-.closeList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  list-style: none;
-  margin: var(--space-3) 0;
-  padding: 0;
-}
-
-.closeItem {
-  align-items: center;
-  background: var(--gray-a2);
-  border-radius: var(--radius-3);
-  color: var(--gray-12);
-  display: flex;
-  font-size: var(--font-size-2);
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-
-  svg {
-    color: var(--gray-10);
-    flex-shrink: 0;
-  }
-}
-
-.closeItemSection {
-  color: var(--gray-9);
-  font-size: var(--font-size-1);
-}
-
+// Reads at the same weight as the body copy above (not a dimmer footnote).
 .reassure {
+  color: var(--gray-11);
+  font-size: var(--font-size-2);
+  line-height: 1.5;
+}
+
+.dontShowAgain {
   align-items: center;
-  color: var(--gray-10);
+  color: var(--gray-11);
+  cursor: pointer;
   display: flex;
   font-size: var(--font-size-2);
   gap: var(--space-2);
+  user-select: none;
+}
 
-  svg {
-    color: var(--gray-9);
-    flex-shrink: 0;
+// A plain text link — the escape hatch to the edit form — so it doesn't compete
+// with the Cancel / Close buttons in the footer below.
+.editLink {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--accent-11);
+  cursor: pointer;
+  font-size: var(--font-size-2);
+  padding: 0;
+  text-align: left;
+
+  &:hover {
+    text-decoration: underline;
   }
 }

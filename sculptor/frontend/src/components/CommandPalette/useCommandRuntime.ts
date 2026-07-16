@@ -15,7 +15,7 @@ import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
 import { sidebarCollapsedAtom } from "../layout/sidebarAtoms.ts";
-import { layoutsSwitcherOpenAtom, saveLayoutModalOpenAtom } from "../layouts/layoutUiAtoms.ts";
+import { layoutsSwitcherOpenAtom, saveLayoutModalRequestAtom } from "../layouts/layoutUiAtoms.ts";
 import { newWorkspaceModalAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
 import { toggleSectionAtom } from "../sections/sectionActions.ts";
 import { workspaceLayoutAtom } from "../sections/sectionAtoms.ts";
@@ -114,7 +114,7 @@ export const useCommandRuntime = (): CommandRuntime => {
   // useSetAtom hook for this single write.
   const openNewWorkspaceModal = useEvent((): void => store.set(newWorkspaceModalAtom, { open: true }));
   const openLayoutsModal = useEvent((): void => store.set(layoutsSwitcherOpenAtom, true));
-  const openSaveLayoutModal = useEvent((): void => store.set(saveLayoutModalOpenAtom, true));
+  const openSaveLayoutModal = useEvent((): void => store.set(saveLayoutModalRequestAtom, { mode: "create" }));
 
   const uiToggleHelpDialog = useEvent((): void => toggleHelpDialog());
   const uiToggleDevPanel = useEvent((): void => toggleDevPanel());

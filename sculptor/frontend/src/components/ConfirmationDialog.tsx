@@ -19,6 +19,9 @@ type ConfirmationDialogProps = {
   confirmLabel: ReactNode;
   onConfirm: () => void;
   onCancel?: () => void;
+  // Optional content pinned to the footer's left edge (e.g. a "don't show again"
+  // opt-out); the Cancel/Confirm buttons stay grouped on the right.
+  footerStart?: ReactNode;
   isDanger?: boolean;
   maxWidth?: string;
   dialogTestId?: string;
@@ -38,6 +41,7 @@ export const ConfirmationDialog = ({
   confirmLabel,
   onConfirm,
   onCancel,
+  footerStart,
   isDanger = false,
   maxWidth = "400px",
   dialogTestId,
@@ -66,23 +70,26 @@ export const ConfirmationDialog = ({
       >
         <AlertDialog.Title>{title}</AlertDialog.Title>
         {children}
-        <Flex gap="3" mt="4" justify="end">
-          <AlertDialog.Cancel>
-            <Button variant="soft" color="gray" onClick={onCancel} data-testid={cancelTestId}>
-              Cancel
-            </Button>
-          </AlertDialog.Cancel>
-          <AlertDialog.Action>
-            <Button
-              ref={confirmButtonRef}
-              variant="solid"
-              color={isDanger ? dangerColor : undefined}
-              onClick={onConfirm}
-              data-testid={confirmTestId}
-            >
-              {confirmLabel}
-            </Button>
-          </AlertDialog.Action>
+        <Flex gap="3" mt="4" align="center" justify={footerStart === undefined ? "end" : "between"}>
+          {footerStart}
+          <Flex gap="3" align="center">
+            <AlertDialog.Cancel>
+              <Button variant="soft" color="gray" onClick={onCancel} data-testid={cancelTestId}>
+                Cancel
+              </Button>
+            </AlertDialog.Cancel>
+            <AlertDialog.Action>
+              <Button
+                ref={confirmButtonRef}
+                variant="solid"
+                color={isDanger ? dangerColor : undefined}
+                onClick={onConfirm}
+                data-testid={confirmTestId}
+              >
+                {confirmLabel}
+              </Button>
+            </AlertDialog.Action>
+          </Flex>
         </Flex>
       </AlertDialog.Content>
     </AlertDialog.Root>

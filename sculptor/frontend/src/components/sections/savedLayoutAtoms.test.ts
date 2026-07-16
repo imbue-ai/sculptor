@@ -12,7 +12,7 @@ import {
   savedLayoutsAtom,
 } from "./savedLayoutAtoms.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
-import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID } from "./systemDefaultLayout.ts";
+import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID, SYSTEM_LAYOUTS } from "./systemDefaultLayout.ts";
 
 function makeLayout(id: string, overrides: Partial<SavedLayout> = {}): SavedLayout {
   return {
@@ -67,14 +67,16 @@ describe("appliedLayoutIdAtom (per-workspace)", () => {
 });
 
 describe("resolvedLayoutsAtom", () => {
-  it("puts System Default first and appends saved layouts, skipping unreadable versions", () => {
+  it("puts the built-in system layouts first and appends saved layouts, skipping unreadable versions", () => {
     const store = createStore();
     const good = makeLayout("good");
     const future = makeLayout("future", { version: SAVED_LAYOUT_VERSION + 1 });
     store.set(savedLayoutsAtom, [good, future]);
 
     const resolved = store.get(resolvedLayoutsAtom);
-    expect(resolved.map((layout) => layout.id)).toEqual([SYSTEM_DEFAULT_LAYOUT_ID, "good"]);
+    // System Default + the task presets, in order, then the readable saved layout.
+    expect(resolved.map((layout) => layout.id)).toEqual([...SYSTEM_LAYOUTS.map((layout) => layout.id), "good"]);
+    expect(resolved[0].id).toBe(SYSTEM_DEFAULT_LAYOUT_ID);
   });
 });
 

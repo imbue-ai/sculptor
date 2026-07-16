@@ -3,7 +3,10 @@
 // layout stores (solid cells = saved static panels; dashed chips mark where default
 // seeding creates an agent/terminal), then a clean options list — an inline keyboard
 // shortcut, a "tidy panels when applying" toggle, and "set as default" — and Save
-// (⌘↵). Atom-driven host, mounted in AppShell.
+// (⌘↵). The same form doubles as the Edit surface for an existing layout: opened in
+// "edit" mode it prefills from the layout and updates its metadata on Save WITHOUT
+// re-capturing the arrangement (the preview then shows the layout's stored panels).
+// Atom-driven host, mounted in AppShell.
 
 import { Button, Switch } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
@@ -11,62 +14,83 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
+import { layoutShortcutBindingsAtom } from "~/common/keybindings/layoutShortcuts.ts";
 import { useLayoutBindingConflict, useSetLayoutShortcut } from "~/common/keybindings/useLayoutShortcutActions.ts";
 import { formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
 import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
-import { saveCurrentLayoutAtom } from "~/components/sections/layoutActions.ts";
-import { openPanelsInSubSection, SECTION_LABELS } from "~/components/sections/layoutQueries.ts";
-import { isMultiInstancePanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
-import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
-import type { PanelId, SectionId } from "~/components/sections/sectionTypes.ts";
-import { toSecondary } from "~/components/sections/sectionTypes.ts";
+import { saveCurrentLayoutAtom, updateLayoutAtom } from "~/components/sections/layoutActions.ts";
+import { defaultLayoutIdAtom } from "~/components/sections/savedLayoutAtoms.ts";
 import { HotkeyChip } from "~/pages/settings/components/HotkeyChip.tsx";
 
-import { saveLayoutModalOpenAtom } from "./layoutUiAtoms.ts";
+import { LayoutPreview } from "./LayoutPreview.tsx";
+import type { SaveLayoutModalRequest } from "./layoutUiAtoms.ts";
+import { saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
 import styles from "./SaveLayoutModal.module.scss";
 
 const SAVE_HINT = formatShortcutForDisplay("Meta+Enter");
 
 export const SaveLayoutModal = (): ReactElement | undefined => {
-  const [isOpen, setIsOpen] = useAtom(saveLayoutModalOpenAtom);
+  const [request, setRequest] = useAtom(saveLayoutModalRequestAtom);
 
-  useEffect(() => (): void => setIsOpen(false), [setIsOpen]);
+  useEffect(() => (): void => setRequest(null), [setRequest]);
 
   const handleOpenChange = useCallback(
     (next: boolean): void => {
       if (!next) {
-        setIsOpen(false);
+        setRequest(null);
       }
     },
-    [setIsOpen],
+    [setRequest],
   );
 
-  if (!isOpen) {
+  if (request === null) {
     return undefined;
   }
 
+  const isEdit = request.mode === "edit";
   return (
     <PaletteDialog
-      open={isOpen}
+      open
       onOpenChange={handleOpenChange}
-      title="Save layout"
+      title={isEdit ? "Edit layout" : "Save layout"}
       testId={ElementIds.SAVE_LAYOUT_DIALOG}
     >
-      <SaveLayoutForm onClose={() => setIsOpen(false)} />
+      {/* Keyed by mode+id so switching between create and editing different layouts
+        remounts the form with fresh initial state rather than reusing stale values. */}
+      <SaveLayoutForm
+        key={isEdit ? `edit:${request.layout.id}` : "create"}
+        request={request}
+        onClose={() => setRequest(null)}
+      />
     </PaletteDialog>
   );
 };
 
-const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
-  const [name, setName] = useState<string>("");
-  const [isSetAsDefault, setIsSetAsDefault] = useState<boolean>(false);
-  const [shouldTidyOnApply, setShouldTidyOnApply] = useState<boolean>(false);
-  // The shortcut is held locally while the Layout has no id yet; it's persisted to
-  // userConfig.keybindings (keyed by the new Layout's id) only on Save.
-  const [shortcut, setShortcut] = useState<string | undefined>(undefined);
+const SaveLayoutForm = ({
+  request,
+  onClose,
+}: {
+  request: SaveLayoutModalRequest;
+  onClose: () => void;
+}): ReactElement => {
+  const isEdit = request.mode === "edit";
+  const editingLayout = request.mode === "edit" ? request.layout : undefined;
+
+  const defaultLayoutId = useAtomValue(defaultLayoutIdAtom);
+  const shortcutBindings = useAtomValue(layoutShortcutBindingsAtom);
+
+  const [name, setName] = useState<string>(editingLayout?.name ?? "");
+  const [isSetAsDefault, setIsSetAsDefault] = useState<boolean>(editingLayout?.id === defaultLayoutId);
+  const [shouldTidyOnApply, setShouldTidyOnApply] = useState<boolean>(editingLayout?.tidyOnApply === true);
+  // The shortcut is held locally while editing; it's persisted to
+  // userConfig.keybindings (keyed by the Layout's id) only on Save. In create mode
+  // there is no id yet, so it starts unset.
+  const [shortcut, setShortcut] = useState<string | undefined>(
+    editingLayout !== undefined ? shortcutBindings[editingLayout.id] : undefined,
+  );
   const [shortcutConflict, setShortcutConflict] = useState<string | null>(null);
   const saveCurrentLayout = useSetAtom(saveCurrentLayoutAtom);
+  const updateLayout = useSetAtom(updateLayoutAtom);
   const setLayoutShortcut = useSetLayoutShortcut();
   const findBindingConflict = useLayoutBindingConflict();
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -81,17 +105,40 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
     if (!canSave) {
       return;
     }
-    const id = saveCurrentLayout({ name: name.trim(), setAsDefault: isSetAsDefault, tidyOnApply: shouldTidyOnApply });
-    if (shortcut !== undefined) {
-      void setLayoutShortcut(id, shortcut);
+
+    if (editingLayout !== undefined) {
+      updateLayout({
+        id: editingLayout.id,
+        name: name.trim(),
+        setAsDefault: isSetAsDefault,
+        tidyOnApply: shouldTidyOnApply,
+      });
+      void setLayoutShortcut(editingLayout.id, shortcut ?? null);
+    } else {
+      const id = saveCurrentLayout({ name: name.trim(), setAsDefault: isSetAsDefault, tidyOnApply: shouldTidyOnApply });
+      if (shortcut !== undefined) {
+        void setLayoutShortcut(id, shortcut);
+      }
     }
     onClose();
-  }, [canSave, saveCurrentLayout, name, isSetAsDefault, shouldTidyOnApply, shortcut, setLayoutShortcut, onClose]);
+  }, [
+    canSave,
+    editingLayout,
+    updateLayout,
+    saveCurrentLayout,
+    name,
+    isSetAsDefault,
+    shouldTidyOnApply,
+    shortcut,
+    setLayoutShortcut,
+    onClose,
+  ]);
 
-  // No id exists yet, so guard against every existing binding (empty self id).
+  // Guard the recorded chord against every OTHER binding — in edit mode a Layout may
+  // keep its own current shortcut (pass its id as the "self" to skip).
   const handleShortcutRecord = useCallback(
     (chord: string): boolean => {
-      const conflict = findBindingConflict(chord, "");
+      const conflict = findBindingConflict(chord, editingLayout?.id ?? "");
       if (conflict !== null) {
         setShortcutConflict(conflict.name);
         return false;
@@ -99,7 +146,7 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
       setShortcutConflict(null);
       return true;
     },
-    [findBindingConflict],
+    [findBindingConflict, editingLayout],
   );
 
   const clearShortcut = useCallback((): void => {
@@ -127,7 +174,7 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
           data-testid={ElementIds.SAVE_LAYOUT_NAME_INPUT}
           aria-label="Layout name"
         />
-        <SaveLayoutPreview />
+        <LayoutPreview source={editingLayout?.captured} />
         <div className={styles.legend}>
           An agent is created by default in the center section. A terminal is created by default in the bottom section.
         </div>
@@ -143,8 +190,6 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
                 onSet={setShortcut}
                 onClear={clearShortcut}
                 onRecordComplete={handleShortcutRecord}
-                idleLabel="Set keyboard shortcut"
-                setLabel="Update keyboard shortcut"
               />
             </div>
           </div>
@@ -186,65 +231,9 @@ const SaveLayoutForm = ({ onClose }: { onClose: () => void }): ReactElement => {
       <div className={styles.footer}>
         <span className={styles.saveHint}>{SAVE_HINT} to save</span>
         <Button variant="solid" disabled={!canSave} onClick={handleSave} data-testid={ElementIds.SAVE_LAYOUT_SUBMIT}>
-          Save layout
+          {isEdit ? "Save changes" : "Save layout"}
         </Button>
       </div>
-    </div>
-  );
-};
-
-const PREVIEW_SECTIONS: ReadonlyArray<{ section: SectionId; areaClass: string }> = [
-  { section: "left", areaClass: styles.cellLeft },
-  { section: "center", areaClass: styles.cellCenter },
-  { section: "right", areaClass: styles.cellRight },
-  { section: "bottom", areaClass: styles.cellBottom },
-];
-
-// A layout never declares agents/terminals; default seeding creates them in fixed
-// sections. The preview marks those homes with a dashed chip.
-const DEFAULT_DYNAMIC_CHIPS: Partial<Record<SectionId, string>> = {
-  center: "Agent default",
-  bottom: "Terminal default",
-};
-
-const SaveLayoutPreview = (): ReactElement => {
-  const layout = useAtomValue(workspaceLayoutAtom);
-  const registry = useAtomValue(panelRegistryAtom);
-
-  const nameOf = (id: PanelId): string => registry.find((definition) => definition.id === id)?.displayName ?? id;
-
-  return (
-    <div className={styles.preview}>
-      {PREVIEW_SECTIONS.map(({ section, areaClass }) => {
-        const ids = [
-          ...openPanelsInSubSection(layout, section),
-          ...openPanelsInSubSection(layout, toSecondary(section)),
-        ];
-        const statics = ids.filter((id) => !isMultiInstancePanelId(id));
-        const activeId = layout.activePanel[section];
-        const defaultChip = DEFAULT_DYNAMIC_CHIPS[section];
-
-        return (
-          <div
-            key={section}
-            className={`${styles.cell} ${statics.length > 0 ? styles.cellSaved : styles.cellStays} ${areaClass}`}
-          >
-            <div className={styles.cellLabel}>{SECTION_LABELS[section]}</div>
-            {statics.length > 0 || defaultChip !== undefined ? (
-              <div className={styles.cellTabs}>
-                {statics.map((id) => (
-                  <span key={id} className={`${styles.tab} ${id === activeId ? styles.tabActive : ""}`}>
-                    {nameOf(id)}
-                  </span>
-                ))}
-                {defaultChip !== undefined ? (
-                  <span className={`${styles.tab} ${styles.tabDefault}`}>{defaultChip}</span>
-                ) : undefined}
-              </div>
-            ) : undefined}
-          </div>
-        );
-      })}
     </div>
   );
 };

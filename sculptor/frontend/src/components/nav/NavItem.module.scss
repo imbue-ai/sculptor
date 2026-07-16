@@ -54,7 +54,23 @@
 }
 
 .navLabel {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// Quiet right-aligned keybinding hint (plain text, not a boxed key) so it reads as
+// trailing metadata rather than competing with the label.
+.navShortcut {
+  background: none;
+  border: 0;
+  color: var(--gray-9);
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: var(--font-size-1);
+}
+
+.navItemActive .navShortcut {
+  color: var(--accent-11);
 }

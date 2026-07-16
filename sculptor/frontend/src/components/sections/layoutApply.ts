@@ -129,8 +129,7 @@ export type TidyClosureEntry = { panelId: PanelId; subSection: SubSectionId };
 
 // The static panels currently open that the layout does NOT declare — exactly what
 // Tidy would close. Agents/terminals are excluded (multi-instance), so a session is
-// never in the closure. The subSection is where the panel currently lives, for the
-// confirmation dialog's "<panel> · <section> section" line.
+// never in the closure. The subSection is where the panel currently lives.
 export function computeTidyClosure(layout: WorkspaceLayoutState, captured: CapturedLayout): Array<TidyClosureEntry> {
   const declared = new Set<PanelId>(Object.keys(captured.placement));
   const closure: Array<TidyClosureEntry> = [];

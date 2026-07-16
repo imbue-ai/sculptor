@@ -47,6 +47,7 @@ import { SettingRow } from "./components/SettingRow.tsx";
 import { SettingsSectionLayout } from "./components/SettingsSection.tsx";
 import { TelemetryRow } from "./components/TelemetryRow.tsx";
 import { ThemeBuilderSection } from "./components/ThemeBuilderSection.tsx";
+import { TidyConfirmationSettingRow } from "./components/TidyConfirmationSettingRow.tsx";
 import { MobileSettingsHeader } from "./MobileSettingsHeader.tsx";
 import { SETTINGS_SECTIONS, SettingsSection, type SettingsSectionId } from "./sections.ts";
 import styles from "./SettingsPage.module.scss";
@@ -269,6 +270,8 @@ export const SettingsPage = (): ReactElement => {
                       </SegmentedControl.Item>
                     </SegmentedControl.Root>
                   </SettingRow>
+
+                  <TidyConfirmationSettingRow />
 
                   <SettingRow
                     title="Software Updates"

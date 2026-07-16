@@ -6,6 +6,8 @@ import { Tooltip } from "@radix-ui/themes";
 import type { LucideIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
+import { ShortcutHint } from "~/components/ShortcutHint.tsx";
+
 import styles from "./NavItem.module.scss";
 
 type NavItemProps = {
@@ -18,6 +20,11 @@ type NavItemProps = {
    * explaining why it can't be used right now. Ignored when enabled.
    */
   disabledTooltip?: string;
+  /**
+   * Raw keybinding for the action (e.g. "Meta+K"), shown as a quiet right-aligned
+   * hint. Omitted for actions with no shortcut.
+   */
+  shortcut?: string | null;
   onClick: () => void;
   testId?: string;
 };
@@ -28,6 +35,7 @@ export const NavItem = ({
   isActive,
   disabled,
   disabledTooltip,
+  shortcut,
   onClick,
   testId,
 }: NavItemProps): ReactElement => {
@@ -45,6 +53,7 @@ export const NavItem = ({
     >
       <Icon size={16} className={styles.navIcon} />
       <span className={styles.navLabel}>{label}</span>
+      {shortcut ? <ShortcutHint binding={shortcut} className={styles.navShortcut} /> : null}
     </button>
   );
   // The row stays focusable while disabled (aria-disabled), so the tooltip anchors on

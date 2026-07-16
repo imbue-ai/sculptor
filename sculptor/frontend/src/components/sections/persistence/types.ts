@@ -80,9 +80,11 @@ export type SavedLayout = {
   version: number;
   // When true, applying this Layout also tidies (closes the static panels it does
   // not declare) after the additive apply, via the usual Tidy confirmation. A
-  // per-Layout property set at save time or from the ⌘J menu — not part of the
-  // captured arrangement, so it lives on the Layout, not in `captured`. Optional:
-  // Layouts saved before it existed read back without it (treated as false).
+  // per-Layout property set at save time or from the Edit form — not part of the
+  // captured arrangement, so it lives on the Layout, not in `captured`. The built-in
+  // system layouts set it so switching to one (notably System Default) produces the
+  // clean arrangement it describes. Optional: Layouts saved before it existed read
+  // back without it (treated as false).
   tidyOnApply?: boolean;
 };
 
@@ -122,6 +124,11 @@ export type GlobalLayoutState = {
   // active workspace's appliedLayoutId, decides the opening highlight. Optional
   // for the same back-compat reason as the fields above.
   layoutMru?: ReadonlyArray<string>;
+  // When true, tidy-on-apply closes the undeclared panels silently — the "Close N
+  // panels?" confirmation is skipped for EVERY layout. A single global preference
+  // (set from "Don't show this again" in that dialog), not per-layout, so dismissing
+  // it once quiets tidy across the app. Optional (defaults to false / always confirm).
+  tidyConfirmationSuppressed?: boolean;
 };
 
 export type LayoutScope = { kind: "workspace"; workspaceId: string } | { kind: "global" };

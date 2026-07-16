@@ -4,15 +4,20 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   applyLayoutAtom,
   deleteLayoutAtom,
-  renameLayoutAtom,
   saveCurrentLayoutAtom,
   setDefaultLayoutAtom,
-  setLayoutTidyOnApplyAtom,
   tidyToLayoutAtom,
+  updateLayoutAtom,
 } from "./layoutActions.ts";
 import type { SavedLayout, WorkspaceLayoutState } from "./persistence/types.ts";
 import { EMPTY_WORKSPACE_LAYOUT, SAVED_LAYOUT_VERSION } from "./persistence/types.ts";
-import { appliedLayoutIdAtom, defaultLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "./savedLayoutAtoms.ts";
+import {
+  appliedLayoutIdAtom,
+  defaultLayoutIdAtom,
+  layoutMruAtom,
+  savedLayoutsAtom,
+  tidyConfirmationSuppressedAtom,
+} from "./savedLayoutAtoms.ts";
 import { activeWorkspaceIdAtom, panelsInSubSectionAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID } from "./systemDefaultLayout.ts";
 import { activeSectionRingNonceAtom, layoutTidyTargetAtom, maximizedSectionAtom } from "./transientAtoms.ts";
@@ -74,6 +79,28 @@ describe("applyLayoutAtom", () => {
     tidy.set(applyLayoutAtom, flagged);
     expect(tidy.get(layoutTidyTargetAtom)).toBe(flagged);
   });
+
+  it("tidies silently — no confirmation — when the global suppression is set", () => {
+    const store = storeWith({ placement: { browser: "right" }, expanded: { right: true } });
+    store.set(tidyConfirmationSuppressedAtom, true);
+    // System Default declares Files/Changes/Commits, so Browser is undeclared and
+    // would close. With the confirmation globally suppressed, apply closes it outright.
+    store.set(applyLayoutAtom, makeLayout("silent", { captured: SYSTEM_DEFAULT_LAYOUT.captured, tidyOnApply: true }));
+
+    expect(store.get(layoutTidyTargetAtom)).toBeNull();
+    expect(store.get(workspaceLayoutAtom).placement.browser).toBeUndefined();
+    expect(store.get(panelsInSubSectionAtom("left"))).toEqual(["files", "changes", "commits"]);
+  });
+
+  it("suppression is global — it silences a different tidy layout too", () => {
+    const store = storeWith({ placement: { browser: "right" }, expanded: { right: true } });
+    store.set(tidyConfirmationSuppressedAtom, true);
+    // A second, unrelated tidy layout also skips the confirmation (the flag is not
+    // keyed to any one layout).
+    store.set(applyLayoutAtom, makeLayout("other", { captured: SYSTEM_DEFAULT_LAYOUT.captured, tidyOnApply: true }));
+    expect(store.get(layoutTidyTargetAtom)).toBeNull();
+    expect(store.get(workspaceLayoutAtom).placement.browser).toBeUndefined();
+  });
 });
 
 describe("tidyToLayoutAtom", () => {
@@ -122,22 +149,49 @@ describe("saveCurrentLayoutAtom", () => {
   });
 });
 
-describe("setLayoutTidyOnApplyAtom", () => {
-  it("toggles a saved layout's tidyOnApply flag", () => {
+describe("updateLayoutAtom", () => {
+  it("updates name + tidy without touching the captured arrangement", () => {
     const store = storeWith({ placement: { files: "left" } });
-    store.set(savedLayoutsAtom, [makeLayout("a", { tidyOnApply: false })]);
+    const original = makeLayout("a", { name: "Old", tidyOnApply: false });
+    store.set(savedLayoutsAtom, [original]);
 
-    store.set(setLayoutTidyOnApplyAtom, { id: "a", tidyOnApply: true });
-    expect(store.get(savedLayoutsAtom)[0].tidyOnApply).toBe(true);
+    store.set(updateLayoutAtom, { id: "a", name: "  New name  ", setAsDefault: false, tidyOnApply: true });
 
-    store.set(setLayoutTidyOnApplyAtom, { id: "a", tidyOnApply: false });
-    expect(store.get(savedLayoutsAtom)[0].tidyOnApply).toBe(false);
+    const updated = store.get(savedLayoutsAtom)[0];
+    expect(updated.name).toBe("New name");
+    expect(updated.tidyOnApply).toBe(true);
+    expect(updated.captured).toBe(original.captured);
   });
 
-  it("is a no-op for System Default (it has no stored record)", () => {
+  it("keeps the existing name when the edit clears it", () => {
     const store = storeWith({ placement: { files: "left" } });
-    store.set(setLayoutTidyOnApplyAtom, { id: SYSTEM_DEFAULT_LAYOUT_ID, tidyOnApply: true });
+    store.set(savedLayoutsAtom, [makeLayout("a", { name: "Keep" })]);
+    store.set(updateLayoutAtom, { id: "a", name: "   ", setAsDefault: false, tidyOnApply: false });
+    expect(store.get(savedLayoutsAtom)[0].name).toBe("Keep");
+  });
+
+  it("owns the default pointer for this layout only", () => {
+    const store = storeWith({ placement: { files: "left" } });
+    store.set(savedLayoutsAtom, [makeLayout("a"), makeLayout("b")]);
+
+    // Turning the flag on points the default here...
+    store.set(updateLayoutAtom, { id: "a", name: "a", setAsDefault: true, tidyOnApply: false });
+    expect(store.get(defaultLayoutIdAtom)).toBe("a");
+
+    // ...editing a DIFFERENT layout with the flag off never steals it...
+    store.set(updateLayoutAtom, { id: "b", name: "b", setAsDefault: false, tidyOnApply: false });
+    expect(store.get(defaultLayoutIdAtom)).toBe("a");
+
+    // ...but turning it off on the current default reverts to System Default.
+    store.set(updateLayoutAtom, { id: "a", name: "a", setAsDefault: false, tidyOnApply: false });
+    expect(store.get(defaultLayoutIdAtom)).toBe(SYSTEM_DEFAULT_LAYOUT_ID);
+  });
+
+  it("is a no-op for System Default", () => {
+    const store = storeWith({ placement: { files: "left" } });
+    store.set(updateLayoutAtom, { id: SYSTEM_DEFAULT_LAYOUT_ID, name: "Nope", setAsDefault: true, tidyOnApply: true });
     expect(store.get(savedLayoutsAtom)).toHaveLength(0);
+    expect(store.get(defaultLayoutIdAtom)).toBe(SYSTEM_DEFAULT_LAYOUT_ID);
   });
 });
 
@@ -166,24 +220,10 @@ describe("deleteLayoutAtom", () => {
   });
 });
 
-describe("setDefaultLayoutAtom + renameLayoutAtom", () => {
+describe("setDefaultLayoutAtom", () => {
   it("points the default at a layout", () => {
     const store = storeWith({});
     store.set(setDefaultLayoutAtom, "focused");
     expect(store.get(defaultLayoutIdAtom)).toBe("focused");
-  });
-
-  it("renames a saved layout, but leaves System Default and empty names alone", () => {
-    const store = storeWith({});
-    store.set(savedLayoutsAtom, [makeLayout("focused", { name: "Focused" })]);
-
-    store.set(renameLayoutAtom, { id: "focused", name: "  Deep work  " });
-    expect(store.get(savedLayoutsAtom)[0].name).toBe("Deep work");
-
-    store.set(renameLayoutAtom, { id: "focused", name: "   " });
-    expect(store.get(savedLayoutsAtom)[0].name).toBe("Deep work");
-
-    store.set(renameLayoutAtom, { id: SYSTEM_DEFAULT_LAYOUT_ID, name: "Nope" });
-    expect(store.get(savedLayoutsAtom)).toHaveLength(1);
   });
 });

@@ -20,7 +20,7 @@ import { panelRegistryAtom } from "../../sections/registry/panelRegistry.ts";
 import { appliedLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "../../sections/savedLayoutAtoms.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../../sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../../sections/sectionTypes.ts";
-import { SYSTEM_DEFAULT_LAYOUT_ID } from "../../sections/systemDefaultLayout.ts";
+import { SYSTEM_LAYOUTS } from "../../sections/systemDefaultLayout.ts";
 import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
 import { buildAddPanelProvider } from "../dynamic/addPanel.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";
@@ -798,7 +798,8 @@ describe("buildLayoutsProvider", () => {
     captured: CAPTURED,
     version: SAVED_LAYOUT_VERSION,
   });
-  const systemDefaultId = `layouts.switch.${SYSTEM_DEFAULT_LAYOUT_ID}`;
+  // Command ids for the built-in layouts (System Default + presets), in switcher order.
+  const systemLayoutCommandIds = SYSTEM_LAYOUTS.map((entry) => `layouts.switch.${entry.id}`);
   const WS_CTX: PaletteContext = {
     ...ROOT_CTX,
     route: { isHome: false, isWorkspace: true, isSettings: false, isAgent: false },
@@ -819,7 +820,11 @@ describe("buildLayoutsProvider", () => {
   it("emits a 'Switch to <layout>' command per resolved layout in the layouts group", () => {
     getDefaultStore().set(savedLayoutsAtom, [layout("a", "Focused"), layout("b", "Wide")]);
     const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
-    expect(commands.map((command) => command.id)).toEqual([systemDefaultId, "layouts.switch.a", "layouts.switch.b"]);
+    expect(commands.map((command) => command.id)).toEqual([
+      ...systemLayoutCommandIds,
+      "layouts.switch.a",
+      "layouts.switch.b",
+    ]);
     expect(commands.every((command) => command.group === "layouts")).toBe(true);
     expect(commands.find((command) => command.id === "layouts.switch.a")?.title).toBe("Switch to Focused");
   });
@@ -837,7 +842,12 @@ describe("buildLayoutsProvider", () => {
     store.set(savedLayoutsAtom, [layout("a", "Focused"), layout("b", "Wide")]);
     store.set(layoutMruAtom, ["b", "a"]);
     const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
-    expect(commands.map((command) => command.id)).toEqual(["layouts.switch.b", "layouts.switch.a", systemDefaultId]);
+    // b, a first (most-recently-applied), then the built-ins in their default order.
+    expect(commands.map((command) => command.id)).toEqual([
+      "layouts.switch.b",
+      "layouts.switch.a",
+      ...systemLayoutCommandIds,
+    ]);
   });
 
   it("perform applies the re-resolved layout via applyLayoutAtom", () => {

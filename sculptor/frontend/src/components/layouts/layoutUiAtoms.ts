@@ -7,6 +7,16 @@
 import type { PrimitiveAtom } from "jotai";
 import { atom } from "jotai";
 
+import type { SavedLayout } from "~/components/sections/persistence/types.ts";
+
 export const layoutsSwitcherOpenAtom: PrimitiveAtom<boolean> = atom<boolean>(false);
 
-export const saveLayoutModalOpenAtom: PrimitiveAtom<boolean> = atom<boolean>(false);
+// What the Save/Edit dialog is doing right now (null = closed). "create" snapshots
+// the current workspace into a new Layout; "edit" reopens the same form on an
+// existing Layout to change its name / shortcut / tidy / default without
+// re-capturing its arrangement. One atom rather than an open flag + a separate
+// target so the two can never disagree.
+export type SaveLayoutModalRequest = { mode: "create" } | { mode: "edit"; layout: SavedLayout };
+
+export const saveLayoutModalRequestAtom: PrimitiveAtom<SaveLayoutModalRequest | null> =
+  atom<SaveLayoutModalRequest | null>(null);

@@ -331,6 +331,9 @@ button { font-family: inherit; }
 }
 .prev .ptab.on { background: var(--gray-a5); color: var(--gray-12); }
 .prev .ptab.default { background: transparent; border: 1px dashed var(--gray-a6); color: var(--gray-10); }
+/* Tidy confirmation: panels the target layout doesn't include get a red border and
+   tint so they read as "closing" against the neutral tabs/chips that stay. */
+.prev .ptab.remove { background: var(--tomato-a3); border: 1px solid var(--tomato-11); color: var(--tomato-11); }
 .prev-legend { color: var(--gray-9); font-size: 12px; }
 
 /* Save dialog options — a clean label-left / control-right list (mirrors the
@@ -427,9 +430,20 @@ button { font-family: inherit; }
 }
 .close-list li svg { color: var(--gray-10); }
 .close-list li .li-sub { color: var(--gray-9); font-size: 12px; }
-.alert .reassure { align-items: center; color: var(--gray-10); display: flex; font-size: 13px; gap: 7px; }
+.alert .reassure { align-items: center; color: var(--gray-11); display: flex; font-size: 13px; gap: 7px; margin-top: 12px; }
 .alert .reassure svg { color: var(--gray-9); flex-shrink: 0; }
+/* Reusing the section-grid preview makes the dialog taller; widen it (~25%) so the
+   miniature keeps a window-like aspect and the tabs don't wrap tightly. */
+.alert.alert-wide { max-width: 525px; width: 525px; }
+.alert .prev-tidy { height: 210px; grid-template-rows: 1fr 78px; margin-top: 14px; max-width: none; }
 .alert-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+/* Footer splits the "don't show again" opt-out to the left, actions to the right. */
+.alert-foot { align-items: center; display: flex; gap: 16px; justify-content: space-between; margin-top: 20px; }
+.alert-foot .alert-actions { margin-top: 0; }
+.dont-show { align-items: center; color: var(--gray-11); cursor: pointer; display: inline-flex; font-size: 13px; gap: 8px; user-select: none; }
+.chk { align-items: center; background: var(--gray-a3); border: 1px solid var(--gray-a6); border-radius: 4px; display: inline-flex; flex-shrink: 0; height: 16px; justify-content: center; width: 16px; }
+.chk.on { background: var(--indigo-9); border-color: var(--indigo-9); }
+.chk.on::after { border: solid white; border-width: 0 2px 2px 0; content: ""; height: 8px; margin-top: -2px; transform: rotate(45deg); width: 4px; }
 
 /* ============================================================
    State routing
@@ -943,26 +957,34 @@ body.bare #chrome { display: none; }
 
 <!-- ═══════════════ 5) Tidy confirmation ═══════════════ -->
 <div class="alert-center" id="dlg-tidy">
-  <div class="alert">
-    <h2>Close 2 panels?</h2>
+  <div class="alert alert-wide">
+    <h2>Close 4 panels?</h2>
     <p>Tidying matches this workspace to <b style="color: var(--gray-12); font-weight: 500;">Focused</b>. Panels the layout doesn&rsquo;t include will close:</p>
-    <ul class="close-list">
-      <li>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-        Browser<span class="li-sub">right section</span>
-      </li>
-      <li>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-        Notes<span class="li-sub">left section</span>
-      </li>
-    </ul>
-    <p class="reassure">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
-      Your agents and terminals are never closed.
-    </p>
-    <div class="alert-actions">
-      <button class="btn soft">Cancel</button>
-      <button class="btn danger">Close 2 panels</button>
+    <div class="prev prev-tidy">
+      <div class="cell cell-l saved">
+        <div class="cell-label">Left</div>
+        <div class="cell-tabs"><span class="ptab remove">Files</span><span class="ptab remove">Changes</span><span class="ptab remove">Commits</span></div>
+      </div>
+      <div class="cell cell-c stays">
+        <div class="cell-label">Center</div>
+        <div class="cell-tabs"><span class="ptab default">Agent</span></div>
+      </div>
+      <div class="cell cell-r saved">
+        <div class="cell-label">Right</div>
+        <div class="cell-tabs"><span class="ptab remove">Browser</span></div>
+      </div>
+      <div class="cell cell-b stays">
+        <div class="cell-label">Bottom</div>
+        <div class="cell-tabs"><span class="ptab default">Terminal</span></div>
+      </div>
+    </div>
+    <p class="reassure">Your agents and terminals are never closed.</p>
+    <div class="alert-foot">
+      <label class="dont-show"><span class="chk on"></span>Don&rsquo;t show this again</label>
+      <div class="alert-actions">
+        <button class="btn soft">Cancel</button>
+        <button class="btn danger">Close 4 panels</button>
+      </div>
     </div>
   </div>
 </div>

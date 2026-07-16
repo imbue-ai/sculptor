@@ -1,4 +1,4 @@
-import { PanelsTopLeft, Plus } from "lucide-react";
+import { LayoutTemplate, Plus } from "lucide-react";
 
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command } from "../types.ts";
@@ -25,7 +25,7 @@ export const buildLayoutCommands = (runtime: CommandRuntime): Array<Command> => 
     subtitle: "Switch, save, and manage layouts",
     keywords: ["layout", "switch", "arrangement", "manage"],
     group: "layouts",
-    icon: PanelsTopLeft,
+    icon: LayoutTemplate,
     // Shows the ⌘⇧L hint and, on select, closes the palette and opens the switcher.
     shortcut: "open_layouts",
     order: 110,

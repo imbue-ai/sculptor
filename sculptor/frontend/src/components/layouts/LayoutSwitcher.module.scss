@@ -115,18 +115,6 @@
   white-space: nowrap;
 }
 
-.renameInput {
-  background: var(--gray-a3);
-  border: 1px solid var(--gray-a6);
-  border-radius: var(--radius-2);
-  color: var(--gray-12);
-  flex: 1;
-  font-size: var(--font-size-2);
-  min-width: 0;
-  outline: none;
-  padding: 2px var(--space-2);
-}
-
 .rowTrailing {
   align-items: center;
   color: var(--gray-10);
@@ -218,19 +206,21 @@
   width: 1px;
 }
 
-// The ⌘J "more options" popover, anchored above the bar within the panel.
+// The ⌘J "more options" popover, anchored above the bar within the panel. Sized to
+// match the Radix context menu (size="1") the rows also feed, so the two surfaces
+// read as one — compact rows, narrow width, tight padding.
 .popover {
   background: var(--color-panel-solid);
   border: 1px solid var(--gray-a5);
-  border-radius: var(--radius-4);
+  border-radius: var(--radius-3);
   bottom: 52px;
   box-shadow: var(--shadow-xl);
   display: flex;
   flex-direction: column;
-  padding: var(--space-2);
+  min-width: 180px;
+  padding: var(--space-1);
   position: absolute;
   right: var(--space-2);
-  width: 300px;
   z-index: var(--z-above);
 }
 
@@ -242,13 +232,14 @@
   color: var(--gray-12);
   cursor: pointer;
   display: flex;
-  font-size: var(--font-size-2);
+  font-family: inherit;
+  font-size: var(--font-size-1);
   font-weight: var(--font-weight-regular);
-  gap: var(--space-3);
+  gap: var(--space-2);
   height: auto;
   justify-content: flex-start;
   margin: 0;
-  padding: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   text-align: left;
   width: 100%;
 
@@ -283,13 +274,6 @@
   flex-shrink: 0;
   font-family: inherit;
   font-size: var(--font-size-1);
-  margin-left: auto;
-}
-
-// The checkmark on the tidy-on-apply toggle row, pushed to the trailing edge.
-.popoverCheck {
-  color: var(--gray-11);
-  flex-shrink: 0;
   margin-left: auto;
 }
 

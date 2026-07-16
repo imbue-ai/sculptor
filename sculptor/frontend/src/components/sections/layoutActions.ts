@@ -9,10 +9,16 @@ import { applyCapturedLayout, computeTidyClosure } from "./layoutApply.ts";
 import { captureLayout } from "./layoutCapture.ts";
 import type { SavedLayout } from "./persistence/types.ts";
 import { SAVED_LAYOUT_VERSION } from "./persistence/types.ts";
-import { appliedLayoutIdAtom, defaultLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "./savedLayoutAtoms.ts";
+import {
+  appliedLayoutIdAtom,
+  defaultLayoutIdAtom,
+  layoutMruAtom,
+  savedLayoutsAtom,
+  tidyConfirmationSuppressedAtom,
+} from "./savedLayoutAtoms.ts";
 import { closePanelAtom } from "./sectionActions.ts";
 import { workspaceLayoutAtom } from "./sectionAtoms.ts";
-import { isSystemDefaultLayoutId, SYSTEM_DEFAULT_LAYOUT_ID } from "./systemDefaultLayout.ts";
+import { isSystemLayoutId, SYSTEM_DEFAULT_LAYOUT_ID } from "./systemDefaultLayout.ts";
 import { activeSectionRingNonceAtom, layoutTidyTargetAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 // Move an id to the front of the MRU list (most-recently-applied first),
@@ -24,10 +30,11 @@ function withFront(ids: ReadonlyArray<string>, id: string): Array<string> {
 // Apply a Layout to the active workspace: additive arrangement + geometry +
 // maximize, record it as the applied Layout, move it to the front of the MRU, and
 // pulse the active-section ring (applying is a deliberate jump). If the Layout opts
-// into tidy-on-apply, hand off to the Tidy confirmation afterward (which closes the
-// static panels it doesn't declare, and is a silent no-op when nothing would close).
-// This is the single choke point every apply path routes through — switcher, command
-// palette, and per-Layout shortcut — so the flag is honored consistently.
+// into tidy-on-apply, close the static panels it doesn't declare too: silently when
+// the user has globally dismissed the confirmation, otherwise via the Tidy
+// confirmation (which is itself a no-op when nothing would close). This is the single
+// choke point every apply path routes through — switcher, command palette, and
+// per-Layout shortcut — so the flags are honored consistently.
 export const applyLayoutAtom = atom(null, (get, set, layout: SavedLayout) => {
   const result = applyCapturedLayout(get(workspaceLayoutAtom), layout.captured);
   set(workspaceLayoutAtom, { ...result.layout, appliedLayoutId: layout.id });
@@ -35,7 +42,11 @@ export const applyLayoutAtom = atom(null, (get, set, layout: SavedLayout) => {
   set(layoutMruAtom, withFront(get(layoutMruAtom), layout.id));
   set(activeSectionRingNonceAtom, (nonce) => nonce + 1);
   if (layout.tidyOnApply === true) {
-    set(layoutTidyTargetAtom, layout);
+    if (get(tidyConfirmationSuppressedAtom)) {
+      set(tidyToLayoutAtom, layout);
+    } else {
+      set(layoutTidyTargetAtom, layout);
+    }
   }
 });
 
@@ -74,11 +85,12 @@ export const saveCurrentLayoutAtom = atom(
   },
 );
 
-// Remove a Layout. System Default is undeletable. A default pointer at the deleted
-// Layout falls back to System Default, and the active workspace drops a now-dangling
-// applied pointer (other workspaces resolve theirs to "no Current" at read time).
+// Remove a Layout. Built-in layouts (System Default + presets) are undeletable. A
+// default pointer at the deleted Layout falls back to System Default, and the active
+// workspace drops a now-dangling applied pointer (other workspaces resolve theirs to
+// "no Current" at read time).
 export const deleteLayoutAtom = atom(null, (get, set, id: string) => {
-  if (isSystemDefaultLayoutId(id)) {
+  if (isSystemLayoutId(id)) {
     return;
   }
   set(
@@ -103,28 +115,32 @@ export const setDefaultLayoutAtom = atom(null, (_get, set, id: string) => {
   set(defaultLayoutIdAtom, id);
 });
 
-// Rename a Layout. System Default's name is fixed, and an empty name is ignored.
-export const renameLayoutAtom = atom(null, (get, set, params: { id: string; name: string }) => {
-  const name = params.name.trim();
-  if (isSystemDefaultLayoutId(params.id) || name === "") {
-    return;
-  }
-  set(
-    savedLayoutsAtom,
-    get(savedLayoutsAtom).map((layout) => (layout.id === params.id ? { ...layout, name } : layout)),
-  );
-});
-
-// Toggle whether applying a Layout also tidies. System Default has no stored record
-// to flag, so it is ignored (it never tidies on apply).
-export const setLayoutTidyOnApplyAtom = atom(null, (get, set, params: { id: string; tidyOnApply: boolean }) => {
-  if (isSystemDefaultLayoutId(params.id)) {
-    return;
-  }
-  set(
-    savedLayoutsAtom,
-    get(savedLayoutsAtom).map((layout) =>
-      layout.id === params.id ? { ...layout, tidyOnApply: params.tidyOnApply } : layout,
-    ),
-  );
-});
+// Update a Layout's editable metadata (name, tidy-on-apply, and whether it's the
+// new-workspace default) from the Edit form — never the captured arrangement, which
+// stays exactly as it was saved. Built-in layouts have no stored record, so they're
+// ignored. An empty name is treated as "leave the name alone" rather than clearing
+// it. `setAsDefault` owns the default pointer for THIS Layout only: turning it on
+// points the default here, turning it off reverts to System Default only when this
+// Layout currently holds it (so editing a non-default Layout never steals it).
+export const updateLayoutAtom = atom(
+  null,
+  (get, set, params: { id: string; name: string; setAsDefault: boolean; tidyOnApply: boolean }) => {
+    if (isSystemLayoutId(params.id)) {
+      return;
+    }
+    const name = params.name.trim();
+    set(
+      savedLayoutsAtom,
+      get(savedLayoutsAtom).map((layout) =>
+        layout.id === params.id
+          ? { ...layout, name: name === "" ? layout.name : name, tidyOnApply: params.tidyOnApply }
+          : layout,
+      ),
+    );
+    if (params.setAsDefault) {
+      set(defaultLayoutIdAtom, params.id);
+    } else if (get(defaultLayoutIdAtom) === params.id) {
+      set(defaultLayoutIdAtom, SYSTEM_DEFAULT_LAYOUT_ID);
+    }
+  },
+);
