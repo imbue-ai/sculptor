@@ -14,7 +14,7 @@
 
 import { DropdownMenu, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
-import type { PointerEvent as ReactPointerEvent, ReactElement } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactElement, Ref } from "react";
 import { useRef } from "react";
 
 import { type AgentTypeName, ElementIds } from "~/api";
@@ -210,13 +210,17 @@ const AddPanelMenuItems = ({
 // AddPanelDropdown (click-to-open) and the section-header control
 // (SectionAddPanelControl, hover-to-open). Owns the focus-restore suppression so an
 // opened panel keeps the focus it grabs on mount. Optional pointer handlers let a
-// hover-driven host keep the menu open while the pointer is over it.
+// hover-driven host keep the menu open while the pointer is over it, and an
+// optional ref exposes the popover element so the host can measure it (for the
+// hover safe-area geometry).
 export const AddPanelMenuContent = ({
   subSection,
+  contentRef,
   onPointerEnter,
   onPointerLeave,
 }: {
   subSection: SubSectionId;
+  contentRef?: Ref<HTMLDivElement>;
   onPointerEnter?: (event: ReactPointerEvent) => void;
   onPointerLeave?: (event: ReactPointerEvent) => void;
 }): ReactElement => {
@@ -229,6 +233,7 @@ export const AddPanelMenuContent = ({
   const openedPanelRef = useRef(false);
   return (
     <DropdownMenu.Content
+      ref={contentRef}
       size="1"
       className={styles.content}
       data-testid={`${ElementIds.ADD_PANEL_DROPDOWN}-${subSection}`}
