@@ -3,11 +3,13 @@ import { useEffect, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelpers.ts";
 
 import { ChatPanelContent } from "../components/ChatPanelContent.tsx";
 import { AgentSheet } from "./AgentSheet.tsx";
 import { AgentSwitcher } from "./AgentSwitcher.tsx";
 import { ChangesPill } from "./ChangesPill.tsx";
+import { MobileChatSkeleton } from "./MobileChatSkeleton.tsx";
 import { MobileWorkspaceHeader } from "./MobileWorkspaceHeader.tsx";
 import styles from "./MobileWorkspaceShell.module.scss";
 import { ReviewAllOverlay } from "./overlays/ReviewAllOverlay.tsx";
@@ -30,6 +32,11 @@ type Overlay = "review" | "terminal" | null;
  */
 export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
+  // `undefined` until the task snapshot lands (it also drives ChatPanelContent's
+  // chat-vs-terminal switch). The desktop layout covers this window with a
+  // section-mount skeleton; the mobile shell mounts the chat directly, so gate a
+  // chat skeleton here rather than letting the pane sit blank on a cold load.
+  const isChatReady = useTaskSupportsChatInterface(taskID) !== undefined;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAgentSheetOpen, setIsAgentSheetOpen] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -63,8 +70,9 @@ export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactEleme
         </div>
         {/* The panel model keys the chat on an explicit taskId (never the
             route), so the shell passes its agent through — same contract as a
-            desktop agent panel. */}
-        <ChatPanelContent taskId={taskID} />
+            desktop agent panel. Until the task snapshot resolves, a chat-shaped
+            skeleton stands in for the (otherwise blank) panel. */}
+        {isChatReady ? <ChatPanelContent taskId={taskID} /> : <MobileChatSkeleton />}
       </div>
 
       <div

@@ -15,10 +15,12 @@ import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
 import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
+import { isSidebarLoadingAtom } from "~/components/nav/sidebarWorkspaceOrder.ts";
 import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { WorkspaceStatusDots } from "~/components/statusDot/StatusDot.tsx";
 import { computeWorkspaceDotStatus } from "~/components/statusDot/statusUtils.ts";
 
+import { MobileDrawerLoadingSkeleton } from "./MobileDrawerLoadingSkeleton.tsx";
 import { useLongPress } from "./useLongPress.ts";
 import styles from "./WorkspaceDrawer.module.scss";
 
@@ -211,6 +213,10 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
   const { navigateToWorkspace, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
   const { isHomeRoute, isSettingsRoute } = useImbueLocation();
   const workspaces = useAtomValue(workspacesArrayAtom);
+  // True only until the first workspace snapshot lands (the frame always writes
+  // an array, even an empty one). Reused from the desktop sidebar so both rails
+  // separate "still loading" from "loaded and genuinely empty" the same way.
+  const isLoading = useAtomValue(isSidebarLoadingAtom);
   const userEmail = useAtomValue(userEmailAtom);
   // Workspace creation goes through the shared new-workspace modal (the same
   // one every desktop entry point uses); there is no separate mobile page.
@@ -291,7 +297,13 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
       </nav>
 
       <div className={styles.workspaceList}>
-        {isEmpty ? (
+        {/* While the first workspace snapshot is still in flight, show a skeleton
+            rather than the empty state — `isEmpty` can't yet tell "loading" from
+            "loaded and empty", so a bare empty state would read as "you have
+            nothing" during a cold load / reconnect (e.g. after a hard refresh). */}
+        {isLoading ? (
+          <MobileDrawerLoadingSkeleton />
+        ) : isEmpty ? (
           <div className={styles.empty}>
             <span className={styles.emptyIcon}>
               <FolderPlus size={28} />

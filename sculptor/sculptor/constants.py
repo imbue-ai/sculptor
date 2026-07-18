@@ -849,6 +849,10 @@ class ElementIDs(StrEnum):
     # none of the desktop sidebar/section/panel tags render under the mobile
     # shell — so they carry their own hooks for the mobile integration suite.
     MOBILE_WORKSPACE_SHELL = "MOBILE_WORKSPACE_SHELL"
+    # Chat-bubble skeleton shown in the shell's chat area while the task snapshot
+    # (and thus the chat-vs-terminal capability) is still in flight, so a cold
+    # load shows a chat silhouette instead of a blank pane.
+    MOBILE_CHAT_LOADING_SKELETON = "MOBILE_CHAT_LOADING_SKELETON"
     MOBILE_WORKSPACE_HEADER = "MOBILE_WORKSPACE_HEADER"
     MOBILE_HEADER_MENU_BUTTON = "MOBILE_HEADER_MENU_BUTTON"
     MOBILE_HEADER_ACTIONS_BUTTON = "MOBILE_HEADER_ACTIONS_BUTTON"
@@ -864,6 +868,10 @@ class ElementIDs(StrEnum):
     MOBILE_DRAWER_SETTINGS_LINK = "MOBILE_DRAWER_SETTINGS_LINK"
     MOBILE_DRAWER_WORKSPACE_ROW = "MOBILE_DRAWER_WORKSPACE_ROW"
     MOBILE_DRAWER_NEW_WORKSPACE_BUTTON = "MOBILE_DRAWER_NEW_WORKSPACE_BUTTON"
+    # Repo-list skeleton shown while the first workspace snapshot is still in
+    # flight, so a cold load shows placeholder rows instead of flashing the
+    # "No workspaces yet" empty state (mirrors the desktop sidebar skeleton).
+    MOBILE_DRAWER_LOADING_SKELETON = "MOBILE_DRAWER_LOADING_SKELETON"
     # The long-press context menu shared by drawer workspace rows and agent-sheet
     # rows (only one menu is ever open at a time, so both reuse these two tags).
     MOBILE_ROW_RENAME_ACTION = "MOBILE_ROW_RENAME_ACTION"

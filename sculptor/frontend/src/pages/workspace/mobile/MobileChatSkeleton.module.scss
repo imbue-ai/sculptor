@@ -1,0 +1,77 @@
+// Loading skeleton for the mobile chat stream. A short alternating transcript of
+// assistant (left) and user (right) bubbles, filling the shell's chat area so the
+// pane doesn't sit blank while the first task snapshot is in flight.
+
+.skeleton {
+  // Delayed fade-in so a fast WebSocket reconnect never flashes a skeleton:
+  // `both` fill keeps it transparent through the delay, then it fades in only if
+  // the task is still loading after the delay elapses. The real chat, when it
+  // arrives sooner, unmounts this before the fade ever starts.
+  animation: mobile-chat-skeleton-reveal var(--duration-fast) var(--ease-out) var(--duration-normal) both;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 0;
+  // The real stream starts from the top; overflow stays clipped so a tall
+  // placeholder can't introduce a scrollbar the real chat wouldn't have yet.
+  overflow: hidden;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+
+@keyframes mobile-chat-skeleton-reveal {
+  from {
+    opacity: 0%;
+  }
+
+  to {
+    opacity: 100%;
+  }
+}
+
+// Assistant turns hug the left; user turns hug the right — the same left/right
+// split the real transcript uses to distinguish speakers.
+.assistantTurn {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.userTurn {
+  display: flex;
+  justify-content: flex-end;
+}
+
+// A bubble is a column of text-line bars. Its width is set inline per turn so the
+// silhouette varies; the lines are percentages of that width. A faint rounded
+// fill + padding reads as a message bubble behind the bars.
+.bubble {
+  background: var(--mobile-line-soft);
+  border-radius: var(--radius-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+// The user side's bubble sits a touch stronger so the two speakers read apart,
+// matching the transcript's user-vs-assistant emphasis.
+.userTurn .bubble {
+  background: var(--mobile-press);
+}
+
+// A text-line placeholder bar; width is set inline per line for an uneven,
+// content-like silhouette.
+.line {
+  border-radius: var(--radius-1);
+  flex-shrink: 0;
+  height: var(--space-2);
+}
+
+// Honour reduced-motion: skip the fade but keep the anti-flash delay, so the
+// skeleton still only appears once loading has genuinely dragged on. (Radix
+// Skeleton drops its own shimmer under this query independently.)
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation-duration: 0.01ms;
+  }
+}
