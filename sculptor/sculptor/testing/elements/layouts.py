@@ -19,6 +19,32 @@ class PlaywrightSaveLayoutDialogElement(PlaywrightIntegrationTestElement):
     def get_name_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_NAME_INPUT)
 
+    def get_tidy_switch(self) -> Locator:
+        """The "Tidy panels when applying" switch (checked when the layout tidies)."""
+        return self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_TIDY_SWITCH)
+
+    def get_shortcut_control(self) -> Locator:
+        """The inline keyboard-shortcut recorder row (wraps the HotkeyChip)."""
+        return self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_SHORTCUT)
+
+    def record_shortcut(self, chord: str) -> None:
+        """Record a keyboard shortcut for this layout: arm the recorder, press the
+        chord, and wait for the chip to show the captured value.
+
+        ``chord`` is a Playwright key expression (e.g. ``"Meta+Shift+G"``). The
+        recorder maps the platform's primary modifier to a ``Meta``-prefixed chord
+        on both macOS and Linux, so pass the platform modifier
+        (``get_playwright_modifier_key``) as the first segment. The captured value
+        is held locally until the form is saved; the chip's clear button appearing
+        confirms the recording completed."""
+        control = self.get_shortcut_control()
+        control.get_by_test_id(ElementIDs.SETTINGS_HOTKEY_SET_BUTTON).click()
+        # Wait for the recorder to arm before pressing: it attaches its capture-phase
+        # keydown listener when it shows this prompt, so a chord pressed earlier is lost.
+        expect(control).to_contain_text("Press keys")
+        self._page.keyboard.press(chord)
+        expect(control.get_by_test_id(ElementIDs.SETTINGS_HOTKEY_CLEAR_BUTTON)).to_be_visible()
+
     def save(self, name: str, *, set_as_default: bool = False, tidy_on_apply: bool = False) -> None:
         """Name the layout, optionally flip the default / tidy-on-apply switches,
         submit, and wait for the dialog to close. The switch flips assume the create
@@ -35,9 +61,15 @@ class PlaywrightSaveLayoutDialogElement(PlaywrightIntegrationTestElement):
         mode prefills it, so a plain click is a toggle rather than a set)."""
         self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_TIDY_SWITCH).click()
 
+    def get_submit_button(self) -> Locator:
+        """The submit button. Its label doubles as the visible mode marker — "Save
+        layout" when creating, "Save changes" when editing (the dialog's actual title
+        is visually hidden, outside the content node this POM is rooted at)."""
+        return self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_SUBMIT)
+
     def submit(self) -> None:
         """Submit the form and wait for the dialog to close."""
-        self._page.get_by_test_id(ElementIDs.SAVE_LAYOUT_SUBMIT).click()
+        self.get_submit_button().click()
         expect(self._locator).to_be_hidden()
 
 
@@ -86,6 +118,12 @@ class PlaywrightLayoutsSwitcherElement(PlaywrightIntegrationTestElement):
     def get_row_by_name(self, name: str) -> Locator:
         return self.get_rows().filter(has_text=name)
 
+    def get_row_shortcut_hint(self, name: str) -> Locator:
+        """The keyboard-shortcut hint (kbd) on a layout's row. Rendered only once the
+        layout has a bound shortcut — the same binding the runtime dispatcher reads —
+        so its visibility gates callers on a registered per-layout shortcut."""
+        return self.get_row_by_name(name).locator("kbd")
+
     def open_save_dialog(self) -> PlaywrightSaveLayoutDialogElement:
         # The Save button lives inside the switcher; the dialog it opens is a
         # separate portal-mounted PaletteDialog, so it stays page-scoped.
@@ -127,3 +165,10 @@ class PlaywrightLayoutsSwitcherElement(PlaywrightIntegrationTestElement):
 def get_layout_tidy_dialog(page: Page) -> PlaywrightLayoutTidyDialogElement:
     dialog = page.get_by_test_id(ElementIDs.LAYOUT_TIDY_DIALOG)
     return PlaywrightLayoutTidyDialogElement(locator=dialog, page=page)
+
+
+def get_save_layout_dialog(page: Page) -> PlaywrightSaveLayoutDialogElement:
+    """POM for an already-open Save/Edit layout dialog — e.g. the one the tidy
+    confirmation's "Edit layout" link opens, rather than the switcher's Save button."""
+    dialog = page.get_by_test_id(ElementIDs.SAVE_LAYOUT_DIALOG)
+    return PlaywrightSaveLayoutDialogElement(locator=dialog, page=page)

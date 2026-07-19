@@ -14,8 +14,11 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.layouts import get_layout_tidy_dialog
+from sculptor.testing.elements.layouts import get_save_layout_dialog
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -167,3 +170,106 @@ def test_row_context_menu_applies_layout(sculptor_instance_: SculptorInstance) -
     # Reopening shows "Reviewing" as the current layout.
     switcher = sidebar.open_layouts_switcher()
     expect(switcher.get_row_by_name("Reviewing")).to_contain_text("Current")
+
+
+@user_story("to back out of tidying and keep the panels a layout would have closed")
+def test_tidy_cancel_keeps_panel_but_layout_still_applies(sculptor_instance_: SculptorInstance) -> None:
+    """Cancelling the Tidy confirmation leaves the undeclared Notes panel open — but the
+    apply is additive and already ran before the prompt, so the layout is still Current."""
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Tidy Cancel WS")
+    sidebar = get_workspace_sidebar(page)
+
+    switcher = sidebar.open_layouts_switcher()
+    switcher.open_save_dialog().save("Base", tidy_on_apply=True)
+
+    open_panel(page, "notes", "left")
+    left = PlaywrightWorkspaceSection(page, "left")
+    expect(left.get_panel_tab("notes")).to_be_visible()
+
+    switcher = sidebar.open_layouts_switcher()
+    switcher.apply_by_name("Base")
+    tidy_dialog = get_layout_tidy_dialog(page)
+    expect(tidy_dialog).to_be_visible()
+    tidy_dialog.cancel()
+
+    # Notes survives the cancelled tidy, yet "Base" is still the applied layout.
+    expect(left.get_panel_tab("notes")).to_be_visible()
+    switcher = sidebar.open_layouts_switcher()
+    expect(switcher.get_row_by_name("Base")).to_contain_text("Current")
+
+
+@user_story("to turn tidy confirmations back on from Settings after silencing them")
+def test_settings_switch_reenables_tidy_confirmation(sculptor_instance_: SculptorInstance) -> None:
+    """Suppressing the Tidy confirmation via "Don't show this again" tidies silently;
+    flipping the Settings ▸ General switch back on makes a later tidy prompt again."""
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Reenable Tidy WS")
+    sidebar = get_workspace_sidebar(page)
+
+    switcher = sidebar.open_layouts_switcher()
+    switcher.open_save_dialog().save("Base", tidy_on_apply=True)
+
+    left = PlaywrightWorkspaceSection(page, "left")
+    open_panel(page, "notes", "left")
+    expect(left.get_panel_tab("notes")).to_be_visible()
+
+    # First apply: confirm while suppressing future prompts, then prove silent tidying.
+    switcher = sidebar.open_layouts_switcher()
+    switcher.apply_by_name("Base")
+    tidy_dialog = get_layout_tidy_dialog(page)
+    expect(tidy_dialog).to_be_visible()
+    tidy_dialog.confirm(suppress_future=True)
+    expect(left.get_panel_tab("notes")).to_have_count(0)
+
+    open_panel(page, "notes", "left")
+    expect(left.get_panel_tab("notes")).to_be_visible()
+    switcher = sidebar.open_layouts_switcher()
+    switcher.apply_by_name("Base")
+    expect(page.get_by_test_id(ElementIDs.LAYOUT_TIDY_DIALOG)).to_have_count(0)
+    expect(left.get_panel_tab("notes")).to_have_count(0)
+
+    # Re-enable confirmations from Settings (the switch is inverted: checked = confirm).
+    settings_page = navigate_to_settings_page(page=page)
+    general = settings_page.click_on_general()
+    switch = general.get_tidy_confirmation_switch()
+    expect(switch).not_to_be_checked()
+    switch.click()
+    expect(switch).to_be_checked()
+
+    # Back in the workspace, re-applying to an untidy arrangement prompts again.
+    navigate_to_workspace(page, "Reenable Tidy WS")
+    open_panel(page, "notes", "left")
+    expect(left.get_panel_tab("notes")).to_be_visible()
+    switcher = sidebar.open_layouts_switcher()
+    switcher.apply_by_name("Base")
+    expect(get_layout_tidy_dialog(page)).to_be_visible()
+
+
+@user_story("to jump from the tidy prompt straight into editing the layout")
+def test_tidy_edit_link_opens_save_dialog_in_edit_mode(sculptor_instance_: SculptorInstance) -> None:
+    """The tidy confirmation's "Edit layout" link (shown for the user's own layouts)
+    dismisses the prompt and opens the save form in edit mode with the tidy switch on."""
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Tidy Edit Link WS")
+    sidebar = get_workspace_sidebar(page)
+
+    switcher = sidebar.open_layouts_switcher()
+    switcher.open_save_dialog().save("Base", tidy_on_apply=True)
+
+    open_panel(page, "notes", "left")
+    left = PlaywrightWorkspaceSection(page, "left")
+    expect(left.get_panel_tab("notes")).to_be_visible()
+
+    switcher = sidebar.open_layouts_switcher()
+    switcher.apply_by_name("Base")
+    tidy_dialog = get_layout_tidy_dialog(page)
+    expect(tidy_dialog).to_be_visible()
+    tidy_dialog.edit_layout()
+
+    save_dialog = get_save_layout_dialog(page)
+    expect(save_dialog).to_be_visible()
+    # Edit mode's visible marker is the submit label ("Save changes" vs create's
+    # "Save layout") — the dialog's title itself is visually hidden.
+    expect(save_dialog.get_submit_button()).to_have_text("Save changes")
+    expect(save_dialog.get_tidy_switch()).to_be_checked()
