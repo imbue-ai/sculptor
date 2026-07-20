@@ -28,6 +28,8 @@ This is the user guide. For contributor and developer documentation, see
 - [Agents](agents.md) — running multiple agents in parallel within one workspace.
 - [Changes](changes.md) — reviewing the agent's diff, committing, and discarding.
 - [Pull Requests](pull_requests.md) — opening a GitHub PR and tracking its status.
+- [CI Babysitter](ci_babysitter.md) — automatically fix failing CI and merge
+  conflicts on your open PRs.
 - [Skills](skills.md) — the bundled `sculptor-workflow` and `sculptor-experimental`
   skills you can run from `/`.
 - [Extensions](extensions.md) — add panels, widgets, home views, and overlays
