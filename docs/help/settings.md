@@ -33,9 +33,9 @@ Under **Project**:
 - **Git** — the pull-request creation prompt, PR status polling, default
   target branch, default branch-naming pattern, and the branch-deletion
   policy for removed workspaces.
-- **CI** — the CI Babysitter: when enabled, Sculptor watches open PRs and
-  asks an agent to fix CI failures and merge conflicts, with a configurable
-  agent, retry cap, and prompts.
+- **CI** — the [CI Babysitter](ci_babysitter.md): when enabled, Sculptor
+  watches open PRs and asks an agent to fix CI failures and merge conflicts,
+  with a configurable agent, retry cap, and prompts.
 - **File browser** — line wrapping, the default diff view (unified vs.
   split), and the commit prompt.
 - **Environment variables** — the global (`~/.sculptor/.env`) and per-repo
