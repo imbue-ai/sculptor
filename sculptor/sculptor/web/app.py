@@ -656,7 +656,7 @@ def start_task(
             interface = TaskInterface(interface)
         except ValueError as e:
             raise HTTPException(
-                status_code=422,
+                status_code=400,
                 detail=f"Invalid interface: {interface}. Must be 'terminal' or 'api'",
             ) from e
 
@@ -666,7 +666,7 @@ def start_task(
 
         if model in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2) and not settings.TESTING.INTEGRATION_ENABLED:
             raise HTTPException(
-                status_code=422,
+                status_code=400,
                 detail="Testing model is only available when integration testing is enabled",
             )
 
@@ -703,7 +703,7 @@ def start_task(
             # terminal type; an omitted type resolves to the user's MRU, where a
             # terminal default falls back to Claude.
             if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
-                raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
+                raise HTTPException(status_code=400, detail="terminal agents do not take an initial prompt")
             resolved_agent_type, _ = _resolve_requested_agent_type(task_request.agent_type, None, has_prompt=True)
             _validate_prompt_model_selection(resolved_agent_type, model, task_request.backend_model)
             agent_config = _agent_config_for_request(resolved_agent_type, None)
@@ -1004,7 +1004,7 @@ def rerun_workspace_setup(
         # stored value runs the current default and `""` (user-cleared) blocks.
         command = resolve_workspace_setup_command(project.workspace_setup_command) if project is not None else None
     if command is None or not command.strip():
-        raise HTTPException(status_code=422, detail={"error": "no setup command configured"})
+        raise HTTPException(status_code=409, detail={"error": "no setup command configured"})
     if environment_id is None or project_id is None or project_path is None:
         raise HTTPException(status_code=409, detail={"error": "environment not ready"})
     if workspace_service.setup_runner.get_state(workspace_id) is not None:
@@ -2163,12 +2163,12 @@ def _agent_config_for_request(
         return TerminalAgentConfig()
     if agent_type == AgentTypeName.REGISTERED:
         if registration_id is None:
-            raise HTTPException(status_code=422, detail="registered terminal agents require a registration_id")
+            raise HTTPException(status_code=400, detail="registered terminal agents require a registration_id")
         registration = get_registration(registration_id)
         if registration is None:
             # The menu may have raced a registration-file deletion.
             raise HTTPException(
-                status_code=422,
+                status_code=400,
                 detail=f"Terminal-agent registration '{registration_id}' not found",
             )
         # Stamped at creation so the task stays self-describing even if the
@@ -2282,7 +2282,7 @@ def create_workspace_agent(
 
         if agent_request.prompt:
             if agent_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
-                raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
+                raise HTTPException(status_code=400, detail="terminal agents do not take an initial prompt")
             # Delegate to existing start_task logic, which validates the
             # model/backend_model pair against the resolved harness
             # (`_validate_prompt_model_selection`).
@@ -3072,7 +3072,7 @@ def _prevent_action_if_out_of_free_space(services: CompleteServiceCollection) ->
     if user_config is not None and free_gb < user_config.min_free_disk_gb:
         logger.warning("Cannot start a task if you have insufficient free space")
         raise HTTPException(
-            status_code=422,
+            status_code=400,
             detail=f"Insufficient disk space ({user_config.min_free_disk_gb} GB free space required to prevent filling your disk)\nPlease either free some space (eg, by deleting old tasks) or increase min_free_disk_gb in settings.",
         )
 
@@ -3936,7 +3936,7 @@ def post_agent_signal(
             session_id = signal_request.session_id
             if session_id is None or _TERMINAL_SESSION_ID_PATTERN.fullmatch(session_id) is None:
                 raise HTTPException(
-                    status_code=422,
+                    status_code=400,
                     detail="session-id event requires a session_id matching [A-Za-z0-9._-]{1,128}",
                 )
             # Evolve only this field; the immediate transaction (above) keeps
@@ -4952,7 +4952,7 @@ def post_trace_start(
     tracer_entries = payload.tracer_entries if payload.tracer_entries is not None else DEFAULT_ADHOC_TRACER_ENTRIES
     if tracer_entries <= 0 or tracer_entries > DEFAULT_TRACER_ENTRIES:
         raise HTTPException(
-            status_code=422,
+            status_code=400,
             detail=f"tracer_entries must be in 1..{DEFAULT_TRACER_ENTRIES}",
         )
 

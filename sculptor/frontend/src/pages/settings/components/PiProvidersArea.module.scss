@@ -1,5 +1,5 @@
-// Tints the shared BlandCircle status dot for the "Connected" provider indicator,
-// matching how StatusDot colours its dots via --inner-color.
+// Tints the shared BlandCircle status dot for the "Connected" provider indicator;
+// BlandCircle reads --inner-color (falling back to gray) for its fill.
 .connectedDot {
   --inner-color: var(--green-9);
 }

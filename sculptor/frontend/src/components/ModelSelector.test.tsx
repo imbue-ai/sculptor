@@ -4,8 +4,9 @@ import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ElementIds, LlmModel, ModelCatalogState, type ModelOption } from "~/api";
+import { ElementIds, LlmModel, ModelCatalogState, type ModelOption, type TestingConfig } from "~/api";
 import { groupModelsByProvider, routeModelChange } from "~/common/modelConstants.ts";
+import { sculptorSettingsAtom } from "~/common/state/atoms/sculptorSettings.ts";
 
 import { ModelSelectOptions } from "./ModelSelectOptions";
 import { CascadingProviderMenu, ModelSelector } from "./ModelSelector";
@@ -24,11 +25,20 @@ const MULTI_PROVIDER_MODELS: ReadonlyArray<ModelOption> = [
   { provider: "openrouter", modelId: "openrouter-old", displayName: "OpenRouter Old" },
 ];
 
-const withStore = (children: ReactNode): ReactElement => (
-  <Provider store={createStore()}>
+const withStore = (children: ReactNode, store: ReturnType<typeof createStore> = createStore()): ReactElement => (
+  <Provider store={store}>
     <Theme>{children}</Theme>
   </Provider>
 );
+
+// A store whose server settings carry the given TESTING config — the channel
+// the backend uses to enable integration testing and the fake-model
+// display-name override.
+const storeWithTestingConfig = (testing: TestingConfig): ReturnType<typeof createStore> => {
+  const store = createStore();
+  store.set(sculptorSettingsAtom, { TESTING: testing });
+  return store;
+};
 
 beforeAll(() => {
   // Radix Select/DropdownMenu call scrollIntoView on open; jsdom does not implement it.
@@ -42,7 +52,11 @@ afterEach(() => {
 describe("ModelSelectOptions", () => {
   // The dropdown content only mounts when the Select is open, so render the
   // options inside an open Select to inspect the items.
-  const renderOptions = (models?: ReadonlyArray<ModelOption>, optionTestId?: string): RenderResult =>
+  const renderOptions = (
+    models?: ReadonlyArray<ModelOption>,
+    optionTestId?: string,
+    store?: ReturnType<typeof createStore>,
+  ): RenderResult =>
     render(
       withStore(
         <Select.Root open value={models ? models[0].modelId : LlmModel.CLAUDE_FABLE_5}>
@@ -51,6 +65,7 @@ describe("ModelSelectOptions", () => {
             <ModelSelectOptions models={models} optionTestId={optionTestId} />
           </Select.Content>
         </Select.Root>,
+        store,
       ),
     );
 
@@ -72,6 +87,28 @@ describe("ModelSelectOptions", () => {
     expect(screen.queryByText("Claude Opus 4.8")).not.toBeInTheDocument();
     // The Claude path stays a flat list — no provider group headers.
     expect(screen.queryAllByRole("group")).toHaveLength(0);
+  });
+
+  it("appends the Fake Claude testing models when integration testing is enabled", () => {
+    renderOptions(undefined, ElementIds.MODEL_OPTION, storeWithTestingConfig({ INTEGRATION_ENABLED: true }));
+    // Integration tests select these options by their literal labels.
+    expect(screen.getAllByText("Fake Claude").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Fake Claude 2").length).toBeGreaterThan(0);
+  });
+
+  it("hides the testing models from the picker when a fake-model display name is set", () => {
+    renderOptions(
+      undefined,
+      ElementIds.MODEL_OPTION,
+      storeWithTestingConfig({ INTEGRATION_ENABLED: true, FAKE_MODEL_DISPLAY_NAME: "Fable" }),
+    );
+    // Neither the real labels nor override-labelled entries appear: the demo
+    // harness seeds its scripted agents out-of-band, so the testing models are
+    // dropped from the list entirely.
+    expect(screen.queryByText("Fake Claude")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fake Claude 2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`${ElementIds.MODEL_OPTION}-${LlmModel.FAKE_CLAUDE}`)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`${ElementIds.MODEL_OPTION}-${LlmModel.FAKE_CLAUDE_2}`)).not.toBeInTheDocument();
   });
 
   it("groups backend models under a non-selectable provider header, ordered by first appearance", () => {
@@ -126,6 +163,28 @@ describe("ModelSelector", () => {
     const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
     // The Claude path must not show a raw model_id; it renders the short name.
     expect(trigger).not.toHaveTextContent("claude-");
+  });
+
+  it("keeps the real Fake Claude trigger label when no override is set", () => {
+    render(
+      withStore(
+        <ModelSelector model={LlmModel.FAKE_CLAUDE} onModelChange={() => {}} capabilityValue={true} />,
+        storeWithTestingConfig({ INTEGRATION_ENABLED: true }),
+      ),
+    );
+    expect(screen.getByTestId(ElementIds.MODEL_SELECTOR)).toHaveTextContent("Fake Claude");
+  });
+
+  it("renders the override label for a testing model when a fake-model display name is set", () => {
+    render(
+      withStore(
+        <ModelSelector model={LlmModel.FAKE_CLAUDE} onModelChange={() => {}} capabilityValue={true} />,
+        storeWithTestingConfig({ INTEGRATION_ENABLED: true, FAKE_MODEL_DISPLAY_NAME: "Scripted" }),
+      ),
+    );
+    const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
+    expect(trigger).toHaveTextContent("Scripted");
+    expect(trigger).not.toHaveTextContent("Fake Claude");
   });
 
   it("renders the disabled-with-tooltip treatment when the capability is false", () => {

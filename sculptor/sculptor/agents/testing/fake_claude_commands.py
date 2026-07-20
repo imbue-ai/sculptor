@@ -1009,6 +1009,10 @@ def handle_ask_user_question(args: dict, emit_streaming: bool) -> list[dict]:
     the chat-message count consistent with the old kill-and-resume flow.
     """
     questions = args["questions"]
+    # How long to wait for the user's answer before the wait errors out. A
+    # large value lets a scripted scenario hold the waiting-on-input state
+    # indefinitely (e.g. demo seeding for screenshots).
+    timeout_seconds = float(args.get("timeout_seconds", 180.0))
 
     message_id = generate_id("msg")
     tool_id = generate_id("toolu")
@@ -1029,6 +1033,7 @@ def handle_ask_user_question(args: dict, emit_streaming: bool) -> list[dict]:
         tool_use_id=tool_id,
         tool_fqn=SCULPTOR_MCP_ASK_TOOL_FQN,
         arguments={"questions": questions},
+        timeout_seconds=timeout_seconds,
     )
     follow_up_text = "[FakeClaude] Task completed."
     follow_up_id = generate_id("msg")

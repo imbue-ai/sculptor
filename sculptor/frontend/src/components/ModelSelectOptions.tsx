@@ -9,7 +9,7 @@ import {
   getProviderDisplayName,
   groupModelsByProvider,
 } from "~/common/modelConstants";
-import { isIntegrationTestingEnabledAtom } from "~/common/state/atoms/sculptorSettings.ts";
+import { fakeModelDisplayNameAtom, isIntegrationTestingEnabledAtom } from "~/common/state/atoms/sculptorSettings.ts";
 
 type ModelSelectOptionsProps = {
   // Base test id for the option items. Each item's `data-testid` is suffixed with
@@ -34,6 +34,7 @@ type ModelSelectOptionsProps = {
  */
 export const ModelSelectOptions = ({ optionTestId, models }: ModelSelectOptionsProps): ReactElement => {
   const isIntegrationTesting = useAtomValue(isIntegrationTestingEnabledAtom);
+  const fakeModelDisplayName = useAtomValue(fakeModelDisplayNameAtom);
 
   if (models !== undefined && models.length > 0) {
     return (
@@ -58,13 +59,13 @@ export const ModelSelectOptions = ({ optionTestId, models }: ModelSelectOptionsP
 
   return (
     <>
-      {getClaudeModelList(isIntegrationTesting).map((modelValue) => (
+      {getClaudeModelList(isIntegrationTesting, fakeModelDisplayName).map((modelValue) => (
         <Select.Item
           key={modelValue}
           value={modelValue}
           data-testid={optionTestId === undefined ? undefined : `${optionTestId}-${modelValue}`}
         >
-          {getModelLongName(modelValue)}
+          {getModelLongName(modelValue, fakeModelDisplayName)}
         </Select.Item>
       ))}
     </>

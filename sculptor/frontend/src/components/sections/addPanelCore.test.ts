@@ -56,7 +56,7 @@ describe("recentAgentLabel", () => {
 
   it("labels the built-in types from AGENT_TYPE_LABELS", () => {
     expect(recentAgentLabel("claude", [])).toBe("Claude");
-    expect(recentAgentLabel("pi", [])).toBe("pi");
+    expect(recentAgentLabel("pi", [])).toBe("Pi");
   });
 
   it("labels a registered type from its display name plus the 'in terminal' marker", () => {
@@ -284,7 +284,7 @@ describe("buildAgentTypeOptions", () => {
   it("offers Claude and pi when nothing is registered (pi is always available)", () => {
     expect(buildAgentTypeOptions({ registrations: [] })).toEqual([
       { key: "claude", stored: "claude", agentType: "claude", registrationId: undefined, label: "Claude" },
-      { key: "pi", stored: "pi", agentType: "pi", registrationId: undefined, label: "pi" },
+      { key: "pi", stored: "pi", agentType: "pi", registrationId: undefined, label: "Pi" },
     ]);
   });
 

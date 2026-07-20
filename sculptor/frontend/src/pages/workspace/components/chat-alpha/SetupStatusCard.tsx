@@ -341,8 +341,9 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
   const hasLogText = logText.length > 0;
   const hasCommandChanged = persistedCommand !== null && currentCommand !== null && persistedCommand !== currentCommand;
   // Rerun is gated on the project having a command — the backend reads it from
-  // `project.workspace_setup_command` and 422s when blank, so an unguarded
-  // button would silently no-op when the user has cleared the setting.
+  // `project.workspace_setup_command` and rejects the rerun with a 409 when
+  // blank, so an unguarded button would silently no-op when the user has
+  // cleared the setting.
   const isRerunVisible =
     (status.status === "succeeded" || status.status === "failed" || status.status === "legacy") &&
     currentCommand !== null;

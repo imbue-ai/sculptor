@@ -27,8 +27,25 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   [LlmModel.FAKE_CLAUDE_2]: { short: "Fake Claude 2", long: "Fake Claude 2" },
 } as const;
 
-export const getModelShortName = (model: LlmModel): string => modelNames[model]?.short || "Unknown";
-export const getModelLongName = (model: LlmModel): string => modelNames[model]?.long || "Unknown";
+// Fake Claude returns deterministic responses without making LLM calls; only
+// shown when integration testing is enabled.
+const TESTING_ONLY_MODELS: ReadonlyArray<LlmModel> = [LlmModel.FAKE_CLAUDE, LlmModel.FAKE_CLAUDE_2];
+
+/**
+ * `fakeModelDisplayName` (settings `TESTING.FAKE_MODEL_DISPLAY_NAME`, read via
+ * `fakeModelDisplayNameAtom`) relabels the deterministic testing models so a
+ * demo harness can present scripted agents under a custom name; every other
+ * model keeps its real name, and an unset override changes nothing.
+ */
+export const getModelShortName = (model: LlmModel, fakeModelDisplayName?: string | null): string =>
+  fakeModelDisplayName && TESTING_ONLY_MODELS.includes(model)
+    ? fakeModelDisplayName
+    : modelNames[model]?.short || "Unknown";
+
+export const getModelLongName = (model: LlmModel, fakeModelDisplayName?: string | null): string =>
+  fakeModelDisplayName && TESTING_ONLY_MODELS.includes(model)
+    ? fakeModelDisplayName
+    : modelNames[model]?.long || "Unknown";
 
 // Models offered in production model pickers (desktop selector + mobile `+` menu).
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
@@ -44,17 +61,18 @@ export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_4_HAIKU,
 ];
 
-// Fake Claude returns deterministic responses without making LLM calls; only
-// shown when integration testing is enabled.
-const TESTING_ONLY_MODELS: ReadonlyArray<LlmModel> = [LlmModel.FAKE_CLAUDE, LlmModel.FAKE_CLAUDE_2];
-
 /**
  * The built-in Claude switcher list (Claude Code uses the user's existing
  * authentication); the Fake Claude test doubles are appended only when
- * integration testing is enabled.
+ * integration testing is enabled. A fake-model display-name override hides
+ * them from the picker entirely: a demo harness seeds its scripted agents
+ * out-of-band, and the relabelled models must not be user-selectable.
  */
-export const getClaudeModelList = (isIntegrationTesting: boolean): ReadonlyArray<LlmModel> =>
-  isIntegrationTesting ? [...PRODUCTION_MODELS, ...TESTING_ONLY_MODELS] : PRODUCTION_MODELS;
+export const getClaudeModelList = (
+  isIntegrationTesting: boolean,
+  fakeModelDisplayName?: string | null,
+): ReadonlyArray<LlmModel> =>
+  isIntegrationTesting && !fakeModelDisplayName ? [...PRODUCTION_MODELS, ...TESTING_ONLY_MODELS] : PRODUCTION_MODELS;
 
 export type ProviderGroup = {
   provider: string;

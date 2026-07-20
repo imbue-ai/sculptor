@@ -4,7 +4,7 @@ import { createStore } from "jotai";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DependenciesStatus, ModelOption, Project } from "~/api";
+import type { DependenciesStatus, ModelOption, Project, TerminalAgentRegistration } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
@@ -104,8 +104,11 @@ vi.mock("~/common/state/hooks/useRepoInfo.ts", () => ({
   }),
 }));
 
+// Most tests want no registered terminal agents; the agent-picker ordering
+// test seeds one via `mockRegistrations.mockReturnValue`.
+const { mockRegistrations } = vi.hoisted(() => ({ mockRegistrations: vi.fn() }));
 vi.mock("~/common/state/hooks/useTerminalAgentRegistrations.ts", () => ({
-  useTerminalAgentRegistrations: (): unknown => ({ registrations: [], refetch: vi.fn() }),
+  useTerminalAgentRegistrations: (): unknown => ({ registrations: mockRegistrations() ?? [], refetch: vi.fn() }),
 }));
 
 // Honors the override argument the same way the real hook does (override wins
@@ -175,6 +178,7 @@ describe("NewWorkspaceForm", () => {
     cleanup();
     mockCreateWorkspace.mockReset();
     mockUsePiModels.mockReset();
+    mockRegistrations.mockReset();
     window.localStorage.clear();
   });
 
@@ -395,6 +399,27 @@ describe("NewWorkspaceForm", () => {
     cleanup();
     renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
     expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA)).toHaveValue("keep me");
+  });
+
+  it("lists the agent picker as Claude, pi, registered agents, then Terminal", async () => {
+    mockRegistrations.mockReturnValue([
+      { registrationId: "my-agent", displayName: "My Agent" } as TerminalAgentRegistration,
+    ]);
+    renderForm();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId(ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT));
+    const options = await screen.findAllByRole("option");
+
+    // The bare Terminal option is the generic escape hatch, so it lists after
+    // the user's registered terminal agents rather than splitting them off
+    // from the built-in harnesses.
+    expect(options.map((option) => option.getAttribute("data-testid"))).toEqual([
+      ElementIds.AGENT_TYPE_OPTION_CLAUDE,
+      ElementIds.AGENT_TYPE_OPTION_PI,
+      ElementIds.AGENT_TYPE_OPTION_REGISTERED,
+      ElementIds.AGENT_TYPE_OPTION_TERMINAL,
+    ]);
   });
 
   it("restores the form's entries on the reopen after the empty-state CTA routed to settings", async () => {

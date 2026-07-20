@@ -1193,7 +1193,7 @@ def test_agent_config_for_request_resolves_each_type() -> None:
     assert isinstance(_agent_config_for_request(AgentTypeName.TERMINAL, None), TerminalAgentConfig)
     with pytest.raises(HTTPException) as exc_info:
         _agent_config_for_request(AgentTypeName.REGISTERED, "some-registration")
-    assert exc_info.value.status_code == 422
+    assert exc_info.value.status_code == 400
     assert isinstance(_agent_config_for_request(AgentTypeName.CLAUDE, None), ClaudeCodeSDKAgentConfig)
     assert isinstance(_agent_config_for_request(AgentTypeName.PI, None), PiAgentConfig)
 
@@ -1236,7 +1236,7 @@ def test_start_task_resolves_agent_type(
             is_camel_case=True,
         ),
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def _post_agent(client: TestClient, workspace: Workspace, body: dict) -> httpx.Response:
@@ -1378,7 +1378,7 @@ def test_start_task_terminal_mru_falls_back_to_claude_for_prompt(
     test_project: Project,
     isolated_user_config: None,
 ) -> None:
-    """A prompt-ful create with a terminal MRU uses Claude rather than 422ing."""
+    """A prompt-ful create with a terminal MRU uses Claude rather than being rejected."""
     _set_user_config_with(last_used_agent_type="terminal")
     response = client.post(
         f"/api/v1/projects/{test_project.object_id}/tasks",
@@ -1399,9 +1399,9 @@ def test_create_terminal_agent_with_prompt_is_rejected(
         workspace = _create_workspace(transaction, test_services, test_project)
 
     response = _post_agent(client, workspace, {"agentType": "terminal", "prompt": "hi"})
-    assert response.status_code == 422
+    assert response.status_code == 400
     response = _post_agent(client, workspace, {"agentType": "registered", "prompt": "hi"})
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 # Terminal-agent registrations.
@@ -1484,7 +1484,7 @@ def test_create_registered_agent_with_unknown_or_deleted_registration_fails(
     with user_session.open_transaction(test_services) as transaction:
         workspace = _create_workspace(transaction, test_services, test_project)
 
-    assert _post_agent(client, workspace, {"agentType": "registered", "registrationId": "nope"}).status_code == 422
+    assert _post_agent(client, workspace, {"agentType": "registered", "registrationId": "nope"}).status_code == 400
 
     # Menu-raced deletion: the file existed when the menu listed it but is
     # gone by creation time.
@@ -1493,5 +1493,25 @@ def test_create_registered_agent_with_unknown_or_deleted_registration_fails(
     assert client.get("/api/v1/terminal-agent-registrations").json()["registrations"]
     path.unlink()
     response = _post_agent(client, workspace, {"agentType": "registered", "registrationId": "fleeting"})
-    assert response.status_code == 422
+    assert response.status_code == 400
     assert "fleeting" in response.json()["detail"]
+
+
+# Workspace setup rerun.
+
+
+def test_setup_rerun_conflicts_when_setup_command_is_cleared(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """A user-cleared ("") setup command blocks reruns with a 409, matching the
+    endpoint's other precondition conflicts (environment not ready, already
+    running)."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        transaction.update_project_fields(test_project.object_id, workspace_setup_command="")
+
+    response = client.post(f"/api/v1/workspaces/{workspace.object_id}/setup/rerun")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {"error": "no setup command configured"}

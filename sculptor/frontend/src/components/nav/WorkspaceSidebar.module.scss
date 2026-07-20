@@ -5,7 +5,11 @@
 // SidebarRepoGroup.module.scss.
 
 .sidebar {
-  background: var(--gray-2);
+  // One step deeper than the --gray-2 content shell (AppShell) so the rail reads
+  // as recessed chrome and the content panels float above it, rather than the two
+  // sharing one flat surface. The resize handle's persistent 1px edge divider
+  // reinforces the boundary.
+  background: var(--gray-1);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -25,7 +29,7 @@
   flex-shrink: 0;
   height: var(--titlebar-height);
   justify-content: flex-end;
-  padding-right: var(--space-2);
+  padding-right: var(--space-3);
 }
 
 .noDrag {

@@ -53,6 +53,7 @@ import {
 } from "../../../common/state/atoms/draftAgentSettings.ts";
 import { isCancellableAtomFamily } from "../../../common/state/atoms/interruptState.ts";
 import { promptDraftAtomFamily } from "../../../common/state/atoms/promptDrafts.ts";
+import { fakeModelDisplayNameAtom } from "../../../common/state/atoms/sculptorSettings.ts";
 import {
   defaultEffortLevelAtom,
   isAlwaysInterruptAndSendAtom,
@@ -192,9 +193,13 @@ export const ChatInput = ({
   const backendModelOptions = Array.isArray(backendModels) ? backendModels : [];
   const selectedBackendLabel =
     backendModelOptions.find((option) => option.modelId === selectedModelId)?.displayName ?? selectedModelId;
+  // The override relabels the trigger when the task runs a deterministic testing
+  // model; the mobile model *options* iterate PRODUCTION_MODELS only, so no
+  // testing model ever appears (or needs relabelling) in that list.
+  const fakeModelDisplayName = useAtomValue(fakeModelDisplayNameAtom);
   const mobileModelLabel = hasBackendModelSource
     ? (selectedBackendLabel ?? "Select model")
-    : getModelShortName(localModel);
+    : getModelShortName(localModel, fakeModelDisplayName);
   const [isPlanFirst, setIsPlanFirst] = useState<boolean>(false);
 
   // Per-task fast-mode and effort preference, persisted in localStorage,
