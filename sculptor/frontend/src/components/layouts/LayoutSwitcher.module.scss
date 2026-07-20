@@ -46,13 +46,6 @@
   padding: var(--space-2) var(--space-2) var(--space-3);
 }
 
-.groupHeading {
-  color: var(--gray-10);
-  font-size: var(--font-size-1);
-  font-weight: var(--font-weight-regular);
-  padding: var(--space-3) var(--space-3) var(--space-1);
-}
-
 .empty {
   color: var(--gray-9);
   font-size: var(--font-size-2);
@@ -127,10 +120,20 @@
   color: var(--gray-11);
 }
 
+// The status marker is icon-only (check for current, outline star for default);
+// the word lives in the aria-label / title so it stays quiet but discoverable.
 .rowMarker {
   align-items: center;
   display: flex;
-  gap: var(--space-1);
+}
+
+// Hairline separating a row's shortcut from its status icon, rendered only when the
+// row has both.
+.rowDivider {
+  background: var(--gray-a5);
+  flex-shrink: 0;
+  height: 11px;
+  width: 1px;
 }
 
 // The layout's assigned shortcut, shown as a quiet trailing kbd (plain text, not a

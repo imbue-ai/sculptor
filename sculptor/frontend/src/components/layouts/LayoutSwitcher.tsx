@@ -377,9 +377,6 @@ export const LayoutSwitcher = (): ReactElement => {
       </div>
       <div className={styles.divider} />
       <div className={styles.list} id={LISTBOX_ID} role="listbox" aria-label="Layouts">
-        <div className={styles.groupHeading} aria-hidden="true">
-          Layouts
-        </div>
         {filtered.length === 0 ? (
           <div className={styles.empty}>No layouts match “{query}”.</div>
         ) : (
@@ -532,13 +529,17 @@ const SwitcherRow = ({
       </span>
       <span className={styles.rowTrailing}>
         {shortcut !== undefined ? <ShortcutHint binding={shortcut} className={styles.rowShortcut} /> : null}
+        {/* Hairline between the shortcut and the status icon, only when the row has
+            both — so the two pieces of trailing metadata read as distinct. */}
+        {shortcut !== undefined && marker !== null ? <span className={styles.rowDivider} aria-hidden="true" /> : null}
         {marker === "default" ? (
-          <span className={styles.rowMarker}>
-            <Star size={12} fill="currentColor" />
-            Default
+          <span className={styles.rowMarker} role="img" aria-label="Default layout" title="Default layout">
+            <Star size={13} />
           </span>
         ) : marker === "current" ? (
-          <span className={styles.rowMarker}>Current</span>
+          <span className={styles.rowMarker} role="img" aria-label="Current layout" title="Current layout">
+            <Check size={13} />
+          </span>
         ) : null}
       </span>
     </div>
