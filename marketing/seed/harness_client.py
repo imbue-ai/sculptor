@@ -74,6 +74,31 @@ def ensure_project(repo_path: str, c) -> str:
     return resolve_project(repo=repo_path, client=c)
 
 
+def clean_slate(c) -> tuple[int, int]:
+    """Delete every workspace and project the harness backend knows about.
+
+    Runs BEFORE the repos are re-cloned: the backend's pollers hold worktrees
+    inside the existing clones, and deleting a clone out from under a live
+    workspace leaves them erroring against dead git dirs. Clearing the backend
+    first also removes stale projects from prior clones (a fresh re-clone gives
+    a repo a new identity, so the old project would linger as an empty repo
+    group in the sidebar). The harness backend is throwaway and fully
+    demo-owned, so deleting everything is always correct here.
+    """
+    from sculpt.client.api.default import delete_project, list_projects
+
+    resp = _call(c, list_projects)
+    projects = json.loads(resp.content) if resp.status_code == 200 and resp.content else []
+    removed_workspaces = removed_projects = 0
+    for project in projects if isinstance(projects, list) else []:
+        if project.get("isDeleted"):
+            continue
+        removed_workspaces += delete_all_workspaces(project["objectId"], c)
+        _call(c, delete_project, project_id=project["objectId"])
+        removed_projects += 1
+    return removed_workspaces, removed_projects
+
+
 def list_project_workspaces(project_id: str, c) -> list[dict]:
     resp = _call(c, list_workspaces, project_id=project_id)
     body = json.loads(resp.content) if resp.status_code == 200 and resp.content else []

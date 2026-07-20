@@ -22,10 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import FAKE_ORIGIN_OWNER, GH_FIXTURES_PATH
 from harness_client import (
     _call,
+    clean_slate,
     client,
     create_agent,
     create_workspace,
-    delete_all_workspaces,
     ensure_project,
     mark_read,
     send_message,
@@ -43,6 +43,13 @@ def write_pr_fixtures() -> None:
 def main() -> None:
     c = client()
 
+    # Clear the backend BEFORE touching the clones on disk: live workspaces
+    # hold worktrees inside them, and re-cloning underneath a live workspace
+    # leaves the backend's pollers erroring against dead git dirs.
+    workspaces_cleared, projects_cleared = clean_slate(c)
+    if projects_cleared:
+        print(f"Clean slate: removed {workspaces_cleared} workspace(s) across {projects_cleared} project(s).")
+
     clones = clone_available_repos(REPO_NAMES)
     if not clones:
         raise RuntimeError("no demo repos available to seed")
@@ -53,14 +60,10 @@ def main() -> None:
     if skipped:
         print(f"Skipping {len(skipped)} workspace(s) for unavailable repos: {', '.join(skipped)}")
 
-    # Register each fresh clone (idempotent) and clean-slate its workspaces so
-    # renamed/removed manifest entries from a prior seed don't linger.
     project_ids: dict[str, str] = {}
     for name, clone in clones.items():
-        pid = ensure_project(clone["path"], c)
-        project_ids[name] = pid
-        cleared = delete_all_workspaces(pid, c)
-        print(f"project {name}: {pid} (cleared {cleared} existing)")
+        project_ids[name] = ensure_project(clone["path"], c)
+        print(f"project {name}: {project_ids[name]}")
 
     created: list[tuple[str, str, str]] = []  # (name, workspace_id, agent_id)
     by_branch: dict[str, tuple[str, str]] = {}  # branch -> (workspace_id, agent_id)

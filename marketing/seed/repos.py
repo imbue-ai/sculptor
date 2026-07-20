@@ -72,8 +72,11 @@ def ensure_clone(name: str) -> dict | None:
     """
     target = REPOS_DIR / name
     if target.is_dir():
-        default_branch = _git(target, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-        return {"name": name, "path": str(target), "default_branch": default_branch}
+        # An interrupted seed (or a crash mid-re-clone) can leave a broken
+        # half-clone behind; only reuse a directory git still recognizes.
+        head = _git(target, "rev-parse", "--abbrev-ref", "HEAD", check=False)
+        if head.returncode == 0:
+            return {"name": name, "path": str(target), "default_branch": head.stdout.strip()}
     source = repo_clone_source(name)
     return fresh_clone(name, source) if source else None
 
