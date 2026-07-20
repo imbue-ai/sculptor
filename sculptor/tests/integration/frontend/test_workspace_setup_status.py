@@ -170,7 +170,7 @@ def test_setup_config_prompt_when_no_command(sculptor_instance_: SculptorInstanc
 def test_setup_rerun_hidden_when_command_cleared_after_run(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """A rerun would 422 on the backend when the project no longer has a
+    """A rerun would 409 on the backend when the project no longer has a
     command configured. Hide the button so users aren't offered a no-op.
     """
     page = sculptor_instance_.page

@@ -146,7 +146,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         navigateToWorkspace(workspaceId);
 
         // Claude and pi both take an initial prompt; terminal/registered agents
-        // do not — the backend rejects a prompt for them (422), which would fail
+        // do not — the backend rejects a prompt for them (400), which would fail
         // the agent create after the workspace already exists and orphan it.
         const isClaudeAgent = effectiveAgentType === "claude";
         const isPiAgent = effectiveAgentType === "pi";
