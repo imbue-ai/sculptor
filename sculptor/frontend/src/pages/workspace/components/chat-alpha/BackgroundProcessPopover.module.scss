@@ -1,0 +1,196 @@
+// Popover surface mirrors the StatusPill tasks popover / AgentTasksPanel:
+// a solid panel, soft shadow, fixed width with a bounded scroll height.
+.popoverContent {
+  background-color: var(--color-panel-solid);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-2);
+  max-height: 400px;
+  overflow: auto;
+  padding: 0;
+  width: 320px;
+}
+
+// Tiny uppercase header, matching the AgentTasksPanel / StatusPill header.
+.header {
+  box-sizing: border-box;
+  color: var(--gray-10);
+  font-size: 10px; // stylelint-disable-line sculptor/no-hardcoded-values
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.8px;
+  padding: var(--space-4) var(--space-4) var(--space-1);
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  // A slight gap so adjacent rows' rounded hover/active highlights (and an
+  // expanded row's output box) never touch the neighbouring row.
+  gap: var(--space-1);
+  // Inset the rows a little from the popover edges so a row's hover/active
+  // highlight (and the expanded output box) read as rounded, padded elements
+  // rather than full-bleed bands.
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+// Each process is a row group: a clickable header line plus an optional
+// expanded output box below it. Rows without output are rendered as plain
+// (non-interactive) divs so there is no focusable affordance without an action.
+.rowGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+// The header line. A button when the row has output to expand, otherwise a
+// plain div — both share these layout styles.
+.row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  // Rounded so the hover/active highlight is a pill; box-sizing keeps the row
+  // (incl. padding) within the list width so the rightmost Stop/state slot
+  // isn't clipped.
+  border-radius: var(--radius-2);
+  box-sizing: border-box;
+  color: inherit;
+  display: flex;
+  font: inherit;
+  gap: var(--space-2);
+  // Tight vertical padding so the row/highlight feels compact; horizontal
+  // padding aligns the content with the panel header.
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  width: 100%;
+}
+
+.rowExpandable {
+  cursor: pointer;
+}
+
+.rowExpandable:hover,
+.rowExpandable:focus-visible {
+  background: var(--gray-a3);
+  outline: none;
+}
+
+// The expanded (active) row keeps a persistent subtle background so it's clear
+// which row is open (only one is open at a time). Neutral gray — no status
+// color. Slightly stronger on hover to stay responsive.
+.rowActive {
+  background: var(--gray-a3);
+}
+
+.rowActive:hover,
+.rowActive:focus-visible {
+  background: var(--gray-a4);
+}
+
+// Ended rows dim — status reads from the dimming + the one-word state, not
+// from color (no status color anywhere).
+.rowEnded {
+  opacity: 55%;
+}
+
+// Gentle opacity pulse for the running row's type icon (status reads from the
+// pulse, not from color). Mirrors the AlphaExpandedToolRow statusDotPulse.
+@keyframes backgroundProcessPulse {
+  0%,
+  100% {
+    opacity: 30%;
+  }
+
+  50% {
+    opacity: 100%;
+  }
+}
+
+.icon {
+  align-items: center;
+  color: var(--gray-9);
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 14px;
+  justify-content: center;
+  width: 14px;
+}
+
+.iconRunning {
+  animation: backgroundProcessPulse 1s ease-in-out infinite;
+}
+
+.name {
+  color: var(--gray-11);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Elapsed time pinned to a fixed right column so the value stays aligned
+// across rows whether the rightmost slot is empty (running) or a state word.
+.elapsed {
+  color: var(--gray-9);
+  flex-shrink: 0;
+  font-family: var(--code-font-family);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+// Rightmost slot: the Stop button for running rows, a one-word state for ended
+// rows. A fixed min-width keeps the elapsed column aligned across rows.
+.slot {
+  align-items: center;
+  color: var(--gray-9);
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  min-width: 54px; // stylelint-disable-line sculptor/no-hardcoded-values
+  text-align: right;
+}
+
+// Per-process Stop button — always visible on running rows (a Radix Button,
+// soft gray). Neutral gray at rest; turns red ONLY on hover (the sole place
+// red appears in this surface). The icon + label sit on one mono-ish line.
+.stopButton {
+  flex-shrink: 0;
+}
+
+.stopButton:hover,
+.stopButton:focus-visible {
+  // Override the Radix soft-gray hover with a red wash on hover only.
+  background-color: var(--red-a3);
+  color: var(--red-11);
+}
+
+// Trailing expand caret (right side, subagent-pill style), shown only on rows
+// that have output. Points right at rest and rotates to point down when the row
+// is expanded. Neutral gray (no status color).
+.chevron {
+  align-items: center;
+  color: var(--gray-8);
+  display: inline-flex;
+  flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+// Spacer that occupies the chevron column on rows without output so names stay
+// aligned with rows that do have a chevron.
+.chevronSpacer {
+  flex-shrink: 0;
+  width: 14px; // stylelint-disable-line sculptor/no-hardcoded-values
+}
+
+// Inline expanded output. A slight symmetric x-inset (on top of the list inset)
+// nests the terminal box under its row so it reads as a child of the row above,
+// with a small gap separating them.
+.output {
+  box-sizing: border-box;
+  padding: var(--space-1) var(--space-2);
+  width: 100%;
+}
