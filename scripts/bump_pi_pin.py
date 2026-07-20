@@ -192,7 +192,7 @@ def apply_edits_in_memory(repo_root: Path, edits: Sequence[PlannedEdit]) -> dict
         if occurrences != edit.count:
             raise BumpError(
                 f"{edit.path}: expected {edit.count} occurrence(s) of {edit.old!r}, found {occurrences}. "
-                "The pinned literals have drifted; update plan_edits in scripts/bump_pi_pin.py."
+                + "The pinned literals have drifted; update plan_edits in scripts/bump_pi_pin.py."
             )
         contents[edit.path] = contents[edit.path].replace(edit.old, edit.new)
     return contents
@@ -213,7 +213,7 @@ def assert_no_stale_residue(contents: Mapping[str, str], replaced_pairs: Sequenc
             if old_literal in content:
                 raise BumpError(
                     f"{path}: still contains {old_literal!r} after the bump; "
-                    "add the new copy to plan_edits in scripts/bump_pi_pin.py."
+                    + "add the new copy to plan_edits in scripts/bump_pi_pin.py."
                 )
 
 

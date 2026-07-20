@@ -36,9 +36,9 @@ def _make_mini_repo(repo_root: Path, version: str) -> None:
     _write(repo_root, bump_pi_pin._PI_VERSION_FILE, f'PI_PINNED_VERSION = "{version}"\n')
     platform_lines = "".join(
         f'        "{key}": PlatformPin(\n'
-        f'            asset="pi-{key}.tar.gz",\n'
-        f'            sha256="{_OLD_SHAS[key]}",\n'
-        f"        ),\n"
+        + f'            asset="pi-{key}.tar.gz",\n'
+        + f'            sha256="{_OLD_SHAS[key]}",\n'
+        + "        ),\n"
         for key in compute_pi_pin.SUPPORTED_PLATFORM_KEYS
     )
     _write(
@@ -50,16 +50,16 @@ def _make_mini_repo(repo_root: Path, version: str) -> None:
         repo_root,
         bump_pi_pin._MANAGED_TOOLS_TEST_FILE,
         f"# Verified darwin-arm64 sha256 for pi {version}; ``just bump-pi <version>`` refreshes it.\n"
-        f'_PI_DARWIN_ARM64_SHA256_{underscored} = "{_OLD_SHAS["darwin-arm64"]}"\n'
-        f"\n"
-        f"value = _PI_DARWIN_ARM64_SHA256_{underscored}\n",
+        + f'_PI_DARWIN_ARM64_SHA256_{underscored} = "{_OLD_SHAS["darwin-arm64"]}"\n'
+        + "\n"
+        + f"value = _PI_DARWIN_ARM64_SHA256_{underscored}\n",
     )
     _write(
         repo_root,
         bump_pi_pin._AGENT_WRAPPER_TEST_FILE,
         f'    version_result.stderr = "pi {version}\\n"\n'
-        f'    other_result.stderr = "pi {version}\\n"\n'
-        f'    assert exc_info.value.pinned_version == "{version}"\n',
+        + f'    other_result.stderr = "pi {version}\\n"\n'
+        + f'    assert exc_info.value.pinned_version == "{version}"\n',
     )
     _write(
         repo_root,

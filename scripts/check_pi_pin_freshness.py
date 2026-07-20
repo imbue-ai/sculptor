@@ -108,7 +108,7 @@ def _run_warning_mode(repo_root: Path) -> int:
     if stale:
         print(
             f"::warning title=pi pin is stale::pi {latest} is released; Sculptor pins {pinned}. "
-            f"The pi-bump workflow opens a bump PR daily, or run `just bump-pi {latest}`."
+            + f"The pi-bump workflow opens a bump PR daily, or run `just bump-pi {latest}`."
         )
     else:
         print(f"pi pin is fresh: pinned={pinned} latest={latest}")
