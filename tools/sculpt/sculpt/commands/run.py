@@ -19,6 +19,7 @@ from sculpt.commands._workspace_helpers import resolve_requested_branch_name
 from sculpt.commands._workspace_helpers import resolve_strategy
 from sculpt.commands.data_types import RunOutput
 from sculpt.formatting import cli_error
+from sculpt.formatting import extract_error_detail
 from sculpt.formatting import handle_connection_error
 from sculpt.resolve import resolve_project
 
@@ -129,15 +130,23 @@ def run_cmd(
     )
 
     try:
-        ws_result = create_workspace_v2.sync(client=client, body=ws_request)  # type: ignore[arg-type]
+        ws_response = create_workspace_v2.sync_detailed(client=client, body=ws_request)  # type: ignore[arg-type]
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
-    if ws_result is None:
-        cli_error("Failed to create workspace", detail="No response from server", json_output=json_output)
-
+    ws_result = ws_response.parsed
     if isinstance(ws_result, HTTPValidationError):
         cli_error("Validation error", detail=str(ws_result), json_output=json_output)
+
+    if ws_result is None:
+        # Hand-raised errors (400/409) are not parsed by the generated client;
+        # surface their detail from the raw body.
+        detail = extract_error_detail(ws_response.content)
+        cli_error(
+            "Failed to create workspace",
+            detail=detail or f"No response from server (status {ws_response.status_code})",
+            json_output=json_output,
+        )
 
     workspace_id = ws_result.object_id
 
@@ -156,15 +165,26 @@ def run_cmd(
     )
 
     try:
-        agent_result = create_workspace_agent.sync(workspace_id=workspace_id, client=client, body=agent_request)
+        agent_response = create_workspace_agent.sync_detailed(
+            workspace_id=workspace_id, client=client, body=agent_request
+        )
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
-    if agent_result is None:
-        cli_error("Failed to create agent", detail="No response from server", json_output=json_output)
-
+    agent_result = agent_response.parsed
     if isinstance(agent_result, HTTPValidationError):
         cli_error("Validation error", detail=str(agent_result), json_output=json_output)
+
+    if agent_result is None:
+        # Same shape as the workspace create above: hand-raised errors (e.g.
+        # the testing-model gate, a prompt sent to a terminal agent) return
+        # 400 with a string detail the generated client does not parse.
+        detail = extract_error_detail(agent_response.content)
+        cli_error(
+            "Failed to create agent",
+            detail=detail or f"No response from server (status {agent_response.status_code})",
+            json_output=json_output,
+        )
 
     if json_output:
         output = RunOutput(

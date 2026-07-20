@@ -1,6 +1,7 @@
 """Output formatting utilities for the sculpt CLI."""
 
 import datetime
+import json
 import sys
 from collections.abc import Sequence
 from typing import NoReturn
@@ -8,6 +9,25 @@ from typing import NoReturn
 import typer
 
 from sculpt.commands.data_types import ErrorOutput
+
+
+def extract_error_detail(body: bytes) -> str | None:
+    """Pull the FastAPI HTTPException `detail` out of an error response body.
+
+    The generated client only parses response bodies for the statuses declared
+    in the OpenAPI schema (200 and 422), so hand-raised errors (400/404/409)
+    arrive unparsed and their detail must be read from the raw body.
+    """
+    try:
+        parsed = json.loads(body)
+    except (ValueError, TypeError):
+        return None
+    if isinstance(parsed, dict):
+        detail = parsed.get("detail")
+        if isinstance(detail, str):
+            return detail
+    return None
+
 
 _ELLIPSIS = "..."
 
