@@ -11,7 +11,7 @@ import { selectAtom } from "jotai/utils";
 
 import type { Project, Workspace } from "~/api";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
-import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import { isWorkspaceDeletingAtomFamily, listedWorkspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import type { SidebarOrderState } from "~/components/sections/persistence/types.ts";
 import { globalLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 
@@ -94,25 +94,30 @@ export function groupWorkspacesByRepo(
 const sidebarOrderAtom = selectAtom(globalLayoutAtom, (global) => global.sidebarOrder);
 
 // The sidebar's repo groups in render order. WorkspaceSidebar renders these.
+// Listed (not just live) workspaces, so a delete in flight stays visible as a
+// "Deleting…" row until the server confirms it or the rollback restores it.
 export const sidebarWorkspaceGroupsAtom = atom<ReadonlyArray<RepoGroup>>((get) =>
-  groupWorkspacesByRepo(get(workspacesArrayAtom) ?? [], get(projectsArrayAtom), get(sidebarOrderAtom)),
+  groupWorkspacesByRepo(get(listedWorkspacesArrayAtom) ?? [], get(projectsArrayAtom), get(sidebarOrderAtom)),
 );
 
 // True while the first workspace snapshot is still in flight, so the sidebar can
 // show a loading skeleton instead of a blank rail (e.g. right after a hard
 // refresh, before the reconnecting WebSocket delivers the first frame).
 //
-// `workspacesArrayAtom` is `undefined` only until that first frame lands — the
-// frame always writes an array, even an empty one — so this cleanly separates
-// "not loaded yet" from "loaded and genuinely empty", a distinction the groups
-// atom above deliberately erases with its `?? []` (keyboard cycling and drag
-// ordering want a concrete array regardless).
-export const isSidebarLoadingAtom = atom<boolean>((get) => get(workspacesArrayAtom) === undefined);
+// `listedWorkspacesArrayAtom` is `undefined` only until that first frame lands
+// — the frame always writes an array, even an empty one — so this cleanly
+// separates "not loaded yet" from "loaded and genuinely empty", a distinction
+// the groups atom above deliberately erases with its `?? []` (keyboard cycling
+// and drag ordering want a concrete array regardless).
+export const isSidebarLoadingAtom = atom<boolean>((get) => get(listedWorkspacesArrayAtom) === undefined);
 
 // The sidebar's workspaces flattened into their visible top-to-bottom order, so
-// keyboard cycling steps through the same list the user sees.
+// keyboard cycling steps through the same list the user sees — minus rows
+// mid-delete, which are visible but not navigable.
 export const sidebarOrderedWorkspacesAtom = atom<ReadonlyArray<Workspace>>((get) =>
-  get(sidebarWorkspaceGroupsAtom).flatMap((group) => group.workspaces),
+  get(sidebarWorkspaceGroupsAtom)
+    .flatMap((group) => group.workspaces)
+    .filter((ws) => !get(isWorkspaceDeletingAtomFamily(ws.objectId))),
 );
 
 // Commit a workspace-row drop: move the dragged workspace to the drop target's slot

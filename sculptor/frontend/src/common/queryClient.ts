@@ -70,6 +70,14 @@ export const workspaceQueryKeyPrefix = (workspaceId: string): QueryKey =>
 export const workspaceGitQueryKeyPrefix = (workspaceId: string): QueryKey =>
   [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "git"] as const;
 
+/**
+ * Query key for the Home recent-workspaces list — a pulled REST snapshot,
+ * refreshed by invalidation: on workspace-membership changes from the stream
+ * and on a confirmed delete (so the list heals even when the stream is down).
+ */
+export const recentWorkspacesQueryKey = (): ReadonlyArray<string> =>
+  [SCULPTOR_QUERY_KEY_PREFIX, "recentWorkspaces"] as const;
+
 /** Query key for a single agent task by its id, populated by the WS bridge. */
 export const taskQueryKey = (taskId: string): ReadonlyArray<string> =>
   [SCULPTOR_QUERY_KEY_PREFIX, "task", taskId] as const;

@@ -3,7 +3,12 @@ import { useCallback } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { markSwitchStart } from "./perf/workspaceSwitchProfiler.ts";
-import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } from "./state/atoms/workspaces";
+import {
+  asLiveWorkspace,
+  setActiveTabByIdAtom,
+  setAgentForWorkspaceAtom,
+  workspaceAtomFamily,
+} from "./state/atoms/workspaces";
 
 type ImbueNavigationFunctions = {
   navigateToWorkspace: (workspaceID: string) => void;
@@ -135,7 +140,7 @@ export const useWorkspacePageParams = (): WorkspacePageParams => {
 export const useActiveProjectID = (): string | null => {
   const params = useParams<WorkspaceURLParams>();
   const workspaceID = params.workspaceID;
-  const workspace = useAtomValue(workspaceAtomFamily(workspaceID ?? ""));
+  const workspace = asLiveWorkspace(useAtomValue(workspaceAtomFamily(workspaceID ?? "")));
   if (workspace === null) {
     return null;
   }
@@ -155,7 +160,7 @@ export type ImbueParams = {
 
 export const useImbueParams = (): ImbueParams => {
   const params = useParams<WorkspaceURLParams>();
-  const workspace = useAtomValue(workspaceAtomFamily(params.workspaceID ?? ""));
+  const workspace = asLiveWorkspace(useAtomValue(workspaceAtomFamily(params.workspaceID ?? "")));
   return {
     projectID: workspace?.projectId,
     taskID: params.id,

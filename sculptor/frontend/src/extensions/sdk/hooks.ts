@@ -7,7 +7,7 @@ import type { CodingAgentTaskView } from "~/api";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
-import { workspaceAtomFamily, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import { asLiveWorkspace, workspaceAtomFamily, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useWorkspaceNavigation } from "~/common/state/hooks/useWorkspaceNavigation.ts";
 import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
@@ -47,7 +47,7 @@ export type CurrentWorkspace = WorkspaceView;
 // hooks so the curated mapping lives in exactly one place.
 const workspaceViewAtomFamily = atomFamily((id: string) =>
   atom((get): WorkspaceView | null => {
-    const workspace = get(workspaceAtomFamily(id));
+    const workspace = asLiveWorkspace(get(workspaceAtomFamily(id)));
     if (!workspace) return null;
     return {
       id: workspace.objectId,

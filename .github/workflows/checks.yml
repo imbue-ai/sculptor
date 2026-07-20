@@ -117,6 +117,15 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
+      # Same early-signal philosophy for the pinned pi harness: annotate — never
+      # gate — when upstream pi has moved past PI_PINNED_VERSION (the pi-bump
+      # workflow opens the actual bump PR on its daily schedule).
+      - name: Warn when the pi pin is stale
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/check_pi_pin_freshness.py --emit-github-warning
+
       - name: Sync Python deps
         run: uv sync --frozen
 

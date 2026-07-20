@@ -1,4 +1,4 @@
-import { ContextMenu, IconButton, Skeleton } from "@radix-ui/themes";
+import { ContextMenu, IconButton, Skeleton, Spinner } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -9,6 +9,7 @@ import { ElementIds } from "~/api";
 import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
+import { isWorkspaceDeletingAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider.ts";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
 import { PrButton } from "~/pages/workspace/components/PrButton.tsx";
@@ -52,15 +53,21 @@ export const WorkspaceRow = ({
   // `sourceBranch` so the skeleton can't become permanent (see the hook).
   const { branch, isLoading: isBranchLoading } = useWorkspaceRowBranch(workspace.objectId, workspace.sourceBranch);
   const gitProvider = useGitProvider(workspace.projectId);
+  // A delete in flight (or confirmed while this pulled row awaits its refetch)
+  // renders the row dimmed and non-interactive: the pending state stays
+  // visible instead of the row vanishing and possibly flashing back. A failed
+  // delete un-dims it via the same store the toast's rollback restores.
+  const isDeleting = useAtomValue(isWorkspaceDeletingAtomFamily(workspace.objectId));
 
   const rowContent = (
     <div
-      className={`${styles.row} ${isFocused ? styles.focused : ""}`}
+      className={`${styles.row} ${isFocused ? styles.focused : ""} ${isDeleting ? styles.deleting : ""}`}
       data-workspace-row
       data-testid={ElementIds.WORKSPACE_ROW}
-      onClick={onClick}
+      onClick={isDeleting ? undefined : onClick}
       role="button"
       tabIndex={-1}
+      aria-disabled={isDeleting || undefined}
     >
       <div className={styles.dot}>
         <StatusDot workspace={workspace} />
@@ -82,32 +89,41 @@ export const WorkspaceRow = ({
       </div>
 
       <div className={styles.rightGroup}>
-        {/* PrButton reads its own PR status and renders nothing when there is no
-            PR (hideCreateAction), so its visibility is driven by PR state — not
-            gated on the branch, which it doesn't consume. */}
-        <div className={styles.prButton} onClick={(e) => e.stopPropagation()}>
-          <PrButton
-            workspaceId={workspace.objectId}
-            targetBranch={prDefaultTargetBranch}
-            hideCreateAction
-            gitProvider={gitProvider}
-          />
-        </div>
-        <span className={styles.repo}>{workspace.projectName}</span>
-        <span className={styles.time}>{formatRelativeTime(workspace.lastActivityAt)}</span>
-        <IconButton
-          variant="ghost"
-          size="1"
-          color="gray"
-          className={styles.deleteButton}
-          data-testid={ElementIds.WORKSPACE_ROW_CONTEXT_MENU_DELETE}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(workspace);
-          }}
-        >
-          <Trash2 size={14} />
-        </IconButton>
+        {isDeleting ? (
+          <span className={styles.deletingLabel}>
+            <Spinner size="1" />
+            Deleting…
+          </span>
+        ) : (
+          <>
+            {/* PrButton reads its own PR status and renders nothing when there is no
+                PR (hideCreateAction), so its visibility is driven by PR state — not
+                gated on the branch, which it doesn't consume. */}
+            <div className={styles.prButton} onClick={(e) => e.stopPropagation()}>
+              <PrButton
+                workspaceId={workspace.objectId}
+                targetBranch={prDefaultTargetBranch}
+                hideCreateAction
+                gitProvider={gitProvider}
+              />
+            </div>
+            <span className={styles.repo}>{workspace.projectName}</span>
+            <span className={styles.time}>{formatRelativeTime(workspace.lastActivityAt)}</span>
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              className={styles.deleteButton}
+              data-testid={ElementIds.WORKSPACE_ROW_CONTEXT_MENU_DELETE}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(workspace);
+              }}
+            >
+              <Trash2 size={14} />
+            </IconButton>
+          </>
+        )}
       </div>
     </div>
   );
@@ -116,8 +132,10 @@ export const WorkspaceRow = ({
     <ContextMenu.Root>
       <ContextMenu.Trigger>{rowContent}</ContextMenu.Trigger>
       <ContextMenu.Content>
-        <ContextMenu.Item onSelect={onOpenInNewTab}>Open in New Tab</ContextMenu.Item>
-        <ContextMenu.Item color="red" onSelect={() => onDelete(workspace)}>
+        <ContextMenu.Item disabled={isDeleting} onSelect={onOpenInNewTab}>
+          Open in New Tab
+        </ContextMenu.Item>
+        <ContextMenu.Item color="red" disabled={isDeleting} onSelect={() => onDelete(workspace)}>
           Delete Workspace
         </ContextMenu.Item>
       </ContextMenu.Content>

@@ -35,7 +35,7 @@ rest of the app keeps working.
 
 ## Bundled extensions
 
-Three extensions ship with Sculptor. Toggle them in **Settings → Extensions**:
+Four extensions ship with Sculptor. Toggle them in **Settings → Extensions**:
 
 - **Linear** *(on by default)* — connects Sculptor to Linear. Adds a workspace
   panel showing the issues linked to the current branch and pull request, a
@@ -47,8 +47,11 @@ Three extensions ship with Sculptor. Toggle them in **Settings → Extensions**:
   perks up when you're typing up a storm.
 - **Pomodoro** *(off by default)* — a small floating pomodoro timer with a
   task label, visible across the whole app.
+- **Buster** *(off by default)* — a desktop pet that treats the app as a
+  playground: a little cart-riding sculpture that wanders across your panels,
+  rides them as they move around, and can be clicked to drive with the keyboard.
 
-Sculpty and Pomodoro are also **examples**: small, readable, no-build
+Sculpty, Pomodoro, and Buster are also **examples**: small, readable, no-build
 extensions meant to give you a quick sense of how a standalone extension is
 put together before you [build your own](#building-your-own).
 
@@ -58,7 +61,7 @@ put together before you [build your own](#building-your-own).
 
 Everything lives in **Settings → Extensions**:
 
-![Settings → Extensions: the global toggles and the three bundled extensions](images/extensions_settings.png)
+![Settings → Extensions: the global toggles and the bundled extensions](images/extensions_settings.png)
 
 - **Per-extension toggles** — enable or disable each extension individually.
   Changes apply live.

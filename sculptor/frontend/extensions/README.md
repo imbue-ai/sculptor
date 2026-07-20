@@ -73,8 +73,8 @@ An extension is loaded from `public/extensions/<id>/` (a `manifest.json` next
 to a `main.js` ESM bundle). There are two ways that tree gets populated:
 
 - **Pure-JS extensions** commit their `main.js` + `manifest.json` directly under
-  `public/extensions/<id>/` — no build step. `sculpty` and `pomodoro` are the
-  examples.
+  `public/extensions/<id>/` — no build step. `sculpty`, `pomodoro`, and `buster`
+  are the examples.
 - **Compiled extensions** keep TS/TSX source under `extensions/<id>/src/` and
   are built into `public/extensions/<id>/` by the host Vite build (see
   `vite-plugins/bundled-extensions.ts`), so `npm run build` and the dev server

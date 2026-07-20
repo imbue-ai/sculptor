@@ -24,14 +24,25 @@ import { useEffect, useRef, useState } from "react";
 import { ElementIds } from "~/api";
 
 import { AddPanelMenuContent } from "./AddPanelDropdown.tsx";
+import { buildSafeTriangle, isPointInTriangle, type Point } from "./hoverSafeArea.ts";
 import type { SubSectionId } from "./sectionTypes.ts";
 import { toSection } from "./sectionTypes.ts";
 import { useAddPanelActions } from "./useAddPanelActions.ts";
 
-// Grace period after the pointer leaves the "+"/menu before a transient (unpinned) menu
-// closes — long enough to cross the gap from the button to the menu without it snapping
-// shut, short enough that it doesn't linger.
+// Grace period after the pointer leaves the safe area heading AWAY from the menu
+// before a transient (unpinned) menu closes — short so it doesn't linger once the
+// pointer is clearly not coming to the menu.
 const MENU_CLOSE_DELAY_MS = 150;
+// Grace while the pointer is inside the hover safe area (see hoverSafeArea.ts) —
+// plausibly still travelling toward the menu across the gap/band between the "+"
+// and the popover. Refreshed on every move that stays inside, so an arbitrarily
+// SLOW crossing never times out; it only lapses once the pointer stops moving
+// (parks in the dead space), which then closes rather than sticking open.
+const SAFE_AREA_GRACE_MS = 800;
+// Horizontal padding added to each end of the safe area's base (the popover's near
+// edge) so a slightly wobbly approach that drifts just past the popover's width
+// still counts as heading toward it.
+const SAFE_AREA_BASE_PADDING_PX = 24;
 // The center quick-add tooltip is a slower hint than the instant menu, so it only
 // surfaces on a deliberate dwell rather than a cursor sweep across the header.
 const QUICK_ADD_TOOLTIP_DELAY_MS = 1000;
@@ -59,6 +70,12 @@ export const SectionAddPanelControl = ({
   const suppressToggleRef = useRef(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // The open popover element, measured on pointer-leave to build the hover safe area.
+  const contentRef = useRef<HTMLDivElement>(null);
+  // The document pointermove listener that watches the safe area while a close is
+  // pending, held in a ref so it can be torn down from any code path. (Whether the
+  // pointer is currently inside the area is closure-local to each beginClose cycle.)
+  const graceMoveRef = useRef<((event: PointerEvent) => void) | null>(null);
 
   const clearCloseTimer = (): void => {
     if (closeTimer.current) {
@@ -74,16 +91,88 @@ export const SectionAddPanelControl = ({
     }
   };
 
-  const scheduleClose = (): void => {
+  const stopGraceTracking = (): void => {
+    if (graceMoveRef.current) {
+      document.removeEventListener("pointermove", graceMoveRef.current);
+      graceMoveRef.current = null;
+    }
+  };
+
+  // The pointer is safely over the "+"/menu: cancel any pending close and tear down
+  // safe-area tracking. Wired to every enter that should keep the menu alive.
+  const keepOpen = (): void => {
+    clearCloseTimer();
+    stopGraceTracking();
+  };
+
+  const closeMenu = (): void => {
+    stopGraceTracking();
+    setIsOpen(false);
+  };
+
+  // Close the transient menu, but forgive the trip across the gap/band between the
+  // "+" and the popover: while the pointer stays inside the safe area (a triangle
+  // from where it left the trigger toward the popover's near edge) it is plausibly
+  // still heading for the menu, so the close is held off. Leaving the area is
+  // treated as moving away, and reaching the menu fires keepOpen via a pointer-enter.
+  const beginClose = (apex: Point): void => {
     if (pinnedRef.current) {
       return; // a pinned menu stays open until it is explicitly toggled off
     }
+    stopGraceTracking();
+
+    const armClose = (delay: number): void => {
+      clearCloseTimer();
+      closeTimer.current = setTimeout(closeMenu, delay);
+    };
+
+    const popover = contentRef.current?.getBoundingClientRect();
+    if (!popover) {
+      // No measurable popover (shouldn't happen while open) — plain timed close.
+      armClose(MENU_CLOSE_DELAY_MS);
+      return;
+    }
+
+    const safeArea = buildSafeTriangle(apex, popover, SAFE_AREA_BASE_PADDING_PX);
+    // Assume the pointer is heading for the menu the instant it leaves; the first
+    // move refines that. Tracked closure-locally for this one close cycle.
+    let isInsideArea = true;
+    armClose(SAFE_AREA_GRACE_MS);
+
+    const onMove = (event: PointerEvent): void => {
+      const isInside = isPointInTriangle({ x: event.clientX, y: event.clientY }, safeArea);
+      if (isInside) {
+        // Still inside the wedge and moving → making progress toward the menu. Keep
+        // refreshing the generous close on every move so a SLOW crossing never times
+        // out; if the pointer instead stops moving, no more moves fire and the last
+        // timer lapses, closing it.
+        isInsideArea = true;
+        armClose(SAFE_AREA_GRACE_MS);
+      } else if (isInsideArea) {
+        // Just crossed out of the wedge → treat as leaving: arm the short close once,
+        // and don't keep pushing it out while the pointer continues outward.
+        isInsideArea = false;
+        armClose(MENU_CLOSE_DELAY_MS);
+      }
+    };
+    graceMoveRef.current = onMove;
+    document.addEventListener("pointermove", onMove);
+  };
+
+  // Close promptly, with no safe-area grace. Used when leaving the menu itself,
+  // where there is no trigger->popover gap to forgive; a move back into the
+  // trigger or into an open submenu cancels this via their pointer-enter handlers.
+  const scheduleShortClose = (): void => {
+    if (pinnedRef.current) {
+      return; // a pinned menu stays open until it is explicitly toggled off
+    }
+    stopGraceTracking();
     clearCloseTimer();
-    closeTimer.current = setTimeout(() => setIsOpen(false), MENU_CLOSE_DELAY_MS);
+    closeTimer.current = setTimeout(closeMenu, MENU_CLOSE_DELAY_MS);
   };
 
   const handleEnter = (): void => {
-    clearCloseTimer();
+    keepOpen();
     setIsOpen(true); // instant
     if (isCenter) {
       clearTooltipTimer();
@@ -91,12 +180,27 @@ export const SectionAddPanelControl = ({
     }
   };
 
-  const handleLeave = (): void => {
-    // Clear a stray suppress flag if a press dragged off the button without a click.
+  // Clear the transient trigger UI shared by both leave paths: the tooltip, and a
+  // stray suppress flag left if a press dragged off the button without a click.
+  const resetTriggerTransientState = (): void => {
     suppressToggleRef.current = false;
     clearTooltipTimer();
     setIsTooltipOpen(false);
-    scheduleClose();
+  };
+
+  // Leaving the "+" trigger: the pointer may be crossing the gap toward the menu,
+  // so hold the close off while it stays in the safe area (see beginClose).
+  const handleTriggerLeave = (event: ReactPointerEvent): void => {
+    resetTriggerTransientState();
+    beginClose({ x: event.clientX, y: event.clientY });
+  };
+
+  // Leaving the menu content or a submenu: close promptly — the safe area only
+  // bridges the trigger->popover gap, so applying it here would just make the
+  // menu linger open after the pointer has left it.
+  const handleMenuLeave = (): void => {
+    resetTriggerTransientState();
+    scheduleShortClose();
   };
 
   // The trigger's primary action: quick-add in the center, pin-toggle elsewhere.
@@ -104,7 +208,7 @@ export const SectionAddPanelControl = ({
     clearTooltipTimer();
     setIsTooltipOpen(false);
     if (isCenter) {
-      clearCloseTimer();
+      keepOpen();
       pinnedRef.current = false;
       setIsOpen(false);
       actions.createRecentAgent(subSection);
@@ -112,7 +216,7 @@ export const SectionAddPanelControl = ({
     }
     const isNextPinned = !pinnedRef.current;
     pinnedRef.current = isNextPinned;
-    clearCloseTimer();
+    keepOpen();
     setIsOpen(isNextPinned);
   };
 
@@ -141,11 +245,12 @@ export const SectionAddPanelControl = ({
     if (nextOpen) {
       // A Radix-driven open (e.g. keyboard, right after a hover-out) must cancel any close
       // the hover-out scheduled — otherwise that timer fires and closes the just-opened menu.
-      clearCloseTimer();
+      keepOpen();
     } else {
       pinnedRef.current = false;
       clearTooltipTimer();
       setIsTooltipOpen(false);
+      stopGraceTracking();
     }
     setIsOpen(nextOpen);
   };
@@ -160,6 +265,10 @@ export const SectionAddPanelControl = ({
 
       if (tooltipTimer.current) {
         clearTimeout(tooltipTimer.current);
+      }
+
+      if (graceMoveRef.current) {
+        document.removeEventListener("pointermove", graceMoveRef.current);
       }
     };
   }, []);
@@ -178,7 +287,7 @@ export const SectionAddPanelControl = ({
             aria-label={isCenter ? "Add agent or panel" : "Add panel"}
             data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
             onPointerEnter={handleEnter}
-            onPointerLeave={handleLeave}
+            onPointerLeave={handleTriggerLeave}
             // Flag the pointer-down (capture phase, so the flag is set before Radix's
             // bubble-phase toggle fires onOpenChange) so handleOpenChange drops Radix's
             // pointer toggle. `activate` is the sole authority for a pointer click. Only a
@@ -195,7 +304,12 @@ export const SectionAddPanelControl = ({
           </IconButton>
         </DropdownMenu.Trigger>
       </Tooltip>
-      <AddPanelMenuContent subSection={subSection} onPointerEnter={clearCloseTimer} onPointerLeave={handleLeave} />
+      <AddPanelMenuContent
+        subSection={subSection}
+        contentRef={contentRef}
+        onPointerEnter={keepOpen}
+        onPointerLeave={handleMenuLeave}
+      />
     </DropdownMenu.Root>
   );
 };
