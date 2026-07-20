@@ -32,7 +32,9 @@ def test_populate_sculptor_folder_pi_stub_passes_dependency_version_gate(tmp_pat
     _populate_sculptor_folder(tmp_path)
 
     config = load_config(tmp_path / "internal" / "config.toml")
-    result = subprocess.run([config.dependency_paths.pi, "--version"], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        [config.dependency_paths.pi, "--version"], capture_output=True, text=True, check=False, timeout=30
+    )
 
     assert result.returncode == 0
     # Real pi emits its version to stderr; the stub mirrors that.

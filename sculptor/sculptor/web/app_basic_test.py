@@ -1495,3 +1495,23 @@ def test_create_registered_agent_with_unknown_or_deleted_registration_fails(
     response = _post_agent(client, workspace, {"agentType": "registered", "registrationId": "fleeting"})
     assert response.status_code == 400
     assert "fleeting" in response.json()["detail"]
+
+
+# Workspace setup rerun.
+
+
+def test_setup_rerun_conflicts_when_setup_command_is_cleared(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """A user-cleared ("") setup command blocks reruns with a 409, matching the
+    endpoint's other precondition conflicts (environment not ready, already
+    running)."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        transaction.update_project_fields(test_project.object_id, workspace_setup_command="")
+
+    response = client.post(f"/api/v1/workspaces/{workspace.object_id}/setup/rerun")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {"error": "no setup command configured"}

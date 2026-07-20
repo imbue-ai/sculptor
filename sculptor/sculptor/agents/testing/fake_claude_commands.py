@@ -1012,7 +1012,7 @@ def handle_ask_user_question(args: dict, emit_streaming: bool) -> list[dict]:
     # How long to wait for the user's answer before the wait errors out. A
     # large value lets a scripted scenario hold the waiting-on-input state
     # indefinitely (e.g. demo seeding for screenshots).
-    timeout_seconds: float = args.get("timeout_seconds", 180.0)
+    timeout_seconds = float(args.get("timeout_seconds", 180.0))
 
     message_id = generate_id("msg")
     tool_id = generate_id("toolu")
