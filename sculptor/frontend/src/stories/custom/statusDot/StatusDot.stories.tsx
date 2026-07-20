@@ -13,13 +13,13 @@ import {
 } from "~/components/statusDot";
 
 /**
- * Visual reference for the status glyphs and the sidebar rail treatment.
+ * Visual reference for the status dots and the sidebar rail treatment.
  *
- * The glyph rows render the real AgentStatusDot / WorkspaceStatusDots. The rail
+ * The dot rows render the real AgentStatusDot / WorkspaceStatusDots. The rail
  * preview composes the real sidebar CSS modules and the real NavItem with static
  * rows (the live SidebarRepoGroup is atom-driven), so the recolor, type
- * hierarchy, and status glyphs can be screenshotted together without a running
- * backend. Every running blob self-seeds, so a column of them animates out of
+ * hierarchy, and status dots can be screenshotted together without a running
+ * backend. Every running dot self-seeds, so a column of them animates out of
  * sync — which is the point of viewing several at once here.
  */
 
@@ -141,7 +141,7 @@ const SidebarRailPreview = (): ReactElement => (
   </aside>
 );
 
-const Showcase = (): ReactElement => (
+const ShowcaseView = (): ReactElement => (
   <div style={{ display: "flex", gap: "48px", alignItems: "flex-start", padding: "8px" }}>
     <SidebarRailPreview />
     <GlyphGallery />
@@ -166,6 +166,6 @@ export const SidebarRail: Story = {
   render: (): ReactElement => <SidebarRailPreview />,
 };
 
-export const Showcase_: Story = {
-  render: (): ReactElement => <Showcase />,
+export const Showcase: Story = {
+  render: (): ReactElement => <ShowcaseView />,
 };

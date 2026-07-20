@@ -1,8 +1,9 @@
 import { Flex } from "@radix-ui/themes";
-import type { CSSProperties, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { useId } from "react";
 
 import styles from "./StatusDot.module.scss";
+import { dotDiameter, pulseTiming, resolveWorkspaceDotStatuses } from "./statusDotHelpers";
 import type { AgentDotStatus, WorkspaceDotStatus } from "./statusUtils";
 
 // Every status is a colored dot of one consistent size: yellow for "waiting on
@@ -11,15 +12,10 @@ import type { AgentDotStatus, WorkspaceDotStatus } from "./statusUtils";
 // PulseLoader). Each dot is centered in a fixed size-wide slot so the row labels
 // next to them stay aligned.
 //
-// This is the single visual source of truth for status iconography; every
-// surface (sidebar rows, panel tabs, command palette, peek popover) renders
-// through it, so a change here stays consistent everywhere.
-
-// The dot diameter as a fraction of the slot; a little inset off the slot edges
-// keeps the dots from crowding their row labels.
-const DOT_SCALE = 0.75;
-
-const dotDiameter = (size: number): number => Math.round(size * DOT_SCALE);
+// This is the shared renderer for agent and workspace status dots; every
+// surface that shows one (sidebar rows, panel tabs, command palette, peek
+// popover) renders through it, so a change here stays consistent everywhere.
+// The pure sizing/timing/aggregation math lives in statusDotHelpers.ts.
 
 const FilledDot = ({ size, className }: { size: number; className: string }): ReactElement => {
   const diameter = dotDiameter(size);
@@ -28,34 +24,6 @@ const FilledDot = ({ size, className }: { size: number; className: string }): Re
       <span className={`${styles.dot} ${className}`} style={{ width: diameter, height: diameter }} />
     </span>
   );
-};
-
-// Stable hash so each running dot derives its own tempo and starting phase from
-// a seed — small changes in the seed spread widely.
-const hashSeed = (seed: string): number => {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index++) {
-    hash = (hash * 31 + seed.charCodeAt(index)) | 0;
-  }
-  return Math.abs(hash);
-};
-
-// Turn a seed into per-instance timing for the two halos. Both share a slightly
-// varied loop duration; a negative delay starts each dot partway through its
-// cycle (no startup jump), and the second halo trails the first by half a loop
-// so the two pings always alternate. A column of running dots then pulses at
-// different tempos and phases instead of in lockstep.
-const pulseTiming = (seed: string): { halo: CSSProperties; haloTrailing: CSSProperties } => {
-  const hash = hashSeed(seed);
-  const duration = 1.7 + (hash % 60) / 100; // 1.70s – 2.29s
-  const phase = ((Math.floor(hash / 7) % 100) / 100) * duration;
-  return {
-    halo: { animationDuration: `${duration.toFixed(2)}s`, animationDelay: `${(-phase).toFixed(2)}s` },
-    haloTrailing: {
-      animationDuration: `${duration.toFixed(2)}s`,
-      animationDelay: `${(-phase - duration / 2).toFixed(2)}s`,
-    },
-  };
 };
 
 /**
@@ -99,40 +67,6 @@ export const AgentStatusDot = ({ status, size = 11 }: AgentStatusDotProps): Reac
   }
 
   return <FilledDot size={size} className={STATUS_DOT_CLASS[status]} />;
-};
-
-/**
- * Collapses a workspace's aggregate agent status into the one or two agent
- * dots shown for it.
- *
- * When some (but not all) agents have errors, two dots are shown: the error
- * dot plus whichever of running/waiting/ready best summarises the rest.
- */
-const resolveWorkspaceDotStatuses = (status: WorkspaceDotStatus): ReadonlyArray<AgentDotStatus> => {
-  if (status.hasError && !status.isAllError) {
-    const secondary: AgentDotStatus = status.hasRunning
-      ? "running"
-      : status.hasWaiting
-        ? "waiting"
-        : status.hasUnread
-          ? "unread"
-          : "read";
-    return ["error", secondary];
-  }
-
-  if (status.isAllError) {
-    return ["error"];
-  }
-
-  if (status.hasWaiting) {
-    return ["waiting"];
-  }
-
-  if (status.hasRunning) {
-    return ["running"];
-  }
-
-  return [status.hasUnread ? "unread" : "read"];
 };
 
 type WorkspaceStatusDotsProps = {

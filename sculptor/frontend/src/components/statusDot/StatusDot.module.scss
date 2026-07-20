@@ -18,8 +18,10 @@
 
 // The halos share the core's dot size (set inline) and are centered over it via
 // inset:0 + margin:auto, so scaling grows them outward from the core's center.
+// The shorthand's 1.9s duration is only a fallback — every instance overrides
+// duration and delay inline (pulseTiming in StatusDot.tsx).
 .pulseHalo {
-  animation: status-pulse 1.9s ease-out infinite;
+  animation: status-pulse 1.9s var(--ease-out) infinite;
   background: currentColor;
   border-radius: 50%;
   inset: 0;
@@ -61,9 +63,9 @@
   color: var(--red-9);
 }
 
-// unread/read filled dots (FilledDot): a dot centered in a fixed size-wide slot
-// so every status — dot or glyph — keeps the same footprint and the labels stay
-// aligned.
+// Non-running statuses (FilledDot: waiting/error/unread/read): a solid dot
+// centered in a fixed size-wide slot so every status keeps the same footprint
+// and the row labels stay aligned.
 .dotBox {
   align-items: center;
   display: inline-flex;

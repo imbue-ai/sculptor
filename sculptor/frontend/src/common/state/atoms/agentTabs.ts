@@ -16,7 +16,7 @@ export type StoredAgentType = AgentTypeName | `registered:${string}`;
 export const AGENT_TYPE_LABELS: Record<Exclude<AgentTypeName, "registered">, string> = {
   claude: "Claude",
   pi: "Pi",
-  terminal: "Terminal Agent",
+  terminal: "Terminal agent",
 };
 
 export const REGISTERED_AGENT_TYPE_PREFIX = "registered:";

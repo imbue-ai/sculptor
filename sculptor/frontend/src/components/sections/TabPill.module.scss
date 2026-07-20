@@ -45,7 +45,8 @@
 }
 
 // The agent-status dot slot, mirroring the source tab's dot so the pill doesn't
-// change shape when copied. The dot itself is the shared AgentStatusDot svg; this
+// change shape when copied. The dot itself is the shared AgentStatusDot (spans tinted
+// via currentColor by the per-status color classes in StatusDot.module.scss); this
 // slot only centers it and keeps it from shrinking as the label truncates.
 .dot {
   align-items: center;

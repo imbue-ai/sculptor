@@ -83,8 +83,8 @@
 }
 
 // The agent-status dot slot on agent tabs (running/waiting/error/unread/read). The dot
-// itself is the shared AgentStatusDot svg, whose per-status colors come from
-// StatusDot.module.scss design tokens; this slot only centers it and keeps it from
+// itself is the shared AgentStatusDot — spans tinted via currentColor by the per-status
+// color classes in StatusDot.module.scss; this slot only centers it and keeps it from
 // shrinking as the label truncates.
 .dot {
   align-items: center;
