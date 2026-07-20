@@ -112,7 +112,7 @@ def test_confirmed_deletion_shows_deleting_row_until_server_confirms(
         expect(rows).to_have_count(2)
         deleting_row = sidebar.get_workspace_row_by_name("Workspace One")
         expect(deleting_row).to_have_attribute("aria-disabled", "true")
-        expect(deleting_row.locator("..").get_by_text("Deleting…")).to_be_visible()
+        expect(sidebar.get_row_deleting_label(deleting_row)).to_be_visible()
         expect(sidebar.get_row_delete_icon(deleting_row)).to_have_count(0)
 
         # Release the held DELETE so it reaches the real backend and commits —

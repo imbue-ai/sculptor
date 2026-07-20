@@ -270,6 +270,14 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         """
         return workspace_row.locator("..").get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW_DELETE)
 
+    def get_row_deleting_label(self, workspace_row: Locator) -> Locator:
+        """Get the "Deleting…" label of a pending-delete workspace row.
+
+        Like the delete icon, the label is a sibling of the row button inside
+        the row container, so it is scoped to the row's parent.
+        """
+        return workspace_row.locator("..").get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW_DELETING)
+
     def get_row_menu_icon(self, workspace_row: Locator) -> Locator:
         """Get the hover-revealed "..." actions menu icon scoped to a workspace row."""
         return workspace_row.locator("..").get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW_MENU)

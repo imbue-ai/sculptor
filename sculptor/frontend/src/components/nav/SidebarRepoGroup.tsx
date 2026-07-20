@@ -210,7 +210,11 @@ const SidebarWorkspaceRow = memo(function SidebarWorkspaceRow({
             </button>
           )}
           {isDeleting ? (
-            <span className={styles.deletingLabel}>
+            <span
+              className={styles.deletingLabel}
+              data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETING}
+              data-workspace-id={workspace.objectId}
+            >
               <Spinner size="1" />
               Deleting…
             </span>
