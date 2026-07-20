@@ -83,6 +83,13 @@
   width: 18px;
 }
 
+// The current (last-applied) layout's icon, tinted with the accent — the quiet
+// marker for "the layout in effect on this workspace". Defined after .rowIcon so it
+// wins the color at equal specificity.
+.rowIconCurrent {
+  color: var(--accent-11);
+}
+
 .rowBody {
   align-items: baseline;
   display: flex;

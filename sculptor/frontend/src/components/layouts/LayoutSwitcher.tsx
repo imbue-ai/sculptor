@@ -513,6 +513,9 @@ const SwitcherRow = ({
       id={optionDomId(layout.id)}
       role="option"
       aria-selected={selected}
+      // The layout in effect on this workspace. Announced to screen readers here
+      // (aria-current) since its only visual cue is the accent-tinted row icon.
+      aria-current={marker === "current" ? true : undefined}
       className={`${styles.row} ${selected ? styles.rowSelected : ""}`}
       onMouseEnter={onMouseEnter}
       onClick={(): void => onClick()}
@@ -520,7 +523,10 @@ const SwitcherRow = ({
       data-layout-id={layout.id}
       data-selected={selected}
     >
-      <span className={styles.rowIcon}>
+      {/* The current layout's marker IS the icon, tinted with the accent — no
+          trailing glyph. Keeps the "you're on this one" cue quiet and off the busy
+          trailing column. */}
+      <span className={`${styles.rowIcon}${marker === "current" ? ` ${styles.rowIconCurrent}` : ""}`}>
         <LayoutWireframeIcon captured={layout.captured} />
       </span>
       <span className={styles.rowBody}>
@@ -529,16 +535,14 @@ const SwitcherRow = ({
       </span>
       <span className={styles.rowTrailing}>
         {shortcut !== undefined ? <ShortcutHint binding={shortcut} className={styles.rowShortcut} /> : null}
-        {/* Hairline between the shortcut and the status icon, only when the row has
-            both — so the two pieces of trailing metadata read as distinct. */}
-        {shortcut !== undefined && marker !== null ? <span className={styles.rowDivider} aria-hidden="true" /> : null}
+        {/* Hairline between the shortcut and the default star, shown only when the row
+            has both. The current-layout marker lives on the row icon, not here. */}
+        {shortcut !== undefined && marker === "default" ? (
+          <span className={styles.rowDivider} aria-hidden="true" />
+        ) : null}
         {marker === "default" ? (
           <span className={styles.rowMarker} role="img" aria-label="Default layout" title="Default layout">
             <Star size={13} />
-          </span>
-        ) : marker === "current" ? (
-          <span className={styles.rowMarker} role="img" aria-label="Current layout" title="Current layout">
-            <Check size={13} />
           </span>
         ) : null}
       </span>
