@@ -1,6 +1,6 @@
 # Plan: Make the marketing screenshot pipeline mergeable (single PR)
 
-Branch: `bryden/orange-newt`. Goal: remove the sculptor-guy scene, replace every
+Branch: `bryden/scu-1809-demo-pipeline-mergeable`. Goal: remove the sculptor-guy scene, replace every
 `DEMO-SCAFFOLD` with either a real bug fix or legitimate harness/demo
 infrastructure, rehome the pipeline as repeatable dev tooling, and ship the UI
 polish already in the tree. No product feature flags: all demo-specific behavior
@@ -46,8 +46,7 @@ every time, violating the class's own "does not change during runtime" contract
 (`config/settings.py:30-35`). No in-repo mutation site was found for
 `TESTING__INTEGRATION_ENABLED`, but per-request re-reads make the gate fragile.
 
-A prior TDD workspace investigated the same symptom, could NOT reproduce any
-actual env mutation, and filed **SCU-1809** proposing the gate read
+**SCU-1809** tracks this symptom and proposes that the gate read
 startup-frozen settings. This workstream implements/closes SCU-1809.
 
 - Add `@lru_cache` to `get_settings()` (test overrides via
@@ -67,7 +66,7 @@ frontend clients, and ships with unit tests.
 - The parser fix arrives via the WS-pre merge of origin/main.
 - Drop the raw-httpx bypass in the demo `harness_client` and use the generated
   parsers (regenerate the client once on the merged branch).
-- ALSO in this PR (Bryden's call): migrate the 10 hand-raised string/dict-detail
+- ALSO in this PR (maintainer's call): migrate the 10 hand-raised string/dict-detail
   422s in `web/app.py` to honest status codes — 400 for bad input
   (`:548, :569, :606, :2024, :2029, :2143, :2930, :3794, :4787` — line numbers
   pre-merge, re-locate after), 409 for the dict-detail "no setup command
@@ -152,7 +151,7 @@ launcher env → backend subprocess → gh subprocess with no scrubbing.
 
 ## WS8 — Rehome + de-hardcode the pipeline
 
-- Stays top-level in `marketing/` (Bryden's call — no package rehome). Exclude
+- Stays top-level in `marketing/` (maintainer's call — no package rehome). Exclude
   the directory from the repo tooling that would otherwise sweep it: the
   `just format`/`just check` targets, pyright/eslint includes, and the ratchet
   configs, as applicable (verify which actually match it and add ignores only
@@ -206,7 +205,7 @@ launcher env → backend subprocess → gh subprocess with no scrubbing.
 ## Decisions (resolved 2026-07-14)
 
 1. Tooling home: top-level `marketing/`, excluded from format/check/ratchets
-   where those would sweep it. (Bryden: no package rehome.)
+   where those would sweep it. (maintainer: no package rehome.)
 2. Fake origin owner: `imbue-ai/<repo>`. The origin URL must exist and look
    github-shaped at all — `_is_github_url(origin)` gates whether PR polling
    runs, and fresh /tmp clones of local repos otherwise have a filesystem-path
