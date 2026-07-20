@@ -56,10 +56,6 @@ def write_file(path: str, content: str) -> dict:
     return step("write_file", file_path=path, content=content)
 
 
-def edit_file(path: str, old: str, new: str) -> dict:
-    return step("edit_file", file_path=path, old_string=old, new_string=new)
-
-
 def bash(command: str, description: str) -> dict:
     return step("bash", command=command, description=description)
 

@@ -18,6 +18,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from config import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT / "tools" / "sculpt"))
+
 from harness_client import _call, client, ensure_project, list_project_workspaces, send_message
 from manifest import STATE_TURNS, all_specs
 from repos import ensure_clone

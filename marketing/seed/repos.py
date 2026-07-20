@@ -21,7 +21,7 @@ from pathlib import Path
 from config import REPOS_DIR, fake_origin_url, repo_clone_source
 
 
-def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=check)
 
 
@@ -48,12 +48,16 @@ def fresh_clone(name: str, source: Path) -> dict:
     if target.exists():
         shutil.rmtree(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
+    result = subprocess.run(
         ["git", "clone", "--quiet", str(source), str(target)],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    if result.returncode != 0:
+        # Surface git's stderr: a bad SCULPTOR_DEMO_REPO_* path is otherwise
+        # undiagnosable from a bare CalledProcessError.
+        raise RuntimeError(f"git clone {source} -> {target} failed:\n{result.stderr.strip()}")
     default_branch = _checkout_default_branch(target)
     _git(target, "remote", "set-url", "origin", fake_origin_url(name))
     # A neutral committer identity so nothing the backend commits in this clone
@@ -73,10 +77,14 @@ def ensure_clone(name: str) -> dict | None:
     target = REPOS_DIR / name
     if target.is_dir():
         # An interrupted seed (or a crash mid-re-clone) can leave a broken
-        # half-clone behind; only reuse a directory git still recognizes.
+        # half-clone behind; only reuse a directory git still recognizes AND
+        # that sits on a real branch. A detached HEAD would report the literal
+        # branch name "HEAD", which create_workspace later fails on
+        # confusingly, so treat it like a broken clone and re-clone.
         head = _git(target, "rev-parse", "--abbrev-ref", "HEAD", check=False)
-        if head.returncode == 0:
-            return {"name": name, "path": str(target), "default_branch": head.stdout.strip()}
+        branch = head.stdout.strip()
+        if head.returncode == 0 and branch != "HEAD":
+            return {"name": name, "path": str(target), "default_branch": branch}
     source = repo_clone_source(name)
     return fresh_clone(name, source) if source else None
 

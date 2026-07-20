@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -46,12 +47,15 @@ from repos import ensure_clone
 FAKE_MODEL_DISPLAY_NAME = "Fable"
 
 
-def _control_alive() -> bool:
+def _is_control_alive() -> bool:
+    # OSError covers the whole liveness-probe failure surface (missing port
+    # file, refused/timed-out connection, HTTP errors); ValueError covers a
+    # garbage port turning the URL invalid. Anything else should propagate.
     try:
         port = CONTROL_PORT_FILE.read_text().strip()
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=2) as resp:
             return b"success" in resp.read()
-    except Exception:
+    except (OSError, ValueError):
         return False
 
 
@@ -63,26 +67,64 @@ def _demo_environment() -> dict[str, str]:
     return env
 
 
-def _parse_ports(deadline_s: float = 180.0) -> tuple[str, str]:
+def _log_tail(max_lines: int = 20) -> str:
+    if not SERVER_LOG.exists():
+        return "(no server log)"
+    return "\n".join(SERVER_LOG.read_text().splitlines()[-max_lines:])
+
+
+def _parse_ports(process: subprocess.Popen, deadline_s: float = 180.0) -> tuple[str, str]:
     """Wait for the server log to reveal the control and backend ports."""
     deadline = time.time() + deadline_s
-    control = backend = None
     while time.time() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(
+                f"harness server exited with code {process.returncode} before publishing its ports; "
+                f"log tail ({SERVER_LOG}):\n{_log_tail()}"
+            )
         log = SERVER_LOG.read_text() if SERVER_LOG.exists() else ""
         control_match = re.search(r"MANUAL_TEST_CONTROL_PORT=(\d+)", log)
         # The backend restarts move the port, so take the LAST uvicorn line.
         backend_matches = re.findall(r"Uvicorn running on https?://[^:]+:(\d+)", log)
         if control_match and backend_matches:
-            control, backend = control_match.group(1), backend_matches[-1]
-            break
+            return control_match.group(1), backend_matches[-1]
         time.sleep(2)
-    if not control or not backend:
-        raise RuntimeError(f"harness did not come up within {deadline_s:.0f}s — see {SERVER_LOG}")
-    return control, backend
+    raise RuntimeError(f"harness did not come up within {deadline_s:.0f}s — see {SERVER_LOG}")
+
+
+def _terminate_stale_server(wait_s: float = 10.0) -> None:
+    """SIGTERM any prior harness instance and wait for it to actually exit.
+
+    The old process owns the server log; truncating and reusing the log while
+    it is still shutting down would interleave two servers' output (and let
+    `_parse_ports` read the dying instance's ports).
+    """
+    if not SERVER_PID_FILE.exists():
+        return
+    try:
+        pid = int(SERVER_PID_FILE.read_text().strip())
+        os.kill(pid, signal.SIGTERM)
+    except (OSError, ValueError) as e:
+        # Stale or garbled pid file — nothing left to stop.
+        print(f"note: could not signal prior harness ({e}); assuming it is gone")
+        return
+    deadline = time.time() + wait_s
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return
+        time.sleep(0.2)
+    print(f"note: prior harness (pid {pid}) still alive {wait_s:.0f}s after SIGTERM; continuing anyway")
 
 
 def main() -> None:
-    if _control_alive():
+    if _is_control_alive():
+        if not BACKEND_PORT_FILE.exists():
+            raise RuntimeError(
+                f"harness state is inconsistent: the control API is alive but {BACKEND_PORT_FILE} "
+                "is missing. Kill the running manual_test_server process and re-run this script."
+            )
         print(
             f"READY control={CONTROL_PORT_FILE.read_text().strip()} "
             f"backend={BACKEND_PORT_FILE.read_text().strip()} (already up)"
@@ -93,12 +135,7 @@ def main() -> None:
     assert sculptor_clone is not None  # the sculptor repo always resolves (this checkout)
     SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Clear any dead prior instance.
-    if SERVER_PID_FILE.exists():
-        try:
-            os.kill(int(SERVER_PID_FILE.read_text().strip()), 15)
-        except (OSError, ValueError):
-            pass
+    _terminate_stale_server()
     SERVER_LOG.write_text("")
 
     with open(SERVER_LOG, "ab") as log:
@@ -124,7 +161,7 @@ def main() -> None:
         )
     SERVER_PID_FILE.write_text(str(process.pid))
 
-    control, backend = _parse_ports()
+    control, backend = _parse_ports(process)
     CONTROL_PORT_FILE.write_text(control)
     BACKEND_PORT_FILE.write_text(backend)
     print(f"READY control={control} backend={backend}")

@@ -13,7 +13,7 @@ source marketing/shots/control.sh   # then drive shots: click_testid / shot / ..
 ## How it works
 
 1. **Clone** — every available demo repo is cloned fresh under the demo
-   directory (default `/tmp/sculptor-demo`), so seeded branches and worktrees
+   directory (default `~/.cache/sculptor-demo`), so seeded branches and worktrees
    never pollute a real checkout. Each clone's `origin` is rewritten to a
    github.com URL purely so the backend's PR polling engages; nothing ever
    contacts GitHub.
@@ -43,7 +43,7 @@ marketing/
 │   └── gh                 # fake gh CLI: serves PR fixtures to the poller
 ├── seed/
 │   ├── config.py          # demo dir + env knobs (single source of truth)
-│   ├── repos.py           # fresh /tmp clones with neutral identity + fake origin
+│   ├── repos.py           # fresh demo-dir clones with neutral identity + fake origin
 │   ├── manifest.py        # every repo, workspace, scripted turn, PR fixture
 │   ├── harness.py         # boot/ensure the QA harness with the demo env
 │   ├── seed_all.py        # realize the whole manifest, idempotently
@@ -60,7 +60,7 @@ marketing/
 
 | Env var | Default | Effect |
 |---|---|---|
-| `SCULPTOR_DEMO_DIR` | `/tmp/sculptor-demo` | where clones, screenshots, ports, and fixtures live |
+| `SCULPTOR_DEMO_DIR` | `~/.cache/sculptor-demo` | where clones, screenshots, ports, and fixtures live |
 | `SCULPTOR_DEMO_REPO_OPENHOST` | unset | local path to clone the `openhost` sidebar-dressing repo from |
 | `SCULPTOR_DEMO_REPO_MNGR` | unset | local path to clone the `mngr` sidebar-dressing repo from |
 | `HARNESS_BACKEND_PORT` | unset | talk to an explicit backend instead of the harness port file |

@@ -19,7 +19,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from config import FAKE_ORIGIN_OWNER, GH_FIXTURES_PATH
+from config import FAKE_ORIGIN_OWNER, GH_FIXTURES_PATH, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT / "tools" / "sculpt"))
+
 from harness_client import (
     _call,
     clean_slate,
@@ -29,9 +32,12 @@ from harness_client import (
     ensure_project,
     mark_read,
     send_message,
+    settled_status,
 )
 from manifest import PR_FIXTURES, READ_BRANCHES, REPO_NAMES, STATE_TURNS, all_specs
 from repos import clone_available_repos
+from sculpt.client import Client
+from sculpt.client.api.default import list_workspace_agents
 
 
 def write_pr_fixtures() -> None:
@@ -103,9 +109,7 @@ def main() -> None:
             print(f"  state turn -> {branch}")
 
 
-def _wait_all(created: list[tuple[str, str, str]], c, timeout_s: int = 120) -> None:
-    from sculpt.client.api.default import list_workspace_agents
-
+def _wait_all(created: list[tuple[str, str, str]], c: Client, timeout_s: int = 120) -> None:
     deadline = time.time() + timeout_s
     pending = {ws: (name, agent) for name, ws, agent in created}
     while pending and time.time() < deadline:
@@ -113,11 +117,11 @@ def _wait_all(created: list[tuple[str, str, str]], c, timeout_s: int = 120) -> N
             name, agent = pending[ws]
             resp = _call(c, list_workspace_agents, workspace_id=ws)
             agents = json.loads(resp.content) if resp.status_code == 200 and resp.content else []
-            status = "?"
+            status = None
             for a in agents if isinstance(agents, list) else []:
                 if a.get("id") == agent:
-                    status = a.get("taskStatus") or a.get("status") or "?"
-            if status in ("READY", "ERROR", "DONE", "COMPLETED"):
+                    status = settled_status(a)
+            if status is not None:
                 print(f"  done: {name} [{status}]")
                 pending.pop(ws)
         if pending:

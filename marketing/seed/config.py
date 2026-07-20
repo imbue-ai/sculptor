@@ -1,8 +1,8 @@
 """Shared paths and knobs for the demo pipeline.
 
 Everything the pipeline writes lives under one demo directory (default
-/tmp/sculptor-demo) so a run never touches the user's real repos or Sculptor
-instance:
+~/.cache/sculptor-demo) so a run never touches the user's real repos or
+Sculptor instance:
 
   <demo dir>/
   ├── repos/<name>/       fresh clones the demo workspaces are created in
@@ -26,7 +26,9 @@ from pathlib import Path
 # marketing/seed/config.py -> repo root is two levels up from marketing/.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-DEMO_DIR = Path(os.environ.get("SCULPTOR_DEMO_DIR", "/tmp/sculptor-demo"))
+# Under the user's cache dir, not /tmp: the demo dir holds full clones of the
+# user's local repos, which don't belong in a world-readable location.
+DEMO_DIR = Path(os.environ.get("SCULPTOR_DEMO_DIR", "~/.cache/sculptor-demo")).expanduser()
 REPOS_DIR = DEMO_DIR / "repos"
 SCREENSHOTS_DIR = DEMO_DIR / "screenshots"
 GH_FIXTURES_PATH = DEMO_DIR / "gh_fixtures.json"

@@ -54,11 +54,24 @@ def _fail_soft(payload: dict) -> None:
 
 
 def _load_fixtures() -> dict:
+    empty = {"owner": "imbue-ai", "branches": {}}
     path = os.environ.get("SCULPTOR_DEMO_GH_FIXTURES", "")
     if not path or not os.path.exists(path):
-        return {"owner": "imbue-ai", "branches": {}}
-    with open(path) as f:
-        return json.load(f)
+        return empty
+    # A missing, unreadable, or non-JSON fixtures file must degrade to "no
+    # PRs", never to a traceback: a non-zero exit would break the exit-0
+    # contract above.
+    try:
+        with open(path) as f:
+            fixtures = json.load(f)
+    except (OSError, ValueError):
+        return empty
+    return fixtures if isinstance(fixtures, dict) else empty
+
+
+def _branches(fixtures: dict) -> dict:
+    branches = fixtures.get("branches")
+    return branches if isinstance(branches, dict) else {}
 
 
 def _flag_values(argv: list[str], flag: str) -> list[str]:
@@ -83,15 +96,19 @@ def _pr_node(branch: str, spec: dict, owner: str, for_search: bool) -> dict:
         "baseRefName": base,
     }
     if spec["state"] == "OPEN":
+        checks = spec.get("checks")
         node.update(
             {
                 "mergeable": "MERGEABLE",
                 "commits": {
-                    "nodes": [{"commit": {"statusCheckRollup": {"state": spec["checks"]} if spec.get("checks") else None}}]
+                    "nodes": [{"commit": {"statusCheckRollup": {"state": checks} if checks else None}}],
                 },
                 "latestReviews": {
                     "nodes": [
-                        {"state": "APPROVED" if a.get("approved") else "CHANGES_REQUESTED", "author": {"login": a["login"]}}
+                        {
+                            "state": "APPROVED" if a.get("approved") else "CHANGES_REQUESTED",
+                            "author": {"login": a["login"]},
+                        }
                         for a in spec.get("approvals", [])
                     ]
                 },
@@ -104,13 +121,27 @@ def _pr_node(branch: str, spec: dict, owner: str, for_search: bool) -> dict:
     return node
 
 
-def _answer_search(fixtures: dict) -> dict:
+def _open_pr_search_nodes(fixtures: dict) -> list[dict]:
+    """Search nodes for every well-formed OPEN fixture entry.
+
+    A malformed entry (missing keys, wrong shapes) is skipped rather than
+    allowed to raise: one bad branch must not take down the whole response —
+    or the exit-0 contract — for the well-formed ones.
+    """
     owner = fixtures.get("owner", "imbue-ai")
-    nodes = [
-        _pr_node(branch, spec, owner, for_search=True)
-        for branch, spec in fixtures.get("branches", {}).items()
-        if spec.get("state") == "OPEN"
-    ]
+    nodes = []
+    for branch, spec in _branches(fixtures).items():
+        try:
+            if spec["state"] != "OPEN":
+                continue
+            nodes.append(_pr_node(branch, spec, owner, for_search=True))
+        except (AttributeError, KeyError, TypeError):
+            continue
+    return nodes
+
+
+def _answer_search(fixtures: dict) -> dict:
+    nodes = _open_pr_search_nodes(fixtures)
     return {
         "data": {
             "search": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": nodes},
@@ -121,8 +152,12 @@ def _answer_search(fixtures: dict) -> dict:
 
 def _answer_repository(fixtures: dict, branch: str) -> dict:
     owner = fixtures.get("owner", "imbue-ai")
-    spec = fixtures.get("branches", {}).get(branch)
-    nodes = [_pr_node(branch, spec, owner, for_search=False)] if spec else []
+    spec = _branches(fixtures).get(branch)
+    try:
+        nodes = [_pr_node(branch, spec, owner, for_search=False)] if spec else []
+    except (AttributeError, KeyError, TypeError):
+        # A malformed fixture entry degrades to "no PR" rather than a crash.
+        nodes = []
     return {"data": {"repository": {"pullRequests": {"nodes": nodes}}}}
 
 

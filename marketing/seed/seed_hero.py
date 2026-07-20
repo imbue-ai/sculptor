@@ -13,6 +13,7 @@ Run from the repo root:  uv run --project sculptor python marketing/seed/seed_he
 
 from __future__ import annotations
 
+import shlex
 import sys
 from pathlib import Path
 
@@ -254,10 +255,11 @@ export function CommandPaletteResults({ query, commands }: Props) {
 
 def _commit(msg: str) -> dict:
     # The demo clone carries a neutral committer identity (repos.py), so a
-    # plain commit never puts the user's real name in a screenshot.
+    # plain commit never puts the user's real name in a screenshot. shlex.quote
+    # keeps quotes/$/backticks in a message from breaking the scripted line.
     return tool(
         "Bash",
-        command=f'git add -A && git commit -q -m "{msg}"',
+        command=f"git add -A && git commit -q -m {shlex.quote(msg)}",
         description=f"Commit: {msg}",
     )
 

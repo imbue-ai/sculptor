@@ -14,17 +14,20 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
+from types import ModuleType
 
 from config import BACKEND_PORT_FILE, REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "tools" / "sculpt"))
 
 from sculpt.auth import MODEL_MAPPING, get_authenticated_client  # noqa: E402
+from sculpt.client import Client  # noqa: E402
 from sculpt.client.api.default import (  # noqa: E402
     create_workspace_agent,
     create_workspace_v2,
+    delete_project,
     delete_workspace,
+    list_projects,
     list_workspace_agents,
     list_workspaces,
     mark_workspace_agent_read,
@@ -50,7 +53,7 @@ def backend_port() -> str:
     return BACKEND_PORT_FILE.read_text().strip()
 
 
-def client():
+def client() -> Client:
     # Strip all ambient SCULPT_* context so nothing downstream re-targets the
     # user's real instance; we talk only to the harness backend.
     for ambient in ("SCULPT_PROJECT_ID", "SCULPT_WORKSPACE_ID", "SCULPT_AGENT_ID", "SCULPT_API_PORT"):
@@ -58,8 +61,8 @@ def client():
     return get_authenticated_client(f"http://localhost:{backend_port()}")
 
 
-def _call(c, endpoint, **kwargs):
-    """Issue an endpoint's sync_detailed call and return the response."""
+def _call(c: Client, endpoint: ModuleType, **kwargs: object):
+    """Issue an endpoint module's sync_detailed call and return the response."""
     return endpoint.sync_detailed(client=c, **kwargs)
 
 
@@ -69,12 +72,12 @@ def _ok(resp, what: str) -> dict:
     return json.loads(resp.content) if resp.content else {}
 
 
-def ensure_project(repo_path: str, c) -> str:
+def ensure_project(repo_path: str, c: Client) -> str:
     """Register the repo with the backend (idempotent) and return its project id."""
     return resolve_project(repo=repo_path, client=c)
 
 
-def clean_slate(c) -> tuple[int, int]:
+def clean_slate(c: Client) -> tuple[int, int]:
     """Delete every workspace and project the harness backend knows about.
 
     Runs BEFORE the repos are re-cloned: the backend's pollers hold worktrees
@@ -85,8 +88,6 @@ def clean_slate(c) -> tuple[int, int]:
     group in the sidebar). The harness backend is throwaway and fully
     demo-owned, so deleting everything is always correct here.
     """
-    from sculpt.client.api.default import delete_project, list_projects
-
     resp = _call(c, list_projects)
     projects = json.loads(resp.content) if resp.status_code == 200 and resp.content else []
     removed_workspaces = removed_projects = 0
@@ -94,33 +95,44 @@ def clean_slate(c) -> tuple[int, int]:
         if project.get("isDeleted"):
             continue
         removed_workspaces += delete_all_workspaces(project["objectId"], c)
-        _call(c, delete_project, project_id=project["objectId"])
-        removed_projects += 1
+        delete_resp = _call(c, delete_project, project_id=project["objectId"])
+        if delete_resp.status_code == 200:
+            removed_projects += 1
+        else:
+            print(f"  warning: delete_project({project['objectId']}) -> {delete_resp.status_code}")
     return removed_workspaces, removed_projects
 
 
-def list_project_workspaces(project_id: str, c) -> list[dict]:
+def list_project_workspaces(project_id: str, c: Client) -> list[dict]:
     resp = _call(c, list_workspaces, project_id=project_id)
     body = json.loads(resp.content) if resp.status_code == 200 and resp.content else []
     return body if isinstance(body, list) else []
 
 
-def delete_all_workspaces(project_id: str, c) -> int:
+def _delete_workspace_checked(workspace_id: str, c: Client) -> bool:
+    """Delete one workspace; warn (rather than silently miscount) on failure."""
+    resp = _call(c, delete_workspace, workspace_id=workspace_id)
+    if resp.status_code != 200:
+        print(f"  warning: delete_workspace({workspace_id}) -> {resp.status_code}")
+        return False
+    return True
+
+
+def delete_all_workspaces(project_id: str, c: Client) -> int:
     """Remove every workspace in a project — a clean slate before a full re-seed
     (handles workspaces left behind when a manifest branch is renamed)."""
     removed = 0
     for ws in list_project_workspaces(project_id, c):
-        _call(c, delete_workspace, workspace_id=ws["objectId"])
-        removed += 1
+        if _delete_workspace_checked(ws["objectId"], c):
+            removed += 1
     return removed
 
 
-def delete_workspaces_by_branch(project_id: str, branch_name: str, c) -> int:
+def delete_workspaces_by_branch(project_id: str, branch_name: str, c: Client) -> int:
     """Remove any existing workspaces on `branch_name` so a re-seed starts clean."""
     removed = 0
     for ws in list_project_workspaces(project_id, c):
-        if ws.get("requestedBranchName") == branch_name:
-            _call(c, delete_workspace, workspace_id=ws["objectId"])
+        if ws.get("requestedBranchName") == branch_name and _delete_workspace_checked(ws["objectId"], c):
             removed += 1
     return removed
 
@@ -149,7 +161,7 @@ def free_branch(repo_path: str, branch_name: str) -> None:
 
 
 def create_workspace(
-    *, project_id: str, branch_name: str, name: str, source_branch: str = "main", target_branch: str = "main", c
+    *, project_id: str, branch_name: str, name: str, source_branch: str = "main", target_branch: str = "main", c: Client
 ) -> str:
     req = CreateWorkspaceRequestV2(
         project_id=project_id,
@@ -163,7 +175,7 @@ def create_workspace(
     return body["objectId"]
 
 
-def create_agent(*, workspace_id: str, prompt: str, model_alias: str, name: str, c) -> str:
+def create_agent(*, workspace_id: str, prompt: str, model_alias: str, name: str, c: Client) -> str:
     req = CreateAgentRequest(
         prompt=prompt,
         model=MODEL_MAPPING[model_alias],
@@ -177,18 +189,39 @@ def create_agent(*, workspace_id: str, prompt: str, model_alias: str, name: str,
     return body["id"]
 
 
-def mark_read(workspace_id: str, agent_id: str, c) -> None:
+def mark_read(workspace_id: str, agent_id: str, c: Client) -> None:
     """Clear a workspace's unread indicator so the sidebar shows a read state."""
     _call(c, mark_workspace_agent_read, workspace_id=workspace_id, agent_id=agent_id)
 
 
-def send_message(workspace_id: str, agent_id: str, text: str, model_alias: str, c) -> None:
+def send_message(workspace_id: str, agent_id: str, text: str, model_alias: str, c: Client) -> None:
     """Send a follow-up turn to an existing agent (e.g. a state-inducing directive)."""
     req = SendMessageRequest(message=text, model=MODEL_MAPPING[model_alias], files=[], sent_via="sculpt")
     _ok(_call(c, send_workspace_agent_messages, workspace_id=workspace_id, agent_id=agent_id, body=req), "send_message")
 
 
-def wait_until_ready(workspace_id: str, agent_id: str, c, timeout_s: int = 120) -> str:
+# The agents list serializes two status fields. `taskStatus` is the server
+# task's outcome (TaskState: QUEUED / RUNNING / FAILED / CANCELLED / DELETED /
+# SUCCEEDED) — it stays RUNNING for the whole life of a healthy agent, so only
+# its terminal values mean anything here. `status` is the derived per-turn
+# state (TaskStatus: BUILDING / RUNNING / READY / WAITING / ERROR /
+# REQUEST_ERROR); a turn has settled once it leaves BUILDING/RUNNING.
+_TERMINAL_TASK_STATES = ("FAILED", "CANCELLED", "DELETED", "SUCCEEDED")
+_SETTLED_AGENT_STATUSES = ("READY", "WAITING", "ERROR", "REQUEST_ERROR")
+
+
+def settled_status(agent: dict) -> str | None:
+    """The agent's settled status if its turn is no longer running, else None."""
+    outcome = agent.get("taskStatus")
+    if outcome in _TERMINAL_TASK_STATES:
+        return outcome
+    status = agent.get("status")
+    if status in _SETTLED_AGENT_STATUSES:
+        return status
+    return None
+
+
+def wait_until_ready(workspace_id: str, agent_id: str, c: Client, timeout_s: int = 120) -> str:
     """Poll the workspace's agents until `agent_id` leaves a running state."""
     deadline = time.time() + timeout_s
     last = "?"
@@ -197,8 +230,9 @@ def wait_until_ready(workspace_id: str, agent_id: str, c, timeout_s: int = 120) 
         agents = json.loads(resp.content) if resp.status_code == 200 and resp.content else []
         for a in agents if isinstance(agents, list) else []:
             if a.get("id") == agent_id:
-                last = a.get("taskStatus") or a.get("status") or "?"
-        if last in ("READY", "ERROR", "DONE", "COMPLETED"):
-            return last
+                settled = settled_status(a)
+                if settled is not None:
+                    return settled
+                last = a.get("status") or "?"
         time.sleep(2)
     return last

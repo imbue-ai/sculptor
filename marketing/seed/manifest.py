@@ -13,7 +13,10 @@ served through the real PR-polling pipeline by the gh shim.
 
 from __future__ import annotations
 
+import shlex
+
 from fakeclaude import bash, directive, multi_step_prompt, task_create, task_update, text, write_file
+from seed_hero import build_prompt as hero_prompt
 
 REPO_NAMES = ["sculptor", "openhost", "mngr"]
 
@@ -81,8 +84,9 @@ STATE_TURNS = {
 
 def commit(message: str) -> dict:
     # The demo clones carry a neutral committer identity (repos.py), so a plain
-    # commit never puts the user's real name in a screenshot.
-    return bash(f'git add -A && git commit -q -m "{message}"', f"Commit: {message}")
+    # commit never puts the user's real name in a screenshot. shlex.quote keeps
+    # quotes/$/backticks in a message from breaking the scripted shell line.
+    return bash(f"git add -A && git commit -q -m {shlex.quote(message)}", f"Commit: {message}")
 
 
 def light_turn(intro: str, files: list[tuple[str, str]], summary: str, commit_msg: str | None = None) -> str:
@@ -125,8 +129,6 @@ export function streamChunks(
 
 
 def sculptor_specs() -> list[dict]:
-    from seed_hero import build_prompt as hero_prompt  # the rich pr-open hero
-
     return [
         {
             "repo": "sculptor",
@@ -222,7 +224,8 @@ def sculptor_specs() -> list[dict]:
                         " * Resolves once the socket reaches OPEN, or rejects on timeout. Tests await\n"
                         " * this instead of a fixed sleep, which is what made the reconnect test flake.\n"
                         " */\n"
-                        "export function waitForSocketOpen(socket: ReconnectingSocket, timeoutMs = 5000): Promise<void> {\n"
+                        "export function waitForSocketOpen(socket: ReconnectingSocket, timeoutMs = 5000): "
+                        "Promise<void> {\n"
                         "  return new Promise((resolve, reject) => {\n"
                         "    if (socket.readyState === socket.OPEN) return resolve();\n"
                         "    const timer = setTimeout(() => reject(new Error(\"socket did not open\")), timeoutMs);\n"
@@ -251,7 +254,12 @@ def openhost_specs() -> list[dict]:
             "name": "Automate TLS certificate renewal",
             "prompt": light_turn(
                 "Adding a scheduled job to renew TLS certs 30 days before expiry and reload nginx.",
-                [("scripts/renew_certs.sh", "#!/usr/bin/env bash\nset -euo pipefail\ncertbot renew --quiet\nnginx -s reload\n")],
+                [
+                    (
+                        "scripts/renew_certs.sh",
+                        "#!/usr/bin/env bash\nset -euo pipefail\ncertbot renew --quiet\nnginx -s reload\n",
+                    )
+                ],
                 "Renewal script and cron entry added. Testing the dry-run path against staging next.",
             ),
         },
@@ -261,7 +269,12 @@ def openhost_specs() -> list[dict]:
             "name": "Tune nginx proxy cache",
             "prompt": light_turn(
                 "Tuning the proxy cache so static assets stop hitting the origin on every request.",
-                [("nginx/cache.conf", "proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=assets:64m inactive=7d;\n")],
+                [
+                    (
+                        "nginx/cache.conf",
+                        "proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=assets:64m inactive=7d;\n",
+                    )
+                ],
                 "Cache zone configured with a 7-day inactive window. Measuring origin offload before rollout.",
             ),
         },
@@ -271,7 +284,12 @@ def openhost_specs() -> list[dict]:
             "name": "Streamline first-deploy flow",
             "prompt": light_turn(
                 "Collapsing the first-deploy wizard from five steps to two with smart defaults.",
-                [("web/onboarding/steps.ts", "export const steps = [\"connect-repo\", \"confirm-and-deploy\"] as const;\n")],
+                [
+                    (
+                        "web/onboarding/steps.ts",
+                        'export const steps = ["connect-repo", "confirm-and-deploy"] as const;\n',
+                    )
+                ],
                 "Reduced to connect + confirm. Wiring the smart-default detection for framework and port next.",
             ),
         },
@@ -289,7 +307,12 @@ def mngr_specs() -> list[dict]:
             "name": "Add retry queue for failed jobs",
             "prompt": light_turn(
                 "Adding a bounded retry queue with exponential backoff for jobs that fail transiently.",
-                [("mngr/jobs/retry.py", "import time\n\n\ndef backoff(attempt: int) -> float:\n    return min(2 ** attempt, 60)\n")],
+                [
+                    (
+                        "mngr/jobs/retry.py",
+                        "import time\n\n\ndef backoff(attempt: int) -> float:\n    return min(2 ** attempt, 60)\n",
+                    )
+                ],
                 "Retry queue with capped exponential backoff is in. Adding a dead-letter path for exhausted jobs.",
             ),
         },
