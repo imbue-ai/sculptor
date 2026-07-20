@@ -1,9 +1,10 @@
 """Integration tests for optimistic workspace deletion from the sidebar.
 
 Deleting a workspace is destructive, so it is confirmed first via the shared
-delete-confirmation dialog. Once confirmed, the removal is optimistic: the row
-disappears before the backend confirms, and a failed delete rolls the row back
-with a prominent error toast offering Retry.
+delete-confirmation dialog. Once confirmed, the pending state is visible: the
+row stays as a dimmed, non-interactive "Deleting…" row until the backend
+confirms (then it is removed), and a failed delete un-dims it in place with a
+prominent error toast offering Retry.
 
 Agent-tab close/deletion coverage lives in ``test_panel_optimistic_deletion``.
 """
@@ -68,11 +69,11 @@ def test_workspace_delete_requires_confirmation(
     expect(rows).to_have_count(1)
 
 
-@user_story("to have a workspace row disappear instantly when I confirm deleting it")
-def test_optimistic_workspace_deletion_removes_row_immediately(
+@user_story("to see a workspace marked as Deleting the moment I confirm, and removed once the server confirms")
+def test_confirmed_deletion_shows_deleting_row_until_server_confirms(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """After confirming, deleting a workspace removes its row instantly (before the server confirms).
+    """Confirming marks the row "Deleting…" instantly; removal waits for the server.
 
     Deletes a non-active workspace so no navigation is involved.
     """
@@ -85,10 +86,10 @@ def test_optimistic_workspace_deletion_removes_row_immediately(
     rows = sidebar.get_workspace_rows()
     expect(rows).to_have_count(2)
 
-    # Hold the DELETE in flight (captured, not yet released) so the row's
-    # disappearance can only be the optimistic removal — a non-optimistic
-    # implementation that waited for the response would still show both rows
-    # until the held request is released.
+    # Hold the DELETE in flight (captured, not yet released) to pin the pending
+    # state: the row must NOT vanish while the request is unconfirmed — it stays
+    # as a non-interactive "Deleting…" row, and only the server's confirmation
+    # removes it.
     held_routes: list[Route] = []
 
     def _hold_workspace_delete(route: Route) -> None:
@@ -104,10 +105,20 @@ def test_optimistic_workspace_deletion_removes_row_immediately(
         sidebar.delete_workspace_via_row_icon(sidebar.get_workspace_row_by_name("Workspace One"))
 
         expect(sidebar.get_delete_confirmation_dialog()).to_be_hidden()
-        expect(rows).to_have_count(1)
 
-        # Release the held DELETE so it reaches the real backend and commits.
+        # Both rows remain; the target reads as pending and is non-interactive:
+        # aria-disabled, labeled "Deleting…", its delete affordance replaced (no
+        # double-delete).
+        expect(rows).to_have_count(2)
+        deleting_row = sidebar.get_workspace_row_by_name("Workspace One")
+        expect(deleting_row).to_have_attribute("aria-disabled", "true")
+        expect(deleting_row.locator("..").get_by_text("Deleting…")).to_be_visible()
+        expect(sidebar.get_row_delete_icon(deleting_row)).to_have_count(0)
+
+        # Release the held DELETE so it reaches the real backend and commits —
+        # the confirmation (not the optimistic apply) removes the row.
         held_routes[0].continue_()
+        expect(rows).to_have_count(1)
     finally:
         page.unroute(_WORKSPACE_DELETE_PATTERN, _hold_workspace_delete)
 
@@ -131,8 +142,8 @@ def test_workspace_deletion_failure_rolls_back_and_shows_toast(
         sidebar.delete_workspace_via_row_icon(sidebar.get_workspace_row_by_name("Workspace One"))
 
         # The error toast is the unambiguous "delete failed" signal; assert it
-        # before the row count so the count check observes the rollback (the row
-        # reappearing) rather than the not-yet-removed pre-delete DOM.
+        # before the row count so the count check observes the rollback (the
+        # "Deleting…" row un-dimmed back to normal) rather than the pre-delete DOM.
         toast = PlaywrightToastElement(page)
         expect(toast).to_be_visible()
         expect(toast).to_contain_text("Failed to delete")
