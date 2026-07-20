@@ -1,6 +1,5 @@
 """Repo resolution and prefix matching utilities for the sculpt CLI."""
 
-import json
 import os
 import subprocess
 from collections.abc import Callable
@@ -21,23 +20,11 @@ from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.project import Project
 from sculpt.client.models.project_initialization_request import ProjectInitializationRequest
 from sculpt.formatting import cli_error
+from sculpt.formatting import extract_error_detail
 from sculpt.formatting import handle_connection_error
 from sculpt.formatting import truncate
 
 T = TypeVar("T")
-
-
-def _extract_detail(body: bytes) -> str | None:
-    """Pull the FastAPI HTTPException `detail` out of an error response body."""
-    try:
-        parsed = json.loads(body)
-    except (ValueError, TypeError):
-        return None
-    if isinstance(parsed, dict):
-        detail = parsed.get("detail")
-        if isinstance(detail, str):
-            return detail
-    return None
 
 
 def resolve_agent_id(base_url: str, prefix_or_id: str, json_output: bool) -> str:
@@ -65,7 +52,9 @@ def resolve_agent_id(base_url: str, prefix_or_id: str, json_output: bool) -> str
     if response.status_code == HTTPStatus.CONFLICT:
         # The server's detail string includes the matching ids; surface the full
         # message verbatim so the user can pick a longer prefix.
-        cli_error(_extract_detail(response.content) or f"Ambiguous prefix '{prefix_or_id}'", json_output=json_output)
+        cli_error(
+            extract_error_detail(response.content) or f"Ambiguous prefix '{prefix_or_id}'", json_output=json_output
+        )
     if response.status_code != HTTPStatus.OK or response.parsed is None:
         cli_error(f"Failed to resolve agent prefix (status {response.status_code})", json_output=json_output)
     parsed = response.parsed
@@ -144,7 +133,7 @@ def _resolve_from_repo(repo: str, client: Client, json_output: bool = False) -> 
             typer.echo(f"Initialized repo for {absolute_path}", err=True)
             return parsed.object_id
 
-    detail = _extract_detail(response.content)
+    detail = extract_error_detail(response.content)
 
     if response.status_code == HTTPStatus.CONFLICT and detail is not None and "already added" in detail:
         # The server has the repo registered under a (possibly worktree-resolved)
