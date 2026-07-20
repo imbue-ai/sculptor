@@ -40,7 +40,10 @@ export const useWorkspaceRename = (): ((workspaceId: string, newName: string) =>
         }
         setRenameErrorToast({
           title: `Failed to rename "${previous?.description ?? "workspace"}"`,
-          description: "The name has been restored. Try again or check your connection.",
+          description:
+            previous !== null
+              ? "The name has been restored. Try again or check your connection."
+              : "Try again or check your connection.",
           type: ToastType.ERROR_PROMINENT,
           action: null,
         });

@@ -65,28 +65,42 @@ export const RecentWorkspaces = ({
   const { data: workspaces, isPending } = useQuery({
     queryKey: recentWorkspacesQueryKey(),
     queryFn: async (): Promise<Array<RecentWorkspaceResponse>> => {
-      // Read-only fetch consumed straight from the response body, so the
-      // unified-stream acknowledgment adds nothing here. Waiting for it would
-      // also fail this load spuriously: the Home page can mount right as the
-      // stream reconnects, and an ack for a request in flight across a
-      // reconnect never arrives — the tracker would time out and leave the
-      // list empty even though the data landed.
-      const response = await listRecentWorkspaces({ meta: { skipWsAck: true } });
-      return response.data?.workspaces ?? [];
+      try {
+        // Read-only fetch consumed straight from the response body, so the
+        // unified-stream acknowledgment adds nothing here. Waiting for it would
+        // also fail this load spuriously: the Home page can mount right as the
+        // stream reconnects, and an ack for a request in flight across a
+        // reconnect never arrives — the tracker would time out and leave the
+        // list empty even though the data landed.
+        const response = await listRecentWorkspaces({ meta: { skipWsAck: true } });
+        return response.data?.workspaces ?? [];
+      } catch (error) {
+        // The list renders its empty state when the query errors, which would
+        // otherwise silently mask a failed load.
+        console.error("Failed to load workspaces:", error);
+        throw error;
+      }
     },
   });
 
-  // The set of live workspace ids, kept fresh by the unified stream. Reduced
-  // to an order-insensitive key so the invalidation below fires exactly when
-  // membership changes — a workspace created or deleted outside this page
-  // (the CLI, another window) must show up without a remount, since Home can
-  // stay mounted indefinitely.
+  // The set of live workspace ids, kept fresh by the unified stream and only
+  // rewritten when membership actually changes (updateWorkspacesAtom guards
+  // the write), so it is a stable effect dependency. The invalidation fires
+  // when membership changes — a workspace created or deleted outside this
+  // page (the CLI, another window) must show up without a remount, since
+  // Home can stay mounted indefinitely — and on remounts with a loaded store,
+  // for freshness.
   const liveWorkspaceIds = useAtomValue(workspaceIdsAtom);
-  const liveMembershipKey = useMemo(() => [...(liveWorkspaceIds ?? [])].sort().join(","), [liveWorkspaceIds]);
 
   useEffect(() => {
+    // Before the first WS frame there is no membership to sync against, and
+    // the mount-time query fetch is already in flight — invalidating here
+    // would only duplicate it.
+    if (liveWorkspaceIds === undefined) {
+      return;
+    }
     void queryClient.invalidateQueries({ queryKey: recentWorkspacesQueryKey() });
-  }, [liveMembershipKey]);
+  }, [liveWorkspaceIds]);
 
   // Rows the canonical store holds as tombstones stay in the list and render
   // as "Deleting…" (see WorkspaceRow) rather than being filtered out — the
