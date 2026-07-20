@@ -5,8 +5,6 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  // Anchor for the absolutely-positioned more-options popover.
-  position: relative;
 }
 
 .header {
@@ -42,7 +40,7 @@
 
 .list {
   flex: 1;
-  // Give the switcher palette-like proportions and room for the popover.
+  // Give the switcher palette-like proportions.
   min-height: 330px;
   overflow: hidden auto;
   padding: var(--space-2) var(--space-2) var(--space-3);
@@ -204,81 +202,4 @@
   height: 14px;
   margin: 0 var(--space-2);
   width: 1px;
-}
-
-// The ⌘J "more options" popover, anchored above the bar within the panel. Sized to
-// match the Radix context menu (size="1") the rows also feed, so the two surfaces
-// read as one — compact rows, narrow width, tight padding.
-.popover {
-  background: var(--color-panel-solid);
-  border: 1px solid var(--gray-a5);
-  border-radius: var(--radius-3);
-  bottom: 52px;
-  box-shadow: var(--shadow-xl);
-  display: flex;
-  flex-direction: column;
-  min-width: 180px;
-  padding: var(--space-1);
-  position: absolute;
-  right: var(--space-2);
-  z-index: var(--z-above);
-}
-
-.popoverRow {
-  align-items: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-2);
-  color: var(--gray-12);
-  cursor: pointer;
-  display: flex;
-  font-family: inherit;
-  font-size: var(--font-size-1);
-  font-weight: var(--font-weight-regular);
-  gap: var(--space-2);
-  height: auto;
-  justify-content: flex-start;
-  margin: 0;
-  padding: var(--space-1) var(--space-2);
-  text-align: left;
-  width: 100%;
-
-  svg {
-    color: var(--gray-11);
-    flex-shrink: 0;
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 50%;
-  }
-
-  &:hover:not(:disabled),
-  &.popoverRowActive {
-    background: var(--gray-a3);
-  }
-}
-
-.popoverRowDanger {
-  color: var(--red-11);
-
-  svg {
-    color: var(--red-11);
-  }
-}
-
-.popoverShortcut {
-  background: none;
-  border: 0;
-  color: var(--gray-10);
-  flex-shrink: 0;
-  font-family: inherit;
-  font-size: var(--font-size-1);
-  margin-left: auto;
-}
-
-.popoverSeparator {
-  background: var(--gray-a3);
-  height: 1px;
-  margin: var(--space-1) var(--space-2);
 }

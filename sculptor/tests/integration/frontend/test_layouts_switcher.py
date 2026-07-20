@@ -22,6 +22,7 @@ from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+from sculptor.testing.utils import get_playwright_modifier_key
 
 
 @user_story("to save my current workspace arrangement as a named layout and switch back to it")
@@ -165,6 +166,47 @@ def test_row_context_menu_applies_layout(sculptor_instance_: SculptorInstance) -
     switcher = sidebar.open_layouts_switcher()
     menu = switcher.open_row_context_menu("Reviewing")
     menu.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_APPLY).click()
+    expect(page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_DIALOG)).to_be_hidden()
+
+    # Reopening shows "Reviewing" as the current layout.
+    switcher = sidebar.open_layouts_switcher()
+    expect(switcher.get_row_by_name("Reviewing")).to_contain_text("Current")
+
+
+@user_story("to open a layout's actions with ⌘J and apply it without leaving the keyboard")
+def test_more_options_menu_opens_with_shortcut_and_applies(sculptor_instance_: SculptorInstance) -> None:
+    """⌘J opens the highlighted layout's more-options menu (a portaled DropdownMenu).
+    Escape closes just that menu while the switcher stays open; reopening it and
+    choosing Apply switches to the highlighted layout (marking it Current)."""
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="More Options WS")
+    sidebar = get_workspace_sidebar(page)
+
+    # Save two layouts so the switcher opens highlighted on the earlier one ("Reviewing"):
+    # the most-recent ("Debugging") is the workspace's current layout, so the highlight
+    # lands on the first row that is not current.
+    switcher = sidebar.open_layouts_switcher()
+    switcher.open_save_dialog().save("Reviewing")
+    switcher = sidebar.open_layouts_switcher()
+    switcher.open_save_dialog().save("Debugging")
+
+    switcher = sidebar.open_layouts_switcher()
+    modifier = get_playwright_modifier_key()
+
+    # ⌘J opens the more-options menu for the highlighted layout.
+    page.keyboard.press(f"{modifier}+j")
+    menu = page.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_POPOVER)
+    expect(menu).to_be_visible()
+
+    # Escape closes only the menu — the switcher (a lower dismissable layer) stays open.
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
+    expect(page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_DIALOG)).to_be_visible()
+
+    # Reopen the menu and apply the highlighted layout from it.
+    page.keyboard.press(f"{modifier}+j")
+    expect(menu).to_be_visible()
+    page.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_APPLY).click()
     expect(page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_DIALOG)).to_be_hidden()
 
     # Reopening shows "Reviewing" as the current layout.

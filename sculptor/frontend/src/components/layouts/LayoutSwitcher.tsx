@@ -1,10 +1,11 @@
 // The Layouts switcher: a switcher-first dialog (PyCharm ⌘E semantics) rendered on
 // the PaletteDialog shell. MRU-ordered list, type-to-filter, a Raycast-style bottom
-// bar, and a ⌘J more-options popover scoped to the highlighted layout. Keyboard is
-// owned by a capture-phase window listener so ⌘⇧L / ⌘J / Enter / Esc beat the global
-// shortcut handler while the switcher is open.
+// bar, and a ⌘J more-options menu (a Radix DropdownMenu) scoped to the highlighted
+// layout. Keyboard is owned by a capture-phase window listener so ⌘⇧L / ⌘J / Enter /
+// Esc beat the global shortcut handler while the switcher is open; once the menu is
+// open, Radix owns arrows / Enter / Escape / typeahead within it.
 
-import { Button, ContextMenu } from "@radix-ui/themes";
+import { Button, ContextMenu, DropdownMenu } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { LucideIcon } from "lucide-react";
 import { Check, Pencil, Star, Trash2 } from "lucide-react";
@@ -44,12 +45,13 @@ const LISTBOX_ID = "layouts-switcher-listbox";
 const optionDomId = (layoutId: string): string => `layouts-switcher-option-${layoutId}`;
 
 // One actionable item scoped to a single layout. The same descriptor list feeds
-// both the ⌘J popover (highlighted layout) and each row's right-click context menu,
-// so the two surfaces can't drift. `shortcut` is a RAW binding string; each surface
-// formats it.
-type PopoverItem = {
+// both the ⌘J more-options menu (highlighted layout) and each row's right-click
+// context menu, so the two menus can't drift. `shortcut` is a RAW binding string;
+// each surface formats it for display.
+type LayoutMenuItem = {
   key: string;
   label: string;
+  // Rendered by the ⌘J menu only; the row context menu shows bare labels.
   icon: LucideIcon;
   shortcut?: string;
   testId: string;
@@ -97,11 +99,9 @@ export const LayoutSwitcher = (): ReactElement => {
   const [query, setQuery] = useState<string>("");
   const [highlightIndex, setHighlightIndex] = useState<number>(() => initialHighlightIndex(ordered, appliedLayoutId));
   const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState<boolean>(false);
-  const [popoverIndex, setPopoverIndex] = useState<number>(0);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const moreOptionsButtonRef = useRef<HTMLButtonElement>(null);
+  const dangerColor = useThemeDangerColor();
 
   const getPanelName = useCallback(
     (id: PanelId): string => registry.find((definition) => definition.id === id)?.displayName ?? id,
@@ -162,10 +162,12 @@ export const LayoutSwitcher = (): ReactElement => {
     [deleteLayout, setLayoutShortcut],
   );
 
-  // Build the action list for a given layout. Shared by the ⌘J popover (highlighted
-  // layout) and each row's right-click context menu so both stay in lock-step.
+  // Build the action list for a given layout. Shared by the ⌘J more-options menu
+  // (highlighted layout) and each row's right-click context menu so both stay in
+  // lock-step. Both surfaces are Radix menus that dismiss themselves once an item is
+  // selected, so no descriptor closes its own menu.
   const buildLayoutItems = useCallback(
-    (layout: SavedLayout): ReadonlyArray<PopoverItem> => {
+    (layout: SavedLayout): ReadonlyArray<LayoutMenuItem> => {
       // Built-ins (System Default + presets) are read-only: you can apply them and set
       // one as default, but can't edit, rename, or delete them.
       const isSystem = isSystemLayoutId(layout.id);
@@ -189,10 +191,7 @@ export const LayoutSwitcher = (): ReactElement => {
           disabled: layout.id === defaultLayoutId,
           danger: false,
           separatorBefore: true,
-          run: (): void => {
-            setDefaultLayout(layout.id);
-            setIsMoreOptionsOpen(false);
-          },
+          run: () => setDefaultLayout(layout.id),
         },
         {
           key: "edit",
@@ -212,56 +211,17 @@ export const LayoutSwitcher = (): ReactElement => {
           disabled: isSystem,
           danger: true,
           separatorBefore: false,
-          run: (): void => {
-            removeLayout(layout);
-            setIsMoreOptionsOpen(false);
-          },
+          run: () => removeLayout(layout),
         },
       ];
     },
     [apply, defaultLayoutId, setDefaultLayout, openEdit, removeLayout],
   );
 
-  const popoverItems: ReadonlyArray<PopoverItem> = useMemo(
+  const moreOptionsItems: ReadonlyArray<LayoutMenuItem> = useMemo(
     () => (highlighted === undefined ? [] : buildLayoutItems(highlighted)),
     [highlighted, buildLayoutItems],
   );
-
-  const enabledPopoverIndexes = useMemo(
-    () =>
-      popoverItems
-        .map((item, index) => ({ item, index }))
-        .filter(({ item }) => !item.disabled)
-        .map(({ index }) => index),
-    [popoverItems],
-  );
-
-  const openPopover = useCallback((): void => {
-    if (highlighted === undefined) {
-      return;
-    }
-    setPopoverIndex(enabledPopoverIndexes[0] ?? 0);
-    setIsMoreOptionsOpen(true);
-  }, [highlighted, enabledPopoverIndexes]);
-
-  // A mousedown anywhere outside the popover (and its trigger) dismisses it — the
-  // popover is a plain positioned div, not a Radix Popover, so it has no built-in
-  // outside-click behavior. The trigger is excluded so its own click still toggles.
-  useEffect(() => {
-    if (!isMoreOptionsOpen) {
-      return undefined;
-    }
-
-    const onMouseDown = (event: MouseEvent): void => {
-      const target = event.target as Node;
-      if (popoverRef.current?.contains(target) === true || moreOptionsButtonRef.current?.contains(target) === true) {
-        return;
-      }
-      setIsMoreOptionsOpen(false);
-    };
-    window.addEventListener("mousedown", onMouseDown);
-    return (): void => window.removeEventListener("mousedown", onMouseDown);
-  }, [isMoreOptionsOpen]);
 
   // Keyboard (capture phase, so it wins over the global handler).
   // The capture listener is mounted once and reads live state through this ref;
@@ -271,14 +231,10 @@ export const LayoutSwitcher = (): ReactElement => {
     filtered,
     highlighted,
     moreOptionsOpen: isMoreOptionsOpen,
-    popoverIndex,
-    popoverItems,
-    enabledPopoverIndexes,
     query,
     openLayoutsBinding,
     moreOptionsBinding,
     apply,
-    openPopover,
     openSave,
     close,
   });
@@ -287,40 +243,32 @@ export const LayoutSwitcher = (): ReactElement => {
       filtered,
       highlighted,
       moreOptionsOpen: isMoreOptionsOpen,
-      popoverIndex,
-      popoverItems,
-      enabledPopoverIndexes,
       query,
       openLayoutsBinding,
       moreOptionsBinding,
       apply,
-      openPopover,
       openSave,
       close,
     };
   });
 
   useEffect(() => {
-    const stepPopover = (delta: number): void => {
-      const { enabledPopoverIndexes: enabled, popoverIndex: current } = stateRef.current;
-      if (enabled.length === 0) {
-        return;
-      }
-      const at = Math.max(0, enabled.indexOf(current));
-      setPopoverIndex(enabled[(at + delta + enabled.length) % enabled.length]);
-    };
-
     const handler = (event: KeyboardEvent): void => {
       const state = stateRef.current;
 
-      // Escape closes the popover first, then clears a query, then the dialog
-      // (stopping Radix from closing the whole dialog while there's a lighter step).
       if (event.key === "Escape") {
+        // While the more-options menu is open, Radix's DropdownMenu owns Escape: it
+        // closes the menu (the highest dismissable layer) and returns focus. Bail so
+        // we neither double-close nor swallow the event before Radix's document
+        // listener sees it.
+        if (state.moreOptionsOpen) {
+          return;
+        }
+        // Otherwise Escape clears a query first, then closes the dialog — stopping
+        // Radix from closing the whole dialog while there's a lighter step to take.
         event.preventDefault();
         event.stopPropagation();
-        if (state.moreOptionsOpen) {
-          setIsMoreOptionsOpen(false);
-        } else if (state.query !== "") {
+        if (state.query !== "") {
           setQuery("");
           setHighlightIndex(0);
         } else {
@@ -329,31 +277,34 @@ export const LayoutSwitcher = (): ReactElement => {
         return;
       }
 
-      // ⌘⇧L while open: advance the highlight (double-tap bounce).
+      // ⌘⇧L: advance the highlight (double-tap bounce). The more-options menu is
+      // scoped to one layout, so cycling the list means leaving it — close it first.
       if (state.openLayoutsBinding != null && shouldHandleKeybinding(event, state.openLayoutsBinding)) {
         event.preventDefault();
         event.stopPropagation();
+        setIsMoreOptionsOpen(false);
         if (state.filtered.length > 0) {
           setHighlightIndex((index) => (index + 1) % state.filtered.length);
         }
         return;
       }
 
-      // ⌘J: toggle the more-options popover.
+      // ⌘J: toggle the more-options menu for the highlighted layout.
       if (state.moreOptionsBinding != null && shouldHandleKeybinding(event, state.moreOptionsBinding)) {
         event.preventDefault();
         event.stopPropagation();
         if (state.moreOptionsOpen) {
           setIsMoreOptionsOpen(false);
-        } else {
-          state.openPopover();
+        } else if (state.highlighted !== undefined) {
+          setIsMoreOptionsOpen(true);
         }
         return;
       }
 
       const isMod = event.metaKey || event.ctrlKey;
 
-      // ⌘S: save the current arrangement.
+      // ⌘S: save the current arrangement. openSave closes the whole switcher, so an
+      // open more-options menu is torn down with it.
       if (isMod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") {
         event.preventDefault();
         event.stopPropagation();
@@ -361,29 +312,9 @@ export const LayoutSwitcher = (): ReactElement => {
         return;
       }
 
+      // While the menu is open, Radix owns navigation inside it (arrows / Enter /
+      // typeahead); the switcher's list navigation below must stay dormant.
       if (state.moreOptionsOpen) {
-        // Popover navigation.
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          stepPopover(1);
-          return;
-        }
-
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          stepPopover(-1);
-          return;
-        }
-
-        // Enter runs the highlighted popover row (skipping it if it is disabled).
-        if (event.key === "Enter" && !isMod) {
-          event.preventDefault();
-          const item = state.popoverItems[state.popoverIndex];
-          if (item !== undefined && !item.disabled) {
-            item.run();
-          }
-          return;
-        }
         return;
       }
 
@@ -495,56 +426,58 @@ export const LayoutSwitcher = (): ReactElement => {
             <ShortcutHint binding="Enter" className={styles.barKbd} />
           </Button>
           <span className={styles.barDivider} />
-          <Button
-            ref={moreOptionsButtonRef}
-            type="button"
-            variant="ghost"
-            size="1"
-            color="gray"
-            className={`${styles.barButton} ${isMoreOptionsOpen ? styles.barButtonActive : ""}`}
-            onClick={() => (isMoreOptionsOpen ? setIsMoreOptionsOpen(false) : openPopover())}
-            disabled={highlighted === undefined}
-            data-testid={ElementIds.LAYOUTS_SWITCHER_MORE_OPTIONS_BUTTON}
-          >
-            More options
-            <ShortcutHint binding={moreOptionsBinding ?? ""} className={styles.barKbd} />
-          </Button>
+          {/* The ⌘J menu targets the highlighted layout — the same descriptors each
+              row's right-click ContextMenu feeds from, so the two surfaces stay in
+              lock-step. Radix Themes DropdownMenu.Trigger renders its single child as
+              the trigger (applies asChild internally), so the Button keeps its full
+              menu aria wiring. */}
+          <DropdownMenu.Root open={isMoreOptionsOpen} onOpenChange={setIsMoreOptionsOpen}>
+            <DropdownMenu.Trigger>
+              <Button
+                type="button"
+                variant="ghost"
+                size="1"
+                color="gray"
+                className={`${styles.barButton} ${isMoreOptionsOpen ? styles.barButtonActive : ""}`}
+                disabled={highlighted === undefined}
+                data-testid={ElementIds.LAYOUTS_SWITCHER_MORE_OPTIONS_BUTTON}
+              >
+                More options
+                <ShortcutHint binding={moreOptionsBinding ?? ""} className={styles.barKbd} />
+              </Button>
+            </DropdownMenu.Trigger>
+            {highlighted !== undefined ? (
+              <DropdownMenu.Content
+                size="1"
+                // Radix returns focus to the trigger on close; redirect it to the
+                // search input so type-to-filter keeps working the instant the menu
+                // closes (⌘J-again, Escape, or picking an item).
+                onCloseAutoFocus={(event): void => {
+                  event.preventDefault();
+                  searchInputRef.current?.focus();
+                }}
+                data-testid={ElementIds.LAYOUTS_MORE_OPTIONS_POPOVER}
+              >
+                {moreOptionsItems.map((item) => (
+                  <Fragment key={item.key}>
+                    {item.separatorBefore ? <DropdownMenu.Separator /> : null}
+                    <DropdownMenu.Item
+                      color={item.danger ? dangerColor : undefined}
+                      disabled={item.disabled}
+                      shortcut={item.shortcut !== undefined ? formatShortcutForDisplay(item.shortcut) : undefined}
+                      onSelect={() => item.run()}
+                      data-testid={item.testId}
+                    >
+                      <item.icon size={14} />
+                      {item.label}
+                    </DropdownMenu.Item>
+                  </Fragment>
+                ))}
+              </DropdownMenu.Content>
+            ) : null}
+          </DropdownMenu.Root>
         </div>
       </div>
-      {isMoreOptionsOpen && highlighted !== undefined ? (
-        <div
-          ref={popoverRef}
-          className={styles.popover}
-          role="menu"
-          data-testid={ElementIds.LAYOUTS_MORE_OPTIONS_POPOVER}
-        >
-          {popoverItems.map((item, index) => (
-            <div key={item.key}>
-              {item.separatorBefore ? <div className={styles.popoverSeparator} /> : null}
-              {/* A plain button, not a Radix ghost Button: the ghost variant applies
-                negative margins so its hover/active background bleeds past a full-width
-                row to the popover edges. This row is fully custom-styled anyway. */}
-              <button
-                type="button"
-                role="menuitem"
-                className={`${styles.popoverRow} ${item.danger ? styles.popoverRowDanger : ""} ${
-                  index === popoverIndex ? styles.popoverRowActive : ""
-                }`}
-                disabled={item.disabled}
-                onMouseEnter={() => setPopoverIndex(index)}
-                onClick={() => item.run()}
-                data-testid={item.testId}
-              >
-                <item.icon size={14} />
-                {item.label}
-                {item.shortcut !== undefined ? (
-                  <ShortcutHint binding={item.shortcut} className={styles.popoverShortcut} />
-                ) : null}
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 };
@@ -556,7 +489,7 @@ type SwitcherRowProps = {
   // The layout's assigned keyboard shortcut (raw binding), shown as a trailing hint.
   shortcut?: string;
   // The shared action descriptors, rendered as this row's right-click context menu.
-  items: ReadonlyArray<PopoverItem>;
+  items: ReadonlyArray<LayoutMenuItem>;
   selected: boolean;
   onMouseEnter: () => void;
   onClick: () => void;

@@ -133,11 +133,13 @@ class PlaywrightLayoutsSwitcherElement(PlaywrightIntegrationTestElement):
         return PlaywrightSaveLayoutDialogElement(locator=dialog, page=self._page)
 
     def open_more_options(self) -> Locator:
-        # Both the trigger and its popover render inside the switcher dialog.
+        """Open the ⌘J more-options menu (a Radix DropdownMenu) for the highlighted
+        layout. The trigger lives in the switcher's bar, but the menu content is
+        portaled to the document body, so it is looked up page-scoped."""
         self.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_MORE_OPTIONS_BUTTON).click()
-        popover = self.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_POPOVER)
-        expect(popover).to_be_visible()
-        return popover
+        menu = self._page.get_by_test_id(ElementIDs.LAYOUTS_MORE_OPTIONS_POPOVER)
+        expect(menu).to_be_visible()
+        return menu
 
     def apply_by_name(self, name: str) -> None:
         """Apply a layout by clicking its row (the user's primary path). Closes the
