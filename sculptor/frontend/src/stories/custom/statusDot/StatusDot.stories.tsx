@@ -6,10 +6,10 @@ import { NavItem } from "~/components/nav/NavItem.tsx";
 import groupStyles from "~/components/nav/SidebarRepoGroup.module.scss";
 import sidebarStyles from "~/components/nav/WorkspaceSidebar.module.scss";
 import {
-  AgentStatusDot,
   type AgentDotStatus,
-  WorkspaceStatusDots,
+  AgentStatusDot,
   type WorkspaceDotStatus,
+  WorkspaceStatusDots,
 } from "~/components/statusDot";
 
 /**
@@ -102,7 +102,7 @@ const RailRepoGroup = ({
   children,
 }: {
   name: string;
-  children: ReactElement | ReactElement[];
+  children: ReactElement | Array<ReactElement>;
 }): ReactElement => (
   <div className={groupStyles.repoGroup}>
     <div className={groupStyles.repoHeader}>
@@ -167,6 +167,5 @@ export const SidebarRail: Story = {
 };
 
 export const Showcase_: Story = {
-  name: "Showcase",
   render: (): ReactElement => <Showcase />,
 };
