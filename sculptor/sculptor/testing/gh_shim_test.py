@@ -24,7 +24,9 @@ pytestmark = pytest.mark.skipif(not _SHIM_PATH.is_file(), reason="marketing gh s
 # Minimal stand-ins for the two query shapes pr_status.py sends; the shim
 # dispatches on the ``search(`` / ``repository(owner:`` substrings.
 _SEARCH_QUERY = "query($q: String!) { search(query: $q, type: ISSUE, first: 100) { nodes } rateLimit { remaining } }"
-_REPOSITORY_QUERY = "query($owner: String!) { repository(owner: $owner, name: $name) { pullRequests { nodes } } }"
+_REPOSITORY_QUERY = (
+    "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { pullRequests { nodes } } }"
+)
 
 _FIXTURES = {
     "owner": "imbue-ai",
@@ -63,7 +65,23 @@ def _search(fixtures_path: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _repository_lookup(fixtures_path: Path, branch: str) -> subprocess.CompletedProcess[str]:
-    args = ["api", "graphql", "-f", f"query={_REPOSITORY_QUERY}", "-F", "owner={owner}", "-f", f"branch={branch}"]
+    # Mirror the full argv shape pr_status.py sends (query, owner/name
+    # placeholders, branch, limit) so the shim's tolerance of every flag is
+    # pinned, not just the ones it dispatches on.
+    args = [
+        "api",
+        "graphql",
+        "-f",
+        f"query={_REPOSITORY_QUERY}",
+        "-F",
+        "owner={owner}",
+        "-F",
+        "name={repo}",
+        "-f",
+        f"branch={branch}",
+        "-F",
+        "limit=20",
+    ]
     return _run_shim(args, fixtures_path)
 
 

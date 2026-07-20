@@ -36,10 +36,10 @@ print(f\"{elements[0]['x']} {elements[0]['y']}\" if elements else '')
 _json_str() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
 
 # Locate by data-testid; prints "x y" of the first match (empty if none).
-loc_testid() { ex "{\"action\":\"locate\",\"selector\":\"[data-testid=$1]\"}" | _first_xy; }
+loc_testid() { ex "{\"action\":\"locate\",\"selector\":$(_json_str "[data-testid=\"$1\"]")}" | _first_xy; }
 
 # Locate by visible text; prints "x y" of the first match (empty if none).
-loc_text() { ex "{\"action\":\"locate\",\"text\":\"$1\"}" | _first_xy; }
+loc_text() { ex "{\"action\":\"locate\",\"text\":$(_json_str "$1")}" | _first_xy; }
 
 click_xy() { ex "{\"action\":\"click\",\"x\":$1,\"y\":$2}" >/dev/null; }
 
