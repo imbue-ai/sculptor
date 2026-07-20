@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { Workspace } from "../../../api";
 import { WorkspaceInitializationStrategy } from "../../../api";
 import {
-  deletedWorkspaceIdsAtom,
+  Tombstone,
   updateWorkspacesAtom,
   workspaceAtomFamily,
   workspaceIdsAtom,
@@ -150,15 +150,15 @@ describe("updateWorkspacesAtom", () => {
     expect(result.current.workspaces).toHaveLength(2);
   });
 
-  it("propagates stream-driven deletions to deletedWorkspaceIdsAtom", () => {
+  it("drops stream-deleted workspaces from the id membership that drives pulled-list refreshes", () => {
     const wrapper = createWrapper();
 
     const { result } = renderHook(
       () => {
         const updateWorkspaces = useSetAtom(updateWorkspacesAtom);
-        const deletedIds = useAtomValue(deletedWorkspaceIdsAtom);
+        const workspaceIds = useAtomValue(workspaceIdsAtom);
         const workspaces = useAtomValue(workspacesArrayAtom) ?? [];
-        return { updateWorkspaces, deletedIds, workspaces };
+        return { updateWorkspaces, workspaceIds, workspaces };
       },
       { wrapper },
     );
@@ -171,7 +171,6 @@ describe("updateWorkspacesAtom", () => {
     });
 
     expect(result.current.workspaces).toHaveLength(2);
-    expect(result.current.deletedIds.size).toBe(0);
 
     // Simulate a stream update marking ws_1 as deleted
     const deletedWorkspace = createMockWorkspace({ objectId: "ws_1", isDeleted: true });
@@ -182,10 +181,10 @@ describe("updateWorkspacesAtom", () => {
     expect(result.current.workspaces).toHaveLength(1);
     expect(result.current.workspaces[0].objectId).toBe("ws_2");
 
-    // ws_1 should appear in deletedWorkspaceIdsAtom so that components
-    // with their own workspace lists (e.g. RecentWorkspaces) can filter it out
-    expect(result.current.deletedIds.has("ws_1")).toBe(true);
-    expect(result.current.deletedIds.has("ws_2")).toBe(false);
+    // ws_1 leaves the id membership — components with their own pulled lists
+    // (e.g. RecentWorkspaces) key their refetch on this, and the refreshed
+    // server response no longer contains the deleted workspace.
+    expect(result.current.workspaceIds).toEqual(["ws_2"]);
   });
 });
 
@@ -221,5 +220,19 @@ describe("useIsWorkspaceDeleted", () => {
       ]),
     });
     expect(result.current).toBe(false);
+  });
+
+  it("treats a deleting (tombstoned) workspace as deleted, and useWorkspace maps it to null", () => {
+    const { result } = renderHook(
+      () => ({ deleted: useIsWorkspaceDeleted("ws_tomb"), workspace: useWorkspace("ws_tomb") }),
+      {
+        wrapper: createWrapper([
+          [workspaceIdsAtom, ["ws_tomb"]],
+          [workspaceAtomFamily("ws_tomb"), new Tombstone(createMockWorkspace({ objectId: "ws_tomb" }))],
+        ]),
+      },
+    );
+    expect(result.current.workspace).toBeNull();
+    expect(result.current.deleted).toBe(true);
   });
 });

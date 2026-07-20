@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import type { Project, Workspace } from "~/api";
 import { projectAtomFamily, projectIdsAtom } from "~/common/state/atoms/projects.ts";
-import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
+import {
+  optimisticDeleteWorkspaceAtom,
+  workspaceAtomFamily,
+  workspaceIdsAtom,
+} from "~/common/state/atoms/workspaces.ts";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { globalLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 
@@ -124,6 +128,23 @@ describe("sidebar reorder atoms", () => {
     const flattened = store.get(sidebarWorkspaceGroupsAtom).flatMap((group) => group.workspaces);
     expect(store.get(sidebarOrderedWorkspacesAtom)).toEqual(flattened);
     expect(flattened.map((workspace) => workspace.objectId)).toEqual(["w-banana", "w-cherry", "w-apple", "w-dates"]);
+  });
+
+  it("keeps a delete-in-flight row in the rendered groups but out of keyboard cycling", () => {
+    const store = createStore();
+    seedStore(store);
+
+    store.set(optimisticDeleteWorkspaceAtom, "w-banana");
+
+    // The groups still list it (its row renders as "Deleting\u2026")\u2026
+    const flattened = store.get(sidebarWorkspaceGroupsAtom).flatMap((group) => group.workspaces);
+    expect(flattened.map((workspace) => workspace.objectId)).toContain("w-banana");
+    // \u2026but cycling steps over it: a non-navigable row must not be a cycling stop.
+    expect(store.get(sidebarOrderedWorkspacesAtom).map((workspace) => workspace.objectId)).toEqual([
+      "w-apple",
+      "w-cherry",
+      "w-dates",
+    ]);
   });
 
   it("moves a repo group to the drop slot and stores the full group order", () => {

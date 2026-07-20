@@ -1,11 +1,13 @@
 import { ScrollArea, Spinner } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
+import { useQuery } from "@tanstack/react-query";
+import { useAtomValue, useStore } from "jotai";
 import type { ReactElement, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { RecentWorkspaceResponse } from "../../../api";
 import { listRecentWorkspaces } from "../../../api";
-import { deletedWorkspaceIdsAtom, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
+import { queryClient, recentWorkspacesQueryKey } from "../../../common/queryClient.ts";
+import { isWorkspaceDeletingAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
 import { EmptyState } from "./EmptyState.tsx";
@@ -30,8 +32,6 @@ export const RecentWorkspaces = ({
   onOpenInNewTab,
   onEscapeToTitle,
 }: RecentWorkspacesProps): ReactElement => {
-  const [workspaces, setWorkspaces] = useState<Array<RecentWorkspaceResponse>>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -39,15 +39,12 @@ export const RecentWorkspaces = ({
 
   const areaRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
-
-  const deletedIds = useAtomValue(deletedWorkspaceIdsAtom);
-
-  const handleNavigateAfterDelete = useCallback((workspaceId: string): void => {
-    setWorkspaces((prev) => prev.filter((ws) => ws.objectId !== workspaceId));
-  }, []);
+  const store = useStore();
 
   const { execute: executeDelete } = useOptimisticWorkspaceDelete({
-    onNavigateAfterDelete: handleNavigateAfterDelete,
+    // Deleting from Home stays on Home: the row renders as "Deleting…" until
+    // the refreshed list drops it, and a failed delete un-dims it in place.
+    onNavigateAfterDelete: useCallback((): void => {}, []),
   });
 
   const handleDelete = useCallback((workspace: RecentWorkspaceResponse): void => {
@@ -60,52 +57,56 @@ export const RecentWorkspaces = ({
     setDeleteTarget(null);
   }, [deleteTarget, executeDelete]);
 
-  // The set of live workspace ids, kept fresh by the unified stream. Reduced
-  // to an order-insensitive key so the fetch below re-runs exactly when
-  // membership changes — a workspace created or deleted outside this page
-  // (the CLI, another window) must show up without a remount, since Home can
-  // stay mounted indefinitely.
-  const liveWorkspaceIds = useAtomValue(workspaceIdsAtom);
-  const liveMembershipKey = useMemo(() => [...(liveWorkspaceIds ?? [])].sort().join(","), [liveWorkspaceIds]);
-
-  // Fetch the recent workspaces on mount and again whenever the live
-  // membership changes. `isLoading` starts true and never flips back, so a
-  // refetch swaps the list in place with no spinner flash; the ignore flag
-  // prevents a stale write if the component unmounts (or the membership
-  // changes again) mid-request.
-  useEffect(() => {
-    let isIgnored = false;
-
-    void (async (): Promise<void> => {
+  // The pulled list snapshot. Data-freshness is invalidation-driven (staleTime
+  // is Infinity globally): membership changes below, plus a confirmed delete
+  // (the mutation invalidates the key so the list heals even when the stream
+  // is down). Refetches swap the list in place — `isPending` is true only
+  // before the first data lands, so there is no spinner flash.
+  const { data: workspaces, isPending } = useQuery({
+    queryKey: recentWorkspacesQueryKey(),
+    queryFn: async (): Promise<Array<RecentWorkspaceResponse>> => {
       try {
         // Read-only fetch consumed straight from the response body, so the
         // unified-stream acknowledgment adds nothing here. Waiting for it would
         // also fail this load spuriously: the Home page can mount right as the
-        // stream reconnects, and an ack for a
-        // request in flight across a reconnect never arrives — the tracker would
-        // time out and leave the list empty even though the data landed.
+        // stream reconnects, and an ack for a request in flight across a
+        // reconnect never arrives — the tracker would time out and leave the
+        // list empty even though the data landed.
         const response = await listRecentWorkspaces({ meta: { skipWsAck: true } });
-        if (!isIgnored && response.data) {
-          setWorkspaces(response.data.workspaces);
-        }
+        return response.data?.workspaces ?? [];
       } catch (error) {
+        // The list renders its empty state when the query errors, which would
+        // otherwise silently mask a failed load.
         console.error("Failed to load workspaces:", error);
-      } finally {
-        if (!isIgnored) {
-          setIsLoading(false);
-        }
+        throw error;
       }
-    })();
+    },
+  });
 
-    return (): void => {
-      isIgnored = true;
-    };
-  }, [liveMembershipKey]);
+  // The set of live workspace ids, kept fresh by the unified stream and only
+  // rewritten when membership actually changes (updateWorkspacesAtom guards
+  // the write), so it is a stable effect dependency. The invalidation fires
+  // when membership changes — a workspace created or deleted outside this
+  // page (the CLI, another window) must show up without a remount, since
+  // Home can stay mounted indefinitely — and on remounts with a loaded store,
+  // for freshness.
+  const liveWorkspaceIds = useAtomValue(workspaceIdsAtom);
 
-  const enrichedWorkspaces = useMemo(
-    () => workspaces.filter((ws) => !deletedIds.has(ws.objectId)),
-    [workspaces, deletedIds],
-  );
+  useEffect(() => {
+    // Before the first WS frame there is no membership to sync against, and
+    // the mount-time query fetch is already in flight — invalidating here
+    // would only duplicate it.
+    if (liveWorkspaceIds === undefined) {
+      return;
+    }
+    void queryClient.invalidateQueries({ queryKey: recentWorkspacesQueryKey() });
+  }, [liveWorkspaceIds]);
+
+  // Rows the canonical store holds as tombstones stay in the list and render
+  // as "Deleting…" (see WorkspaceRow) rather than being filtered out — the
+  // pending state is visible, and the row leaves the DOM only when the
+  // refreshed server list confirms the deletion.
+  const enrichedWorkspaces = useMemo(() => workspaces ?? [], [workspaces]);
 
   const filteredWorkspaces = useMemo(() => {
     if (!searchQuery.trim()) return enrichedWorkspaces;
@@ -165,7 +166,9 @@ export const RecentWorkspaces = ({
       } else if (e.key === "Enter" && focusedIndex !== null) {
         e.preventDefault();
         const workspace = visibleWorkspaces[focusedIndex];
-        if (workspace) {
+        // A row mid-delete is non-interactive: don't navigate into a
+        // workspace that is going away.
+        if (workspace && !store.get(isWorkspaceDeletingAtomFamily(workspace.objectId))) {
           onWorkspaceClick(workspace);
         }
       } else if (e.key === "Escape") {
@@ -181,7 +184,7 @@ export const RecentWorkspaces = ({
       areaElement.addEventListener("keydown", handleKeyDown);
       return (): void => areaElement.removeEventListener("keydown", handleKeyDown);
     }
-  }, [focusedIndex, visibleWorkspaces, onWorkspaceClick, searchInputRef, onEscapeToTitle]);
+  }, [focusedIndex, visibleWorkspaces, onWorkspaceClick, searchInputRef, onEscapeToTitle, store]);
 
   // Scroll focused row into view
   useEffect(() => {
@@ -191,7 +194,7 @@ export const RecentWorkspaces = ({
     }
   }, [focusedIndex]);
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <div className={styles.recentArea}>
         <Spinner size="2" />
