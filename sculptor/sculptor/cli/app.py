@@ -54,6 +54,21 @@ class SyncCloseServer(Server):
         await super()._wait_tasks_to_complete()
 
 
+def resolve_and_publish_backend_port(port_option: int | None) -> int:
+    """Resolve the port the server will listen on and publish it process-wide.
+
+    Downstream code (agent/terminal environment setup, the service collection)
+    reads the port from the cached settings snapshot, so after publishing
+    SCULPTOR_API_PORT the snapshot must be retaken — the CLI has already primed
+    it (for logging config) before the --port option is applied. This must
+    remain the last startup write to os.environ that settings care about.
+    """
+    port = port_option or get_settings().BACKEND_PORT
+    os.environ["SCULPTOR_API_PORT"] = str(port)
+    get_settings.cache_clear()
+    return port
+
+
 def cmd_version(value: bool) -> None:
     """Print the Sculptor version."""
     if value:
@@ -118,11 +133,7 @@ def main(
     # We either successfully initialize the config from file, or need to perform onboarding.
     initialize_from_file()
 
-    # Using the globally configured user_config
-    port = port or get_settings().BACKEND_PORT
-    # Publish the resolved port so downstream code (e.g. agent environment
-    # setup) sees the actual port the server is listening on, not the default.
-    os.environ["SCULPTOR_API_PORT"] = str(port)
+    port = resolve_and_publish_backend_port(port)
 
     # Print version of Sculptor that is running
     typer.echo("Starting Sculptor server version " + sculptor_version.__version__)

@@ -89,13 +89,15 @@ def mount_extension_files(app: FastAPI) -> None:
 # dependency overrides bypass the function entirely, so the cache is inert there).
 @cache
 def get_settings() -> SculptorSettings:
-    """Parse settings from the environment once, at first request.
+    """Parse settings from the environment once, at first call.
 
-    SculptorSettings is a frozen snapshot of server settings that "do not change
-    during runtime" (see its docstring) — but without the cache each
-    Depends(get_settings) re-parsed os.environ per request, so any runtime env
-    perturbation would silently flip settings-gated behavior mid-session (e.g.
-    the FakeClaude model gate, SCU-1809).
+    SculptorSettings is a process-lifetime snapshot of server settings that "do
+    not change during runtime" (see its docstring). Re-parsing os.environ on
+    every Depends(get_settings) would let a runtime env perturbation silently
+    flip settings-gated behavior mid-session (e.g. the FakeClaude model gate).
+    The CLI retakes the snapshot once after publishing the resolved port (see
+    resolve_and_publish_backend_port); nothing else may mutate settings-relevant
+    env after startup.
     """
     return SculptorSettings()
 
