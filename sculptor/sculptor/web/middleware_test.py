@@ -1,10 +1,12 @@
+from collections.abc import Iterator
+
 import pytest
 
 from sculptor.web.middleware import get_settings
 
 
 @pytest.fixture
-def fresh_settings_cache():
+def fresh_settings_cache() -> Iterator[None]:
     """Isolate this module's tests from any get_settings() call elsewhere in the
     pytest process, and leave no snapshot behind for later tests."""
     get_settings.cache_clear()
@@ -12,12 +14,12 @@ def fresh_settings_cache():
     get_settings.cache_clear()
 
 
-def test_get_settings_returns_the_same_snapshot_every_call(fresh_settings_cache) -> None:
+def test_get_settings_returns_the_same_snapshot_every_call(fresh_settings_cache: None) -> None:
     assert get_settings() is get_settings()
 
 
 def test_get_settings_snapshot_is_immune_to_runtime_env_changes(
-    fresh_settings_cache, monkeypatch: pytest.MonkeyPatch
+    fresh_settings_cache: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Settings are parsed from the environment once; a runtime env perturbation
     # must not flip settings-gated behavior mid-session (e.g. the FakeClaude
