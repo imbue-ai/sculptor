@@ -1109,10 +1109,19 @@ install-pi:
 
 # Recompute pi's per-platform sha256 pin: download each supported-platform tarball,
 # hash it, and print the platforms={...} block to paste into PI_PIN
-# (sculptor/services/managed_tools.py). The one manual step at a pi version bump.
+# (sculptor/services/managed_tools.py). Print-only; `just bump-pi` applies a bump.
 [group("install")]
 compute-pi-pin version:
     uv run python "{{justfile_directory()}}/scripts/compute_pi_pin.py" "{{version}}"
+
+# Apply a pi version bump end-to-end: recompute the per-platform sha256 pins
+# (cross-checked against the release's published SHA256SUMS) and rewrite
+# PI_PINNED_VERSION plus every hardcoded copy in tests/docs/stories. The
+# pi-bump workflow runs this daily; run it by hand when the checks staleness
+# warning fires.
+[group("install")]
+bump-pi version:
+    uv run python "{{justfile_directory()}}/scripts/bump_pi_pin.py" "{{version}}"
 
 # Installs additional dependencies for testing
 [group("install")]

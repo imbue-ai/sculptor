@@ -25,7 +25,7 @@ from sculptor.services.managed_tools import _PI_PLATFORM_MAP
 from sculptor.services.managed_tools import get_managed_tool
 from sculptor.services.managed_tools import get_managed_tools
 
-# Verified darwin-arm64 sha256 for pi 0.80.10; regenerate with ``just compute-pi-pin 0.80.10``.
+# Verified darwin-arm64 sha256 for pi 0.80.10; ``just bump-pi <version>`` refreshes it.
 _PI_DARWIN_ARM64_SHA256_0_80_10 = "4406ed227c486f2e3c16cf14f793dc3ad46b5d01bf69135a2424cffa58a9a34b"
 
 

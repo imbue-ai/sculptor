@@ -51,9 +51,9 @@ class PlatformPin(FrozenModel):
 class PiPin(FrozenModel):
     """The static, in-repo source of truth for the managed pi distribution.
 
-    pi publishes no checksums, so Sculptor computes them per version
-    (``scripts/compute_pi_pin.py``) and bakes them here; the install path verifies
-    downloads against these pinned values.
+    Sculptor computes pi's digests itself per version (``just bump-pi``, which
+    cross-checks upstream's published ``SHA256SUMS``) and bakes them here; the
+    install path verifies downloads against these pinned values only.
     """
 
     version: str
@@ -187,9 +187,9 @@ def _current_pi_platform_key() -> str:
 class PiManagedTool(ManagedTool):
     """Managed-install conformer for pi.
 
-    pi publishes per-platform tarballs and no checksums of its own, so the
-    distribution descriptor is built entirely from the static ``PI_PIN`` (no network
-    to resolve it) and verified against the baked sha256 at download time.
+    pi publishes per-platform tarballs; the distribution descriptor is built
+    entirely from the static ``PI_PIN`` (no network to resolve it) and verified
+    against the baked sha256 at download time.
     """
 
     tool = Dependency.PI
