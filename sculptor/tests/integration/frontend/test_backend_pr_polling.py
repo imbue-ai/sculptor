@@ -53,6 +53,20 @@ elif [[ "$*" == *"graphql"* ]]; then
 fi
 """
 
+# Open PR sitting in the merge queue, surfaced through the SEARCH path (the
+# primary path). Same shape as _FAKE_GH_SEARCH_OPEN but the search node reports
+# isInMergeQueue:true, which drives the "Merge queued" status dot on the open-PR
+# button. The per-branch fallback returns nothing.
+_FAKE_GH_MERGE_QUEUED = """\
+#!/bin/bash
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [[ "$*" == *"author:@me"* ]]; then
+    echo '{"data":{"search":{"nodes":[{"number":42,"title":"Test PR","url":"https://github.com/test/repo/pull/42","state":"OPEN","baseRefName":"main","repository":{"nameWithOwner":"test-org/test-repo"},"headRefName":"'"$BRANCH"'","mergeable":"MERGEABLE","isInMergeQueue":true,"commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}],"pageInfo":{"hasNextPage":false,"endCursor":null}},"rateLimit":{"cost":3,"remaining":4997,"limit":5000,"resetAt":"2026-01-01T00:00:00Z"}}}'
+elif [[ "$*" == *"graphql"* ]]; then
+    echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}'
+fi
+"""
+
 # Closed-not-merged PR. A closed PR is NOT in ``state:open`` search results, so
 # this is driven entirely through the per-branch FALLBACK query returning a
 # ``CLOSED`` node — exercising Change-2's terminal-state recovery.
@@ -205,6 +219,20 @@ def test_home_page_shows_pr_badge(sculptor_instance_: SculptorInstance) -> None:
     pr_button = workspace_row.get_by_test_id(ElementIDs.PR_BUTTON_OPEN)
     expect(pr_button).to_be_visible()
     expect(pr_button).to_contain_text("PR #42")
+
+
+@user_story("to see when a GitHub PR is queued in the merge queue")
+def test_merge_queued_pr_shows_dot(sculptor_instance_: SculptorInstance) -> None:
+    """When the backend reports an open PR is in the merge queue, the open-PR
+    button shows the "Merge queued" status dot."""
+    _install_fake_gh(sculptor_instance_.fake_bin_dir, _FAKE_GH_MERGE_QUEUED)
+    _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
+
+    task_page = start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
+    _wait_for_open_pr_button(task_page)
+
+    merge_queued_dot = sculptor_instance_.page.get_by_test_id(ElementIDs.PR_BUTTON_MERGE_QUEUED)
+    expect(merge_queued_dot).to_be_visible()
 
 
 @user_story("to see cached PR status immediately when navigating between pages")
