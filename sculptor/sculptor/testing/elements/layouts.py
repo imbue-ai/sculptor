@@ -177,6 +177,13 @@ class PlaywrightLayoutsSwitcherElement(PlaywrightIntegrationTestElement):
         return PlaywrightSaveLayoutDialogElement(locator=dialog, page=self._page)
 
 
+def get_layouts_switcher(page: Page) -> PlaywrightLayoutsSwitcherElement:
+    """POM for an already-open switcher dialog — e.g. one opened via the ⌘⇧L global
+    shortcut rather than the sidebar's ``open_layouts_switcher`` click."""
+    dialog = page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_DIALOG)
+    return PlaywrightLayoutsSwitcherElement(locator=dialog, page=page)
+
+
 def get_layout_tidy_dialog(page: Page) -> PlaywrightLayoutTidyDialogElement:
     dialog = page.get_by_test_id(ElementIDs.LAYOUT_TIDY_DIALOG)
     return PlaywrightLayoutTidyDialogElement(locator=dialog, page=page)

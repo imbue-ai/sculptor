@@ -12,7 +12,7 @@ agent behavior.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.elements.layouts import get_layouts_switcher
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -29,7 +29,7 @@ def test_open_layouts_shortcut_opens_switcher_and_escape_closes(sculptor_instanc
     mod_key = get_playwright_modifier_key()
     page.keyboard.press(f"{mod_key}+Shift+l")
 
-    switcher = page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_DIALOG)
+    switcher = get_layouts_switcher(page)
     expect(switcher).to_be_visible()
 
     page.keyboard.press("Escape")
@@ -64,7 +64,7 @@ def test_recorded_shortcut_applies_its_layout(sculptor_instance_: SculptorInstan
 
     # Close the switcher so no dismissible overlay guards the dispatcher, then press it.
     page.keyboard.press("Escape")
-    expect(page.get_by_test_id(ElementIDs.LAYOUTS_SWITCHER_DIALOG)).to_be_hidden()
+    expect(switcher).to_be_hidden()
     page.keyboard.press(chord)
 
     # The per-layout dispatcher applied Alpha: it is now the workspace's current layout.
