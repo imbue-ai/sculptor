@@ -13,6 +13,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import open_panel
+from sculptor.testing.elements.layouts import BUILT_IN_LAYOUT_COUNT
 from sculptor.testing.elements.layouts import get_layout_tidy_dialog
 from sculptor.testing.elements.layouts import get_save_layout_dialog
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
@@ -37,18 +38,16 @@ def test_switcher_opens_and_saves_a_layout(sculptor_instance_: SculptorInstance)
     # A fresh workspace always has the undeletable System Default plus the built-in
     # task presets (Chat / Review / Terminal / Browser).
     expect(switcher.get_system_default_row()).to_be_visible()
-    built_in_count = switcher.get_rows().count()
-    assert built_in_count >= 1
+    expect(switcher.get_rows()).to_have_count(BUILT_IN_LAYOUT_COUNT)
 
     switcher.open_save_dialog().save("Deep work")
 
     # Reopening shows the new layout alongside the built-ins, and the just-saved one
     # is marked as the workspace's current layout.
     switcher = sidebar.open_layouts_switcher()
-    expect(switcher.get_rows()).to_have_count(built_in_count + 1)
-    deep_work_row = switcher.get_row_by_name("Deep work")
-    expect(deep_work_row).to_be_visible()
-    expect(deep_work_row).to_contain_text("Current")
+    expect(switcher.get_rows()).to_have_count(BUILT_IN_LAYOUT_COUNT + 1)
+    expect(switcher.get_row_by_name("Deep work")).to_be_visible()
+    expect(switcher.get_current_row()).to_contain_text("Deep work")
 
 
 @user_story("to tidy a workspace to a layout, closing the panels it doesn't include")
@@ -170,7 +169,7 @@ def test_row_context_menu_applies_layout(sculptor_instance_: SculptorInstance) -
 
     # Reopening shows "Reviewing" as the current layout.
     switcher = sidebar.open_layouts_switcher()
-    expect(switcher.get_row_by_name("Reviewing")).to_contain_text("Current")
+    expect(switcher.get_current_row()).to_contain_text("Reviewing")
 
 
 @user_story("to open a layout's actions with ⌘J and apply it without leaving the keyboard")
@@ -211,7 +210,7 @@ def test_more_options_menu_opens_with_shortcut_and_applies(sculptor_instance_: S
 
     # Reopening shows "Reviewing" as the current layout.
     switcher = sidebar.open_layouts_switcher()
-    expect(switcher.get_row_by_name("Reviewing")).to_contain_text("Current")
+    expect(switcher.get_current_row()).to_contain_text("Reviewing")
 
 
 @user_story("to back out of tidying and keep the panels a layout would have closed")
@@ -238,7 +237,7 @@ def test_tidy_cancel_keeps_panel_but_layout_still_applies(sculptor_instance_: Sc
     # Notes survives the cancelled tidy, yet "Base" is still the applied layout.
     expect(left.get_panel_tab("notes")).to_be_visible()
     switcher = sidebar.open_layouts_switcher()
-    expect(switcher.get_row_by_name("Base")).to_contain_text("Current")
+    expect(switcher.get_current_row()).to_contain_text("Base")
 
 
 @user_story("to turn tidy confirmations back on from Settings after silencing them")
@@ -315,3 +314,37 @@ def test_tidy_edit_link_opens_save_dialog_in_edit_mode(sculptor_instance_: Sculp
     # "Save layout") — the dialog's title itself is visually hidden.
     expect(save_dialog.get_submit_button()).to_have_text("Save changes")
     expect(save_dialog.get_tidy_switch()).to_be_checked()
+
+
+@user_story("to switch to a built-in preset layout, which tidies away the panels it doesn't include")
+def test_applying_a_built_in_preset_tidies_and_becomes_current(sculptor_instance_: SculptorInstance) -> None:
+    """Applying a built-in preset (Chat — just the center agent, no static panels) is a
+    tidy-on-apply switch with no save step: it closes the undeclared static panels
+    (including a just-opened Notes) after confirmation, leaves the agent in place, and
+    becomes the workspace's current layout."""
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Preset Apply WS")
+    sidebar = get_workspace_sidebar(page)
+
+    # Open Notes as residue the Chat preset (which declares no static panels) tidies away.
+    open_panel(page, "notes", "left")
+    left = PlaywrightWorkspaceSection(page, "left")
+    expect(left.get_panel_tab("notes")).to_be_visible()
+
+    switcher = sidebar.open_layouts_switcher()
+    switcher.apply_by_name("Chat")
+
+    # Chat tidies on apply, so the confirmation appears naming a panel that would close.
+    tidy_dialog = get_layout_tidy_dialog(page)
+    expect(tidy_dialog).to_be_visible()
+    expect(tidy_dialog).to_contain_text("Notes")
+    tidy_dialog.confirm()
+
+    # Notes is closed; the agent (never tidied) still holds the center.
+    expect(left.get_panel_tab("notes")).to_have_count(0)
+    center = PlaywrightWorkspaceSection(page, "center")
+    expect(center.get_agent_tabs()).to_have_count(1)
+
+    # Chat is now the workspace's current layout.
+    switcher = sidebar.open_layouts_switcher()
+    expect(switcher.get_current_row()).to_contain_text("Chat")

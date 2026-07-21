@@ -12,6 +12,11 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 # in the frontend); saved layouts get generated uuids, so tests key off names.
 SYSTEM_DEFAULT_LAYOUT_ID = "system-default"
 
+# The built-in layouts a fresh workspace always shows, before any user layout is saved:
+# System Default plus the Chat / Review / Terminal / Browser presets. Mirrors
+# SYSTEM_LAYOUTS in systemDefaultLayout.ts — keep in sync if presets are added/removed.
+BUILT_IN_LAYOUT_COUNT = 5
+
 
 class PlaywrightSaveLayoutDialogElement(PlaywrightIntegrationTestElement):
     """POM for the "Save current arrangement as a layout" dialog."""
@@ -114,6 +119,14 @@ class PlaywrightLayoutsSwitcherElement(PlaywrightIntegrationTestElement):
 
     def get_system_default_row(self) -> Locator:
         return self.get_row_by_id(SYSTEM_DEFAULT_LAYOUT_ID)
+
+    def get_current_row(self) -> Locator:
+        """The row for the workspace's currently-applied layout. The current marker is
+        an accent-tinted row icon with no "Current" text, exposed to assertions and
+        assistive tech via aria-current, so tests key off the attribute rather than row
+        copy. Exactly one row carries it at a time."""
+        # Kept in the POM to honour the integration-test css-locator ratchet.
+        return self._locator.locator(f'[data-testid="{ElementIDs.LAYOUTS_SWITCHER_ROW.value}"][aria-current="true"]')
 
     def get_row_by_name(self, name: str) -> Locator:
         return self.get_rows().filter(has_text=name)

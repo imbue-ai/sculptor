@@ -58,8 +58,8 @@ def test_recorded_shortcut_applies_its_layout(sculptor_instance_: SculptorInstan
     # Bravo is current and Alpha is not; Alpha's row carries the recorded shortcut hint,
     # which gates us on the binding being registered before we fire it.
     switcher = sidebar.open_layouts_switcher()
-    expect(switcher.get_row_by_name("Bravo")).to_contain_text("Current")
-    expect(switcher.get_row_by_name("Alpha")).not_to_contain_text("Current")
+    expect(switcher.get_current_row()).to_contain_text("Bravo")
+    expect(switcher.get_current_row()).not_to_contain_text("Alpha")
     expect(switcher.get_row_shortcut_hint("Alpha")).to_be_visible()
 
     # Close the switcher so no dismissible overlay guards the dispatcher, then press it.
@@ -69,4 +69,4 @@ def test_recorded_shortcut_applies_its_layout(sculptor_instance_: SculptorInstan
 
     # The per-layout dispatcher applied Alpha: it is now the workspace's current layout.
     switcher = sidebar.open_layouts_switcher()
-    expect(switcher.get_row_by_name("Alpha")).to_contain_text("Current")
+    expect(switcher.get_current_row()).to_contain_text("Alpha")
