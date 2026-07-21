@@ -17,6 +17,7 @@ import { useKeybinding } from "~/common/keybindings";
 import { layoutShortcutBindingsAtom } from "~/common/keybindings/layoutShortcuts.ts";
 import { useSetLayoutShortcut } from "~/common/keybindings/useLayoutShortcutActions.ts";
 import { formatShortcutForDisplay, shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
+import type { AccentColor } from "~/common/state/atoms/themeBuilder";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { applyLayoutAtom, deleteLayoutAtom, setDefaultLayoutAtom } from "~/components/sections/layoutActions.ts";
 import type { SavedLayout } from "~/components/sections/persistence/types.ts";
@@ -388,6 +389,7 @@ export const LayoutSwitcher = (): ReactElement => {
               marker={markerFor(layout, defaultLayoutId, appliedLayoutId)}
               shortcut={layoutShortcutBindings[layout.id]}
               items={buildLayoutItems(layout)}
+              dangerColor={dangerColor}
               selected={index === clampedHighlight}
               onMouseEnter={() => setHighlightIndex(index)}
               onClick={() => apply(layout)}
@@ -487,6 +489,9 @@ type SwitcherRowProps = {
   shortcut?: string;
   // The shared action descriptors, rendered as this row's right-click context menu.
   items: ReadonlyArray<LayoutMenuItem>;
+  // The theme's danger color for the destructive context-menu item. Passed in (rather
+  // than read per row) so the whole list makes one theme subscription, not one per row.
+  dangerColor: AccentColor;
   selected: boolean;
   onMouseEnter: () => void;
   onClick: () => void;
@@ -498,12 +503,11 @@ const SwitcherRow = ({
   marker,
   shortcut,
   items,
+  dangerColor,
   selected,
   onMouseEnter,
   onClick,
 }: SwitcherRowProps): ReactElement => {
-  const dangerColor = useThemeDangerColor();
-
   // Radix Themes' ContextMenu.Trigger already renders its single child as the trigger
   // (it applies asChild internally), so the option div stays a direct child of the
   // listbox — the role="listbox" > role="option" tree and aria-activedescendant are
