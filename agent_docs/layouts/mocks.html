@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layouts — SCU-1725 mock</title>
+<style>
+/* ============================================================
+   Fonts — the app's real fonts, loaded from the repo's own
+   node_modules (relative to agent_docs/layouts/).
+   ============================================================ */
+@font-face {
+  font-family: "InterV";
+  src: url("../../sculptor/frontend/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-display: block;
+}
+@font-face {
+  font-family: "JBMonoV";
+  src: url("../../sculptor/frontend/node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 100 800;
+  font-display: block;
+}
+
+/* ============================================================
+   Design tokens — exact Radix dark values used by the app
+   (gray gray-scale, gray accent, indigo primary, tomato danger).
+   ============================================================ */
+:root {
+  --gray-1: #111111; --gray-2: #191919; --gray-3: #222222; --gray-4: #2a2a2a;
+  --gray-5: #313131; --gray-6: #3a3a3a; --gray-7: #484848; --gray-8: #606060;
+  --gray-9: #6e6e6e; --gray-10: #7b7b7b; --gray-11: #b4b4b4; --gray-12: #eeeeee;
+  --gray-a2: #ffffff09; --gray-a3: #ffffff12; --gray-a4: #ffffff1b;
+  --gray-a5: #ffffff22; --gray-a6: #ffffff2c; --gray-a7: #ffffff3b;
+  --gray-a8: #ffffff55;
+  --indigo-9: #3e63dd; --indigo-10: #5472e4; --indigo-11: #9eb1ff;
+  --tomato-9: #e54d2e; --tomato-10: #ec6142; --tomato-11: #ff977d;
+  --green-11: #63d489;
+  --red-11: #ff977d;
+  --panel-solid: var(--gray-2);
+  --bg: var(--gray-1);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.4);
+  --shadow-palette: 0 16px 70px rgba(0, 0, 0, 0.22), 0 4px 16px rgba(0, 0, 0, 0.12);
+  --font: "InterV", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: "JBMonoV", "JetBrains Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--gray-12);
+  font-family: var(--font);
+  font-size: 14px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+svg { display: block; flex-shrink: 0; }
+button { font-family: inherit; }
+
+/* ============================================================
+   App shell backdrop (sidebar + topbar + panels), used dimmed
+   behind every dialog and undimmed for the sidebar state.
+   ============================================================ */
+#shell { display: flex; height: 100vh; }
+
+.sidebar {
+  background: var(--gray-2);
+  border-right: 1px solid var(--gray-a5);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 240px;
+}
+.win-controls {
+  align-items: center; display: flex; flex-shrink: 0;
+  height: 40px; justify-content: flex-end; padding-right: 8px;
+}
+.nav-group { display: flex; flex-direction: column; flex-shrink: 0; gap: 2px; padding: 8px; }
+.nav-item {
+  align-items: center; background: transparent; border: none; border-radius: 4px;
+  color: var(--gray-12); cursor: pointer; display: flex; font-size: 14px; gap: 8px;
+  padding: 4px 8px; text-align: left; width: 100%;
+}
+.nav-item svg { color: var(--gray-11); }
+.nav-item:hover { background: var(--gray-a3); }
+.nav-item.hovered { background: var(--gray-a3); }
+.repo-list { flex-grow: 1; min-height: 0; overflow: hidden; padding: 4px 8px; }
+.repo-header {
+  align-items: center; border-radius: 4px; color: var(--gray-12); display: flex;
+  font-size: 14px; font-weight: 500; gap: 4px; min-height: 28px; padding: 0 8px;
+}
+.repo-header svg { color: var(--gray-10); }
+.repo-header .spacer { flex: 1; }
+.ws-row {
+  align-items: center; border-radius: 4px; color: var(--gray-11); display: flex;
+  font-size: 14px; gap: 8px; min-height: 28px; padding: 0 8px 0 24px;
+}
+.ws-row.active { background: var(--gray-a3); }
+.ws-dot { background: #0090ff; border-radius: 50%; height: 6px; width: 6px; }
+.ws-dot.idle { background: var(--gray-7); }
+.version-row { color: var(--gray-9); font-size: 11px; padding: 4px 16px 10px; }
+
+.main { background: var(--gray-2); display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.topbar {
+  align-items: center; display: flex; flex-shrink: 0; gap: 8px;
+  height: 40px; padding: 0 12px;
+}
+.topbar .chip-btn {
+  align-items: center; border: 1px solid var(--gray-a4); border-radius: 4px;
+  color: var(--gray-11); display: flex; height: 24px; justify-content: center; width: 24px;
+}
+.topbar .branch { align-items: center; color: var(--gray-11); display: flex; font-family: var(--mono); font-size: 12px; gap: 6px; }
+.topbar .branch .arrow { color: var(--gray-8); }
+.topbar .spacer { flex: 1; }
+.topbar .diffstat { align-items: center; color: var(--gray-10); display: flex; font-family: var(--mono); font-size: 12px; gap: 6px; }
+.plus { color: var(--green-11); }
+.minus { color: var(--red-11); }
+
+.panels { display: flex; flex: 1; min-height: 0; }
+.section-left {
+  border-right: 1px solid var(--gray-a5); display: flex; flex-direction: column;
+  flex-shrink: 0; width: 237px;
+}
+.tabbar {
+  align-items: center; border-bottom: 1px solid var(--gray-a5); display: flex;
+  flex-shrink: 0; gap: 2px; height: 36px; padding: 0 6px;
+}
+.tab {
+  align-items: center; border-radius: 4px; color: var(--gray-10); display: flex;
+  font-size: 13px; gap: 6px; padding: 4px 8px;
+}
+.tab.active { background: var(--gray-a3); color: var(--gray-12); }
+.tab .x { color: var(--gray-8); font-size: 11px; }
+.tab .dot { background: #35a06c; border-radius: 50%; height: 6px; width: 6px; }
+.tabbar .spacer { flex: 1; }
+.tabbar .icon { color: var(--gray-9); padding: 0 4px; }
+.tree { color: var(--gray-11); display: flex; flex-direction: column; font-size: 13px; gap: 2px; padding: 8px; }
+.tree .row { align-items: center; border-radius: 4px; display: flex; gap: 6px; padding: 3px 6px; }
+.tree .row svg { color: var(--gray-9); }
+.tree .searchbox {
+  align-items: center; border: 1px solid var(--gray-a4); border-radius: 4px;
+  color: var(--gray-9); display: flex; font-size: 12px; gap: 6px; margin-bottom: 6px; padding: 4px 8px;
+}
+.section-center { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.chat { display: flex; flex: 1; flex-direction: column; gap: 16px; overflow: hidden; padding: 20px 10%; }
+.bubble {
+  background: var(--gray-a3); border-radius: 8px; color: var(--gray-12);
+  font-size: 14px; line-height: 1.5; padding: 12px 14px;
+}
+.bubble .time { color: var(--gray-9); display: block; font-size: 12px; margin-top: 6px; }
+.agent-md { color: var(--gray-11); display: flex; flex-direction: column; font-size: 14px; gap: 10px; line-height: 1.55; }
+.agent-md .meta { color: var(--gray-9); font-family: var(--mono); font-size: 11px; }
+.agent-md b { color: var(--gray-12); }
+.composer-wrap { flex-shrink: 0; padding: 0 10% 6px; }
+.composer {
+  background: var(--gray-1); border: 1px solid var(--gray-a5); border-radius: 10px;
+  display: flex; flex-direction: column; gap: 26px; padding: 12px;
+}
+.composer .ph { color: var(--gray-9); font-size: 14px; }
+.composer .row { align-items: center; display: flex; gap: 10px; }
+.composer .row .spacer { flex: 1; }
+.composer .row svg { color: var(--gray-10); }
+.composer .model { align-items: center; color: var(--gray-11); display: flex; font-size: 13px; gap: 4px; }
+.composer .send {
+  align-items: center; background: var(--gray-a4); border-radius: 6px;
+  color: var(--gray-11); display: flex; height: 26px; justify-content: center; width: 26px;
+}
+.composer-hints { color: var(--gray-8); display: flex; font-size: 11px; justify-content: space-between; padding: 6px 2px 0; }
+
+/* ============================================================
+   Overlay + dialog positioning (PaletteDialog shell semantics)
+   ============================================================ */
+.overlay { display: none; inset: 0; position: fixed; z-index: 1000; }
+.pal {
+  background: var(--panel-solid);
+  border: 1px solid var(--gray-a5);
+  border-radius: 8px;
+  box-shadow: var(--shadow-xl);
+  display: none;
+  flex-direction: column;
+  left: 50%;
+  max-height: min(80vh, 640px);
+  overflow: hidden;
+  position: fixed;
+  top: 14%;
+  transform: translateX(-50%);
+  width: min(720px, 92vw);
+  z-index: 1001;
+}
+
+/* Palette header: borderless input, 18px, edge-to-edge (Raycast style) */
+.pal-head { align-items: center; display: flex; flex-shrink: 0; gap: 12px; padding: 16px 24px; }
+.pal-input { color: var(--gray-12); flex: 1; font-size: 18px; font-weight: 400; line-height: 24px; padding-left: 4px; }
+.pal-input .caret {
+  animation: blink 1.1s steps(1) infinite;
+  border-left: 1.5px solid var(--gray-12);
+  display: inline-block; height: 20px; margin-left: 1px; vertical-align: text-bottom;
+}
+@keyframes blink { 50% { opacity: 0; } }
+.pal-input.placeholder { color: var(--gray-9); }
+.pal-divider { background: var(--gray-a4); flex-shrink: 0; height: 1px; }
+
+/* List + groups + rows — mirrors CommandPalette.module.scss */
+.pal-list { flex: 1; min-height: 0; overflow: hidden auto; padding: 8px 8px 12px; }
+.grp { margin-bottom: 8px; }
+.grp:last-child { margin-bottom: 0; }
+.grp-h { color: var(--gray-10); font-size: 12px; font-weight: 400; padding: 12px 12px 4px; }
+.row {
+  align-items: center; border-radius: 6px; color: var(--gray-12); cursor: pointer;
+  display: flex; font-size: 14px; gap: 12px; line-height: 1.35; padding: 8px 12px;
+  user-select: none;
+}
+.row:hover { background: var(--gray-a3); }
+.row.sel { background: var(--gray-a4); }
+.row-ico { align-items: center; color: var(--gray-11); display: flex; justify-content: center; width: 18px; }
+.row-body { align-items: baseline; display: flex; flex: 1; gap: 8px; min-width: 0; }
+.row-title { color: var(--gray-12); flex-shrink: 0; font-weight: 400; white-space: nowrap; }
+.row-sub { color: var(--gray-10); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-trail {
+  align-items: center; color: var(--gray-10); display: flex; flex-shrink: 0;
+  font-size: 12px; gap: 8px; justify-content: flex-end; min-width: 40px;
+}
+.row.sel .row-trail { color: var(--gray-11); }
+.row-trail kbd { font-family: inherit; font-size: 12px; font-weight: 400; }
+.row-trail .marker { align-items: center; display: flex; gap: 4px; }
+.row-trail .marker svg { color: var(--gray-10); }
+.row.sel .row-trail .marker svg { color: var(--gray-11); }
+.row-trail .chev { color: var(--gray-9); }
+
+/* Hover/selection-revealed per-row actions (rename / duplicate / …) */
+/* Negative vertical margin keeps the 24px buttons from inflating the 35px row. */
+.row-actions { align-items: center; display: flex; gap: 2px; margin: -4px 0; }
+.row-actions .act {
+  align-items: center; background: transparent; border: none; border-radius: 4px;
+  color: var(--gray-10); cursor: pointer; display: flex; height: 24px;
+  justify-content: center; width: 24px;
+}
+.row-actions .act:hover { background: var(--gray-a4); color: var(--gray-12); }
+.row-actions .act.danger:hover { color: var(--tomato-10); }
+
+/* Footer — quiet helper copy + kbd hints (NewWorkspaceForm footer language) */
+.pal-foot {
+  align-items: center; border-top: 1px solid var(--gray-a3); display: flex;
+  flex-shrink: 0; gap: 12px; justify-content: space-between; padding: 10px 24px;
+}
+.foot-copy { align-items: center; color: var(--gray-9); display: flex; font-size: 12px; gap: 6px; }
+.foot-copy svg { color: var(--gray-9); }
+.foot-hints { align-items: center; color: var(--gray-8); display: flex; flex-shrink: 0; font-size: 11px; gap: 14px; }
+.foot-hints kbd { color: var(--gray-8); font-family: inherit; font-size: 11px; }
+
+/* ============================================================
+   Switcher bottom bar (Raycast-style) + Actions popover (⌘K)
+   ============================================================ */
+.bar {
+  align-items: center; border-top: 1px solid var(--gray-a3); display: flex; flex-shrink: 0;
+  gap: 12px; height: 44px; justify-content: space-between; padding: 0 12px 0 16px;
+}
+.bar-left { align-items: center; color: var(--gray-10); display: flex; font-size: 12px; gap: 8px; min-width: 0; }
+.bar-right { align-items: center; display: flex; flex-shrink: 0; gap: 2px; }
+.bar-btn {
+  align-items: center; border-radius: 4px; color: var(--gray-11); cursor: pointer;
+  display: flex; font-size: 12px; gap: 6px; padding: 4px 8px;
+}
+.bar-btn kbd { color: var(--gray-10); font-family: inherit; font-size: 12px; }
+.bar-btn svg { color: var(--gray-10); }
+.bar-btn:hover, .bar-btn.active { background: var(--gray-a4); }
+.bar-div { background: var(--gray-a4); height: 14px; margin: 0 6px; width: 1px; }
+
+.pal.overflow-visible { overflow: visible; }
+/* Give the switcher palette-like proportions (and room for the ⌘K popover). */
+#dlg-switcher .pal-list, #dlg-switcher-actions .pal-list { min-height: 330px; }
+.act-pop {
+  background: var(--panel-solid); border: 1px solid var(--gray-a5); border-radius: 8px;
+  bottom: 52px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.35);
+  display: flex; flex-direction: column; position: absolute; right: 10px; width: 300px; z-index: 5;
+}
+.act-list { display: flex; flex-direction: column; padding: 6px; }
+.act-row {
+  align-items: center; border-radius: 4px; color: var(--gray-12); cursor: pointer;
+  display: flex; font-size: 13px; gap: 10px; padding: 6px 8px; white-space: nowrap;
+}
+.act-row svg { color: var(--gray-11); }
+.act-row .sc { color: var(--gray-10); flex-shrink: 0; font-size: 12px; margin-left: auto; }
+.act-row:hover { background: var(--gray-a3); }
+.act-row.sel { background: var(--gray-a4); }
+.act-row.danger, .act-row.danger svg { color: var(--tomato-11, #ff977d); }
+.act-sep { background: var(--gray-a3); height: 1px; margin: 4px 6px; }
+.act-search { border-top: 1px solid var(--gray-a3); color: var(--gray-9); font-size: 13px; padding: 10px 14px; }
+/* Menu-row affordances: a right-aligned switch (tidy toggle), and the shortcut
+   row's current binding + a link-out glyph (assignment lives in Keyboard settings). */
+.act-row .toggle { margin-left: auto; }
+.act-row .kbd-cur {
+  align-items: center; color: var(--gray-10); display: flex; flex-shrink: 0;
+  font-size: 12px; gap: 6px; margin-left: auto;
+}
+.act-row .kbd-cur svg { color: var(--gray-9); }
+
+/* ============================================================
+   Save-current-as dialog (NewWorkspaceForm-style body + footer)
+   ============================================================ */
+.save-body { display: flex; flex-direction: column; gap: 14px; padding: 24px 24px 20px; }
+.save-title { color: var(--gray-12); font-size: 20px; font-weight: 600; letter-spacing: -0.005em; line-height: 1.25; }
+.save-title .caret {
+  animation: blink 1.1s steps(1) infinite;
+  border-left: 1.5px solid var(--gray-12);
+  display: inline-block; height: 22px; margin-left: 1px; vertical-align: text-bottom;
+}
+.save-cap { color: var(--gray-10); font-size: 13px; }
+
+/* Mini preview of what this layout captures. Solid boxes = saved panels; dashed
+   chips mark the fixed homes where default seeding creates an agent/terminal.
+   Bottom spans the full width; the box is centered near a real window's aspect. */
+.prev {
+  border: 1px solid var(--gray-a4); border-radius: 6px; display: grid; gap: 4px;
+  grid-template-areas: "l c r" "b b b"; grid-template-columns: 1fr 1.4fr 1fr;
+  grid-template-rows: 1fr 110px; height: 300px; margin: 0 auto; max-width: 560px;
+  padding: 4px; width: 100%;
+}
+.prev .cell { border-radius: 4px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: hidden; padding: 8px; }
+.prev .saved { background: var(--gray-a2); border: 1px solid var(--gray-a5); }
+.prev .stays { border: 1px dashed var(--gray-a5); }
+.prev .cell-label { color: var(--gray-9); font-size: 12px; line-height: 1.4; }
+.prev .cell-l { grid-area: l; }
+.prev .cell-c { grid-area: c; }
+.prev .cell-r { grid-area: r; }
+.prev .cell-b { align-items: center; flex-direction: row; gap: 8px; grid-area: b; }
+.prev .cell-tabs { display: flex; flex-wrap: wrap; gap: 3px; }
+.prev .ptab {
+  background: var(--gray-a3); border: 1px solid transparent; border-radius: 3px; color: var(--gray-11);
+  font-size: 12px; padding: 2px 8px; white-space: nowrap;
+}
+.prev .ptab.on { background: var(--gray-a5); color: var(--gray-12); }
+.prev .ptab.default { background: transparent; border: 1px dashed var(--gray-a6); color: var(--gray-10); }
+/* Tidy confirmation: panels the target layout doesn't include get a red border and
+   tint so they read as "closing" against the neutral tabs/chips that stay. */
+.prev .ptab.remove { background: var(--tomato-a3); border: 1px solid var(--tomato-11); color: var(--tomato-11); }
+.prev-legend { color: var(--gray-9); font-size: 12px; }
+
+/* Save dialog options — a clean label-left / control-right list (mirrors the
+   settings SettingRow), holding the inline keyboard-shortcut affordance, the
+   tidy-on-apply toggle, and set-as-default. */
+.opt-list { display: flex; flex-direction: column; }
+.opt-row2 {
+  align-items: center; border-top: 1px solid var(--gray-a3); display: flex; gap: 20px;
+  justify-content: space-between; padding: 12px 0;
+}
+.opt-row2:first-child { border-top: none; padding-top: 4px; }
+.opt2-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.opt2-title { color: var(--gray-12); font-size: 13px; }
+.opt2-sub { color: var(--gray-9); font-size: 12px; }
+.opt2-ctrl { align-items: center; display: flex; flex-shrink: 0; gap: 10px; }
+/* Shortcut control: the assigned combo shown as an accent chip beside the
+   Set/Update button. Reuses the app's HotkeyChip recording under the hood. */
+.sk-set { align-items: center; display: none; gap: 10px; }
+.sk-kbd {
+  background: var(--indigo-a5); border: 1px solid var(--indigo-a6); border-radius: 4px;
+  color: var(--indigo-11); font-family: inherit; font-size: 12px; padding: 3px 9px;
+}
+.btn.tiny { font-size: 12px; padding: 5px 10px; }
+.opt-note { color: var(--gray-9); font-size: 12px; margin-top: 10px; }
+
+/* ============================================================
+   Keyboard settings — the Layouts group inside Settings ▸ Keybindings.
+   Assigning a layout's shortcut lives here (no bespoke recording UI in the
+   switcher); the ⌘J "Keyboard shortcut" row deep-links to this section.
+   Mirrors KeybindingsSection: search + reset toolbar, group title, rows of
+   title/description + a HotkeyChip on the right.
+   ============================================================ */
+.kbd-body { display: flex; flex-direction: column; overflow: auto; padding: 24px 28px 28px; }
+.kbd-h1 { color: var(--gray-12); font-size: 20px; font-weight: 600; letter-spacing: -0.005em; }
+.kbd-desc { color: var(--gray-10); font-size: 13px; margin: 6px 0 20px; }
+.kbd-tools { align-items: center; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 20px; }
+.kbd-search {
+  background: var(--gray-a2); border: 1px solid var(--gray-a5); border-radius: 6px;
+  color: var(--gray-9); flex: 1; font-size: 13px; max-width: 300px; padding: 7px 10px;
+}
+.kbd-grp-title { color: var(--gray-11); font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.set-row {
+  align-items: center; border-top: 1px solid var(--gray-a3); display: flex; gap: 28px;
+  justify-content: space-between; padding: 14px 2px;
+}
+.set-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.set-title { color: var(--gray-12); font-size: 14px; font-weight: 500; }
+.set-desc { color: var(--gray-10); font-size: 13px; }
+/* HotkeyChip — set state (accent chip + clear) and idle state ("Click to set"). */
+.hk-set {
+  align-items: center; background: var(--indigo-a4); border-radius: 6px; color: var(--indigo-12);
+  display: flex; gap: 10px; height: 32px; justify-content: space-between; min-width: 104px; padding: 0 6px 0 12px;
+}
+.hk-set kbd { font-family: inherit; font-size: 13px; }
+.hk-set .hk-x { align-items: center; color: var(--indigo-11); cursor: pointer; display: flex; padding: 4px; }
+.hk-idle {
+  background: var(--gray-a3); border: none; border-radius: 6px; color: var(--gray-11);
+  cursor: pointer; font-size: 13px; height: 32px; padding: 0 14px;
+}
+
+/* Switch (Radix size-1-ish) */
+.switch { background: var(--gray-a6); border-radius: 999px; flex-shrink: 0; height: 14px; position: relative; width: 26px; }
+.switch::after { background: var(--gray-11); border-radius: 50%; content: ""; height: 10px; left: 2px; position: absolute; top: 2px; width: 10px; }
+.switch.on { background: var(--indigo-9); }
+.switch.on::after { background: white; left: auto; right: 2px; }
+.switch-label { align-items: center; color: var(--gray-9); cursor: pointer; display: inline-flex; font-size: 11px; gap: 6px; user-select: none; }
+
+/* Buttons (Radix size-2) */
+.btn {
+  align-items: center; border: none; border-radius: 4px; cursor: pointer; display: inline-flex;
+  font-size: 14px; font-weight: 500; gap: 6px; height: 32px; justify-content: center; padding: 0 12px;
+}
+.btn.primary { background: var(--indigo-9); color: white; }
+.btn.primary:hover { background: var(--indigo-10); }
+.btn.soft { background: var(--gray-a3); color: var(--gray-11); }
+.btn.soft:hover { background: var(--gray-a4); }
+.btn.danger { background: var(--tomato-9); color: white; }
+.btn.danger:hover { background: var(--tomato-10); }
+
+/* ============================================================
+   Tidy confirmation (Radix AlertDialog, size 3)
+   ============================================================ */
+.alert-center { align-items: center; display: none; inset: 0; justify-content: center; position: fixed; z-index: 1001; }
+.alert {
+  background: var(--panel-solid); border: 1px solid var(--gray-a4); border-radius: 12px;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.55); max-width: 420px; padding: 24px; width: 420px;
+}
+.alert h2 { color: var(--gray-12); font-size: 18px; font-weight: 700; letter-spacing: -0.005em; margin-bottom: 8px; }
+.alert p { color: var(--gray-11); font-size: 14px; line-height: 1.5; }
+.close-list { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 12px 0; }
+.close-list li {
+  align-items: center; background: var(--gray-a2); border-radius: 6px; color: var(--gray-12);
+  display: flex; font-size: 14px; gap: 10px; padding: 7px 10px;
+}
+.close-list li svg { color: var(--gray-10); }
+.close-list li .li-sub { color: var(--gray-9); font-size: 12px; }
+.alert .reassure { align-items: center; color: var(--gray-11); display: flex; font-size: 13px; gap: 7px; margin-top: 12px; }
+.alert .reassure svg { color: var(--gray-9); flex-shrink: 0; }
+/* Reusing the section-grid preview makes the dialog taller; widen it (~25%) so the
+   miniature keeps a window-like aspect and the tabs don't wrap tightly. */
+.alert.alert-wide { max-width: 525px; width: 525px; }
+.alert .prev-tidy { height: 210px; grid-template-rows: 1fr 78px; margin-top: 14px; max-width: none; }
+.alert-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+/* Footer splits the "don't show again" opt-out to the left, actions to the right. */
+.alert-foot { align-items: center; display: flex; gap: 16px; justify-content: space-between; margin-top: 20px; }
+.alert-foot .alert-actions { margin-top: 0; }
+.dont-show { align-items: center; color: var(--gray-11); cursor: pointer; display: inline-flex; font-size: 13px; gap: 8px; user-select: none; }
+.chk { align-items: center; background: var(--gray-a3); border: 1px solid var(--gray-a6); border-radius: 4px; display: inline-flex; flex-shrink: 0; height: 16px; justify-content: center; width: 16px; }
+.chk.on { background: var(--indigo-9); border-color: var(--indigo-9); }
+.chk.on::after { border: solid white; border-width: 0 2px 2px 0; content: ""; height: 8px; margin-top: -2px; transform: rotate(45deg); width: 4px; }
+
+/* ============================================================
+   State routing
+   ============================================================ */
+body[data-state="dialog"] .overlay,
+body[data-state="dialog-search"] .overlay,
+body[data-state="switcher"] .overlay,
+body[data-state="switcher-actions"] .overlay,
+body[data-state="context-menu"] .overlay,
+body[data-state="keyboard-settings"] .overlay,
+body[data-state="save"] .overlay,
+body[data-state="save-options"] .overlay { background: rgba(0, 0, 0, 0.7); display: block; }
+body[data-state="switcher"] #dlg-switcher { display: flex; }
+body[data-state="switcher-actions"] #dlg-switcher-actions,
+body[data-state="context-menu"] #dlg-switcher-actions { display: flex; }
+body[data-state="keyboard-settings"] #dlg-keyboard { display: flex; }
+
+/* Right-click a layout row → the same ⌘J menu, anchored at the row instead of
+   the bar. Shows the menu is both a keyboard action and a context menu. */
+body[data-state="context-menu"] .act-pop { bottom: auto; right: auto; left: 330px; top: 150px; }
+body[data-state="context-menu"] .bar-btn.active { background: transparent; }
+body[data-state="palette"] .overlay { background: rgba(0, 0, 0, 0.4); display: block; }
+body[data-state="tidy"] .overlay { background: rgba(0, 0, 0, 0.6); display: block; }
+
+body[data-state="dialog"] #dlg-layouts { display: flex; }
+body[data-state="dialog-search"] #dlg-layouts-search { display: flex; }
+body[data-state="palette"] #dlg-palette { display: flex; box-shadow: var(--shadow-palette); max-height: min(72vh, 560px); }
+body[data-state="save"] #dlg-save { display: flex; }
+body[data-state="save-options"] #dlg-save-options,
+body[data-state="save-shortcut-set"] #dlg-save-options { display: flex; }
+body[data-state="save-shortcut-set"] .overlay { background: rgba(0, 0, 0, 0.7); display: block; }
+/* Shortcut control swaps between "Set…" (no binding) and combo + "Update…". */
+body[data-state="save-shortcut-set"] .sk-set { display: inline-flex; }
+body[data-state="save-shortcut-set"] .sk-idle { display: none; }
+body[data-state="tidy"] #dlg-tidy { display: flex; }
+body[data-state="sidebar"] .nav-layouts { background: var(--gray-a3); }
+
+/* Mock chrome (hidden with ?bare=1) */
+#chrome {
+  align-items: center; background: var(--gray-3); border: 1px solid var(--gray-a5);
+  border-radius: 999px; bottom: 14px; box-shadow: var(--shadow-xl); display: flex; gap: 2px;
+  left: 50%; padding: 4px; position: fixed; transform: translateX(-50%); z-index: 2000;
+}
+#chrome a { border-radius: 999px; color: var(--gray-11); font-size: 12px; padding: 4px 10px; text-decoration: none; }
+#chrome a:hover { background: var(--gray-a3); color: var(--gray-12); }
+#chrome a.on { background: var(--gray-a4); color: var(--gray-12); }
+body.bare #chrome { display: none; }
+</style>
+</head>
+<body data-state="dialog">
+
+<!-- ═══════════════ App shell backdrop ═══════════════ -->
+<div id="shell">
+  <aside class="sidebar">
+    <div class="win-controls">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7b7b7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
+    </div>
+    <nav class="nav-group">
+      <button class="nav-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</button>
+      <button class="nav-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>Commands</button>
+      <button class="nav-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New Workspace</button>
+    </nav>
+    <div class="repo-list">
+      <div class="repo-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        sculptor
+        <span class="spacer"></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7b7b7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+      </div>
+      <div class="ws-row active"><span class="ws-dot"></span>Enlightened Squid</div>
+      <div class="ws-row"><span class="ws-dot idle"></span>Layouts polish</div>
+      <div class="ws-row"><span class="ws-dot idle"></span>Sidebar drag fix</div>
+      <div class="repo-header" style="margin-top: 4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        docs-site
+        <span class="spacer"></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7b7b7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+      </div>
+    </div>
+    <nav class="nav-group">
+      <button class="nav-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Add repo</button>
+      <button class="nav-item nav-layouts"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>Layouts</button>
+      <button class="nav-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Settings</button>
+      <button class="nav-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg>Report a bug</button>
+    </nav>
+    <div class="version-row">0.42.0.dev0</div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="chip-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></span>
+      <span class="branch">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+        imbue/enlightened-squid <span class="arrow">→</span> main
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7b7b7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+      <span class="spacer"></span>
+      <span class="diffstat"><span class="plus">+4</span><span class="minus">-0</span><span>· 2 files</span></span>
+      <span class="chip-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg></span>
+    </div>
+    <div class="panels">
+      <div class="section-left">
+        <div class="tabbar">
+          <span class="tab active">Files <span class="x">×</span></span>
+          <span class="tab">Changes <span class="x">×</span></span>
+          <span class="tab">Commits <span class="x">×</span></span>
+          <span class="spacer"></span>
+          <span class="icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span>
+        </div>
+        <div class="tree">
+          <div class="searchbox"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search files…</div>
+          <div class="row"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>sculptor</div>
+          <div class="row"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>docs</div>
+          <div class="row" style="padding-left: 24px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>justfile</div>
+          <div class="row" style="padding-left: 24px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>README.md</div>
+        </div>
+      </div>
+      <div class="section-center">
+        <div class="tabbar">
+          <span class="tab active"><span class="dot"></span>Claude 1 <span class="x">×</span></span>
+          <span class="icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span>
+          <span class="spacer"></span>
+          <span class="icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="m21 3-9 9"/><path d="M9 21H3v-6"/><path d="m3 21 9-9"/></svg></span>
+        </div>
+        <div class="chat">
+          <div class="bubble">/sculptor:help I just set up Sculptor for the first time. What should I know to get started?<span class="time">11:18 PM</span></div>
+          <div class="agent-md">
+            <div>Welcome to Sculptor! 🎉 Here's the lay of the land.</div>
+            <div><b>Sculptor</b> runs coding agents in workspaces — isolated copies of your repository, so agents can work in parallel without stepping on each other.</div>
+            <div>Three concepts to know: <b>Workspaces</b>, <b>Agents</b>, and <b>Changes</b>.</div>
+            <div class="meta">25.8s · 8,863 tokens · 3% context</div>
+          </div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <span class="ph">Enter a prompt...</span>
+            <div class="row">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+              <span class="spacer"></span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="6" height="6" x="3" y="5" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              <span class="model">Opus (1M) <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7b7b7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+              <span class="send"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+            </div>
+          </div>
+          <div class="composer-hints"><span>↑↓ navigate prompts</span><span>⌘↵ to send message</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay"></div>
+
+<!-- ═══════════════ 0) Layouts switcher (⌘⇧L) — list + Raycast bar ═══════════════ -->
+<section class="pal" id="dlg-switcher">
+  <header class="pal-head"><span class="pal-input placeholder">Search layouts…<span class="caret"></span></span></header>
+  <div class="pal-divider"></div>
+  <div class="pal-list">
+    <div class="grp">
+      <div class="grp-h">Layouts</div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M9 15h12"/></svg></span>
+        <span class="row-body"><span class="row-title">System Default</span><span class="row-sub">Files, Changes &amp; Commits · Terminal below</span></span>
+        <span class="row-trail"><span class="marker"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Default</span></span>
+      </div>
+      <div class="row sel">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></span>
+        <span class="row-body"><span class="row-title">Focused</span><span class="row-sub">Just the agent, full width</span></span>
+        <span class="row-trail"><kbd>⌥1</kbd></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg></span>
+        <span class="row-body"><span class="row-title">Review</span><span class="row-sub">Changes &amp; Commits left · Browser right</span></span>
+        <span class="row-trail"><span class="marker">Current</span><kbd>⌥2</kbd></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 13h18"/><path d="M15 3v10"/></svg></span>
+        <span class="row-body"><span class="row-title">Debugging</span><span class="row-sub">Wide terminal · Browser right</span></span>
+        <span class="row-trail"></span>
+      </div>
+    </div>
+  </div>
+  <footer class="bar">
+    <span class="bar-left">
+      <span class="bar-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        Save current arrangement… <kbd>⌘S</kbd>
+      </span>
+    </span>
+    <span class="bar-right">
+      <span class="bar-btn">Apply <kbd>↵</kbd></span>
+      <span class="bar-div"></span>
+      <span class="bar-btn">More options <kbd>⌘J</kbd></span>
+    </span>
+  </footer>
+</section>
+
+<!-- ═══════════════ 0b) Switcher with Actions popover open (⌘K) ═══════════════ -->
+<section class="pal overflow-visible" id="dlg-switcher-actions">
+  <header class="pal-head"><span class="pal-input placeholder">Search layouts…</span></header>
+  <div class="pal-divider"></div>
+  <div class="pal-list">
+    <div class="grp">
+      <div class="grp-h">Layouts</div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M9 15h12"/></svg></span>
+        <span class="row-body"><span class="row-title">System Default</span><span class="row-sub">Files, Changes &amp; Commits · Terminal below</span></span>
+        <span class="row-trail"><span class="marker"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Default</span></span>
+      </div>
+      <div class="row sel">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></span>
+        <span class="row-body"><span class="row-title">Focused</span><span class="row-sub">Just the agent, full width</span></span>
+        <span class="row-trail"><kbd>⌥1</kbd></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg></span>
+        <span class="row-body"><span class="row-title">Review</span><span class="row-sub">Changes &amp; Commits left · Browser right</span></span>
+        <span class="row-trail"><span class="marker">Current</span><kbd>⌥2</kbd></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 13h18"/><path d="M15 3v10"/></svg></span>
+        <span class="row-body"><span class="row-title">Debugging</span><span class="row-sub">Wide terminal · Browser right</span></span>
+        <span class="row-trail"></span>
+      </div>
+    </div>
+  </div>
+  <footer class="bar">
+    <span class="bar-left">
+      <span class="bar-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        Save current arrangement… <kbd>⌘S</kbd>
+      </span>
+    </span>
+    <span class="bar-right">
+      <span class="bar-btn">Apply <kbd>↵</kbd></span>
+      <span class="bar-div"></span>
+      <span class="bar-btn active">More options <kbd>⌘J</kbd></span>
+    </span>
+  </footer>
+  <div class="act-pop">
+    <div class="act-list">
+      <div class="act-row sel">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        Apply<span class="sc">↵</span>
+      </div>
+      <div class="act-row" id="act-tidy">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg>
+        Tidy panels when applying<span class="switch on toggle"></span>
+      </div>
+      <div class="act-sep"></div>
+      <div class="act-row" id="act-shortcut">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg>
+        Keyboard shortcut<span class="sc kbd-cur"><kbd>⌥1</kbd><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg></span>
+      </div>
+      <div class="act-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Set as default
+      </div>
+      <div class="act-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+        Rename
+      </div>
+      <div class="act-row danger">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        Delete<span class="sc">⌘⌫</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 1) Layouts dialog (⌘⇧L) — v1, superseded by the switcher ═══════════════ -->
+<section class="pal" id="dlg-layouts">
+  <header class="pal-head"><span class="pal-input placeholder">Search layouts…<span class="caret"></span></span></header>
+  <div class="pal-divider"></div>
+  <div class="pal-list">
+    <div class="grp">
+      <div class="grp-h">Layouts</div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M9 15h12"/></svg></span>
+        <span class="row-body"><span class="row-title">System Default</span><span class="row-sub">Files, Changes &amp; Commits · Terminal below</span></span>
+        <span class="row-trail"><span class="marker"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Default</span></span>
+      </div>
+      <div class="row sel">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></span>
+        <span class="row-body"><span class="row-title">Focused</span><span class="row-sub">Just the agent, full width</span></span>
+        <span class="row-trail">
+          <span class="row-actions">
+            <button class="act" title="Set as default"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+            <button class="act" title="Rename"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+            <button class="act" title="Duplicate"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            <button class="act danger" title="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+          </span>
+        </span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg></span>
+        <span class="row-body"><span class="row-title">Review</span><span class="row-sub">Changes &amp; Commits left · Browser right</span></span>
+        <span class="row-trail"><span class="marker"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Current · edited</span></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 13h18"/><path d="M15 3v10"/></svg></span>
+        <span class="row-body"><span class="row-title">Debugging</span><span class="row-sub">Wide terminal · Browser right</span></span>
+        <span class="row-trail"></span>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="grp-h">Actions</div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span>
+        <span class="row-body"><span class="row-title">Save current arrangement as…</span><span class="row-sub">New layout from this workspace</span></span>
+        <span class="row-trail"></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg></span>
+        <span class="row-body"><span class="row-title">Tidy workspace</span><span class="row-sub">Close panels not in this layout</span></span>
+        <span class="row-trail"><span class="marker">2 panels</span></span>
+      </div>
+    </div>
+  </div>
+  <footer class="pal-foot">
+    <span class="foot-copy">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      Layouts arrange your panels — your agents and terminals stay put.
+    </span>
+    <span class="foot-hints"><span><kbd>↑↓</kbd> Navigate</span><span><kbd>↵</kbd> Apply</span></span>
+  </footer>
+</section>
+
+<!-- ═══════════════ 2) Layouts dialog, searching ═══════════════ -->
+<section class="pal" id="dlg-layouts-search">
+  <header class="pal-head"><span class="pal-input">de<span class="caret"></span></span></header>
+  <div class="pal-divider"></div>
+  <div class="pal-list">
+    <div class="grp">
+      <div class="grp-h">Layouts</div>
+      <div class="row sel">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M9 15h12"/></svg></span>
+        <span class="row-body"><span class="row-title">System Default</span><span class="row-sub">Files, Changes &amp; Commits · Terminal below</span></span>
+        <span class="row-trail"><span class="marker"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Default</span></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 13h18"/><path d="M15 3v10"/></svg></span>
+        <span class="row-body"><span class="row-title">Debugging</span><span class="row-sub">Wide terminal · Browser right</span></span>
+        <span class="row-trail"><span class="marker">Layout</span></span>
+      </div>
+    </div>
+  </div>
+  <footer class="pal-foot">
+    <span class="foot-copy">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      Layouts arrange your panels — your agents and terminals stay put.
+    </span>
+    <span class="foot-hints"><span><kbd>↑↓</kbd> Navigate</span><span><kbd>↵</kbd> Apply</span></span>
+  </footer>
+</section>
+
+<!-- ═══════════════ 3) Command palette quick-switch ═══════════════ -->
+<section class="pal" id="dlg-palette">
+  <header class="pal-head"><span class="pal-input">layout<span class="caret"></span></span></header>
+  <div class="pal-divider"></div>
+  <div class="pal-list">
+    <div class="grp">
+      <div class="grp-h">Layouts</div>
+      <div class="row sel">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg></span>
+        <span class="row-body"><span class="row-title">Switch to Focused</span><span class="row-sub">Just the agent, full width</span></span>
+        <span class="row-trail"><span class="marker">Layouts</span></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg></span>
+        <span class="row-body"><span class="row-title">Switch to Review</span><span class="row-sub">Current layout · edited</span></span>
+        <span class="row-trail"><span class="marker">Layouts</span></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 13h18"/><path d="M15 3v10"/></svg></span>
+        <span class="row-body"><span class="row-title">Switch to Debugging</span><span class="row-sub">Wide terminal · Browser right</span></span>
+        <span class="row-trail"><span class="marker">Layouts</span></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M9 15h12"/></svg></span>
+        <span class="row-body"><span class="row-title">Switch to System Default</span><span class="row-sub">Reset to the default layout</span></span>
+        <span class="row-trail"><span class="marker">Layouts</span></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span>
+        <span class="row-body"><span class="row-title">Save current arrangement as layout…</span></span>
+        <span class="row-trail"><span class="marker">Layouts</span></span>
+      </div>
+      <div class="row">
+        <span class="row-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></span>
+        <span class="row-body"><span class="row-title">Layouts…</span><span class="row-sub">Switch, save, and manage layouts</span></span>
+        <span class="row-trail"><kbd>⌘⇧L</kbd></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 4) Save current arrangement as… ═══════════════ -->
+<section class="pal" id="dlg-save">
+  <div class="save-body">
+    <div class="save-title">Planning<span class="caret"></span></div>
+    <div class="save-cap">Saves this workspace&rsquo;s panels and space as a reusable layout.</div>
+    <div class="prev">
+      <div class="cell cell-l saved">
+        <div class="cell-label">Left</div>
+        <div class="cell-tabs"><span class="ptab on">Files</span><span class="ptab">Changes</span><span class="ptab">Commits</span></div>
+      </div>
+      <div class="cell cell-c stays">
+        <div class="cell-label">Center</div>
+        <div class="cell-tabs"><span class="ptab default">Agent default</span></div>
+      </div>
+      <div class="cell cell-r saved">
+        <div class="cell-label">Right</div>
+        <div class="cell-tabs"><span class="ptab on">Browser</span></div>
+      </div>
+      <div class="cell cell-b stays">
+        <div class="cell-label">Bottom</div>
+        <div class="cell-tabs"><span class="ptab default">Terminal default</span></div>
+      </div>
+    </div>
+    <div class="prev-legend">An agent is created by default in the center section. A terminal is created by default in the bottom section.</div>
+  </div>
+  <footer class="pal-foot" style="padding: 16px 24px;">
+    <label class="switch-label"><span class="switch on"></span>Set as default for new workspaces</label>
+    <span style="align-items: center; display: flex; gap: 12px;">
+      <span class="foot-hints"><span><kbd>⌘↵</kbd> to save</span></span>
+      <button class="btn primary">Save layout</button>
+    </span>
+  </footer>
+</section>
+
+<!-- ═══════════════ 4b) Save-as dialog — tidy-on-apply proposal ═══════════════ -->
+<section class="pal" id="dlg-save-options">
+  <div class="save-body">
+    <div class="save-title">Planning<span class="caret"></span></div>
+    <div class="prev">
+      <div class="cell cell-l saved">
+        <div class="cell-label">Left</div>
+        <div class="cell-tabs"><span class="ptab on">Files</span><span class="ptab">Changes</span><span class="ptab">Commits</span></div>
+      </div>
+      <div class="cell cell-c stays">
+        <div class="cell-label">Center</div>
+        <div class="cell-tabs"><span class="ptab default">Agent default</span></div>
+      </div>
+      <div class="cell cell-r saved">
+        <div class="cell-label">Right</div>
+        <div class="cell-tabs"><span class="ptab on">Browser</span></div>
+      </div>
+      <div class="cell cell-b stays">
+        <div class="cell-label">Bottom</div>
+        <div class="cell-tabs"><span class="ptab default">Terminal default</span></div>
+      </div>
+    </div>
+    <div class="prev-legend">An agent is created by default in the center section. A terminal is created by default in the bottom section.</div>
+    <div class="opt-list">
+      <div class="opt-row2">
+        <span class="opt2-label"><span class="opt2-title">Keyboard shortcut</span><span class="opt2-sub">Apply this layout with a keypress.</span></span>
+        <span class="opt2-ctrl">
+          <span class="sk-set"><span class="sk-kbd">⌥1</span><button class="btn soft tiny">Update keyboard shortcut</button></span>
+          <button class="btn soft tiny sk-idle">Set keyboard shortcut</button>
+        </span>
+      </div>
+      <div class="opt-row2">
+        <span class="opt2-label"><span class="opt2-title">Tidy panels when applying</span><span class="opt2-sub">Closes panels this layout doesn&rsquo;t include — never agents or terminals.</span></span>
+        <span class="opt2-ctrl"><span class="switch on"></span></span>
+      </div>
+      <div class="opt-row2">
+        <span class="opt2-label"><span class="opt2-title">Set as default for new workspaces</span></span>
+        <span class="opt2-ctrl"><span class="switch"></span></span>
+      </div>
+    </div>
+    <div class="opt-note">Change or clear layout shortcuts anytime in Settings ▸ Keybindings.</div>
+  </div>
+  <footer class="pal-foot" style="justify-content: flex-end; padding: 16px 24px;">
+    <span style="align-items: center; display: flex; gap: 12px;">
+      <span class="foot-hints"><span><kbd>⌘↵</kbd> to save</span></span>
+      <button class="btn primary">Save layout</button>
+    </span>
+  </footer>
+</section>
+
+<!-- ═══════════════ 4c) Keyboard settings — the Layouts group ═══════════════ -->
+<section class="pal" id="dlg-keyboard" style="max-height: min(80vh, 620px);">
+  <div class="kbd-body">
+    <div class="kbd-h1">Keybindings</div>
+    <div class="kbd-desc">Customize keybindings for Sculptor.</div>
+    <div class="kbd-tools">
+      <span class="kbd-search">layout</span>
+      <button class="btn soft">Reset all to defaults</button>
+    </div>
+    <div class="kbd-grp-title">Layouts</div>
+    <div class="set-row">
+      <span class="set-label"><span class="set-title">Apply “Focused” layout</span><span class="set-desc">Switch this workspace to the Focused layout</span></span>
+      <span class="hk-set"><kbd>⌥1</kbd><span class="hk-x"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></span>
+    </div>
+    <div class="set-row">
+      <span class="set-label"><span class="set-title">Apply “Review” layout</span><span class="set-desc">Switch this workspace to the Review layout</span></span>
+      <span class="hk-set"><kbd>⌥2</kbd><span class="hk-x"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></span>
+    </div>
+    <div class="set-row">
+      <span class="set-label"><span class="set-title">Apply “Debugging” layout</span><span class="set-desc">Switch this workspace to the Debugging layout</span></span>
+      <button class="hk-idle">Click to set</button>
+    </div>
+    <div class="set-row">
+      <span class="set-label"><span class="set-title">Apply System Default layout</span><span class="set-desc">Switch this workspace to the System Default layout</span></span>
+      <button class="hk-idle">Click to set</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 5) Tidy confirmation ═══════════════ -->
+<div class="alert-center" id="dlg-tidy">
+  <div class="alert alert-wide">
+    <h2>Close 4 panels?</h2>
+    <p>Tidying matches this workspace to <b style="color: var(--gray-12); font-weight: 500;">Focused</b>. Panels the layout doesn&rsquo;t include will close:</p>
+    <div class="prev prev-tidy">
+      <div class="cell cell-l saved">
+        <div class="cell-label">Left</div>
+        <div class="cell-tabs"><span class="ptab remove">Files</span><span class="ptab remove">Changes</span><span class="ptab remove">Commits</span></div>
+      </div>
+      <div class="cell cell-c stays">
+        <div class="cell-label">Center</div>
+        <div class="cell-tabs"><span class="ptab default">Agent</span></div>
+      </div>
+      <div class="cell cell-r saved">
+        <div class="cell-label">Right</div>
+        <div class="cell-tabs"><span class="ptab remove">Browser</span></div>
+      </div>
+      <div class="cell cell-b stays">
+        <div class="cell-label">Bottom</div>
+        <div class="cell-tabs"><span class="ptab default">Terminal</span></div>
+      </div>
+    </div>
+    <p class="reassure">Your agents and terminals are never closed.</p>
+    <div class="alert-foot">
+      <label class="dont-show"><span class="chk on"></span>Don&rsquo;t show this again</label>
+      <div class="alert-actions">
+        <button class="btn soft">Cancel</button>
+        <button class="btn danger">Close 4 panels</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ Mock chrome ═══════════════ -->
+<nav id="chrome">
+  <a href="?state=switcher">Switcher</a>
+  <a href="?state=switcher-actions">Actions ⌘J</a>
+  <a href="?state=context-menu">Right-click</a>
+  <a href="?state=keyboard-settings">Keyboard settings</a>
+  <a href="?state=save">Save as…</a>
+  <a href="?state=save-options">Save (no shortcut)</a>
+  <a href="?state=save-shortcut-set">Save (shortcut set)</a>
+  <a href="?state=tidy">Tidy</a>
+  <a href="?state=palette">Cmd+K</a>
+  <a href="?state=sidebar">Sidebar</a>
+  <a href="?state=dialog">v1</a>
+</nav>
+
+<script>
+const params = new URLSearchParams(location.search);
+const state = params.get("state") || "switcher";
+document.body.dataset.state = state;
+if (params.get("bare")) document.body.classList.add("bare");
+document.querySelectorAll("#chrome a").forEach((a) => {
+  if (new URLSearchParams(a.getAttribute("href").slice(1)).get("state") === state) a.classList.add("on");
+});
+</script>
+</body>
+</html>

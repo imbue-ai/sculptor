@@ -6,6 +6,7 @@ import type { KeybindingId } from "~/common/keybindings/types.ts";
 
 import { buildChatCommands } from "../builtinCommands/chat.ts";
 import { buildHelpCommands } from "../builtinCommands/help.ts";
+import { buildLayoutCommands } from "../builtinCommands/layouts.ts";
 import { buildNavigationCommands } from "../builtinCommands/navigation.ts";
 import { buildPanelCommands } from "../builtinCommands/panels.ts";
 import { buildSettingsCommands } from "../builtinCommands/settings.ts";
@@ -39,6 +40,8 @@ const makeRuntime = (): CommandRuntime =>
     store: getDefaultStore(),
     navigate: { toHome: noop, toSettings: vi.fn(), toWorkspace: vi.fn(), toAgent: vi.fn() },
     openNewWorkspaceModal: noop,
+    openLayoutsModal: noop,
+    openSaveLayoutModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
@@ -81,6 +84,7 @@ const collectStaticShortcuts = (): Array<KeybindingId> => {
     ...buildChatCommands(runtime),
     ...buildTerminalCommands(runtime),
     ...buildHelpCommands(runtime),
+    ...buildLayoutCommands(runtime),
   ];
   return cmds.flatMap((c) => (c.shortcut != null ? [c.shortcut] : []));
 };
@@ -113,7 +117,7 @@ const collectDescriptorShortcuts = (): Array<KeybindingId> => {
 
 describe("Palette shortcut resolution", () => {
   it("every shortcut id referenced by a palette command resolves to a real KEYBINDING_DEFINITIONS entry", () => {
-    // Coverage caveat: this walks the seven static builders, the
+    // Coverage caveat: this walks the eight static builders, the
     // workspace switcher dynamic provider, and the workspace/agent
     // action descriptors — every place a `shortcut: ...` literal lives
     // today. A new builder added to CommandRegistrations.tsx without

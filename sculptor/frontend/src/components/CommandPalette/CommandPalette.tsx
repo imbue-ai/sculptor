@@ -8,7 +8,8 @@ import { createElement, useCallback, useEffect, useMemo, useRef, useState } from
 
 import { ElementIds } from "../../api";
 import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
-import { formatShortcutForDisplay, shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
+import { shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
+import { ShortcutHint } from "../ShortcutHint.tsx";
 import { commandPaletteOpenAtom, commandPalettePendingAtom, commandPaletteSearchAtom } from "./atoms.ts";
 import styles from "./CommandPalette.module.scss";
 import { agentRenameTargetAtom, palettePendingRenameAtom, renamingWorkspaceIdAtom } from "./contextActions/atoms.ts";
@@ -40,25 +41,6 @@ const kindLabelForRow = (groupId: CommandGroupId, isSearching: boolean): string 
 // Tab, Backspace. We skip these in the window-level shortcut listener so
 // in-palette navigation isn't intercepted as a command shortcut.
 const CMDK_KEYS = new Set(["Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape", "Tab", "Backspace"]);
-
-/**
- * Render a keybinding hint as a single <kbd> with the platform-formatted
- * display string. We deliberately do NOT split into per-character <kbd>s:
- * the Mac modifier glyphs (⌘ ⇧ ⌥ ⌃) only render legibly when the system
- * font can lay them out as a single text run with kerning / ligature
- * lookups in play. Splitting per-character broke that, especially for
- * thin glyphs like ⇧ which then looked like a ghost. Same approach as
- * the chat input's `<KeyboardHint>`.
- */
-const ShortcutHint = ({ binding }: { binding: string }): ReactElement => {
-  const display = formatShortcutForDisplay(binding);
-  if (!display) return <></>;
-  return (
-    <kbd className={styles.itemShortcut} aria-label={`Shortcut: ${display}`}>
-      {display}
-    </kbd>
-  );
-};
 
 const PaletteRow = ({
   command,
@@ -128,7 +110,7 @@ const PaletteRow = ({
               </Badge>
             ) : null}
             {binding ? (
-              <ShortcutHint binding={binding} />
+              <ShortcutHint binding={binding} className={styles.itemShortcut} />
             ) : kind ? (
               <span className={styles.itemKind}>{kind}</span>
             ) : null}

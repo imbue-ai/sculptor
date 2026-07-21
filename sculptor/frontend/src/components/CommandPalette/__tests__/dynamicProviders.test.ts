@@ -8,14 +8,23 @@ import { projectAtomFamily, projectIdsAtom } from "../../../common/state/atoms/p
 import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
 import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
-import { EMPTY_WORKSPACE_LAYOUT } from "../../sections/persistence/types.ts";
+import { applyLayoutAtom } from "../../sections/layoutActions.ts";
+import type { CapturedLayout, SavedLayout } from "../../sections/persistence/types.ts";
+import {
+  DEFAULT_SECTION_SIZES,
+  EMPTY_WORKSPACE_LAYOUT,
+  SAVED_LAYOUT_VERSION,
+} from "../../sections/persistence/types.ts";
 import type { PanelDefinition } from "../../sections/registry/panelRegistry.ts";
 import { panelRegistryAtom } from "../../sections/registry/panelRegistry.ts";
+import { appliedLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "../../sections/savedLayoutAtoms.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../../sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../../sections/sectionTypes.ts";
+import { SYSTEM_LAYOUTS } from "../../sections/systemDefaultLayout.ts";
 import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
 import { buildAddPanelProvider } from "../dynamic/addPanel.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";
+import { buildLayoutsProvider } from "../dynamic/layouts.ts";
 import { buildPanelTogglesProvider } from "../dynamic/panels.ts";
 import { buildWorkspaceProvider } from "../dynamic/workspaceCommands.tsx";
 import type { CommandRuntime } from "../runtime.ts";
@@ -44,6 +53,8 @@ const makeRuntime = (): CommandRuntime => {
       toAgent: vi.fn(),
     },
     openNewWorkspaceModal: noop,
+    openLayoutsModal: noop,
+    openSaveLayoutModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
@@ -767,5 +778,86 @@ describe("buildAddPanelProvider", () => {
       .find((c) => c.id === "addpanel.open")!;
     root.perform({ ctx: WORKSPACE_CTX, keepOpen: false, pushPage: vi.fn() });
     expect(runtime.store.get(addPanelTargetSubSectionAtom)).toBeNull();
+  });
+});
+
+describe("buildLayoutsProvider", () => {
+  const CAPTURED: CapturedLayout = {
+    placement: {},
+    order: {},
+    activePanel: {},
+    expanded: {},
+    splits: {},
+    sectionSizes: DEFAULT_SECTION_SIZES,
+    maximizedSection: null,
+    activeSubSection: null,
+  };
+  const layout = (id: string, name: string): SavedLayout => ({
+    id,
+    name,
+    captured: CAPTURED,
+    version: SAVED_LAYOUT_VERSION,
+  });
+  // Command ids for the built-in layouts (System Default + presets), in switcher order.
+  const systemLayoutCommandIds = SYSTEM_LAYOUTS.map((entry) => `layouts.switch.${entry.id}`);
+  const WS_CTX: PaletteContext = {
+    ...ROOT_CTX,
+    route: { isHome: false, isWorkspace: true, isSettings: false, isAgent: false },
+    activeWorkspaceId: "ws1",
+  };
+
+  beforeEach(() => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, []);
+    store.set(layoutMruAtom, []);
+    store.set(appliedLayoutIdAtom, undefined);
+  });
+
+  it("emits nothing off a workspace route", () => {
+    expect(buildLayoutsProvider(makeRuntime()).produce(ROOT_CTX)).toHaveLength(0);
+  });
+
+  it("emits a 'Switch to <layout>' command per resolved layout in the layouts group", () => {
+    getDefaultStore().set(savedLayoutsAtom, [layout("a", "Focused"), layout("b", "Wide")]);
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    expect(commands.map((command) => command.id)).toEqual([
+      ...systemLayoutCommandIds,
+      "layouts.switch.a",
+      "layouts.switch.b",
+    ]);
+    expect(commands.every((command) => command.group === "layouts")).toBe(true);
+    expect(commands.find((command) => command.id === "layouts.switch.a")?.title).toBe("Switch to Focused");
+  });
+
+  it("marks the workspace's applied layout with a 'Current layout' subtitle", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused")]);
+    store.set(appliedLayoutIdAtom, "a");
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    expect(commands.find((command) => command.id === "layouts.switch.a")?.subtitle).toBe("Current layout");
+  });
+
+  it("orders the rows most-recently-applied first", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused"), layout("b", "Wide")]);
+    store.set(layoutMruAtom, ["b", "a"]);
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    // b, a first (most-recently-applied), then the built-ins in their default order.
+    expect(commands.map((command) => command.id)).toEqual([
+      "layouts.switch.b",
+      "layouts.switch.a",
+      ...systemLayoutCommandIds,
+    ]);
+  });
+
+  it("perform applies the re-resolved layout via applyLayoutAtom", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused")]);
+    const command = buildLayoutsProvider(makeRuntime())
+      .produce(WS_CTX)
+      .find((entry) => entry.id === "layouts.switch.a");
+    const setSpy = vi.spyOn(store, "set");
+    command?.perform({ ctx: WS_CTX, keepOpen: false, pushPage: vi.fn() });
+    expect(setSpy).toHaveBeenCalledWith(applyLayoutAtom, expect.objectContaining({ id: "a" }));
   });
 });

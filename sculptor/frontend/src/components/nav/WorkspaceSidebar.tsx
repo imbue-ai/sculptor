@@ -3,13 +3,14 @@ import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { Bug, Command, Home, PanelLeftClose, Plus, Settings } from "lucide-react";
+import { Bug, Command, Home, LayoutTemplate, PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds } from "~/api";
+import { useKeybinding } from "~/common/keybindings";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
@@ -23,6 +24,7 @@ import { buildWorkspaceActions } from "~/components/CommandPalette/contextAction
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { DevModeIndicator } from "~/components/DevModeIndicator.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
+import { layoutsSwitcherOpenAtom } from "~/components/layouts/layoutUiAtoms.ts";
 import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
@@ -94,9 +96,19 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
   const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
   const { toggle: toggleCommandPalette } = useCommandPalette();
-  const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
+  const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute, isWorkspaceRoute } = useImbueLocation();
+  const setLayoutsSwitcherOpen = useSetAtom(layoutsSwitcherOpenAtom);
   const { navigateToNextTab } = useWorkspaceTabActions();
   const gitAndOpenIn = useGitAndOpenInRuntime();
+
+  // Resolved keybindings for the fixed nav actions, shown as quiet right-aligned
+  // hints (Add repo has no shortcut, so it shows none). Read live so a user's
+  // rebind in Settings is reflected here too.
+  const homeShortcut = useKeybinding("home");
+  const commandsShortcut = useKeybinding("command_palette");
+  const layoutsShortcut = useKeybinding("open_layouts");
+  const newWorkspaceShortcut = useKeybinding("new_workspace");
+  const settingsShortcut = useKeybinding("settings");
   // Deleting a workspace updates the sidebar optimistically and rolls back with
   // an error toast on failure. Navigate away only when the deleted
   // workspace is the active one.
@@ -281,20 +293,34 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             icon={Home}
             label="Home"
             isActive={isHomeRoute}
+            shortcut={homeShortcut}
             onClick={handleOpenHome}
             testId={ElementIds.SIDEBAR_HOME_LINK}
           />
           <NavItem
             icon={Command}
             label="Commands"
+            shortcut={commandsShortcut}
             onClick={toggleCommandPalette}
             testId={ElementIds.SIDEBAR_CMDK_LINK}
+          />
+          {/* Opens the Layouts switcher for the current workspace. Disabled off a
+            workspace route, where there is no arrangement to switch. */}
+          <NavItem
+            icon={LayoutTemplate}
+            label="Layouts"
+            disabled={!isWorkspaceRoute}
+            disabledTooltip="Open a workspace to switch layouts"
+            shortcut={layoutsShortcut}
+            onClick={() => setLayoutsSwitcherOpen(true)}
+            testId={ElementIds.SIDEBAR_LAYOUTS_LINK}
           />
           {/* Opens the new-workspace dialog; the per-repo "+" in the repo groups
             below is the direct-create affordance. */}
           <NavItem
             icon={Plus}
             label="New Workspace"
+            shortcut={newWorkspaceShortcut}
             onClick={() => setNewWorkspaceModal({ open: true })}
             testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
           />
@@ -355,6 +381,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             icon={Settings}
             label="Settings"
             isActive={isSettingsRoute}
+            shortcut={settingsShortcut}
             onClick={handleOpenSettings}
             testId={ElementIds.SIDEBAR_SETTINGS_LINK}
           />

@@ -6,6 +6,7 @@ import { DEFAULT_THEME_BUILDER_SETTINGS, themeBuilderSettingsAtom } from "../../
 import { chatToolDensityAtom } from "../../../pages/workspace/components/chat-alpha/atoms.ts";
 import { buildChatCommands } from "../builtinCommands/chat.ts";
 import { buildHelpCommands } from "../builtinCommands/help.ts";
+import { buildLayoutCommands } from "../builtinCommands/layouts.ts";
 import { buildNavigationCommands } from "../builtinCommands/navigation.ts";
 import { buildPanelCommands } from "../builtinCommands/panels.ts";
 import { buildSettingsCommands } from "../builtinCommands/settings.ts";
@@ -63,6 +64,8 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
       toAgent: vi.fn(),
     },
     openNewWorkspaceModal: vi.fn(),
+    openLayoutsModal: vi.fn(),
+    openSaveLayoutModal: vi.fn(),
     ui: {
       toggleHelpDialog: vi.fn(),
       toggleDevPanel: vi.fn(),
@@ -655,6 +658,50 @@ describe("buildHelpCommands", () => {
   });
 });
 
+describe("buildLayoutCommands", () => {
+  // A workspace context carrying a concrete active id, since the layout
+  // commands gate on `ctx.activeWorkspaceId` (a layout applies to the current
+  // workspace's arrangement), not merely on the workspace route flag.
+  const ACTIVE_WORKSPACE_CTX: PaletteContext = { ...WORKSPACE_CTX, activeWorkspaceId: "ws-1" };
+
+  it("emits exactly the expected command ids", () => {
+    const cmds = buildLayoutCommands(makeRuntime());
+    expect(cmds.map((c) => c.id).sort()).toEqual(["layouts.open", "layouts.save"].sort());
+  });
+
+  it("both commands live in the layouts group and are gated on a concrete active workspace", () => {
+    const cmds = buildLayoutCommands(makeRuntime());
+    for (const cmd of cmds) {
+      expect(cmd.group).toBe("layouts");
+      expect(cmd.when).toBeDefined();
+      expect(cmd.when!(ACTIVE_WORKSPACE_CTX)).toBe(true);
+      expect(cmd.when!(WORKSPACE_CTX)).toBe(false);
+      expect(cmd.when!(ROOT_CTX)).toBe(false);
+      expect(cmd.when!(NO_ACTIVE_ROUTE_CTX)).toBe(false);
+    }
+  });
+
+  it("layouts.open is the 'Layouts…' opener carrying the open_layouts shortcut", () => {
+    const cmd = buildLayoutCommands(makeRuntime()).find((c) => c.id === "layouts.open")!;
+    expect(cmd.title).toBe("Layouts…");
+    expect(cmd.shortcut).toBe("open_layouts");
+  });
+
+  it("layouts.open perform opens the Layouts switcher", () => {
+    const runtime = makeRuntime();
+    const cmd = buildLayoutCommands(runtime).find((c) => c.id === "layouts.open")!;
+    runPerform(cmd);
+    expect(runtime.openLayoutsModal).toHaveBeenCalledTimes(1);
+  });
+
+  it("layouts.save perform opens the Save-layout dialog", () => {
+    const runtime = makeRuntime();
+    const cmd = buildLayoutCommands(runtime).find((c) => c.id === "layouts.save")!;
+    runPerform(cmd);
+    expect(runtime.openSaveLayoutModal).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("invariants", () => {
   it("no builtin command claims the `command_palette` keybinding as its own shortcut", () => {
     // The Cmd+K-while-open close path lives in `useGlobalKeyboardShortcuts`
@@ -675,6 +722,7 @@ describe("invariants", () => {
       ...buildChatCommands(runtime),
       ...buildTerminalCommands(runtime),
       ...buildHelpCommands(runtime),
+      ...buildLayoutCommands(runtime),
     ];
     const offenders = allBuiltinCmds.filter((c) => c.shortcut === "command_palette");
     expect(offenders).toEqual([]);

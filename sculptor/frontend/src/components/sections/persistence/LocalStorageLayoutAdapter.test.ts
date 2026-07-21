@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LocalStorageLayoutAdapter } from "./LocalStorageLayoutAdapter.ts";
-import type { LayoutScope, WorkspaceLayoutState } from "./types.ts";
-import { LAYOUT_SNAPSHOT_VERSION } from "./types.ts";
+import type { GlobalLayoutState, LayoutScope, SavedLayout, WorkspaceLayoutState } from "./types.ts";
+import { DEFAULT_SECTION_SIZES, LAYOUT_SNAPSHOT_VERSION, SAVED_LAYOUT_VERSION } from "./types.ts";
 
 const WS_SCOPE: LayoutScope = { kind: "workspace", workspaceId: "ws-1" };
 const GLOBAL_SCOPE: LayoutScope = { kind: "global" };
@@ -14,7 +14,37 @@ function makeWorkspaceLayout(activePanel: string): WorkspaceLayoutState {
     activePanel: { center: activePanel },
     expanded: {},
     splits: {},
+    sectionSizes: DEFAULT_SECTION_SIZES,
     activeSubSection: "center",
+  };
+}
+
+function makeGlobalLayout(overrides: Partial<GlobalLayoutState> = {}): GlobalLayoutState {
+  return {
+    sidebarWidthPx: 300,
+    sidebarCollapsed: true,
+    explorerListWidthPx: 260,
+    sidebarOrder: { repos: [], workspaces: {} },
+    explorerSidebarHiddenByPanel: {},
+    ...overrides,
+  };
+}
+
+function makeSavedLayout(id: string, name: string): SavedLayout {
+  return {
+    id,
+    name,
+    captured: {
+      placement: { files: "left" },
+      order: { left: ["files"] },
+      activePanel: { left: "files" },
+      expanded: { left: true, right: false, bottom: false },
+      splits: {},
+      sectionSizes: DEFAULT_SECTION_SIZES,
+      maximizedSection: null,
+      activeSubSection: "center",
+    },
+    version: SAVED_LAYOUT_VERSION,
   };
 }
 
@@ -122,6 +152,67 @@ describe("LocalStorageLayoutAdapter", () => {
     }
   });
 
+  it("round-trips savedLayouts, defaultLayoutId, and layoutMru unchanged", () => {
+    const layout = makeSavedLayout("layout-1", "My Layout");
+    const global = makeGlobalLayout({
+      savedLayouts: [layout],
+      defaultLayoutId: "layout-1",
+      layoutMru: ["layout-1"],
+    });
+    adapter.write(GLOBAL_SCOPE, global);
+    adapter.flush();
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual(global);
+  });
+
+  it("coerces a non-array savedLayouts/layoutMru to [] on read instead of throwing", () => {
+    // A hand-edited or corrupt global snapshot can carry a wrong-kind value in these
+    // fields. The `?? []` fallback in savedLayoutAtoms only rescues an ABSENT field, so
+    // a present non-array would reach .filter/.map and throw — read() must coerce it.
+    localStorage.setItem(
+      "sculptor-layout-global",
+      JSON.stringify({
+        sidebarWidthPx: 300,
+        sidebarCollapsed: true,
+        explorerListWidthPx: 260,
+        savedLayouts: "not-a-list",
+        layoutMru: 42,
+      }),
+    );
+    expect(() => adapter.read(GLOBAL_SCOPE)).not.toThrow();
+    const read = adapter.read(GLOBAL_SCOPE) as GlobalLayoutState;
+    expect(read.savedLayouts).toEqual([]);
+    expect(read.layoutMru).toEqual([]);
+  });
+
+  it("drops malformed savedLayouts entries and non-string MRU ids on read", () => {
+    // A wrong-kind MEMBER is still inside an array, so the container coercion passes it
+    // through; the switcher/apply path then reads `.version` and `captured.*` off each
+    // entry. So null/non-object members AND version-matching-but-structurally-broken
+    // entries (missing or invalid captured) must be dropped on read too.
+    const layout = makeSavedLayout("layout-1", "My Layout");
+    localStorage.setItem(
+      "sculptor-layout-global",
+      JSON.stringify({
+        sidebarWidthPx: 300,
+        sidebarCollapsed: true,
+        explorerListWidthPx: 260,
+        savedLayouts: [
+          null,
+          "nope",
+          7,
+          { id: "no-captured", name: "No captured", version: 1 },
+          { id: "null-captured", name: "Null captured", version: 1, captured: null },
+          { id: "partial-captured", name: "Partial", version: 1, captured: { placement: {} } },
+          layout,
+        ],
+        layoutMru: ["layout-1", null, 3],
+      }),
+    );
+    const read = adapter.read(GLOBAL_SCOPE) as GlobalLayoutState;
+    expect(read.savedLayouts).toEqual([layout]);
+    expect(read.layoutMru).toEqual(["layout-1"]);
+  });
+
   it("stamps the current snapshot version on writes and strips it on reads", () => {
     const snapshot = makeWorkspaceLayout("agent:1");
     adapter.write(WS_SCOPE, snapshot);
@@ -142,6 +233,24 @@ describe("LocalStorageLayoutAdapter", () => {
     // field; they must still hydrate rather than being discarded.
     localStorage.setItem("sculptor-layout-ws-ws-1", JSON.stringify(makeWorkspaceLayout("files")));
     expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("files"));
+  });
+
+  it("hydrates a workspace snapshot written before sectionSizes moved here, filling the default", () => {
+    // sectionSizes moved from the global store into the per-workspace layout;
+    // a snapshot persisted before that move lacks it and must read back with the
+    // default rather than being rejected (which would drop the user's panels).
+    localStorage.setItem(
+      "sculptor-layout-ws-ws-1",
+      JSON.stringify({
+        placement: { files: "left" },
+        order: { left: ["files"] },
+        activePanel: { left: "files" },
+        expanded: { left: true },
+        splits: {},
+        activeSubSection: "left",
+      }),
+    );
+    expect(adapter.read(WS_SCOPE)?.sectionSizes).toEqual(DEFAULT_SECTION_SIZES);
   });
 
   it("rejects a future-version snapshot as nothing stored", () => {
@@ -195,14 +304,7 @@ describe("LocalStorageLayoutAdapter", () => {
     const wsTwoScope: LayoutScope = { kind: "workspace", workspaceId: "ws-2" };
     const wsOne = makeWorkspaceLayout("agent:one");
     const wsTwo = makeWorkspaceLayout("agent:two");
-    const global = {
-      sectionSizes: { left: 25, right: 25, bottom: 25 },
-      sidebarWidthPx: 300,
-      sidebarCollapsed: true,
-      explorerListWidthPx: 260,
-      sidebarOrder: { repos: [], workspaces: {} },
-      explorerSidebarHiddenByPanel: { files: true },
-    };
+    const global = makeGlobalLayout({ explorerSidebarHiddenByPanel: { files: true } });
 
     adapter.write(WS_SCOPE, wsOne);
     adapter.write(wsTwoScope, wsTwo);
@@ -255,14 +357,7 @@ describe("LocalStorageLayoutAdapter", () => {
   it("flush persists pending writes synchronously (e.g. on beforeunload)", () => {
     vi.useFakeTimers();
     adapter.write(WS_SCOPE, makeWorkspaceLayout("x"));
-    adapter.write(GLOBAL_SCOPE, {
-      sectionSizes: { left: 25, right: 25, bottom: 25 },
-      sidebarWidthPx: 300,
-      sidebarCollapsed: true,
-      explorerListWidthPx: 260,
-      sidebarOrder: { repos: [], workspaces: {} },
-      explorerSidebarHiddenByPanel: {},
-    });
+    adapter.write(GLOBAL_SCOPE, makeGlobalLayout());
     // Before the debounce window elapses nothing is committed to storage, but
     // read() already sees the pending snapshot (read-your-writes).
     expect(localStorage.getItem("sculptor-layout-ws-ws-1")).toBeNull();
@@ -270,14 +365,7 @@ describe("LocalStorageLayoutAdapter", () => {
     adapter.flush();
     expect(localStorage.getItem("sculptor-layout-ws-ws-1")).not.toBeNull();
     expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("x"));
-    expect(adapter.read(GLOBAL_SCOPE)).toEqual({
-      sectionSizes: { left: 25, right: 25, bottom: 25 },
-      sidebarWidthPx: 300,
-      sidebarCollapsed: true,
-      explorerListWidthPx: 260,
-      sidebarOrder: { repos: [], workspaces: {} },
-      explorerSidebarHiddenByPanel: {},
-    });
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual(makeGlobalLayout());
   });
 
   it("flushes pending writes when the window fires beforeunload, and stops after dispose", () => {

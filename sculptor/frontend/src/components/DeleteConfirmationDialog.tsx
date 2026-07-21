@@ -1,11 +1,8 @@
-import { AlertDialog, Button, Flex } from "@radix-ui/themes";
+import { AlertDialog } from "@radix-ui/themes";
 import type { ReactElement } from "react";
-import { useRef } from "react";
-
-import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 
 import { ElementIds } from "../api";
-import { POPOVER_FRIENDLY_MODAL_ATTRIBUTE } from "./popoverFriendlyModal.ts";
+import { ConfirmationDialog } from "./ConfirmationDialog.tsx";
 
 type DeleteConfirmationDialogProps = {
   isOpen: boolean;
@@ -37,51 +34,24 @@ export const DeleteConfirmationDialog = ({
   entityName,
   onConfirm,
 }: DeleteConfirmationDialogProps): ReactElement => {
-  const dangerColor = useThemeDangerColor();
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
   // Terminals are "closed", not "deleted" — they hold no durable history.
   const title = entityType === "terminal" ? "Close terminal?" : `Delete ${entityType}?`;
   const description = DESCRIPTION_BY_TYPE[entityType](entityName);
   const confirmLabel = CONFIRM_LABEL_BY_TYPE[entityType];
 
-  // Radix' AlertDialog defaults focus to the first focusable element
-  // (Cancel) for safety, which makes Enter dismiss the dialog instead of
-  // confirming. Override `onOpenAutoFocus` to land focus on the Delete
-  // button so Enter accepts. Esc / Cancel still close as expected.
-  const handleOpenAutoFocus = (event: Event): void => {
-    event.preventDefault();
-    confirmButtonRef.current?.focus();
-  };
-
   return (
-    <AlertDialog.Root open={isOpen} onOpenChange={onOpenChange}>
-      <AlertDialog.Content
-        maxWidth="400px"
-        data-testid={ElementIds.DELETE_CONFIRMATION_DIALOG}
-        {...{ [POPOVER_FRIENDLY_MODAL_ATTRIBUTE]: "true" }}
-        onOpenAutoFocus={handleOpenAutoFocus}
-      >
-        <AlertDialog.Title>{title}</AlertDialog.Title>
-        <AlertDialog.Description>{description}</AlertDialog.Description>
-        <Flex gap="3" mt="4" justify="end">
-          <AlertDialog.Cancel>
-            <Button variant="soft" color="gray" data-testid={ElementIds.DELETE_CONFIRMATION_CANCEL}>
-              Cancel
-            </Button>
-          </AlertDialog.Cancel>
-          <AlertDialog.Action>
-            <Button
-              ref={confirmButtonRef}
-              variant="solid"
-              color={dangerColor}
-              onClick={onConfirm}
-              data-testid={ElementIds.DELETE_CONFIRMATION_CONFIRM}
-            >
-              {confirmLabel}
-            </Button>
-          </AlertDialog.Action>
-        </Flex>
-      </AlertDialog.Content>
-    </AlertDialog.Root>
+    <ConfirmationDialog
+      open={isOpen}
+      onOpenChange={onOpenChange}
+      title={title}
+      confirmLabel={confirmLabel}
+      onConfirm={onConfirm}
+      isDanger
+      dialogTestId={ElementIds.DELETE_CONFIRMATION_DIALOG}
+      cancelTestId={ElementIds.DELETE_CONFIRMATION_CANCEL}
+      confirmTestId={ElementIds.DELETE_CONFIRMATION_CONFIRM}
+    >
+      <AlertDialog.Description>{description}</AlertDialog.Description>
+    </ConfirmationDialog>
   );
 };

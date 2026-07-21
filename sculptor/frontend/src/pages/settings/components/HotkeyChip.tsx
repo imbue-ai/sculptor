@@ -157,6 +157,7 @@ export const HotkeyChip = ({
       </Flex>
     );
   }
+
   return (
     <Flex
       className={styles.hotkeySet}

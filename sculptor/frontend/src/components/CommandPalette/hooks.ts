@@ -8,6 +8,7 @@ import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { recentAgentTypeAtom } from "~/components/sections/addPanelCore.ts";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
+import { layoutMruAtom, savedLayoutsAtom } from "~/components/sections/savedLayoutAtoms.ts";
 import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
 import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
@@ -243,6 +244,11 @@ const dynamicProviderInputsAtom = atom((get) => {
     // chosen section; without it, picking a section wouldn't recompute the
     // list and the panel page would show "No commands here".
     addPanelTarget: get(addPanelTargetSubSectionAtom),
+    // The layouts provider lists one "Switch to <layout>" per saved layout in
+    // MRU order; tracking both keeps the list live when a layout is saved,
+    // deleted, or applied while the palette is open.
+    savedLayouts: get(savedLayoutsAtom),
+    layoutMru: get(layoutMruAtom),
     // The add-panel provider builds the "New {recent} agent" row title from the
     // normalized last-used agent type; tracking it keeps that title in sync when a
     // userConfig frame or the pi flag lands while the palette is open.

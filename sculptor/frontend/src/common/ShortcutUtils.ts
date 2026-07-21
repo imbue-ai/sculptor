@@ -58,6 +58,19 @@ export const parseShortcut = (shortcutString: string): ShortcutParsed => {
   return result;
 };
 
+/**
+ * Whether two shortcut strings denote the same chord — same modifiers and key,
+ * independent of spelling or modifier order (so "Meta+Shift+G", "cmd+⇧+g", and
+ * "Shift+Meta+g" all compare equal). Used by keybinding conflict detection in
+ * both the Settings ▸ Keybindings UI and the Layouts save dialog, so a recorded
+ * chord is matched against existing bindings the same way everywhere.
+ */
+export const chordsEqual = (a: string, b: string): boolean => {
+  const pa = parseShortcut(a);
+  const pb = parseShortcut(b);
+  return pa.meta === pb.meta && pa.ctrl === pb.ctrl && pa.alt === pb.alt && pa.shift === pb.shift && pa.key === pb.key;
+};
+
 // Fallback map of shortcut key → KeyboardEvent.code, used by matchesKey only
 // when no active layout map is available. Assumes a QWERTY physical layout.
 const KEY_TO_CODE: Record<string, string> = {

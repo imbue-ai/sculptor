@@ -3,6 +3,7 @@ import { useMemo } from "react";
 
 import { buildChatCommands } from "./builtinCommands/chat.ts";
 import { buildHelpCommands } from "./builtinCommands/help.ts";
+import { buildLayoutCommands } from "./builtinCommands/layouts.ts";
 import { buildNavigationCommands } from "./builtinCommands/navigation.ts";
 import { buildPanelCommands } from "./builtinCommands/panels.ts";
 import { buildSettingsCommands } from "./builtinCommands/settings.ts";
@@ -13,6 +14,7 @@ import { WorkspaceDeleteConfirmation } from "./contextActions/WorkspaceDeleteCon
 import { buildAddPanelProvider } from "./dynamic/addPanel.ts";
 import { buildAgentActionsProvider } from "./dynamic/agentActions.ts";
 import { buildAgentProvider } from "./dynamic/agentCommands.ts";
+import { buildLayoutsProvider } from "./dynamic/layouts.ts";
 import { buildPanelTogglesProvider } from "./dynamic/panels.ts";
 import { buildWorkspaceActionsProvider } from "./dynamic/workspaceActions.ts";
 import { buildWorkspaceProvider } from "./dynamic/workspaceCommands.tsx";
@@ -55,6 +57,7 @@ export const CommandRegistrations = (): ReactElement => {
       ...buildChatCommands(runtime),
       ...buildTerminalCommands(runtime),
       ...buildHelpCommands(runtime),
+      ...buildLayoutCommands(runtime),
     ],
     [runtime],
   );
@@ -64,10 +67,12 @@ export const CommandRegistrations = (): ReactElement => {
   const agentProvider = useMemo(() => buildAgentProvider(runtime), [runtime]);
   const panelTogglesProvider = useMemo(() => buildPanelTogglesProvider(runtime), [runtime]);
   const addPanelProvider = useMemo(() => buildAddPanelProvider(runtime), [runtime]);
+  const layoutsProvider = useMemo(() => buildLayoutsProvider(runtime), [runtime]);
   useRegisterDynamicCommands(workspaceProvider);
   useRegisterDynamicCommands(panelTogglesProvider);
   useRegisterDynamicCommands(agentProvider);
   useRegisterDynamicCommands(addPanelProvider);
+  useRegisterDynamicCommands(layoutsProvider);
 
   // Context-action providers — drive Cmd+K → Workspace/Agent actions… off
   // the same descriptor lists that the right-click menus consume. Adding

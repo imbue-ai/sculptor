@@ -18,6 +18,8 @@ export type StaticKeybindingId =
   | "toggle_right_panel"
   | "toggle_sidebar"
   | "maximize_section"
+  | "open_layouts"
+  | "layout_more_options"
   | "next_section"
   | "previous_section"
   | "next_panel"

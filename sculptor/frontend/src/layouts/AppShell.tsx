@@ -38,6 +38,9 @@ import { CommandPalette } from "~/components/CommandPalette";
 import { CommandRegistrations } from "~/components/CommandPalette/CommandRegistrations.tsx";
 import { KeyboardShortcutsDialog } from "~/components/KeyboardShortcutsDialog.tsx";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
+import { LayoutsModal } from "~/components/layouts/LayoutsModal.tsx";
+import { LayoutTidyConfirmation } from "~/components/layouts/LayoutTidyConfirmation.tsx";
+import { SaveLayoutModal } from "~/components/layouts/SaveLayoutModal.tsx";
 import { CollapsedSidebarToggle } from "~/components/nav/CollapsedSidebarToggle.tsx";
 import { WorkspaceSidebar } from "~/components/nav/WorkspaceSidebar.tsx";
 import { NewWorkspaceModal } from "~/components/newWorkspace/NewWorkspaceModal.tsx";
@@ -138,6 +141,9 @@ export const AppShell = (): ReactElement => {
       <CommandPalette />
       <KeyboardShortcutsDialog />
       <NewWorkspaceModal />
+      <LayoutsModal />
+      <SaveLayoutModal />
+      <LayoutTidyConfirmation />
       <RepoPathDialog
         isOpen={isRepoPathDialogOpen}
         project={currentProject}
