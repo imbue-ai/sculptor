@@ -65,6 +65,15 @@ A **Layout** is a **reusable template**, not a literal snapshot of one workspace
 - **System Default.** There is always an undeletable "System Default" backed by
   `buildDefaultWorkspaceLayout`. A `defaultLayoutId` pointer decides what new workspaces
   seed from and what "switch to default" applies; if unset, it resolves to System Default.
+- **Built-in task presets.** Alongside System Default, the switcher ships a small set of
+  read-only presets — **Chat**, **Review**, **Terminal**, and **Browser** — each arranging
+  the shell for one common task (chat only; Review All maximized; a terminal below; the
+  Browser on the right). Like System Default they are synthesized (never stored in
+  `savedLayouts`) and can't be edited, renamed, or deleted (`SYSTEM_LAYOUTS` /
+  `isSystemLayoutId` in `systemDefaultLayout.ts`). They are additive and tidy-on-apply:
+  applying one collapses or closes only the *static* panels it doesn't declare and never
+  touches agents or terminals — so a new user has something meaningful to switch between
+  before saving any Layout of their own.
 - **Name:** user-facing term is **"Layouts."**
 
 ## What a Layout captures, and what "apply" does
