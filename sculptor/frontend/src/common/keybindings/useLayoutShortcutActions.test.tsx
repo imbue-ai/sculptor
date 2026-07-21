@@ -105,7 +105,7 @@ describe("useLayoutBindingConflict", () => {
   function renderConflict(
     config: UserConfig | null,
     layouts: ReadonlyArray<SavedLayout>,
-  ): (chord: string, selfBindingId: string) => NamedBinding | null {
+  ): (chord: string, selfLayoutId: string | undefined) => NamedBinding | null {
     const store = createStore();
     store.set(userConfigAtom, config);
     store.set(savedLayoutsAtom, layouts);
@@ -116,7 +116,7 @@ describe("useLayoutBindingConflict", () => {
   it("detects a conflict with a static built-in binding", () => {
     const findConflict = renderConflict(null, []);
     // command_palette defaults to Meta+K.
-    expect(findConflict("Meta+K", layoutShortcutBindingId("a"))?.id).toBe("command_palette");
+    expect(findConflict("Meta+K", "a")?.id).toBe("command_palette");
   });
 
   it("detects a conflict with another layout's dynamic binding", () => {
@@ -124,22 +124,33 @@ describe("useLayoutBindingConflict", () => {
       makeLayout("a"),
       makeLayout("b"),
     ]);
-    expect(findConflict("Alt+2", layoutShortcutBindingId("a"))?.id).toBe(layoutShortcutBindingId("b"));
+    expect(findConflict("Alt+2", "a")?.id).toBe(layoutShortcutBindingId("b"));
   });
 
-  it("ignores the layout's own current binding", () => {
+  it("ignores the edited layout's own current binding", () => {
     const findConflict = renderConflict(withKeybindings({ [layoutShortcutBindingId("a")]: "Alt+1" }), [
       makeLayout("a"),
     ]);
-    // Re-recording the same chord onto the same layout is not a conflict.
-    expect(findConflict("Alt+1", layoutShortcutBindingId("a"))).toBeNull();
+    // Editing layout "a" and re-recording its own chord is not a conflict. The self
+    // is skipped by resolving the layout id ("a") to its binding id inside the hook —
+    // the exact path the save dialog exercises, so this guards its call shape too.
+    expect(findConflict("Alt+1", "a")).toBeNull();
+  });
+
+  it("reports a collision when creating a new layout (no self to skip)", () => {
+    const findConflict = renderConflict(withKeybindings({ [layoutShortcutBindingId("b")]: "Alt+2" }), [
+      makeLayout("b"),
+    ]);
+    // Create mode passes undefined: nothing is skipped, so a chord another layout
+    // already holds is reported.
+    expect(findConflict("Alt+2", undefined)?.id).toBe(layoutShortcutBindingId("b"));
   });
 
   it("returns null for a free chord and skips unbound entries", () => {
     const findConflict = renderConflict(null, [makeLayout("a"), makeLayout("b")]);
     // Layouts a, b and every System layout are unbound (null binding); a chord no
     // one holds must match none of them without tripping on the null entries.
-    expect(findConflict("Alt+9", layoutShortcutBindingId("a"))).toBeNull();
+    expect(findConflict("Alt+9", "a")).toBeNull();
   });
 
   it("matches chords that are spelled differently but parse equal", () => {
@@ -149,6 +160,6 @@ describe("useLayoutBindingConflict", () => {
     ]);
     // "Option" parses to the same modifier as "Alt" and modifier order is
     // irrelevant, so the differently-spelled query still collides.
-    expect(findConflict("Shift+Alt+2", layoutShortcutBindingId("a"))?.id).toBe(layoutShortcutBindingId("b"));
+    expect(findConflict("Shift+Alt+2", "a")?.id).toBe(layoutShortcutBindingId("b"));
   });
 });

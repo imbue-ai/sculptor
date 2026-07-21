@@ -8,7 +8,7 @@ import { useStore } from "jotai";
 import { useCallback } from "react";
 
 import { UserConfigField } from "~/api";
-import { parseShortcut } from "~/common/ShortcutUtils.ts";
+import { chordsEqual } from "~/common/ShortcutUtils.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 
@@ -38,26 +38,26 @@ export function useSetLayoutShortcut(): (layoutId: string, chord: string | null)
   );
 }
 
-function sameChord(a: string, b: string): boolean {
-  const pa = parseShortcut(a);
-  const pb = parseShortcut(b);
-  return pa.meta === pb.meta && pa.ctrl === pb.ctrl && pa.alt === pb.alt && pa.shift === pb.shift && pa.key === pb.key;
-}
-
 // Find an existing binding (static or per-layout) that a recorded chord would
-// collide with, ignoring the binding being edited. Returns null when the chord is
-// free. Spans both lanes via allNamedBindingsAtom so neither can silently shadow the
-// other.
-export function useLayoutBindingConflict(): (chord: string, selfBindingId: string) => NamedBinding | null {
+// collide with, ignoring the Layout currently being edited. Returns null when the
+// chord is free. Spans both lanes via allNamedBindingsAtom so neither can silently
+// shadow the other.
+//
+// Takes the LAYOUT id being edited (or undefined when creating a new Layout) and
+// resolves the namespaced `layout.apply.<id>` binding id itself — callers hold a
+// layout id, not a binding id, so resolving here removes the chance of passing the
+// wrong shape and defeating the self-skip.
+export function useLayoutBindingConflict(): (chord: string, selfLayoutId: string | undefined) => NamedBinding | null {
   const store = useStore();
   return useCallback(
-    (chord: string, selfBindingId: string): NamedBinding | null => {
+    (chord: string, selfLayoutId: string | undefined): NamedBinding | null => {
+      const selfBindingId = selfLayoutId !== undefined ? layoutShortcutBindingId(selfLayoutId) : null;
       for (const candidate of store.get(allNamedBindingsAtom)) {
         if (candidate.id === selfBindingId || candidate.binding === null) {
           continue;
         }
 
-        if (sameChord(chord, candidate.binding)) {
+        if (chordsEqual(chord, candidate.binding)) {
           return candidate;
         }
       }

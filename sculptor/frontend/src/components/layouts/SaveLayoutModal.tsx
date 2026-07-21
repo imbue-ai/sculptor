@@ -135,10 +135,11 @@ const SaveLayoutForm = ({
   ]);
 
   // Guard the recorded chord against every OTHER binding — in edit mode a Layout may
-  // keep its own current shortcut (pass its id as the "self" to skip).
+  // keep its own current shortcut (pass its layout id as the "self" to skip; undefined
+  // when creating, where there is nothing to skip).
   const handleShortcutRecord = useCallback(
     (chord: string): boolean => {
-      const conflict = findBindingConflict(chord, editingLayout?.id ?? "");
+      const conflict = findBindingConflict(chord, editingLayout?.id);
       if (conflict !== null) {
         setShortcutConflict(conflict.name);
         return false;

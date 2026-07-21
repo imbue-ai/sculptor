@@ -7,7 +7,7 @@ import { ElementIds, UserConfigField } from "~/api";
 import { CATEGORY_DISPLAY_NAMES, CATEGORY_ORDER, type ResolvedKeybinding } from "~/common/keybindings";
 import { keybindingsAtom } from "~/common/keybindings/atoms.ts";
 import { allNamedBindingsAtom, dynamicLayoutKeybindingsAtom } from "~/common/keybindings/layoutShortcuts.ts";
-import { formatShortcutForDisplay, parseShortcut } from "~/common/ShortcutUtils.ts";
+import { chordsEqual, formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 
 import { HotkeyChip } from "./HotkeyChip.tsx";
@@ -89,21 +89,11 @@ export const KeybindingsSection = ({ onSettingChange }: KeybindingsSectionProps)
 
   const checkForConflict = useCallback(
     (targetId: string, recordedKeys: string): boolean | void => {
-      const parsedRecorded = parseShortcut(recordedKeys);
       for (const kb of allNamedBindings) {
         if (kb.id === targetId) continue;
-        if (kb.binding) {
-          const parsedExisting = parseShortcut(kb.binding);
-          if (
-            parsedRecorded.meta === parsedExisting.meta &&
-            parsedRecorded.ctrl === parsedExisting.ctrl &&
-            parsedRecorded.alt === parsedExisting.alt &&
-            parsedRecorded.shift === parsedExisting.shift &&
-            parsedRecorded.key === parsedExisting.key
-          ) {
-            setConflictInfo({ recordedKeys, targetId, conflictingId: kb.id });
-            return false;
-          }
+        if (kb.binding && chordsEqual(recordedKeys, kb.binding)) {
+          setConflictInfo({ recordedKeys, targetId, conflictingId: kb.id });
+          return false;
         }
       }
       return true;
