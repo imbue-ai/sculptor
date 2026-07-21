@@ -2,7 +2,6 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Queue
-from threading import Thread
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -36,8 +35,8 @@ from sculptor.interfaces.environments.agent_execution_environment import AgentEx
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import ToolUseID
 from sculptor.primitives.ids import WorkspaceID
-from sculptor.server.llm_content_generation import TaskTitle
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
@@ -45,6 +44,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
@@ -55,7 +55,6 @@ from sculptor.state.messages import PersistentUserMessage
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import HistoryScan
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
-from sculptor.tasks.handlers.run_agent.setup import _resolve_title_prediction_thread
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
@@ -254,61 +253,7 @@ def _scan_history(local_task: Task, services: ServiceCollectionForTask) -> Histo
     """Fetch the task's saved messages and scan them, as run_agent_task_v1 does."""
     with services.data_model_service.open_task_transaction() as transaction:
         saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
-    return scan_message_history(saved_messages)
-
-
-def test_resolve_title_prediction_overwrites_renamed_title(
-    local_task: Task,
-    services: ServiceCollectionForTask,
-) -> None:
-    """_resolve_title_prediction_thread clobbers a title that was renamed via the API.
-
-    Simulates the race condition:
-    1. Agent starts with title=None, kicks off title prediction thread
-    2. User renames the agent to "Renamed Title" (updates DB)
-    3. Title prediction finishes and saves the predicted title, overwriting the rename
-    """
-    workspace_id = WorkspaceID()
-    initial_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title=None,
-    )
-    _set_task_state(local_task, initial_state, services)
-
-    # Step 1: Agent loads state into memory (title=None).
-    in_memory_state = initial_state
-
-    # Step 2: User renames agent via API (directly updating DB).
-    renamed_state = AgentTaskStateV2(
-        workspace_id=workspace_id,
-        title="Renamed Title",
-    )
-    _set_task_state(local_task, renamed_state, services)
-    assert _get_task_title(local_task, services) == "Renamed Title"
-
-    # Step 3: Title prediction thread completes with a predicted title.
-    predicted_title = [TaskTitle(title="Predicted Title")]
-    completed_thread = Thread(target=lambda: None)
-    completed_thread.start()
-    completed_thread.join()
-
-    initial_message = ChatInputUserMessage(
-        message_id=AgentMessageID(),
-        text="Initial prompt",
-        model_name=LLMModel.CLAUDE_4_SONNET,
-    )
-
-    _resolve_title_prediction_thread(
-        title_thread=completed_thread,
-        title_result=predicted_title,
-        task_id=local_task.object_id,
-        task_state=in_memory_state,
-        initial_message=initial_message,
-        services=services,
-    )
-
-    # Step 4: The renamed title should be preserved, not overwritten.
-    assert _get_task_title(local_task, services) == "Renamed Title"
+    return scan_message_history(saved_messages, CLAUDE_CODE_HARNESS)
 
 
 class _SigtermOnFirstPushAgent(DefaultAgentWrapper):
@@ -609,6 +554,151 @@ def test_scan_message_history_derives_last_processed_from_history(
     scan = _scan_history(local_task, services)
 
     assert scan.last_processed_message_id == chat_message_id
+
+
+def _make_valid_auq_response_block(tool_use_id: str) -> ResponseBlockAgentMessage:
+    return ResponseBlockAgentMessage(
+        message_id=AgentMessageID(),
+        role="assistant",
+        assistant_message_id=AssistantMessageID(generate_id()),
+        content=(
+            ToolUseBlock(
+                id=ToolUseID(tool_use_id),
+                name="mcp__sculptor__ask_user_question",
+                input={
+                    "questions": [
+                        {
+                            "question": "Pick a color",
+                            "header": "Color",
+                            "options": [{"label": "Red", "description": "warm"}],
+                            "multiSelect": False,
+                        }
+                    ]
+                },
+            ),
+        ),
+    )
+
+
+def _make_sigterm_stop(request_id: AgentMessageID, stopped_by_user: bool = False) -> RequestStoppedAgentMessage:
+    try:
+        raise AgentClientError("Killed by SIGTERM", exit_code=AGENT_EXIT_CODE_FROM_SIGTERM)
+    except AgentClientError as exc:
+        sigterm_error = SerializedException.build(exc, exc.__traceback__)
+    return RequestStoppedAgentMessage(
+        message_id=AgentMessageID(),
+        request_id=request_id,
+        error=sigterm_error,
+        stopped_by_user=stopped_by_user,
+    )
+
+
+def test_scan_message_history_settles_question_blocked_killed_turn(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+) -> None:
+    """A killed turn blocked on an unanswered question derives as settled, not resumable.
+
+    The web layer restores the question after a shutdown/restart stop and pins
+    the task at WAITING (the SCU-1801 contract), so the runner must neither
+    auto-resume the turn (a "continue" would settle or re-issue the question
+    out from under the user) nor terminalize it via the orphan synthesis (a
+    turn_abandoned completion would dismiss the question). The user's late
+    answer drives the continuation instead.
+    """
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Ask me something",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    with services.data_model_service.open_task_transaction() as transaction:
+        for message in (
+            chat_message,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            _make_valid_auq_response_block("toolu_pending"),
+            _make_sigterm_stop(chat_message.message_id),
+        ):
+            services.task_service.create_message(message, local_task.object_id, transaction)
+
+    scan = _scan_history(local_task, services)
+
+    # Not resumable, not a synthesis candidate: the question keeps the turn alive.
+    assert scan.in_flight_chat_message_id is None
+    assert scan.dangling_chat_message_id is None
+    # Settled for dedup: the next run must not re-deliver the prompt.
+    assert scan.last_processed_message_id == chat_message.message_id
+    # The turn still seeds the conversation's launch settings for the
+    # answer-driven continuation.
+    assert scan.last_started_chat_message == chat_message
+
+
+def test_scan_message_history_keeps_killed_turn_resumable_when_question_answered(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+) -> None:
+    """An answered question does not block the resume of its killed turn.
+
+    Once the user has answered (even if the answer never started processing),
+    there is no pending question for a resume to clobber, so the killed turn
+    keeps the normal resumable derivation.
+    """
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Ask me something",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Pick a color": "Red"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="toolu_answered"),
+        tool_use_id="toolu_answered",
+    )
+    with services.data_model_service.open_task_transaction() as transaction:
+        for message in (
+            chat_message,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            _make_valid_auq_response_block("toolu_answered"),
+            answer,
+            _make_sigterm_stop(chat_message.message_id),
+        ):
+            services.task_service.create_message(message, local_task.object_id, transaction)
+
+    scan = _scan_history(local_task, services)
+
+    assert scan.in_flight_chat_message_id == chat_message.message_id
+    assert scan.dangling_chat_message_id == chat_message.message_id
+    assert scan.last_processed_message_id is None
+
+
+def test_scan_message_history_user_stop_dismisses_question_and_keeps_resume(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+) -> None:
+    """A user-initiated stop dismisses the pending question — the user is moving on.
+
+    The web layer clears the question on ``stopped_by_user=True`` (it is no
+    longer answerable), so the scan must not treat the turn as question-blocked
+    either; the killed turn keeps the normal resumable derivation.
+    """
+    chat_message = ChatInputUserMessage(
+        message_id=AgentMessageID(),
+        text="Ask me something",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    with services.data_model_service.open_task_transaction() as transaction:
+        for message in (
+            chat_message,
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=chat_message.message_id),
+            _make_valid_auq_response_block("toolu_dismissed"),
+            _make_sigterm_stop(chat_message.message_id, stopped_by_user=True),
+        ):
+            services.task_service.create_message(message, local_task.object_id, transaction)
+
+    scan = _scan_history(local_task, services)
+
+    assert scan.in_flight_chat_message_id == chat_message.message_id
+    assert scan.dangling_chat_message_id == chat_message.message_id
+    assert scan.last_processed_message_id is None
 
 
 class _RecordOnlyAgent(DefaultAgentWrapper):
@@ -1367,8 +1457,8 @@ def test_eager_pi_probe_records_fetched_empty_when_no_models(
         )
 
     # The carried-forward state AND the persisted row are fetched-empty [], not the
-    # NOT_FETCHED_YET sentinel — otherwise finalize_task_setup would later write the
-    # in-memory sentinel back over the DB.
+    # NOT_FETCHED_YET sentinel — so agent construction reads the fetched-empty
+    # catalog from the carried-forward in-memory copy, not the stale sentinel.
     assert evolved.available_models == []
     assert not isinstance(evolved.available_models, ModelCatalogState)
     assert _read_persisted_task_state(local_task, services).available_models == []
@@ -2146,7 +2236,7 @@ def test_noop_resume_advances_dedup_cursor_for_synthesized_completions(
 
     # The next restart's derived cursor lands on the LAST synthesized completion
     # (the answer, which follows the chat message in queue order).
-    derived_cursor = scan_message_history(saved_messages).last_processed_message_id
+    derived_cursor = scan_message_history(saved_messages, CLAUDE_CODE_HARNESS).last_processed_message_id
     assert derived_cursor == answer.message_id
 
     # Simulate the next restart's dedup over the replayed user-message queue: both

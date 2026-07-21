@@ -1,7 +1,7 @@
 import { atom } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 
-import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { asLiveWorkspace, workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
 import { activeWorkspaceIdAtom, isEmptyLayout, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
@@ -301,7 +301,7 @@ export const openFileFromUiEventAtom = atom(
       return;
     }
 
-    const workspace = get(workspaceAtomFamily(workspaceId));
+    const workspace = asLiveWorkspace(get(workspaceAtomFamily(workspaceId)));
     const targetBranch = workspace?.targetBranch ?? null;
     const statusMap = getUncommittedFileStatusMap(workspaceId, targetBranch);
     const status = statusMap.get(filePath);

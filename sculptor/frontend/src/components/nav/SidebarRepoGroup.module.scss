@@ -303,3 +303,22 @@ $row-min-height: 28px;
 [data-sidebar-drag-active] .workspaceRow .hoverReveal {
   visibility: hidden;
 }
+
+// A delete in flight: the row stays listed but reads as pending — dimmed,
+// default cursor, its hover actions replaced by the label. Interactivity is
+// disabled in the component (click/rename/drag/menu guards), not here.
+.workspaceRowDeleting {
+  cursor: default;
+  opacity: 55%;
+}
+
+.deletingLabel {
+  align-items: center;
+  color: var(--gray-a11);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  padding-right: var(--space-2);
+  white-space: nowrap;
+}

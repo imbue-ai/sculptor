@@ -38,12 +38,13 @@ generated-*.ts
 # the host Vite build from their source under `extensions/<id>/` (see
 # vite-plugins/bundled-extensions.ts); that generated output is ignored.
 #
-# The no-build example extensions (`sculpty`, `pomodoro`) are the exception:
-# they are hand-authored as a manifest.json + main.js with no build step, so
-# they are checked in here directly. Re-include them explicitly.
+# The no-build example extensions (`sculpty`, `pomodoro`, `buster`) are the
+# exception: they are hand-authored as a manifest.json + main.js with no build
+# step, so they are checked in here directly. Re-include them explicitly.
 public/extensions/*
 !public/extensions/sculpty/
 !public/extensions/pomodoro/
+!public/extensions/buster/
 
 # Test coverage output
 coverage/

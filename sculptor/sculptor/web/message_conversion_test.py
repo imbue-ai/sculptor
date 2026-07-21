@@ -6,6 +6,7 @@ from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
+from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
@@ -1088,6 +1089,95 @@ def test_subagent_question_reconstructed_from_persisted_child_block() -> None:
         completed_message_by_id=completed_by_id,
         current_state=state,
     )
+    assert state.pending_user_question is None
+
+
+def _replay_history_with_stopped_auq_turn(is_stopped_by_user: bool) -> tuple[TaskUpdate, dict, TaskID]:
+    """Replay from scratch (as after a restart) a history whose AUQ turn ended
+    in a ``RequestStoppedAgentMessage`` attributed per ``is_stopped_by_user``."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Ask me a question", model_name=LLMModel.CLAUDE_4_SONNET)
+    question_data = _make_simple_question_data("Pick a color?", "toolu_stopped_auq")
+    tool_block = ToolUseBlock(
+        id=ToolUseID("toolu_stopped_auq"),
+        name="mcp__sculptor__ask_user_question",
+        input={"questions": [q.model_dump() for q in question_data.questions]},
+    )
+    response = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-stopped-auq"),
+        message_id=AgentMessageID(),
+        content=(tool_block,),
+    )
+    stopped = RequestStoppedAgentMessage(
+        request_id=user_message.message_id,
+        error=_make_serialized_exception("Agent died with exit code 143"),
+        stopped_by_user=is_stopped_by_user,
+    )
+    state = convert_agent_messages_to_task_update(
+        [user_message, RequestStartedAgentMessage(request_id=user_message.message_id), response, stopped],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    return state, completed_by_id, task_id
+
+
+def test_pending_question_preserved_when_auq_turn_stopped_by_restart() -> None:
+    """A stop the user did not ask for (shutdown/restart SIGTERM) must keep the
+    reconstructed question pending so the interactive panel re-renders after
+    the restart — the question is still answerable via the runner's
+    answer-after-turn-ended continuation."""
+    state, _, _ = _replay_history_with_stopped_auq_turn(is_stopped_by_user=False)
+
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "toolu_stopped_auq"
+
+
+def test_pending_question_cleared_when_auq_turn_stopped_by_user() -> None:
+    """An explicit user Stop dismisses the pending question — the user is
+    moving on, and the chat input should reappear."""
+    state, _, _ = _replay_history_with_stopped_auq_turn(is_stopped_by_user=True)
+
+    assert state.pending_user_question is None
+
+
+def test_preserved_pending_question_cleared_when_new_chat_turn_starts() -> None:
+    """A newly started user turn supersedes a question preserved across a
+    non-user stop: the user chose a fresh prompt over answering, so the stale
+    panel must not linger while the agent works on the new turn."""
+    state, completed_by_id, task_id = _replay_history_with_stopped_auq_turn(is_stopped_by_user=False)
+    assert state.pending_user_question is not None
+
+    new_chat = ChatInputUserMessage(text="Never mind, do something else", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [new_chat, RequestStartedAgentMessage(request_id=new_chat.message_id)],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    assert state.pending_user_question is None
+
+
+def test_preserved_pending_question_cleared_on_context_clear() -> None:
+    """A cleared context wipes the session that asked — a question preserved
+    across a non-user stop can no longer be answered against it."""
+    state, completed_by_id, task_id = _replay_history_with_stopped_auq_turn(is_stopped_by_user=False)
+    assert state.pending_user_question is not None
+
+    state = convert_agent_messages_to_task_update(
+        [ContextClearedMessage(message_id=AgentMessageID())],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
     assert state.pending_user_question is None
 
 
@@ -7063,3 +7153,76 @@ def test_workflow_states_survive_request_success() -> None:
 
     assert "toolu-wf-1" in _workflow_states_of(state)
     assert state.pending_background_task_ids == frozenset()
+
+
+def test_pi_partial_response_extracts_img_tags_into_file_blocks() -> None:
+    """A Pi agent streaming partial whose TextBlock contains <img> tags must
+    produce FileBlocks in the chat content, not raw <img> text.
+
+    Regression test for SCU-1830: _handle_partial_response did not call
+    split_text_and_media() on TextBlocks, so the frontend MarkdownBlock
+    suppressed the <img> tag and no image appeared in chat.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+    assistant_message_id = AssistantMessageID("assistant-pi-img")
+    chat_message_id = AgentMessageID()
+
+    user_message = ChatInputUserMessage(
+        text="Show me the screenshot",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    state = convert_agent_messages_to_task_update(
+        [user_message],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    request_started = RequestStartedAgentMessage(request_id=user_message.message_id)
+
+    partial_with_img = PartialResponseBlockAgentMessage(
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        first_response_message_id=chat_message_id,
+        content=(TextBlock(text="Here is a screenshot:\n\n<img src='/tmp/test.png' alt='test'>\n\nDone."),),
+    )
+
+    response_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=chat_message_id,
+        content=(TextBlock(text="Here is a screenshot:\n\n<img src='/tmp/test.png' alt='test'>\n\nDone."),),
+    )
+
+    request_success = _make_request_success(request_id=user_message.message_id)
+
+    state = convert_agent_messages_to_task_update(
+        [
+            request_started,
+            partial_with_img,
+            response_block,
+            request_success,
+        ],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    # After the full flow (partial → response → request_success), the completed
+    # message should have the <img> tag extracted into a FileBlock.
+    assert len(state.chat_messages) == 2  # user + assistant
+    assistant_reply = state.chat_messages[1]
+
+    file_blocks = [b for b in assistant_reply.content if isinstance(b, FileBlock)]
+    assert len(file_blocks) == 1, f"Expected one FileBlock, got content: {assistant_reply.content}"
+    assert file_blocks[0].source == "/tmp/test.png"
+
+    text_blocks = [b for b in assistant_reply.content if isinstance(b, TextBlock)]
+    text_content = "".join(b.text for b in text_blocks)
+    assert "Here is a screenshot" in text_content
+    assert "Done." in text_content
+    # The <img> tag should NOT be present as raw text
+    assert "<img" not in text_content

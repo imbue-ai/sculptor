@@ -1,9 +1,36 @@
-import { describe, expect, it } from "vitest";
+import { Theme } from "@radix-ui/themes";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedProviderEntry } from "~/api";
-import { ProviderGroup } from "~/api";
+import { ElementIds, ProviderGroup } from "~/api";
 
+import type { PiLoginRequestView } from "./PiLoginDialog.tsx";
+import { PiProvidersArea } from "./PiProvidersArea.tsx";
 import { groupProviders } from "./piProvidersGrouping.ts";
+
+const { mockUsePiAuthenticatedProviders } = vi.hoisted(() => ({
+  mockUsePiAuthenticatedProviders: vi.fn(),
+}));
+
+vi.mock("~/common/state/hooks/usePiAuthenticatedProviders", () => ({
+  usePiAuthenticatedProviders: mockUsePiAuthenticatedProviders,
+}));
+
+// The real login dialog embeds an xterm terminal; the stub echoes the request it
+// receives so tests can assert what the area hands it.
+vi.mock("./PiLoginDialog.tsx", () => ({
+  PiLoginDialog: ({ request }: { request: PiLoginRequestView }): ReactElement => (
+    <div
+      data-testid="fake-login-dialog"
+      data-mode={request.mode}
+      data-provider-id={request.providerId ?? ""}
+      data-group={request.group ?? ""}
+      data-supports-subscription={String(request.supportsSubscription)}
+    />
+  ),
+}));
 
 const makeProvider = (overrides: Partial<AuthenticatedProviderEntry>): AuthenticatedProviderEntry => ({
   providerId: "anthropic",
@@ -12,7 +39,80 @@ const makeProvider = (overrides: Partial<AuthenticatedProviderEntry>): Authentic
   inAuthJson: false,
   envDetected: false,
   envVarNames: ["ANTHROPIC_API_KEY"],
+  supportsSubscription: false,
   ...overrides,
+});
+
+const renderProvidersArea = (providers: ReadonlyArray<AuthenticatedProviderEntry>): void => {
+  mockUsePiAuthenticatedProviders.mockReturnValue({
+    providers,
+    isPending: false,
+    refetch: vi.fn(),
+  });
+  render(
+    <Theme>
+      <PiProvidersArea />
+    </Theme>,
+  );
+};
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe("PiProvidersArea copy", () => {
+  it("describes the connected providers as synced with auth.json", () => {
+    renderProvidersArea([makeProvider({ inAuthJson: true })]);
+    expect(screen.getByText(/The list of connected providers is synced with/)).toBeTruthy();
+    expect(screen.getByText("~/.pi/agent/auth.json")).toBeTruthy();
+  });
+
+  it("hands the dialog the clicked provider's auth shape on login", () => {
+    renderProvidersArea([
+      makeProvider({
+        providerId: "openai-codex",
+        displayName: "ChatGPT Plus/Pro (Codex)",
+        group: ProviderGroup.SUBSCRIPTION_ONLY,
+        supportsSubscription: true,
+        envVarNames: [],
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId(`${ElementIds.PI_PROVIDER_ADD_CELL}-openai-codex`));
+
+    const dialog = screen.getByTestId("fake-login-dialog");
+    expect(dialog.getAttribute("data-mode")).toBe("login");
+    expect(dialog.getAttribute("data-provider-id")).toBe("openai-codex");
+    expect(dialog.getAttribute("data-group")).toBe("subscription_only");
+    expect(dialog.getAttribute("data-supports-subscription")).toBe("true");
+  });
+
+  it("hands the dialog the clicked provider's auth shape on disconnect", () => {
+    renderProvidersArea([makeProvider({ providerId: "anthropic", inAuthJson: true, supportsSubscription: true })]);
+    fireEvent.click(screen.getByTestId(`${ElementIds.PI_PROVIDER_DISCONNECT_BUTTON}-anthropic`));
+
+    const dialog = screen.getByTestId("fake-login-dialog");
+    expect(dialog.getAttribute("data-mode")).toBe("logout");
+    expect(dialog.getAttribute("data-provider-id")).toBe("anthropic");
+    expect(dialog.getAttribute("data-group")).toBe("single_key");
+    expect(dialog.getAttribute("data-supports-subscription")).toBe("true");
+  });
+
+  it("renders connected rows without a per-row credential-source line", () => {
+    renderProvidersArea([
+      makeProvider({ providerId: "anthropic", displayName: "Anthropic", inAuthJson: true }),
+      makeProvider({
+        providerId: "groq",
+        displayName: "Groq",
+        envDetected: true,
+        envVarNames: ["GROQ_API_KEY"],
+      }),
+    ]);
+    expect(screen.queryByText(/Imported from/)).toBeNull();
+    expect(screen.queryByText(/Detected via environment variable/)).toBeNull();
+    // The env-only row keeps its explainer note — the only place that names the env var.
+    expect(screen.getByText(/clear that variable to disconnect/)).toBeTruthy();
+  });
 });
 
 describe("groupProviders", () => {
@@ -39,6 +139,33 @@ describe("groupProviders", () => {
     ]);
     expect(grouping.sessionOnly.map((p) => p.providerId)).toEqual(["amazon-bedrock"]);
     expect(grouping.connected).toHaveLength(0);
+  });
+
+  it("puts an unauthenticated subscription-only provider under Available", () => {
+    const grouping = groupProviders([
+      makeProvider({
+        providerId: "openai-codex",
+        group: ProviderGroup.SUBSCRIPTION_ONLY,
+        supportsSubscription: true,
+        envVarNames: [],
+      }),
+    ]);
+    expect(grouping.available.map((p) => p.providerId)).toEqual(["openai-codex"]);
+    expect(grouping.sessionOnly).toHaveLength(0);
+  });
+
+  it("puts an authenticated subscription-only provider under Connected", () => {
+    const grouping = groupProviders([
+      makeProvider({
+        providerId: "github-copilot",
+        group: ProviderGroup.SUBSCRIPTION_ONLY,
+        supportsSubscription: true,
+        envVarNames: [],
+        inAuthJson: true,
+      }),
+    ]);
+    expect(grouping.connected.map((p) => p.providerId)).toEqual(["github-copilot"]);
+    expect(grouping.sessionOnly).toHaveLength(0);
   });
 
   it("sorts the Available group alphabetically by display name", () => {

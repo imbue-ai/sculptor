@@ -337,3 +337,8 @@ scan-reports/
 
 # Generated per-PR perf config (derived from offload-perf.toml by tools/perf/make_fast_config.py)
 offload-perf-fast.toml
+
+# Personal, per-repo overrides of committed .sculptor/ config docs (e.g. naming.local.md).
+# The .local. infix marks a doc as yours-only; it layers over the committed one and is never
+# shared. Extension-agnostic so any future .sculptor/<name>.local.<ext> is ignored too.
+/.sculptor/*.local.*

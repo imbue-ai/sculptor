@@ -300,6 +300,7 @@ class AuthenticatedProviderEntry(SerializableModel):
     in_auth_json: bool
     env_detected: bool
     env_var_names: tuple[str, ...]
+    supports_subscription: bool
 
 
 class AuthenticatedProvidersResponse(SerializableModel):
@@ -324,8 +325,10 @@ class PiModelsResponse(SerializableModel):
 class PiLoginRequest(RequestModel):
     """Start an interactive pi login or logout PTY.
 
-    ``provider_id`` is on-screen guidance / refresh context only — pi's /login and
-    /logout take no provider argument (the user selects in pi's own TUI selector).
+    pi's /login and /logout take no provider argument, so ``provider_id`` is the row
+    the spawned session's keystroke driver selects in pi's own TUI selectors (and the
+    auth.json key whose change marks the session completed). None means pi's selectors
+    are left entirely to the user.
     """
 
     mode: Literal["login", "logout"]

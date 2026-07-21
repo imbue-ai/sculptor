@@ -332,6 +332,15 @@ def convert_agent_messages_to_task_update(
                     completed_chat_messages.append(previously_queued_message)
                     is_promoted = True
                     break
+            # A newly started user turn supersedes any unanswered question left
+            # pending by a non-user stop (shutdown/restart): the user chose to
+            # move on with a fresh prompt instead of answering, so the stale
+            # panel must not linger while the agent works on the new turn.
+            # Promotion only matches queued *chat* messages, so answer-delivery
+            # turns (request_id = the UserQuestionAnswerMessage id) never clear
+            # here — the UserQuestionAnswerMessage branch resolves those.
+            if is_promoted:
+                pending_user_questions.clear()
             # Only update current_request_id for real content requests (matched a
             # queued message) or when idle.  Lifecycle requests like
             # RemoveQueuedMessage emit their own RequestStarted/RequestSuccess pair
@@ -651,6 +660,10 @@ def convert_agent_messages_to_task_update(
             cleared_message = _add_context_cleared_to_message(None, msg)
             completed_message_by_id[cleared_message.id] = cleared_message
             completed_chat_messages.append(cleared_message)
+            # A cleared context wipes the session that asked — any pending
+            # question (including one preserved across a non-user stop) can no
+            # longer be answered against it.
+            pending_user_questions.clear()
 
         elif isinstance(msg, TurnMetricsAgentMessage):
             pending_turn_metrics = msg.turn_metrics
@@ -756,10 +769,14 @@ def convert_agent_messages_to_task_update(
                 in_progress_chat_message = _mark_stopped(in_progress_chat_message)
                 in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
                 pending_turn_metrics = None
-                # Clear any pending AUQs — the turn was stopped so the
-                # questions are no longer answerable and the chat input
-                # should reappear.
-                pending_user_questions.clear()
+                # Only a user-initiated stop dismisses pending AUQs — the user is
+                # moving on, so the chat input should reappear. A stop the user
+                # did not ask for (backend shutdown/restart SIGTERM) leaves the
+                # questions pending: they were reconstructed from the persisted
+                # ToolUseBlock above and remain answerable after resume via the
+                # runner's answer-after-turn-ended continuation.
+                if msg.stopped_by_user:
+                    pending_user_questions.clear()
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
@@ -1232,12 +1249,17 @@ def _handle_partial_response(
     # via the partial first, and the later final ResponseBlockAgentMessage skips it
     # as a duplicate — so without stamping on this path the live turn never gets a role.
     committed_tool_use_ids = {b.id for b in committed_content if isinstance(b, ToolUseBlock)}
-    deduplicated = tuple(
-        _stamp_interactive_role(b, harness)
-        for b in content
-        if not (isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids)
-    )
-    new_content = committed_content + deduplicated
+    # Extract <img>/<video> tags from TextBlocks into FileBlocks during streaming.
+    # The _handle_response_blocks path already does this for persisted messages.
+    expanded: list[ContentBlockTypes] = []
+    for b in content:
+        if isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids:
+            continue
+        if isinstance(b, TextBlock):
+            expanded.extend(split_text_and_media(b.text))
+        else:
+            expanded.append(_stamp_interactive_role(b, harness))
+    new_content = committed_content + tuple(expanded)
 
     return in_progress.model_copy(update={"content": new_content})
 

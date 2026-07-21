@@ -8,7 +8,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ElementIds, type Project, type Workspace } from "~/api";
 import { queryClient } from "~/common/queryClient";
 import { projectAtomFamily, projectIdsAtom } from "~/common/state/atoms/projects.ts";
-import { workspaceAtomFamily, workspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
+import {
+  optimisticDeleteWorkspaceAtom,
+  workspaceAtomFamily,
+  workspaceIdsAtom,
+} from "~/common/state/atoms/workspaces.ts";
 import { renderWithProviders } from "~/common/testUtils.tsx";
 
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
@@ -113,6 +117,35 @@ describe("WorkspaceSidebar loading state", () => {
     renderWithProviders(<Sidebar />, { store });
 
     expect(screen.queryByTestId(ElementIds.SIDEBAR_LOADING_SKELETON)).toBeNull();
+  });
+});
+
+describe("WorkspaceSidebar deleting rows", () => {
+  let store: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    store = createStore();
+  });
+
+  afterEach(() => {
+    cleanup();
+    queryClient.clear();
+  });
+
+  it("keeps a delete-in-flight row visible as a dimmed, non-interactive Deleting\u2026 row", () => {
+    seedProject(store, "p1");
+    seedWorkspaces(store, ["w1"]);
+    store.set(optimisticDeleteWorkspaceAtom, "w1");
+    renderWithProviders(<Sidebar />, { store });
+
+    // Still listed under its repo group, carrying the last-known name.
+    const row = screen.getByTestId(ElementIds.SIDEBAR_WORKSPACE_ROW);
+    expect(screen.getByText("ws-w1")).toBeTruthy();
+    expect(row.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByText("Deleting\u2026")).toBeTruthy();
+    // The action affordances are replaced by the pending label.
+    expect(screen.queryByTestId(ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE)).toBeNull();
+    expect(screen.queryByTestId(ElementIds.SIDEBAR_WORKSPACE_ROW_MENU)).toBeNull();
   });
 });
 

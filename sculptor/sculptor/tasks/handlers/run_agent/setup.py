@@ -1,28 +1,19 @@
 import time
 from contextlib import contextmanager
 from queue import Queue
-from threading import Thread
 from typing import Generator
 from typing import Sequence
 from typing import cast
 
 from loguru import logger
 
-from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
-from sculptor.foundation.async_monkey_patches import log_exception
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.errors import ImbueError
 from sculptor.foundation.event_utils import ReadOnlyEvent
-from sculptor.foundation.nested_evolver import assign
-from sculptor.foundation.nested_evolver import chill
-from sculptor.foundation.nested_evolver import evolver
-from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
-from sculptor.foundation.progress_tracking.progress_tracking import start_finish_context
 from sculptor.foundation.pydantic_serialization import FrozenModel
+from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
@@ -35,12 +26,11 @@ from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import SIGINT_EXIT_CODES
 from sculptor.interfaces.agents.constants import SIGTERM_EXIT_CODES
 from sculptor.interfaces.agents.errors import AgentClientError
+from sculptor.interfaces.agents.harness import Harness
 from sculptor.primitives.ids import AgentMessageID
-from sculptor.primitives.ids import TaskID
-from sculptor.server.llm_content_generation import TaskTitle
-from sculptor.server.llm_content_generation import generate_title_from_prompt
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
+from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
 from sculptor.state.messages import PersistentAgentMessage
@@ -50,11 +40,6 @@ from sculptor.utils.type_utils import extract_leaf_types
 
 # it will take at most this much time to notice when the process has finished
 _POLL_SECONDS: float = 1.0
-# if it takes longer than this, we give up waiting for the title and branch name to be predicted
-_TITLE_NAME_TIMEOUT_SECONDS: float = 10.0
-# the fallback title is the initial prompt truncated to this many characters
-_FALLBACK_TITLE_MAX_LENGTH: int = 60
-_FIXED_TITLE_COUNTER_FOR_TESTING = 0
 
 
 class LastProcessedMessageNotInQueueError(ImbueError):
@@ -104,141 +89,6 @@ def wait_for_initial_message_and_process_queue(
     return re_queued_messages, initial_message
 
 
-@contextmanager
-def title_prediction_context(
-    task_state: AgentTaskStateV2,
-    initial_message: ChatInputUserMessage,
-    settings: SculptorSettings,
-    concurrency_group: ConcurrencyGroup,
-    root_progress_handle: RootProgressHandle,
-) -> Generator[tuple[list[TaskTitle], Thread | None], None, None]:
-    """Start title prediction thread if needed."""
-    title_result: list[TaskTitle] = []
-    title_thread = None
-
-    if task_state.title is None:
-        title_thread = concurrency_group.start_new_thread(
-            target=_predict_title,
-            args=(
-                initial_message.text,
-                title_result,
-                settings,
-                concurrency_group,
-                root_progress_handle,
-            ),
-        )
-
-    try:
-        yield title_result, title_thread
-    finally:
-        # Ensure thread is cleaned up if still running
-        if title_thread and title_thread.is_alive():
-            title_thread.join()
-
-
-def finalize_task_setup(
-    task: Task,
-    task_state: AgentTaskStateV2,
-    title_thread: Thread | None,
-    title_result: list[TaskTitle],
-    initial_message: ChatInputUserMessage,
-    services: ServiceCollectionForTask,
-) -> AgentTaskStateV2:
-    """Handle final task setup steps after environment is ready."""
-    if title_thread is not None:
-        # Resolve title prediction
-        task_state = _resolve_title_prediction_thread(
-            title_result=title_result,
-            title_thread=title_thread,
-            task_id=task.object_id,
-            task_state=task_state,
-            initial_message=initial_message,
-            services=services,
-        )
-
-    return task_state
-
-
-def _resolve_title_prediction_thread(
-    title_thread: Thread,
-    title_result: list[TaskTitle],
-    task_id: TaskID,
-    task_state: AgentTaskStateV2,
-    initial_message: ChatInputUserMessage,
-    services: ServiceCollectionForTask,
-) -> AgentTaskStateV2:
-    """
-    Waits (a little while) for the title prediction thread to finish,
-    then saves the title to the database.
-    """
-    title_thread.join(timeout=_TITLE_NAME_TIMEOUT_SECONDS)
-    if title_thread.is_alive() or not title_result:
-        logger.warning("Title prediction thread did not finish in time, using default")
-        title = initial_message.text
-    else:
-        title = title_result[0].title
-
-    # Save the title to the database, but only if the user hasn't already
-    # renamed the agent (which would have set a title via the API).
-    with services.data_model_service.open_task_transaction() as transaction:
-        task_row = transaction.get_task(task_id)
-        assert task_row is not None
-        db_state = AgentTaskStateV2.model_validate(task_row.current_state)
-        if db_state.title is not None:
-            # User already renamed — keep their title.
-            title = db_state.title
-
-        mutable_task_state = evolver(task_state)
-        assign(mutable_task_state.title, lambda: title)
-        task_state = chill(mutable_task_state)
-
-        task_row = task_row.evolve(task_row.ref().current_state, task_state.model_dump())
-        _task_row = transaction.upsert_task(task_row)
-    return task_state
-
-
-def _predict_title(
-    initial_prompt: str,
-    title_result: list[TaskTitle],
-    settings: SculptorSettings,
-    concurrency_group: ConcurrencyGroup,
-    root_progress_handle: RootProgressHandle,
-) -> None:
-    with start_finish_context(root_progress_handle.track_task_title_generation()) as title_generation_handler:
-        if settings.TESTING.INTEGRATION_ENABLED:
-            title = _generate_fixed_title_for_testing()
-            title_result.append(TaskTitle(title=title))
-            title_generation_handler.report_generated_title(title)
-            return
-        try:
-            logger.debug("Generating title for task...")
-            task_title = generate_title_from_prompt(initial_prompt, concurrency_group)
-            logger.debug("Generated title: '{}'", task_title.title)
-            title_result.append(task_title)
-        except Exception as e:
-            log_exception(
-                e,
-                "Failed to generate title",
-                priority=ExceptionPriority.LOW_PRIORITY,
-            )
-            title = (
-                initial_prompt[:_FALLBACK_TITLE_MAX_LENGTH] + "..."
-                if len(initial_prompt) > _FALLBACK_TITLE_MAX_LENGTH
-                else initial_prompt
-            )
-            logger.debug("Generated fallback title: '{}'", title)
-            title_result.append(TaskTitle(title=title))
-        finally:
-            if title_result:
-                title_generation_handler.report_generated_title(title_result[0].title)
-
-
-def _generate_fixed_title_for_testing() -> str:
-    global _FIXED_TITLE_COUNTER_FOR_TESTING
-    _FIXED_TITLE_COUNTER_FOR_TESTING += 1
-    return f"Task {_FIXED_TITLE_COUNTER_FOR_TESTING}"
-
-
 def load_initial_task_state(services: ServiceCollectionForTask, task: Task) -> tuple[AgentTaskStateV2, Project]:
     logger.debug("loading initial task state")
     with services.data_model_service.open_task_transaction() as transaction:
@@ -284,6 +134,11 @@ class HistoryScan(FrozenModel):
     dangling_chat_message_id: AgentMessageID | None
     # The last user chat message the agent started processing.
     last_user_chat_message_id: AgentMessageID | None
+    # That same message in full: it carries the conversation's launch settings
+    # (model, fast mode, effort), which model-less turns (question answers,
+    # answer-continuation resumes) continue with, so the runner re-seeds the
+    # agent wrapper from it on startup.
+    last_started_chat_message: ChatInputUserMessage | None
     # Every persistent message replayed in log order: user messages the agent
     # started processing plus the agent's own non-killed messages. The loop keeps
     # appending to (a copy of) this as the run produces more messages.
@@ -294,7 +149,7 @@ class HistoryScan(FrozenModel):
     last_processed_message_id: AgentMessageID | None
 
 
-def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
+def scan_message_history(all_messages: Sequence[Message], harness: Harness) -> HistoryScan:
     """Replay a task's persisted message log to reconstruct the loop's startup state.
 
     The scan is the single authority on which persisted user messages are settled
@@ -302,6 +157,10 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
     ``RequestStartedAgentMessage`` references it and the scan does not leave it in
     flight. ``last_processed_message_id`` is derived from the same pass state as
     the in-flight ids, so the dedup cursor and the resume tracking cannot diverge.
+
+    ``harness`` identifies AskUserQuestion / ExitPlanMode tool blocks in the log:
+    a killed turn that is blocked on an unanswered question is settled rather
+    than left in flight (see the question gate below).
     """
     persistent_user_message_by_id: dict[AgentMessageID, PersistentUserMessage] = {}
     # ids of user messages some RequestStartedAgentMessage references — i.e. user
@@ -310,6 +169,7 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
     # the last user chat message that we *started* processing — tracked in case we
     # never *finished* processing it, so that the agent can resume where it left off
     last_user_chat_message_id: AgentMessageID | None = None
+    last_started_chat_message: ChatInputUserMessage | None = None
     in_flight_chat_message_id: AgentMessageID | None = None
     in_flight_answer_message_id: AgentMessageID | None = None
     # Track whether the agent emitted any visible response for the in-flight chat
@@ -317,6 +177,14 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
     # rather just resend the original prompt than send a "continue where you left
     # off" instruction with no prior content. Reset on each new RequestStarted.
     is_partial_agent_response = False
+    # tool_use ids of AUQ / ExitPlanMode calls the user has not answered. Kept in
+    # lockstep with the web layer's pending-question derivation (derived
+    # ``_ready_or_waiting`` and message_conversion): a newer started user turn, a
+    # settled completion, a user-initiated stop, or a context clear dismisses
+    # them; a stop the user did not ask for (shutdown/restart SIGTERM) preserves
+    # them, because the question is restored in the UI and stays answerable via
+    # the answer-after-turn-ended continuation.
+    unanswered_question_tool_use_ids: set[str] = set()
     persistent_message_history: list[PersistentUserMessage | PersistentAgentMessage] = []
     for message in all_messages:
         # just remember the last chat message from the user (that the agent started processing)
@@ -326,8 +194,12 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
                 started_user_message_ids.add(message.request_id)
                 if isinstance(persistent_message, ChatInputUserMessage):
                     last_user_chat_message_id = message.request_id
+                    last_started_chat_message = persistent_message
                     in_flight_chat_message_id = message.request_id
                     is_partial_agent_response = False
+                    # A newer user prompt began processing — it supersedes any
+                    # older unanswered question.
+                    unanswered_question_tool_use_ids.clear()
                 elif isinstance(persistent_message, UserQuestionAnswerMessage):
                     in_flight_answer_message_id = message.request_id
                 # add the user message to the history as well
@@ -349,18 +221,40 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
                 isinstance(message, RequestSuccessAgentMessage) and (not message.interrupted or message.turn_abandoned)
             ):
                 in_flight_answer_message_id = None
+            # Any settled completion means the asking turn is over and its
+            # questions can no longer be answered against it — except a stop the
+            # user did not ask for, which preserves them (see the set's comment).
+            if not (isinstance(message, RequestStoppedAgentMessage) and not message.stopped_by_user):
+                unanswered_question_tool_use_ids.clear()
         # used above so that we can figure out which user messages started being processed so far
         if isinstance(message, PersistentUserMessage):
             persistent_user_message_by_id[message.message_id] = message
+            if isinstance(message, UserQuestionAnswerMessage):
+                unanswered_question_tool_use_ids.discard(message.tool_use_id)
         # remember all messages that have been emitted so far by the agent
         if isinstance(message, PersistentAgentMessage):
             was_killed = get_killed_exit_code(message)
             if not was_killed:
                 persistent_message_history.append(message)
+            if isinstance(message, ContextClearedMessage):
+                # A cleared context wipes the session that asked — any older
+                # question can no longer be answered against it.
+                unanswered_question_tool_use_ids.clear()
             # A ResponseBlockAgentMessage from the in-flight turn means Claude
             # produced visible content that we'd want to continue from on resume.
             if isinstance(message, ResponseBlockAgentMessage):
                 is_partial_agent_response = True
+                for block in message.content:
+                    if not isinstance(block, ToolUseBlock):
+                        continue
+                    # Invalid AUQ inputs were rejected by the MCP server, so the
+                    # agent has already moved on — mirror the web layer and skip
+                    # them. ExitPlanMode accepts any input per its schema.
+                    if (
+                        harness.is_ask_user_question_tool(block.name)
+                        and harness.is_valid_ask_user_question_input(block.name, block.input)
+                    ) or harness.is_exit_plan_mode_tool(block.name):
+                        unanswered_question_tool_use_ids.add(block.id)
     # The pre-gate value: dangling means "no accepted terminal completion", even
     # when there is no partial output to resume from.
     dangling_chat_message_id = in_flight_chat_message_id
@@ -371,6 +265,17 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
     # converts the push into a resume and Claude continues its --resume session.
     if not is_partial_agent_response:
         in_flight_chat_message_id = None
+
+    # The question gate: a killed turn blocked on an unanswered question is
+    # settled, not resumable. The UI restores the question and pins the task at
+    # WAITING, and the user's late answer drives the continuation — so the turn
+    # must not be auto-resumed here (a "continue" turn would settle or re-issue
+    # the question out from under the user) nor terminalized by the orphan
+    # synthesis (a turn_abandoned completion would dismiss the question in the
+    # web layer's derivations).
+    if unanswered_question_tool_use_ids:
+        in_flight_chat_message_id = None
+        dangling_chat_message_id = None
 
     # Derive the dedup cursor: the latest user message (in log order) that was
     # started and did not end the scan in flight. In-flight messages stay ahead of
@@ -390,6 +295,7 @@ def scan_message_history(all_messages: Sequence[Message]) -> HistoryScan:
         is_partial_agent_response=is_partial_agent_response,
         dangling_chat_message_id=dangling_chat_message_id,
         last_user_chat_message_id=last_user_chat_message_id,
+        last_started_chat_message=last_started_chat_message,
         persistent_message_history=persistent_message_history,
         last_processed_message_id=last_processed_message_id,
     )

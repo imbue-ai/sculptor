@@ -3,7 +3,7 @@ import { useCallback } from "react";
 
 import { updateWorkspace } from "~/api";
 import { workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
-import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { asLiveWorkspace, workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { ToastType } from "~/components/Toast.tsx";
 
 /**
@@ -24,7 +24,9 @@ export const useWorkspaceRename = (): ((workspaceId: string, newName: string) =>
   return useCallback(
     (workspaceId: string, newName: string): void => {
       const workspaceAtom = workspaceAtomFamily(workspaceId);
-      const previous = store.get(workspaceAtom);
+      // A tombstoned (deleting) entry has no live model to rename optimistically;
+      // the PATCH still goes out and the server stays authoritative.
+      const previous = asLiveWorkspace(store.get(workspaceAtom));
       if (previous !== null) {
         store.set(workspaceAtom, { ...previous, description: newName });
       }
@@ -38,7 +40,10 @@ export const useWorkspaceRename = (): ((workspaceId: string, newName: string) =>
         }
         setRenameErrorToast({
           title: `Failed to rename "${previous?.description ?? "workspace"}"`,
-          description: "The name has been restored. Try again or check your connection.",
+          description:
+            previous !== null
+              ? "The name has been restored. Try again or check your connection."
+              : "Try again or check your connection.",
           type: ToastType.ERROR_PROMINENT,
           action: null,
         });

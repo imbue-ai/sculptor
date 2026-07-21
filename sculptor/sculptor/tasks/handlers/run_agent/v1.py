@@ -92,12 +92,10 @@ from sculptor.state.messages import ModelOption
 from sculptor.state.messages import PersistentAgentMessage
 from sculptor.state.messages import PersistentUserMessage
 from sculptor.tasks.handlers.run_agent.setup import HistoryScan
-from sculptor.tasks.handlers.run_agent.setup import finalize_task_setup
 from sculptor.tasks.handlers.run_agent.setup import get_killed_exit_code
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import message_queue_subscription_context
 from sculptor.tasks.handlers.run_agent.setup import scan_message_history
-from sculptor.tasks.handlers.run_agent.setup import title_prediction_context
 from sculptor.tasks.handlers.run_agent.setup import wait_for_initial_message_and_process_queue
 from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
@@ -186,7 +184,7 @@ def run_agent_task_v1(
         # input_message_queue.
         with services.data_model_service.open_task_transaction() as transaction:
             all_messages = services.task_service.get_saved_messages_for_task(task.object_id, transaction)
-        history_scan = scan_message_history(all_messages)
+        history_scan = scan_message_history(all_messages, get_harness_for_config(task_data.agent_config))
 
         # Subscribe to the message queue, set up the environment, then wait for the initial message.
         # Environment setup happens before the initial message wait so that prompt-less agents
@@ -252,25 +250,6 @@ def run_agent_task_v1(
                     # from this in-memory copy; re-read so the selection is not lost here.
                     task_state = _refresh_model_fields_from_db(task.object_id, task_state, services)
 
-                    with title_prediction_context(
-                        task_state,
-                        initial_message,
-                        settings,
-                        environment_concurrency_group,
-                        root_progress_handle,
-                    ) as (
-                        title_result,
-                        title_thread,
-                    ):
-                        # Handle git initialization and branch setup
-                        task_state = finalize_task_setup(
-                            task=task,
-                            task_state=task_state,
-                            title_thread=title_thread,
-                            title_result=title_result,
-                            initial_message=initial_message,
-                            services=services,
-                        )
                     setup_duration = time.monotonic() - setup_start_time
                     if setup_duration >= TIMING_LOG_THRESHOLD_SECONDS:
                         logger.debug(format_timing_log("task setup", setup_duration))
@@ -399,6 +378,17 @@ def _run_agent_in_environment(
         agent_wrapper.start(secrets)
         if on_agent_started is not None:
             on_agent_started()
+
+        # The last chat turn the agent started processing carries the
+        # conversation's launch settings (model, fast mode, effort); model-less
+        # turns (question answers) continue with them, so they are re-seeded
+        # into the agent wrapper from the replayed history.
+        if history_scan.last_started_chat_message is not None:
+            agent_wrapper.set_conversation_launch_settings(
+                model_name=history_scan.last_started_chat_message.model_name,
+                fast_mode=history_scan.last_started_chat_message.fast_mode,
+                effort=history_scan.last_started_chat_message.effort,
+            )
 
         logger.debug("Initial in-flight user chat message ID: {}", initial_in_flight_user_chat_message_id)
         logger.debug("Derived last processed message id:      {}", history_scan.last_processed_message_id)
@@ -829,11 +819,11 @@ def _eager_fetch_pi_models_into_state(
     task state so the switcher reflects pi's models immediately.
 
     Returns the task state evolved with the probe's result, so the caller carries
-    it forward — otherwise `finalize_task_setup`'s later evolve-and-upsert (from
-    the in-memory state) would write the stale `NOT_FETCHED_YET` back out.
-    Restricted to pi: the `supports_model_selection` check skips harnesses that
-    cannot select a model at all, and the `PiAgent` check below skips the rest —
-    only pi sources a dynamic catalog via the probe (Claude supports model
+    it forward into agent construction, which reads this in-memory copy rather
+    than re-reading the DB. Restricted to pi: the `supports_model_selection` check
+    skips harnesses that cannot select a model at all, and the `PiAgent` check
+    below skips the rest — only pi sources a dynamic catalog via the probe (Claude
+    supports model
     selection but with a static built-in list). Best-effort: on any failure the
     probe returns an empty catalog, which is persisted as a fetched-but-empty `[]`
     (the switcher then shows the empty state) rather than left not-fetched.
@@ -1069,8 +1059,8 @@ def _refresh_model_fields_from_db(
     The set_model endpoint writes the selected model straight to task state while the
     agent waits for its first message, so this handler's in-memory copy goes stale.
     Refresh only those two fields (leaving the rest of the in-memory state as-is) so a
-    pre-message switch reaches agent construction and survives `finalize_task_setup`'s
-    write-back. A no-op when nothing changed or the task row is missing.
+    pre-message switch reaches agent construction. A no-op when nothing changed or the
+    task row is missing.
     """
     with services.data_model_service.open_task_transaction() as transaction:
         task_row = transaction.get_task(task_id)

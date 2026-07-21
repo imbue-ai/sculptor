@@ -1364,6 +1364,11 @@
           "source": {
             "$ref": "#/$defs/AgentMessageSource",
             "default": "AGENT"
+          },
+          "stoppedByUser": {
+            "default": false,
+            "title": "Stoppedbyuser",
+            "type": "boolean"
           }
         },
         "required": [

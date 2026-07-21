@@ -191,6 +191,9 @@ export const workspaceBranchDeletionPolicyAtom = atom<"never" | "delete_if_safe"
 // Entity mentions (experimental — off by default)
 export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableEntityMentions ?? false);
 
+// Auto-rename workspace + agent from the first prompt (experimental — off by default)
+export const isAutoRenameEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableAutoRename ?? false);
+
 // Extension system (experimental — off by default). Gates extension
 // loading at boot and the Extensions settings section. Enabling takes effect
 // immediately (ExtensionLoader bootstraps when the flag turns on); disabling only

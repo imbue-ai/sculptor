@@ -16,7 +16,7 @@ import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom } from "~/common/state/ato
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
 import { useCommandPalette } from "~/components/CommandPalette";
-import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import { pendingWorkspaceRenameIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import type { OpenInRuntime } from "~/components/CommandPalette/contextActions/menu.tsx";
 import type { WorkspaceActionRuntime } from "~/components/CommandPalette/contextActions/types.ts";
 import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
@@ -76,7 +76,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // (notably after a hard refresh), without conflating it with a genuinely
   // empty list.
   const isLoading = useAtomValue(isSidebarLoadingAtom);
-  const setRenamingWorkspaceId = useSetAtom(renamingWorkspaceIdAtom);
+  const setPendingWorkspaceRename = useSetAtom(pendingWorkspaceRenameIdAtom);
   // The workspace→last-agent map is only consulted inside the click handler, so
   // read it lazily from the store rather than subscribing: the whole sidebar
   // would otherwise re-render (and churn the click callbacks) on every agent-id
@@ -123,11 +123,15 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // Functions and callbacks
   const workspaceActionRuntime = useMemo<WorkspaceActionRuntime>(
     () => ({
-      beginRename: (ws): void => setRenamingWorkspaceId(ws.objectId),
+      // Record the rename intent only; the sidebar menu's onCloseAutoFocus enters
+      // rename mode once the menu (and its focus scope) is gone, so the inline
+      // input takes focus with nothing competing for it. See
+      // pendingWorkspaceRenameIdAtom.
+      beginRename: (ws): void => setPendingWorkspaceRename(ws.objectId),
       beginDelete: (ws): void => setDeleteTarget(ws),
       ...gitAndOpenIn,
     }),
-    [setRenamingWorkspaceId, gitAndOpenIn],
+    [setPendingWorkspaceRename, gitAndOpenIn],
   );
 
   // Run the optimistic delete once the user confirms in the dialog.

@@ -7,6 +7,7 @@ sequence, the auth.json completion judgement, and the broadcast's pi-only target
 all with a stand-in terminal manager.
 """
 
+from typing import Callable
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -196,42 +197,106 @@ class _FakeTerminal:
         self._on_write(self, data)
 
 
-def test_drive_pi_session_logout_filters_and_confirms(monkeypatch: pytest.MonkeyPatch) -> None:
+def _drive_with_fake_pi(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: PiLoginMode,
+    provider_id: str | None,
+    on_write: Callable[[_FakeTerminal, bytes], None] = lambda manager, data: None,
+) -> _FakeTerminal:
+    """Run _drive_pi_session against a scripted _FakeTerminal and return it.
+
+    Launch readiness is scripted (write_launch_command emits a readiness marker) and
+    the fuzzy-filter settle is zeroed, so the driver advances without real waits.
+    """
     monkeypatch.setattr(pi_login_service_module, "_PI_FILTER_SETTLE_SECONDS", 0.0)
-    # write_launch_command starts pi; emit a readiness marker so the slash is sent.
     monkeypatch.setattr(
         pi_login_service_module,
         "write_launch_command",
         lambda manager, command, **kwargs: manager.emit(b"escape interrupt"),
     )
+    terminal = _FakeTerminal(on_write)
+    manager = cast(LocalTerminalManager, terminal)
+    _drive_pi_session(_OutputAccumulator(manager), manager, "/fake/pi", mode, provider_id)
+    return terminal
 
+
+def test_drive_pi_session_logout_filters_and_confirms(monkeypatch: pytest.MonkeyPatch) -> None:
     def on_write(manager: _FakeTerminal, data: bytes) -> None:
         if data == b"/logout\r":
             manager.emit(b"Select provider to logout:")
 
-    terminal = _FakeTerminal(on_write)
-    manager = cast(LocalTerminalManager, terminal)
-    accumulator = _OutputAccumulator(manager)
-    _drive_pi_session(accumulator, manager, "/fake/pi", PiLoginMode.LOGOUT, "openai")
+    terminal = _drive_with_fake_pi(monkeypatch, PiLoginMode.LOGOUT, "openai", on_write)
 
     # Submit the slash, fuzzy-filter to the chosen provider, then confirm with Return.
     assert terminal.writes == [b"/logout\r", b"openai", b"\r"]
 
 
-def test_drive_pi_session_login_only_opens_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        pi_login_service_module,
-        "write_launch_command",
-        lambda manager, command, **kwargs: manager.emit(b"escape interrupt"),
-    )
+def test_drive_pi_session_agnostic_login_only_opens_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    terminal = _drive_with_fake_pi(monkeypatch, PiLoginMode.LOGIN, None)
 
-    terminal = _FakeTerminal(lambda manager, data: None)
-    manager = cast(LocalTerminalManager, terminal)
-    accumulator = _OutputAccumulator(manager)
-    _drive_pi_session(accumulator, manager, "/fake/pi", PiLoginMode.LOGIN, "openai")
-
-    # Login leaves provider selection + credential entry to the user — only the slash.
+    # The empty-state CTA names no provider — pi's own selectors take over, so only
+    # the slash is driven.
     assert terminal.writes == [b"/login\r"]
+
+
+def test_drive_pi_session_login_api_key_provider_lands_on_key_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    def on_write(manager: _FakeTerminal, data: bytes) -> None:
+        if data == b"/login\r":
+            manager.emit(b"Select authentication method:")
+        elif data == b"\r":
+            manager.emit(b"Select provider to configure:")
+
+    terminal = _drive_with_fake_pi(monkeypatch, PiLoginMode.LOGIN, "openai", on_write)
+
+    # openai is API-key-only, so its single valid method is chosen automatically
+    # (Down + Return on pi's method selector), then the provider list is
+    # fuzzy-filtered to the provider and confirmed — landing on the key input.
+    assert terminal.writes == [b"/login\r", b"\x1b[B", b"\r", b"openai", b"\r"]
+
+
+def test_drive_pi_session_login_subscription_provider_lets_user_pick_method(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def on_write(manager: _FakeTerminal, data: bytes) -> None:
+        if data == b"/login\r":
+            manager.emit(b"Select authentication method:")
+            # As if the user picked a method in pi's TUI: the provider list renders.
+            manager.emit(b"Select provider to configure:")
+
+    terminal = _drive_with_fake_pi(monkeypatch, PiLoginMode.LOGIN, "anthropic", on_write)
+
+    # anthropic also supports subscription login, so the method choice stays with the
+    # user; once their choice renders the provider list, the provider is auto-selected.
+    assert terminal.writes == [b"/login\r", b"anthropic", b"\r"]
+
+
+def test_drive_pi_session_login_subscription_only_provider_drives_to_oauth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def on_write(manager: _FakeTerminal, data: bytes) -> None:
+        if data == b"/login\r":
+            manager.emit(b"Select authentication method:")
+        elif data == b"\r":
+            manager.emit(b"Select provider to configure:")
+
+    terminal = _drive_with_fake_pi(monkeypatch, PiLoginMode.LOGIN, "openai-codex", on_write)
+
+    # openai-codex is subscription-only: its single valid method is the selector's
+    # default row ("Use a subscription"), so a bare Return confirms it, then the
+    # provider list is fuzzy-filtered to the provider and confirmed.
+    assert terminal.writes == [b"/login\r", b"\r", b"openai-codex", b"\r"]
+
+
+def test_drive_pi_session_login_gives_up_when_method_selector_never_renders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pi_login_service_module, "_PI_SELECTOR_TIMEOUT_SECONDS", 0.05)
+
+    terminal = _drive_with_fake_pi(monkeypatch, PiLoginMode.LOGIN, "openai")
+
+    # The slash is retried once (an early keystroke can be dropped); with no selector
+    # ever rendering, the session is left for manual completion — nothing else typed.
+    assert terminal.writes == [b"/login\r", b"/login\r"]
 
 
 def test_poll_marks_completed_on_auth_json_change(monkeypatch: pytest.MonkeyPatch) -> None:

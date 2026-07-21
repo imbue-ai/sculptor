@@ -17,7 +17,8 @@ type UseOptimisticTaskDeleteInputs = {
    * deleted agent is active. Receives the deleted task's pre-delete snapshot because the
    * optimistic removal has already dropped the task from the store by the time this runs —
    * callbacks that need the deleted task's data (e.g. its position among siblings) must
-   * read it from the snapshot, not the store.
+   * read it from the snapshot, not the store. Only invoked when the cache had the task;
+   * deleting a task the cache never knew falls back to the default root navigation.
    */
   onNavigateAfterDelete?: (taskId: string, deletedTask: CodingAgentTaskView) => void;
 };
@@ -43,15 +44,15 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
   const execute = useCallback(
     (taskId: string, taskTitle: string): void => {
       const snapshot = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(taskId));
-      if (!snapshot) {
-        return;
-      }
 
       // Tombstone the task and drop it from the ids list *now*, before the
       // navigation callbacks run: the mirror projects the removal into the
       // Jotai atoms synchronously, so the callbacks below already see the task
       // gone from every store. The mutation's onError rolls this back on
-      // failure using the returned context.
+      // failure using the returned context. A missing snapshot applies
+      // nothing — the DELETE is still sent (the server is the authority on
+      // deletability, and a stale reference must not silently swallow the
+      // user's intent).
       const deleteContext = applyOptimisticTaskDelete(taskId);
 
       // A deleted agent must not linger as the workspace's saved agent, or the next
@@ -61,7 +62,7 @@ export const useOptimisticTaskDelete = (inputs: UseOptimisticTaskDeleteInputs): 
         setAgentForWorkspace({ wsId: workspaceId, agentId: null });
       }
 
-      if (onNavigateAfterDelete) {
+      if (onNavigateAfterDelete && snapshot) {
         onNavigateAfterDelete(taskId, snapshot);
       } else if (isAgentRoute && taskID === taskId) {
         navigateToRoot();

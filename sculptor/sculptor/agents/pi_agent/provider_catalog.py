@@ -7,13 +7,16 @@ class ProviderGroup(StrEnum):
     """How a pi provider's credentials are supplied.
 
     SINGLE_KEY providers are fully supported in v1: a single API key persisted in
-    ``auth.json`` is enough to authenticate them. SESSION_ONLY providers draw extra
-    values (region, base URL, account/gateway id, AWS profile) from the environment
-    that are not expressible in ``auth.json`` alone, so v1 surfaces them as
-    env-detected only.
+    ``auth.json`` is enough to authenticate them. SUBSCRIPTION_ONLY providers have
+    no API-key or env-var form at all — pi's interactive subscription (OAuth) login
+    is their only authentication, persisted by pi in ``auth.json``. SESSION_ONLY
+    providers draw extra values (region, base URL, account/gateway id, AWS profile)
+    from the environment that are not expressible in ``auth.json`` alone, so v1
+    surfaces them as env-detected only.
     """
 
     SINGLE_KEY = "single_key"
+    SUBSCRIPTION_ONLY = "subscription_only"
     SESSION_ONLY = "session_only"
 
 
@@ -23,13 +26,17 @@ class ProviderCatalogEntry(FrozenModel):
     ``provider_id`` equals both the ``auth.json`` top-level key and the ``provider``
     field pi reports in ``get_available_models`` (e.g. Gemini is ``google``).
     ``env_var_names`` lists every conventional env var that authenticates the
-    provider; the first is the canonical/primary one.
+    provider; the first is the canonical/primary one. ``supports_subscription``
+    marks providers pi can authenticate via its OAuth/subscription login — for a
+    SINGLE_KEY provider it is one of two methods, and for a SUBSCRIPTION_ONLY
+    provider it is the only one.
     """
 
     provider_id: str
     env_var_names: tuple[str, ...]
     display_name: str
     group: ProviderGroup
+    supports_subscription: bool = False
 
 
 _PROVIDER_CATALOG: tuple[ProviderCatalogEntry, ...] = (
@@ -38,6 +45,7 @@ _PROVIDER_CATALOG: tuple[ProviderCatalogEntry, ...] = (
         env_var_names=("ANTHROPIC_API_KEY",),
         display_name="Anthropic",
         group=ProviderGroup.SINGLE_KEY,
+        supports_subscription=True,
     ),
     ProviderCatalogEntry(
         provider_id="openai",
@@ -170,6 +178,20 @@ _PROVIDER_CATALOG: tuple[ProviderCatalogEntry, ...] = (
         env_var_names=("XIAOMI_TOKEN_PLAN_SGP_API_KEY",),
         display_name="Xiaomi Token Plan (SGP)",
         group=ProviderGroup.SINGLE_KEY,
+    ),
+    ProviderCatalogEntry(
+        provider_id="openai-codex",
+        env_var_names=(),
+        display_name="ChatGPT Plus/Pro (Codex)",
+        group=ProviderGroup.SUBSCRIPTION_ONLY,
+        supports_subscription=True,
+    ),
+    ProviderCatalogEntry(
+        provider_id="github-copilot",
+        env_var_names=(),
+        display_name="GitHub Copilot",
+        group=ProviderGroup.SUBSCRIPTION_ONLY,
+        supports_subscription=True,
     ),
     ProviderCatalogEntry(
         provider_id="azure-openai-responses",

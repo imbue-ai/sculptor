@@ -438,16 +438,11 @@ class ElementIDs(StrEnum):
     PI_PROVIDER_ADD_CELL = "pi-provider-add-cell"
     # Mount point for the in-modal Authenticate/Disconnect actions and the login terminal.
     PI_PROVIDER_ACTIONS = "pi-provider-actions"
-    PI_PROVIDER_AUTHENTICATE_BUTTON = "pi-provider-authenticate-button"
     PI_PROVIDER_DISCONNECT_BUTTON = "pi-provider-disconnect-button"
     # Centered modal that hosts the interactive pi /login (or /logout) session.
     PI_LOGIN_DIALOG = "pi-login-dialog"
     PI_LOGIN_TERMINAL = "pi-login-terminal"
     PI_LOGIN_DONE_BUTTON = "pi-login-done-button"
-    # Unused paste-key UI test IDs; drop with a `just generate-api` pass.
-    PI_PROVIDER_PASTE_KEY_SWITCH = "pi-provider-paste-key-switch"
-    PI_PASTE_KEY_INPUT = "pi-paste-key-input"
-    PI_PASTE_KEY_SAVE = "pi-paste-key-save"
     # Model-picker disabled "no models available" state when a harness (pi) has no
     # authenticated providers; the fix-it action lives on the composer send slot.
     PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"
@@ -621,6 +616,7 @@ class ElementIDs(StrEnum):
     SIDEBAR_WORKSPACE_ROW = "SIDEBAR_WORKSPACE_ROW"
     SIDEBAR_WORKSPACE_ROW_DELETE = "SIDEBAR_WORKSPACE_ROW_DELETE"
     SIDEBAR_WORKSPACE_ROW_MENU = "SIDEBAR_WORKSPACE_ROW_MENU"
+    SIDEBAR_WORKSPACE_ROW_DELETING = "SIDEBAR_WORKSPACE_ROW_DELETING"
     SIDEBAR_LAYOUTS_LINK = "SIDEBAR_LAYOUTS_LINK"
     SIDEBAR_SETTINGS_LINK = "SIDEBAR_SETTINGS_LINK"
     SIDEBAR_REPORT_BUG = "SIDEBAR_REPORT_BUG"
@@ -808,6 +804,9 @@ class ElementIDs(StrEnum):
 
     # Entity Mentions (experimental)
     SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE = "SETTINGS_ENABLE_ENTITY_MENTIONS_TOGGLE"
+
+    # Auto-rename workspace + agent from the first prompt (experimental)
+    SETTINGS_ENABLE_AUTO_RENAME_TOGGLE = "SETTINGS_ENABLE_AUTO_RENAME_TOGGLE"
 
     SETTINGS_ENABLE_EXTENSIONS_TOGGLE = "SETTINGS_ENABLE_EXTENSIONS_TOGGLE"
     SETTINGS_ALLOW_AGENT_EXTENSION_LOADING_TOGGLE = "SETTINGS_ALLOW_AGENT_EXTENSION_LOADING_TOGGLE"
