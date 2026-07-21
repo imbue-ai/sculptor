@@ -68,7 +68,15 @@ export const LayoutPreview = ({
           ...openPanelsInSubSection(layout, toSecondary(section)),
         ];
         const statics = ids.filter((id) => !isMultiInstancePanelId(id));
-        const activeId = layout.activePanel[section];
+        // A cell merges the section's primary and secondary sub-section panels, so a
+        // tab counts as active when it is the selected tab in whichever half it lives
+        // in — reading only the primary half would leave a split section's secondary
+        // active tab unhighlighted.
+        const activeIds = new Set<PanelId>(
+          [layout.activePanel[section], layout.activePanel[toSecondary(section)]].filter(
+            (id): id is PanelId => id !== undefined,
+          ),
+        );
         const defaultChip = dynamicChips[section];
 
         return (
@@ -81,7 +89,7 @@ export const LayoutPreview = ({
               <div className={styles.cellTabs}>
                 {statics.map((id) => {
                   const isRemoving = removingPanelIds?.has(id) === true;
-                  const tabClass = isRemoving ? styles.tabRemoving : id === activeId ? styles.tabActive : "";
+                  const tabClass = isRemoving ? styles.tabRemoving : activeIds.has(id) ? styles.tabActive : "";
                   return (
                     <span key={id} className={`${styles.tab} ${tabClass}`}>
                       {nameOf(id)}
