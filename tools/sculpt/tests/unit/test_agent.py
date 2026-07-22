@@ -335,6 +335,22 @@ class TestAgentCreateHarness:
         assert body["backendModel"]["modelId"] == "kimi-k2-0711-preview"
 
     @respx.mock
+    def test_create_with_harness_pi_and_model_errors_when_catalog_empty(self, runner: CliRunner) -> None:
+        """--model with an empty pi catalog (no authenticated provider) fails with
+        the authenticate pointer, not an empty unknown-model list."""
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        _mock_pi_models([], None)
+
+        result = runner.invoke(
+            app,
+            ["agent", "create", "-w", "ws_test123", "-p", "Do something", "--harness", "Pi", "--model", "kimi-k2"],
+        )
+
+        assert result.exit_code == 1
+        assert "authenticate a provider" in result.output + (result.stderr or "")
+
+    @respx.mock
     def test_create_with_harness_pi_rejects_model_not_in_pi_catalog(self, runner: CliRunner) -> None:
         """Unknown pi models are rejected loudly — never silently swapped for the
         catalog default."""

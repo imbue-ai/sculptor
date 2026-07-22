@@ -132,7 +132,11 @@ def create(
         None,
         "--model",
         "-m",
-        help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)",
+        help=(
+            "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)."
+            + " With --harness pi, a model from pi's own catalog: model_id, display"
+            + " name, or provider/model_id (e.g. kimi-coding/kimi-k2-0711-preview)."
+        ),
         show_default="opus",
     ),
     name: str | None = typer.Option(None, "--name", help="Agent name"),
@@ -157,29 +161,27 @@ def create(
     client = get_authenticated_client(base_url, json_output)
     workspace_id = resolve_workspace(workspace, client, json_output)
 
-    model_lower = "opus" if model is None else model.lower()
-    if model_lower not in MODEL_MAPPING:
-        valid = ", ".join(MODEL_MAPPING.keys())
-        cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
-
-    llm_model = MODEL_MAPPING[model_lower]
-
     selection = resolve_harness_selection(harness, client, json_output)
     if prompt and selection is not None and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
         cli_error("Terminal agents do not take an initial prompt (--prompt)", json_output=json_output)
 
+    # The pi harness takes its model from pi's own catalog, not the Claude
+    # names, so model validation depends on which harness was resolved.
+    llm_model = None
     backend_model = None
-    if prompt and selection is not None and selection.agent_type == AgentTypeName.PI:
-        if model is not None:
-            cli_error(
-                "--model does not apply to the Pi harness — pi picks from its own catalog",
-                json_output=json_output,
-            )
-        backend_model = resolve_pi_backend_model(client, json_output)
+    if selection is not None and selection.agent_type == AgentTypeName.PI:
+        if prompt:
+            backend_model = resolve_pi_backend_model(client, json_output, model)
+    else:
+        model_lower = "opus" if model is None else model.lower()
+        if model_lower not in MODEL_MAPPING:
+            valid = ", ".join(MODEL_MAPPING.keys())
+            cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
+        llm_model = MODEL_MAPPING[model_lower]
 
     request = CreateAgentRequest(
         prompt=prompt,
-        model=llm_model if prompt and backend_model is None else None,
+        model=llm_model if prompt and backend_model is None else UNSET,
         backend_model=backend_model if backend_model is not None else UNSET,
         interface="API",
         name=name,

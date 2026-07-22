@@ -38,7 +38,11 @@ def run_cmd(
         None,
         "--model",
         "-m",
-        help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)",
+        help=(
+            "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)."
+            + " With --harness pi, a model from pi's own catalog: model_id, display"
+            + " name, or provider/model_id (e.g. kimi-coding/kimi-k2-0711-preview)."
+        ),
         show_default="opus",
     ),
     strategy: str = typer.Option(
@@ -76,12 +80,6 @@ def run_cmd(
     """Create a workspace and agent in one step."""
     base_url = base_url or get_default_base_url()
 
-    model_lower = "opus" if model is None else model.lower()
-    if model_lower not in MODEL_MAPPING:
-        valid = ", ".join(MODEL_MAPPING.keys())
-        cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
-
-    llm_model = MODEL_MAPPING[model_lower]
     client = get_authenticated_client(base_url, json_output)
 
     # Resolve the harness up front so a bad or terminal choice fails before we
@@ -96,14 +94,18 @@ def run_cmd(
             json_output=json_output,
         )
 
+    # The pi harness takes its model from pi's own catalog, not the Claude
+    # names, so model validation depends on which harness was resolved.
+    llm_model = None
     backend_model = None
     if selection is not None and selection.agent_type == AgentTypeName.PI:
-        if model is not None:
-            cli_error(
-                "--model does not apply to the Pi harness — pi picks from its own catalog",
-                json_output=json_output,
-            )
-        backend_model = resolve_pi_backend_model(client, json_output)
+        backend_model = resolve_pi_backend_model(client, json_output, model)
+    else:
+        model_lower = "opus" if model is None else model.lower()
+        if model_lower not in MODEL_MAPPING:
+            valid = ", ".join(MODEL_MAPPING.keys())
+            cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
+        llm_model = MODEL_MAPPING[model_lower]
 
     project_id = resolve_project(repo, client, json_output)
 
