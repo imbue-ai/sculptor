@@ -120,6 +120,15 @@ _CLAUDE_CLI_REGISTRATION = {
     "launchCommand": "claude",
 }
 
+_ANTHROPIC_MODEL_DICT = {"provider": "anthropic", "modelId": "claude-opus-4-8", "displayName": "Claude Opus 4.8"}
+_KIMI_MODEL_DICT = {"provider": "kimi-coding", "modelId": "kimi-k2-0711-preview", "displayName": "Kimi K2"}
+
+
+def _mock_pi_models(available: list[dict[str, Any]], default: dict[str, Any] | None) -> None:
+    respx.get("http://localhost:5050/api/v1/pi/models").mock(
+        return_value=Response(200, json={"availableModels": available, "defaultModel": default})
+    )
+
 
 def _mock_workspaces(*object_ids: str) -> None:
     workspaces = [
@@ -244,11 +253,112 @@ class TestAgentCreateHarness:
         assert body["agentType"] == "pi"
 
     @respx.mock
-    def test_create_with_harness_pi_rejects_explicit_default_model_flag(self, runner: CliRunner) -> None:
-        """--model is rejected for a pi prompt even when it names the flag's
-        default — an explicit choice is never silently ignored."""
+    def test_create_with_harness_pi_and_model_id_sends_chosen_backend_model(self, runner: CliRunner) -> None:
+        """--model with the Pi harness selects from pi's own catalog by model_id,
+        and the request carries it as the backend model rather than a Claude model."""
         _mock_session()
         _mock_workspaces("ws_test123")
+        _mock_pi_models([_ANTHROPIC_MODEL_DICT, _KIMI_MODEL_DICT], _ANTHROPIC_MODEL_DICT)
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "agent",
+                "create",
+                "-w",
+                "ws_test123",
+                "-p",
+                "Do something",
+                "--harness",
+                "Pi",
+                "--model",
+                "kimi-k2-0711-preview",
+            ],
+        )
+
+        assert result.exit_code == 0
+        body = json.loads(route.calls.last.request.content)
+        assert body["agentType"] == "pi"
+        assert body["backendModel"]["provider"] == "kimi-coding"
+        assert body["backendModel"]["modelId"] == "kimi-k2-0711-preview"
+        assert "model" not in body
+
+    @respx.mock
+    def test_create_with_harness_pi_model_matches_display_name_case_insensitively(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        _mock_pi_models([_ANTHROPIC_MODEL_DICT, _KIMI_MODEL_DICT], _ANTHROPIC_MODEL_DICT)
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(
+            app,
+            ["agent", "create", "-w", "ws_test123", "-p", "Do something", "--harness", "Pi", "--model", "kimi k2"],
+        )
+
+        assert result.exit_code == 0
+        body = json.loads(route.calls.last.request.content)
+        assert body["backendModel"]["modelId"] == "kimi-k2-0711-preview"
+
+    @respx.mock
+    def test_create_with_harness_pi_model_matches_provider_qualified_id(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        _mock_pi_models([_ANTHROPIC_MODEL_DICT, _KIMI_MODEL_DICT], _ANTHROPIC_MODEL_DICT)
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "agent",
+                "create",
+                "-w",
+                "ws_test123",
+                "-p",
+                "Do something",
+                "--harness",
+                "Pi",
+                "--model",
+                "kimi-coding/kimi-k2-0711-preview",
+            ],
+        )
+
+        assert result.exit_code == 0
+        body = json.loads(route.calls.last.request.content)
+        assert body["backendModel"]["provider"] == "kimi-coding"
+        assert body["backendModel"]["modelId"] == "kimi-k2-0711-preview"
+
+    @respx.mock
+    def test_create_with_harness_pi_rejects_model_not_in_pi_catalog(self, runner: CliRunner) -> None:
+        """Unknown pi models are rejected loudly — never silently swapped for the
+        catalog default."""
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        _mock_pi_models([_ANTHROPIC_MODEL_DICT, _KIMI_MODEL_DICT], _ANTHROPIC_MODEL_DICT)
+
+        result = runner.invoke(
+            app,
+            ["agent", "create", "-w", "ws_test123", "-p", "Do something", "--harness", "Pi", "--model", "grok"],
+        )
+
+        assert result.exit_code == 1
+        output = result.output + (result.stderr or "")
+        assert "Unknown pi model 'grok'" in output
+        assert "kimi-coding/kimi-k2-0711-preview" in output
+
+    @respx.mock
+    def test_create_with_harness_pi_rejects_claude_shorthand_names(self, runner: CliRunner) -> None:
+        """Claude shorthand names (opus, sonnet, ...) are not pi catalog entries;
+        with --harness pi they fail as unknown pi models."""
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        _mock_pi_models([_ANTHROPIC_MODEL_DICT, _KIMI_MODEL_DICT], _ANTHROPIC_MODEL_DICT)
 
         result = runner.invoke(
             app,
@@ -256,7 +366,7 @@ class TestAgentCreateHarness:
         )
 
         assert result.exit_code == 1
-        assert "does not apply to the Pi harness" in result.output + (result.stderr or "")
+        assert "Unknown pi model 'opus'" in result.output + (result.stderr or "")
 
     @respx.mock
     def test_create_with_harness_terminal_sends_terminal_agent_type(self, runner: CliRunner) -> None:

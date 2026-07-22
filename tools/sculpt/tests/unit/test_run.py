@@ -404,6 +404,7 @@ _CLAUDE_CLI_REGISTRATION = {
 
 
 _PI_MODEL_DICT = {"provider": "anthropic", "modelId": "claude-opus-4-8", "displayName": "Claude Opus 4.8"}
+_KIMI_MODEL_DICT = {"provider": "kimi-coding", "modelId": "kimi-k2-0711-preview", "displayName": "Kimi K2"}
 
 
 def _mock_pi_models(available: list[dict[str, Any]], default: dict[str, Any] | None) -> None:
@@ -451,30 +452,60 @@ class TestRunHarness:
         assert "authenticate a provider" in result.output + (result.stderr or "")
 
     @respx.mock
-    def test_run_with_harness_pi_rejects_claude_model_flag(self, runner: CliRunner) -> None:
+    def test_run_with_harness_pi_and_model_selects_from_pi_catalog(self, runner: CliRunner) -> None:
+        """--model with the Pi harness selects from pi's own catalog (here by
+        display name) and is sent as the backend model."""
         _mock_session()
         _mock_initialize_project()
+        _mock_preview_branch_name()
+        _mock_pi_models([_PI_MODEL_DICT, _KIMI_MODEL_DICT], _PI_MODEL_DICT)
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        agent_route = respx.post("http://localhost:5050/api/v1/workspaces/ws_newrun123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(
+            app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Pi", "--model", "Kimi K2"]
+        )
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        body = json.loads(agent_route.calls.last.request.content)
+        assert body["agentType"] == "pi"
+        assert body["backendModel"]["provider"] == "kimi-coding"
+        assert body["backendModel"]["modelId"] == "kimi-k2-0711-preview"
+        assert "model" not in body
+
+    @respx.mock
+    def test_run_with_harness_pi_rejects_model_not_in_pi_catalog(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_initialize_project()
+        _mock_pi_models([_PI_MODEL_DICT, _KIMI_MODEL_DICT], _PI_MODEL_DICT)
+
+        result = runner.invoke(
+            app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Pi", "--model", "grok"]
+        )
+
+        assert result.exit_code != 0
+        output = result.output + (result.stderr or "")
+        assert "Unknown pi model 'grok'" in output
+        assert "kimi-coding/kimi-k2-0711-preview" in output
+
+    @respx.mock
+    def test_run_with_harness_pi_rejects_claude_model_flag(self, runner: CliRunner) -> None:
+        """Claude shorthand names are not pi catalog entries; with --harness pi
+        they fail as unknown pi models rather than silently selecting Claude."""
+        _mock_session()
+        _mock_initialize_project()
+        _mock_pi_models([_PI_MODEL_DICT, _KIMI_MODEL_DICT], _PI_MODEL_DICT)
 
         result = runner.invoke(
             app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Pi", "--model", "sonnet"]
         )
 
         assert result.exit_code != 0
-        assert "does not apply to the Pi harness" in result.output + (result.stderr or "")
-
-    @respx.mock
-    def test_run_with_harness_pi_rejects_explicit_default_model_flag(self, runner: CliRunner) -> None:
-        """--model is rejected for pi even when it names the flag's default —
-        an explicit choice is never silently ignored."""
-        _mock_session()
-        _mock_initialize_project()
-
-        result = runner.invoke(
-            app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Pi", "--model", "opus"]
-        )
-
-        assert result.exit_code != 0
-        assert "does not apply to the Pi harness" in result.output + (result.stderr or "")
+        assert "Unknown pi model 'sonnet'" in result.output + (result.stderr or "")
 
     @respx.mock
     def test_run_without_harness_omits_agent_type(self, runner: CliRunner) -> None:
