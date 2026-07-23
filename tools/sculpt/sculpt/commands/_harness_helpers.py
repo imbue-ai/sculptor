@@ -1,8 +1,9 @@
-"""Shared harness (agent-type) resolution for the agent-creating commands.
+"""Shared harness and model resolution for the agent-creating commands.
 
 ``sculpt agent create`` and ``sculpt run`` both turn an optional ``--harness``
-name into the agent type to send. The resolution — validating the built-in
-harnesses and the server's registered terminal agents — lives here so the two
+name and an optional ``--model`` name into the agent type and model to send.
+The resolution — validating the built-in harnesses, the server's registered
+terminal agents, and each harness's model catalog — lives here so the two
 commands stay in lockstep.
 """
 
@@ -10,9 +11,12 @@ from collections.abc import Sequence
 
 import httpx
 
+from sculpt.auth import MODEL_MAPPING
 from sculpt.client import Client
 from sculpt.client.api.default import get_pi_models
 from sculpt.client.api.default import list_terminal_agent_registrations
+from sculpt.client.models.agent_type_name import AgentTypeName
+from sculpt.client.models.llm_model import LLMModel
 from sculpt.client.models.model_option import ModelOption
 from sculpt.client.models.terminal_agent_registration import TerminalAgentRegistration
 from sculpt.formatting import cli_error
@@ -57,6 +61,15 @@ def resolve_harness_selection(harness: str | None, client: Client, json_output: 
     return selection
 
 
+# Shared --model help so `agent create` and `run` describe the same contract.
+MODEL_HELP = (
+    "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable;"
+    + " default opus). With --harness pi, a model from pi's own catalog:"
+    + " model_id, display name, or provider/model_id (default: pi's own"
+    + " default model)."
+)
+
+
 def _pi_model_names(option: ModelOption) -> tuple[str, str, str]:
     """The accepted spellings of a pi catalog model, lowercased for matching."""
     return (
@@ -70,7 +83,7 @@ def _format_pi_model_list(options: Sequence[ModelOption]) -> str:
     return ", ".join(f"{o.display_name} ({o.provider}/{o.model_id})" for o in options)
 
 
-def resolve_pi_backend_model(client: Client, json_output: bool, requested_model: str | None = None) -> ModelOption:
+def _resolve_pi_backend_model(client: Client, json_output: bool, requested_model: str | None = None) -> ModelOption:
     """Pick the backend model a pi prompt runs under, from pi's own catalog.
 
     A pi prompt must name a model from pi's curated, authenticated-only catalog
@@ -111,3 +124,24 @@ def resolve_pi_backend_model(client: Client, json_output: bool, requested_model:
         "pi has no usable model — authenticate a provider (Sculptor Settings → Pi → Providers), then retry",
         json_output=json_output,
     )
+
+
+def resolve_prompt_models(
+    selection: HarnessSelection | None,
+    model: str | None,
+    client: Client,
+    json_output: bool,
+) -> tuple[LLMModel | None, ModelOption | None]:
+    """Resolve --model for a prompted agent against the resolved harness's catalog.
+
+    Returns ``(claude_model, pi_backend_model)`` — exactly one is set: a pi
+    harness takes a backend model from pi's own catalog, anything else a
+    Claude model from MODEL_MAPPING.
+    """
+    if selection is not None and selection.agent_type == AgentTypeName.PI:
+        return None, _resolve_pi_backend_model(client, json_output, model)
+    model_lower = "opus" if model is None else model.lower()
+    if model_lower not in MODEL_MAPPING:
+        valid = ", ".join(MODEL_MAPPING.keys())
+        cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
+    return MODEL_MAPPING[model_lower], None
