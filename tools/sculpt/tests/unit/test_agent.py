@@ -255,7 +255,7 @@ class TestAgentCreateHarness:
     @respx.mock
     def test_create_with_harness_pi_and_model_id_sends_chosen_backend_model(self, runner: CliRunner) -> None:
         """--model with the Pi harness selects from pi's own catalog by model_id,
-        and the request carries it as the backend model rather than a Claude model."""
+        and the request carries it as the backend model with no Claude model field."""
         _mock_session()
         _mock_workspaces("ws_test123")
         _mock_pi_models([_ANTHROPIC_MODEL_DICT, _KIMI_MODEL_DICT], _ANTHROPIC_MODEL_DICT)
@@ -349,6 +349,35 @@ class TestAgentCreateHarness:
 
         assert result.exit_code == 1
         assert "authenticate a provider" in result.output + (result.stderr or "")
+
+    @respx.mock
+    def test_create_with_harness_pi_ambiguous_match_requires_provider_qualified_id(self, runner: CliRunner) -> None:
+        """A spelling shared by two catalog entries is an error."""
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        gateway_opus = {"provider": "vercel", "modelId": "claude-opus-4-8", "displayName": "Claude Opus 4.8"}
+        _mock_pi_models([_ANTHROPIC_MODEL_DICT, gateway_opus], _ANTHROPIC_MODEL_DICT)
+
+        result = runner.invoke(
+            app,
+            [
+                "agent",
+                "create",
+                "-w",
+                "ws_test123",
+                "-p",
+                "Do something",
+                "--harness",
+                "Pi",
+                "--model",
+                "claude opus 4.8",
+            ],
+        )
+
+        assert result.exit_code == 1
+        output = result.output + (result.stderr or "")
+        assert "matches multiple pi models" in output
+        assert "vercel/claude-opus-4-8" in output
 
     @respx.mock
     def test_create_with_harness_pi_rejects_model_not_in_pi_catalog(self, runner: CliRunner) -> None:

@@ -495,7 +495,7 @@ class TestRunHarness:
     @respx.mock
     def test_run_with_harness_pi_rejects_claude_model_flag(self, runner: CliRunner) -> None:
         """Claude shorthand names are not pi catalog entries; with --harness pi
-        they fail as unknown pi models rather than silently selecting Claude."""
+        they fail as unknown pi models."""
         _mock_session()
         _mock_initialize_project()
         _mock_pi_models([_PI_MODEL_DICT, _KIMI_MODEL_DICT], _PI_MODEL_DICT)

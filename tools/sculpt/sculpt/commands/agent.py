@@ -133,11 +133,11 @@ def create(
         "--model",
         "-m",
         help=(
-            "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)."
-            + " With --harness pi, a model from pi's own catalog: model_id, display"
-            + " name, or provider/model_id (e.g. kimi-coding/kimi-k2-0711-preview)."
+            "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable;"
+            + " default opus). With --harness pi, a model from pi's own catalog:"
+            + " model_id, display name, or provider/model_id (default: pi's own"
+            + " default model)."
         ),
-        show_default="opus",
     ),
     name: str | None = typer.Option(None, "--name", help="Agent name"),
     harness: str | None = typer.Option(
@@ -165,8 +165,6 @@ def create(
     if prompt and selection is not None and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
         cli_error("Terminal agents do not take an initial prompt (--prompt)", json_output=json_output)
 
-    # The pi harness takes its model from pi's own catalog, not the Claude
-    # names, so model validation depends on which harness was resolved.
     llm_model = None
     backend_model = None
     if selection is not None and selection.agent_type == AgentTypeName.PI:

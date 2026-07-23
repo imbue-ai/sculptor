@@ -39,11 +39,11 @@ def run_cmd(
         "--model",
         "-m",
         help=(
-            "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)."
-            + " With --harness pi, a model from pi's own catalog: model_id, display"
-            + " name, or provider/model_id (e.g. kimi-coding/kimi-k2-0711-preview)."
+            "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable;"
+            + " default opus). With --harness pi, a model from pi's own catalog:"
+            + " model_id, display name, or provider/model_id (default: pi's own"
+            + " default model)."
         ),
-        show_default="opus",
     ),
     strategy: str = typer.Option(
         "worktree",
@@ -94,8 +94,6 @@ def run_cmd(
             json_output=json_output,
         )
 
-    # The pi harness takes its model from pi's own catalog, not the Claude
-    # names, so model validation depends on which harness was resolved.
     llm_model = None
     backend_model = None
     if selection is not None and selection.agent_type == AgentTypeName.PI:

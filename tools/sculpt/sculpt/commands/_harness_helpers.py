@@ -6,6 +6,8 @@ harnesses and the server's registered terminal agents — lives here so the two
 commands stay in lockstep.
 """
 
+from collections.abc import Sequence
+
 import httpx
 
 from sculpt.client import Client
@@ -64,6 +66,10 @@ def _pi_model_names(option: ModelOption) -> tuple[str, str, str]:
     )
 
 
+def _format_pi_model_list(options: Sequence[ModelOption]) -> str:
+    return ", ".join(f"{o.display_name} ({o.provider}/{o.model_id})" for o in options)
+
+
 def resolve_pi_backend_model(client: Client, json_output: bool, requested_model: str | None = None) -> ModelOption:
     """Pick the backend model a pi prompt runs under, from pi's own catalog.
 
@@ -87,13 +93,18 @@ def resolve_pi_backend_model(client: Client, json_output: bool, requested_model:
             return catalog.available_models[0]
     else:
         requested_lower = requested_model.lower()
-        for option in catalog.available_models:
-            if requested_lower in _pi_model_names(option):
-                return option
-        if catalog.available_models:
-            available = ", ".join(f"{o.display_name} ({o.provider}/{o.model_id})" for o in catalog.available_models)
+        matches = [o for o in catalog.available_models if requested_lower in _pi_model_names(o)]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
             cli_error(
-                f"Unknown pi model '{requested_model}'. Available pi models: {available}",
+                f"'{requested_model}' matches multiple pi models: {_format_pi_model_list(matches)}."
+                + " Use provider/model_id to pick one",
+                json_output=json_output,
+            )
+        if catalog.available_models:
+            cli_error(
+                f"Unknown pi model '{requested_model}'. Available pi models: {_format_pi_model_list(catalog.available_models)}",
                 json_output=json_output,
             )
     cli_error(
