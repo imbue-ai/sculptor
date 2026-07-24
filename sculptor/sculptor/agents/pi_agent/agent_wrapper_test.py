@@ -287,7 +287,7 @@ def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:
     env.get_tool_binary_path.return_value = "/bin/pi"
     version_result = MagicMock()
     version_result.stdout = ""
-    version_result.stderr = "pi 0.80.10\n"
+    version_result.stderr = "pi 0.82.0\n"
     env.run_process_to_completion.return_value = version_result
     env.get_state_path.return_value = Path("/fake/state")
     env.get_system_prompt.return_value = ""
@@ -691,7 +691,7 @@ def _make_probe_env(probe_process: MagicMock) -> MagicMock:
     env.get_tool_binary_path.return_value = "/bin/pi"
     version_result = MagicMock()
     version_result.stdout = ""
-    version_result.stderr = "pi 0.80.10\n"
+    version_result.stderr = "pi 0.82.0\n"
     env.run_process_to_completion.return_value = version_result
     env.get_state_path.return_value = Path("/fake/state")
     env.run_process_in_background.return_value = probe_process
@@ -2509,7 +2509,7 @@ class TestStartAndSessionResume:
         agent = _make_agent(env)
         with pytest.raises(PiVersionMismatchError) as exc_info:
             agent.start(secrets={})
-        assert exc_info.value.pinned_version == "0.80.10"
+        assert exc_info.value.pinned_version == "0.82.0"
         assert exc_info.value.detected_version == "0.50.0"
         # The message must point the user at the self-healing fix (managed install).
         assert "Managed" in str(exc_info.value)

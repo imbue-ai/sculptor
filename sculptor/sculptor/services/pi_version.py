@@ -7,4 +7,4 @@ here — in its own import-free module — so the test harness's ``fake_pi`` stu
 module import-free.
 """
 
-PI_PINNED_VERSION = "0.80.10"
+PI_PINNED_VERSION = "0.82.0"
