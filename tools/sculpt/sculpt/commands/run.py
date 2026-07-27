@@ -1,7 +1,6 @@
 import httpx
 import typer
 
-from sculpt.auth import MODEL_MAPPING
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
 from sculpt.client.api.default import create_workspace_agent
@@ -12,8 +11,9 @@ from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequ
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.types import UNSET
 from sculpt.commands._follow_helpers import follow_and_stream_messages
+from sculpt.commands._harness_helpers import MODEL_HELP
 from sculpt.commands._harness_helpers import resolve_harness_selection
-from sculpt.commands._harness_helpers import resolve_pi_backend_model
+from sculpt.commands._harness_helpers import resolve_prompt_models
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
 from sculpt.commands._workspace_helpers import resolve_strategy
@@ -38,8 +38,7 @@ def run_cmd(
         None,
         "--model",
         "-m",
-        help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)",
-        show_default="opus",
+        help=MODEL_HELP,
     ),
     strategy: str = typer.Option(
         "worktree",
@@ -76,12 +75,6 @@ def run_cmd(
     """Create a workspace and agent in one step."""
     base_url = base_url or get_default_base_url()
 
-    model_lower = "opus" if model is None else model.lower()
-    if model_lower not in MODEL_MAPPING:
-        valid = ", ".join(MODEL_MAPPING.keys())
-        cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
-
-    llm_model = MODEL_MAPPING[model_lower]
     client = get_authenticated_client(base_url, json_output)
 
     # Resolve the harness up front so a bad or terminal choice fails before we
@@ -96,14 +89,7 @@ def run_cmd(
             json_output=json_output,
         )
 
-    backend_model = None
-    if selection is not None and selection.agent_type == AgentTypeName.PI:
-        if model is not None:
-            cli_error(
-                "--model does not apply to the Pi harness — pi picks from its own catalog",
-                json_output=json_output,
-            )
-        backend_model = resolve_pi_backend_model(client, json_output)
+    llm_model, backend_model = resolve_prompt_models(selection, model, client, json_output)
 
     project_id = resolve_project(repo, client, json_output)
 
