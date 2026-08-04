@@ -13,7 +13,6 @@ max_parallel = 32
 # 4 min instead of 10; with retry_count=1 a false timeout just retries rather
 # than failing the whole run.
 test_timeout_secs = 240
-stream_output = true
 sandbox_project_root = "/app/sculptor"
 sandbox_repo_root = "/app"
 # Reuses offload.toml's base image: deps pre-synced, package installed editable,
