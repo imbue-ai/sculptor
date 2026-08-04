@@ -408,6 +408,10 @@ class ElementIDs(StrEnum):
     # Settings > Dependencies > Git
     SETTINGS_GIT_DEP_STATUS = "settings-git-dep-status"
 
+    # Settings > Dependencies > Voice Models
+    SETTINGS_VOICE_MODELS_STATUS = "settings-voice-models-status"
+    SETTINGS_VOICE_MODELS_INSTALL_BUTTON = "settings-voice-models-install-button"
+
     # Pi settings
     SETTINGS_NAV_PI = "SETTINGS_NAV_PI"
     PI_BINARY_PATH_INPUT = "pi-binary-path-input"

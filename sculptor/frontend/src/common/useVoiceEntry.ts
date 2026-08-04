@@ -83,22 +83,115 @@ const ARIA_LABEL_BY_STATUS: Record<VoiceButtonStatus, string> = {
   "voice-error": "Retry voice entry",
 };
 
+export type VoiceModelsInstall = {
+  info: DependencyInfo | null;
+  isInstalled: boolean;
+  /** True while an install runs, whether kicked off from this mount or observed
+   *  from another surface via the shared status stream. */
+  isInstalling: boolean;
+  installError: string | null;
+  /** 0–100 for the aggregate bundle download; null when the total is unknown. */
+  progressPercent: number | null;
+  handleInstall: () => void;
+};
+
+/**
+ * Owns the managed voice-models install, mirroring the shared
+ * `useManagedDependency` flow: fire-and-forget POST plus a
+ * `getDependenciesStatus` poll as a WebSocket fallback, both writing the one
+ * shared `dependenciesStatusAtom`. Used by the mic button and by
+ * Settings → Dependencies, which therefore stay coherent with each other.
+ */
+export const useVoiceModelsInstall = (): VoiceModelsInstall => {
+  const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
+  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
+  const { startPolling, stopPolling } = usePollingInterval();
+
+  const [isInstallingLocal, setIsInstallingLocal] = useState(false);
+  const [installErrorLocal, setInstallErrorLocal] = useState<string | null>(null);
+
+  const info = selectVoiceModelsInfo(dependenciesStatus);
+  const isInstalled = Boolean(info?.installed);
+  const installProgress = info?.installProgress ?? null;
+  const installError = installErrorLocal ?? info?.installError ?? null;
+
+  // Once the shared status confirms the bundle is installed, drop any stale
+  // installing/error state during render (mirrors useManagedDependency) so
+  // consumers settle without waiting for an effect tick.
+  if (isInstalled && (isInstallingLocal || installErrorLocal !== null)) {
+    setIsInstallingLocal(false);
+    setInstallErrorLocal(null);
+  }
+
+  const runInstall = useCallback(async (): Promise<void> => {
+    setIsInstallingLocal(true);
+    setInstallErrorLocal(null);
+    try {
+      // Fire-and-forget, like the other managed installs: the download opens no
+      // request transaction, so skip the WS ack and track completion by polling.
+      const response = await installDependency({ query: { tool: VOICE_MODELS_TOOL }, meta: { skipWsAck: true } });
+      const result = response.data;
+      if (result && !result.success && !result.in_progress) {
+        setInstallErrorLocal(result.error ?? "Installation failed");
+        setIsInstallingLocal(false);
+        return;
+      }
+      startPolling(async () => {
+        try {
+          const { data: deps } = await getDependenciesStatus({ meta: { skipWsAck: true } });
+          if (deps) {
+            setDependenciesStatus(deps);
+          }
+          const polledInfo = selectVoiceModelsInfo(deps ?? null);
+          if (polledInfo?.installError) {
+            stopPolling();
+            setInstallErrorLocal(polledInfo.installError);
+            setIsInstallingLocal(false);
+            return;
+          }
+
+          if (polledInfo?.installed && !polledInfo.installProgress) {
+            stopPolling();
+            setIsInstallingLocal(false);
+          }
+        } catch {
+          // Keep polling; transient status-fetch failures are expected mid-download.
+        }
+      });
+    } catch (error) {
+      setInstallErrorLocal(error instanceof Error ? error.message : "Installation failed");
+      setIsInstallingLocal(false);
+    }
+  }, [setDependenciesStatus, startPolling, stopPolling]);
+
+  const handleInstall = useCallback((): void => {
+    void runInstall();
+  }, [runInstall]);
+
+  const progressPercent =
+    installProgress && installProgress.totalBytes
+      ? Math.round((installProgress.bytesDownloaded / installProgress.totalBytes) * 100)
+      : null;
+
+  return {
+    info,
+    isInstalled,
+    isInstalling: isInstallingLocal || installProgress !== null,
+    installError,
+    progressPercent,
+    handleInstall,
+  };
+};
+
 /**
  * Owns the voice-entry mic button's full lifecycle: the managed voice-models
- * install (mirroring the shared `useManagedDependency` flow — fire-and-forget
- * POST plus a `getDependenciesStatus` poll as a WebSocket fallback, both writing
- * the one shared `dependenciesStatusAtom`) and the on-device speech engine
+ * install (via `useVoiceModelsInstall`) and the on-device speech engine
  * (lazily imported, started/stopped on click, disposed on unmount). Transcribed
  * segments are handed back verbatim through `onAppendTranscript`; the caller owns
  * how they land in its draft.
  */
 export const useVoiceEntry = (params: { onAppendTranscript: (text: string) => void }): VoiceEntryView => {
-  const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
-  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
-  const { startPolling, stopPolling } = usePollingInterval();
-
-  const [isInstalling, setIsInstalling] = useState(false);
-  const [installErrorLocal, setInstallErrorLocal] = useState<string | null>(null);
+  const install = useVoiceModelsInstall();
   const [engineState, setEngineState] = useState<VoiceEngineState>("idle");
   const [voiceError, setVoiceError] = useState<VoiceError | null>(null);
 
@@ -117,60 +210,6 @@ export const useVoiceEntry = (params: { onAppendTranscript: (text: string) => vo
       engineRef.current = null;
     };
   }, []);
-
-  const info = selectVoiceModelsInfo(dependenciesStatus);
-  const isInstalled = Boolean(info?.installed);
-  const installProgress = info?.installProgress ?? null;
-  const installError = installErrorLocal ?? info?.installError ?? null;
-
-  // Once the shared status confirms the bundle is installed, drop any stale
-  // installing/error state during render (mirrors useManagedDependency) so the
-  // button settles to idle without waiting for an effect tick.
-  if (isInstalled && (isInstalling || installErrorLocal !== null)) {
-    setIsInstalling(false);
-    setInstallErrorLocal(null);
-  }
-
-  const handleInstall = useCallback(async (): Promise<void> => {
-    setIsInstalling(true);
-    setInstallErrorLocal(null);
-    try {
-      // Fire-and-forget, like the other managed installs: the download opens no
-      // request transaction, so skip the WS ack and track completion by polling.
-      const response = await installDependency({ query: { tool: VOICE_MODELS_TOOL }, meta: { skipWsAck: true } });
-      const result = response.data;
-      if (result && !result.success && !result.in_progress) {
-        setInstallErrorLocal(result.error ?? "Installation failed");
-        setIsInstalling(false);
-        return;
-      }
-      startPolling(async () => {
-        try {
-          const { data: deps } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-          if (deps) {
-            setDependenciesStatus(deps);
-          }
-          const polledInfo = selectVoiceModelsInfo(deps ?? null);
-          if (polledInfo?.installError) {
-            stopPolling();
-            setInstallErrorLocal(polledInfo.installError);
-            setIsInstalling(false);
-            return;
-          }
-
-          if (polledInfo?.installed && !polledInfo.installProgress) {
-            stopPolling();
-            setIsInstalling(false);
-          }
-        } catch {
-          // Keep polling; transient status-fetch failures are expected mid-download.
-        }
-      });
-    } catch (error) {
-      setInstallErrorLocal(error instanceof Error ? error.message : "Installation failed");
-      setIsInstalling(false);
-    }
-  }, [setDependenciesStatus, startPolling, stopPolling]);
 
   const startListening = useCallback(async (): Promise<void> => {
     setVoiceError(null);
@@ -223,10 +262,10 @@ export const useVoiceEntry = (params: { onAppendTranscript: (text: string) => vo
   // while the bundle is absent; once installed the engine state (or a voice
   // error) drives the affordance.
   let status: VoiceButtonStatus;
-  if (!isInstalled) {
-    if (isInstalling || installProgress) {
+  if (!install.isInstalled) {
+    if (install.isInstalling) {
       status = "installing";
-    } else if (installError !== null) {
+    } else if (install.installError !== null) {
       status = "install-error";
     } else {
       status = "not-installed";
@@ -237,16 +276,12 @@ export const useVoiceEntry = (params: { onAppendTranscript: (text: string) => vo
     status = engineState === "error" ? "voice-error" : engineState;
   }
 
-  const progressPercent =
-    installProgress && installProgress.totalBytes
-      ? Math.round((installProgress.bytesDownloaded / installProgress.totalBytes) * 100)
-      : null;
-
+  const { handleInstall } = install;
   const handleClick = useCallback((): void => {
     switch (status) {
       case "not-installed":
       case "install-error":
-        void handleInstall();
+        handleInstall();
         break;
       case "idle":
       case "voice-error":
@@ -265,9 +300,14 @@ export const useVoiceEntry = (params: { onAppendTranscript: (text: string) => vo
 
   return {
     status,
-    tooltip: buildTooltip({ status, progressPercent, installError, voiceError }),
+    tooltip: buildTooltip({
+      status,
+      progressPercent: install.progressPercent,
+      installError: install.installError,
+      voiceError,
+    }),
     ariaLabel: ARIA_LABEL_BY_STATUS[status],
-    progressPercent,
+    progressPercent: install.progressPercent,
     isActive: status === "listening",
     isBusy: status === "initializing" || status === "stopping",
     isError: status === "install-error" || status === "voice-error",
