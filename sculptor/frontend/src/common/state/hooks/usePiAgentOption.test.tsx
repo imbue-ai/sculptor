@@ -32,6 +32,7 @@ const makeStatus = (overrides: Partial<DependenciesStatus>): DependenciesStatus 
   claude: makeInfo({}),
   pi: makeInfo({}),
   gh: makeInfo({}),
+  voiceModels: makeInfo({}),
   ...overrides,
 });
 
