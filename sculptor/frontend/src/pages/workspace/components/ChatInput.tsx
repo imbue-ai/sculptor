@@ -15,6 +15,7 @@ import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { getModelShortName, PRODUCTION_MODELS } from "~/common/modelConstants.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
+import { appendTranscript } from "~/common/voiceEntryText.ts";
 import { CapabilityGate } from "~/components/CapabilityGate.tsx";
 import { EFFORT_DISPLAY_NAMES, EFFORT_OPTIONS } from "~/components/effortConstants.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
@@ -25,6 +26,7 @@ import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
 import { SendButton } from "~/components/SendButton.tsx";
 import { CAPABILITY_UNSUPPORTED_COPY } from "~/components/useCapabilityGate.ts";
+import { VoiceEntryButton } from "~/components/VoiceEntryButton.tsx";
 
 import {
   btwAgent,
@@ -366,6 +368,21 @@ export const ChatInput = ({
     setPromptDraft(null);
     setAttachedFiles([]);
   }, [editorRef, setPromptDraft, setAttachedFiles]);
+
+  // Voice-entry segments append to the live draft with the spacing typing would
+  // produce, written through the same editor-content + draft-atom path as every
+  // other programmatic insert. It never steals focus and never sends — dictation
+  // only fills the composer.
+  const handleAppendVoiceTranscript = useCallback(
+    (text: string): void => {
+      const currentDraft = getDraft() ?? "";
+      const nextDraft = appendTranscript({ draft: currentDraft, segment: text });
+      if (nextDraft === currentDraft) return;
+      editorRef.current?.commands.setContent(nextDraft, { contentType: "markdown" });
+      setPromptDraft(nextDraft);
+    },
+    [getDraft, setPromptDraft, editorRef],
+  );
 
   const openBtwPopup = useSetAtom(openBtwPopupAtom);
   const closeBtwPopup = useSetAtom(closeBtwPopupAtom);
@@ -1017,6 +1034,9 @@ export const ChatInput = ({
                       sourcesBackendModels={hasBackendModelSource}
                     />
                   </Flex>
+                  {/* Immediately left of the send button, only in the desktop
+                      toolbar; the component self-hides outside a secure context. */}
+                  <VoiceEntryButton onAppendTranscript={handleAppendVoiceTranscript} />
                 </>
               )}
               {isMissingUsableModel ? (

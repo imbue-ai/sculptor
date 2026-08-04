@@ -1,0 +1,39 @@
+.wrapper {
+  display: inline-flex;
+  position: relative;
+}
+
+/* Overlaid on the disabled install button, centered over its icon. Rotated so
+   the arc fills clockwise from 12 o'clock. */
+.ring {
+  inset: 0;
+  margin: auto;
+  pointer-events: none;
+  position: absolute;
+  transform: rotate(-90deg);
+}
+
+.ringTrack {
+  stroke: var(--gray-a5);
+}
+
+.ringIndicator {
+  stroke: var(--accent-9);
+  transition: stroke-dashoffset var(--duration-normal) var(--ease-default);
+}
+
+/* While listening the button is the solid accent variant; a soft pulsing halo
+   reinforces that the mic is live. */
+.listening {
+  animation: voiceEntryPulse var(--duration-slower) var(--ease-in-out) infinite alternate;
+}
+
+@keyframes voiceEntryPulse {
+  from {
+    box-shadow: 0 0 0 0 var(--accent-a7);
+  }
+
+  to {
+    box-shadow: 0 0 0 var(--space-1) var(--accent-a5);
+  }
+}
