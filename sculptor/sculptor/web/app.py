@@ -141,6 +141,8 @@ from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import get_user_config_instance_if_set
 from sculptor.services.user_config.user_config import merge_config
 from sculptor.services.user_config.user_config import replace_config
+from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
+from sculptor.services.voice_models import find_voice_model_file
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -3220,13 +3222,17 @@ def install_dependency(
     tool: str = "CLAUDE",
     user_session: UserSession = Depends(get_user_session),
 ) -> InstallResult:
-    """Trigger installation of a managed dependency binary."""
+    """Trigger installation of a managed dependency binary or artifact bundle."""
+    services = get_services_from_request_or_websocket(request)
+    # The voice-models bundle is a managed artifact, not a ``Dependency`` (it is
+    # never provisioned into agent environments), so it dispatches by name.
+    if tool == VOICE_MODELS_TOOL_NAME:
+        return services.dependency_management_service.install_voice_models()
     try:
         dependency = Dependency(tool)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}") from e
 
-    services = get_services_from_request_or_websocket(request)
     return services.dependency_management_service.install_managed(dependency)
 
 
@@ -4855,6 +4861,55 @@ def get_uploaded_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(file_path)
+
+
+# Bundle files are immutable per pin (the ETag is the pinned sha256), so the
+# renderer may cache them; the short max-age keeps a stale cache self-healing
+# after a pin bump without conditional-request storms during a session.
+_VOICE_MODELS_CACHE_CONTROL = "public, max-age=3600"
+
+
+def _matches_if_none_match(header_value: str, etag: str) -> bool:
+    """Whether an ``If-None-Match`` header matches a single known strong ETag.
+
+    Weak comparison per RFC 9110: a ``W/`` prefix on a candidate is ignored, and
+    ``*`` matches any representation.
+    """
+    if header_value.strip() == "*":
+        return True
+    candidates = {candidate.strip().removeprefix("W/") for candidate in header_value.split(",")}
+    return etag in candidates
+
+
+@router.get("/api/v1/voice-models/{path:path}", response_class=FileResponse)
+def get_voice_model_file(
+    path: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Serve one pinned file of the installed voice-models bundle.
+
+    The renderer's on-device speech-to-text loads its model files from here so
+    they never ship inside the app bundle. Only the exact serve paths listed in
+    the pin are allowed; everything else is rejected.
+    """
+    pinned = find_voice_model_file(path)
+    if pinned is None:
+        raise HTTPException(status_code=404, detail="Not a voice-models bundle file")
+
+    services = get_services_from_request_or_websocket(request)
+    file_path = services.dependency_management_service.resolve_voice_model_path(path)
+    if file_path is None:
+        raise HTTPException(status_code=404, detail="Voice models are not installed")
+
+    etag = f'"{pinned.sha256}"'
+    headers = {"ETag": etag, "Cache-Control": _VOICE_MODELS_CACHE_CONTROL}
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match is not None and _matches_if_none_match(if_none_match, etag):
+        return Response(status_code=304, headers=headers)
+
+    media_type = "application/json" if path.endswith(".json") else "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type, headers=headers)
 
 
 @router.post("/api/v1/upload-diagnostics")
