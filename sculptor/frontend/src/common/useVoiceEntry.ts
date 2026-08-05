@@ -99,8 +99,8 @@ export type VoiceModelsInstall = {
  * Owns the managed voice-models install, mirroring the shared
  * `useManagedDependency` flow: fire-and-forget POST plus a
  * `getDependenciesStatus` poll as a WebSocket fallback, both writing the one
- * shared `dependenciesStatusAtom`. Used by the mic button and by
- * Settings → Dependencies, which therefore stay coherent with each other.
+ * shared `dependenciesStatusAtom` — so every surface rendering install state
+ * stays coherent, whichever one started the download.
  */
 export const useVoiceModelsInstall = (): VoiceModelsInstall => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
@@ -116,8 +116,8 @@ export const useVoiceModelsInstall = (): VoiceModelsInstall => {
   const installError = installErrorLocal ?? info?.installError ?? null;
 
   // Once the shared status confirms the bundle is installed, drop any stale
-  // installing/error state during render (mirrors useManagedDependency) so
-  // consumers settle without waiting for an effect tick.
+  // installing/error state during render so consumers settle without waiting
+  // for an effect tick.
   if (isInstalled && (isInstallingLocal || installErrorLocal !== null)) {
     setIsInstallingLocal(false);
     setInstallErrorLocal(null);
@@ -127,8 +127,8 @@ export const useVoiceModelsInstall = (): VoiceModelsInstall => {
     setIsInstallingLocal(true);
     setInstallErrorLocal(null);
     try {
-      // Fire-and-forget, like the other managed installs: the download opens no
-      // request transaction, so skip the WS ack and track completion by polling.
+      // Fire-and-forget: the download opens no request transaction, so skip the
+      // WS ack and track completion by polling.
       const response = await installDependency({ query: { tool: VOICE_MODELS_TOOL }, meta: { skipWsAck: true } });
       const result = response.data;
       if (result && !result.success && !result.in_progress) {
@@ -215,11 +215,9 @@ export const useVoiceEntry = (params: { onAppendTranscript: (text: string) => vo
     setVoiceError(null);
     setEngineState("initializing");
     try {
-      // One engine per mounted button, restarted across toggles (stop releases
-      // the microphone; start reacquires it). The loader is imported dynamically
-      // so the heavy engine module never enters the static graph of this hook's
-      // importers — keeping it off the initial bundle and out of every consumer's
-      // transform.
+      // One engine per mounted button, restarted across toggles. The loader is
+      // imported dynamically so the heavy engine module stays off the initial
+      // bundle until dictation actually starts.
       let engine = engineRef.current;
       if (engine === null) {
         const { loadVoiceEngine } = await import("~/common/voiceEngineLoader.ts");
@@ -258,9 +256,7 @@ export const useVoiceEntry = (params: { onAppendTranscript: (text: string) => vo
     }
   }, []);
 
-  // Fold install + engine lifecycle into one button status. Install state wins
-  // while the bundle is absent; once installed the engine state (or a voice
-  // error) drives the affordance.
+  // Fold install + engine lifecycle into one button status.
   let status: VoiceButtonStatus;
   if (!install.isInstalled) {
     if (install.isInstalling) {

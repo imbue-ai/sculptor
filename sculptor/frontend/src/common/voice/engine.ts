@@ -8,8 +8,6 @@
 // come exclusively from the backend's managed voice-models endpoint; the ONNX
 // Runtime wasm and the VAD audio worklet are code that ships with the app.
 
-// `import type` is erased at build, so this carries no runtime dependency on the
-// (large) speech libraries — they are loaded lazily via dynamic import() below.
 import type { MicVAD } from "@ricky0123/vad-web";
 
 import { baseUrl } from "~/apiClient.ts";
@@ -31,8 +29,7 @@ const appAssetBase = (): string =>
 const voiceModelsBase = (): string => new URL(`${baseUrl}/api/v1/voice-models/`, window.location.href).href;
 
 // The compiled Moonshine pipeline is cached at module scope so a later start() —
-// even from a freshly created engine — is warm. (Dynamic import() is itself
-// memoized by the module system, so the libraries need no separate caching.)
+// even from a freshly created engine — is warm.
 let sharedTranscriber: AsrTranscriber | undefined;
 let isFetchAuthInstalled = false;
 
@@ -77,7 +74,6 @@ const ensureTranscriber = async (): Promise<AsrTranscriber> => {
   transformers.env.allowLocalModels = false;
   transformers.env.remoteHost = voiceModelsBase();
   // The default wasmPaths points at jsDelivr; serve the wasm from our own origin.
-  // The ONNX backend populates `wasm` when the module loads, so it is defined here.
   const wasm = transformers.env.backends.onnx.wasm;
   if (wasm !== undefined) {
     wasm.wasmPaths = `${appAssetBase()}transformers-ort/`;
@@ -200,8 +196,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
       await vad.start();
       // A click's transient user activation can expire during a long cold init,
       // leaving the AudioContext suspended under autoplay policy — and the VAD
-      // would then silently process nothing. Resume explicitly; a refusal here
-      // surfaces as init-failed instead of a dead "listening" state.
+      // would then silently process nothing.
       if (audioContext !== undefined && audioContext.state === "suspended") {
         await audioContext.resume();
       }
@@ -212,10 +207,9 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     setState("listening");
   };
 
-  // Fully release the microphone. vad-web's pause() keeps the MediaStream (and
+  // Fully release the microphone: vad-web's pause() keeps the MediaStream (and
   // the OS mic indicator) live, so stopping destroys the VAD and closes the
-  // AudioContext instead; the next start() rebuilds them. The expensive part —
-  // the Moonshine pipeline — stays cached at module scope, so restarts are warm.
+  // AudioContext instead; the next start() rebuilds them.
   const releaseCapture = (): void => {
     if (vadInstance !== undefined) {
       void vadInstance.destroy().catch(() => undefined);
