@@ -1,7 +1,9 @@
 """Integration tests for model-specific capability gating in the chat input.
 
 Verifies that:
-- The fast mode toggle is only visible when Claude Opus 4.6 is selected
+- The fast mode toggle is capability-gated: visible for the fast-mode-capable
+  Opus generations (rolling Opus 5, pinned 4.8 and 4.6) and hidden for models
+  that don't support it (e.g. Sonnet)
 - The fast mode draft state is preserved when switching away from Opus 4.6 and back
 - The model selector is isolated per agent (changing one agent's model doesn't bleed to others)
 """
