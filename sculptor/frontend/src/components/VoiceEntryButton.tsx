@@ -13,8 +13,7 @@ const ICON_SIZE_PX = 16;
 const RING_SIZE_PX = 28;
 const RING_STROKE_PX = 2;
 
-/** A determinate circular progress overlay (Radix has only an indeterminate
- *  Spinner). Draws an SVG arc via stroke-dashoffset, rotated to start at 12 o'clock. */
+/** A determinate circular progress overlay (Radix has only an indeterminate Spinner). */
 const ProgressRing = ({ percent }: { percent: number }): ReactElement => {
   const radius = (RING_SIZE_PX - RING_STROKE_PX) / 2;
   const center = RING_SIZE_PX / 2;
@@ -62,16 +61,16 @@ type VoiceEntryButtonProps = {
  * The square mic toggle that sits immediately left of the send button. It folds
  * the whole voice-entry lifecycle into one button: trigger/monitor the managed
  * voice-models download (determinate ring while installing), then start/stop the
- * on-device speech engine. Desktop-only in v1, and hidden outside a secure
- * context (mic capture requires one). Harness-agnostic — always rendered,
- * regardless of the active agent type.
+ * on-device speech engine. Desktop-only, and hidden outside a secure context
+ * (mic capture requires one). Harness-agnostic — always rendered, regardless of
+ * the active agent type.
  */
 export const VoiceEntryButton = ({ onAppendTranscript }: VoiceEntryButtonProps): ReactElement | null => {
   const isMobile = useIsMobile();
   const voice = useVoiceEntry({ onAppendTranscript });
 
-  // Desktop-only v1; getUserMedia is unavailable off a secure context, so there
-  // is nothing the button could do there.
+  // Voice entry is desktop-only, and getUserMedia is unavailable off a secure
+  // context, so there is nothing the button could do there.
   if (isMobile || !window.isSecureContext) {
     return null;
   }
@@ -79,8 +78,8 @@ export const VoiceEntryButton = ({ onAppendTranscript }: VoiceEntryButtonProps):
   const icon = <Mic size={ICON_SIZE_PX} />;
 
   // Radix Tooltip does not fire on a disabled button (pointer-events: none), so
-  // during install the hover target and test id live on a wrapping span — the
-  // same handling CapabilityGate uses — with the progress ring overlaid.
+  // during install the hover target and test id live on a wrapping span, with
+  // the progress ring overlaid.
   if (voice.status === "installing") {
     return (
       <Tooltip content={voice.tooltip}>

@@ -369,10 +369,9 @@ export const ChatInput = ({
     setAttachedFiles([]);
   }, [editorRef, setPromptDraft, setAttachedFiles]);
 
-  // Voice-entry segments append to the live draft with the spacing typing would
-  // produce, written through the same editor-content + draft-atom path as every
-  // other programmatic insert. It never steals focus and never sends — dictation
-  // only fills the composer.
+  // Voice segments append with the spacing typing would produce, and
+  // deliberately without the focus steal appendTextRef does — dictation fills
+  // the composer while the user may be working elsewhere.
   const handleAppendVoiceTranscript = useCallback(
     (text: string): void => {
       const currentDraft = getDraft() ?? "";
@@ -1034,8 +1033,6 @@ export const ChatInput = ({
                       sourcesBackendModels={hasBackendModelSource}
                     />
                   </Flex>
-                  {/* Immediately left of the send button, only in the desktop
-                      toolbar; the component self-hides outside a secure context. */}
                   <VoiceEntryButton onAppendTranscript={handleAppendVoiceTranscript} />
                 </>
               )}

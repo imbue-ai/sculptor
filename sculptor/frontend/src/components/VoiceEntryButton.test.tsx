@@ -11,10 +11,9 @@ import type { VoiceEngine, VoiceEngineEvents } from "~/common/voice/types.ts";
 
 import { VoiceEntryButton } from "./VoiceEntryButton.tsx";
 
-// The speech engine is loaded lazily through voiceEngineLoader (which wraps the
-// not-yet-existent `~/common/voice/engine`); mocking the loader stands in for the
-// engine and captures its listeners so a test can drive state/segment/error
-// transitions.
+// The speech engine is loaded lazily through voiceEngineLoader; mocking the
+// loader stands in for the engine and captures its listeners so a test can
+// drive state/segment/error transitions.
 const engineHarness = vi.hoisted(() => ({
   events: null as VoiceEngineEvents | null,
   start: vi.fn(async (): Promise<void> => {}),
