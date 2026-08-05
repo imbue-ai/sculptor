@@ -249,7 +249,9 @@ CLAUDE_VERSION_RANGE = VersionRange(
     # against this failure. Do not lower this without re-validating that case.
     min_version="2.1.202",
     max_version="2.99.99",
-    recommended_version="2.1.202",
+    # Recommended is the latest validated release; bumped to pull in Claude
+    # Opus 5 support (SCU-1841).
+    recommended_version="2.1.222",
     # Blocked versions create background tool invocations that are missing events
     # describing them.
     blocked_versions=(BlockedVersionRange(min_version="2.1.101", max_version="2.1.101"),),

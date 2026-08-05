@@ -60,7 +60,7 @@ export const defaultModelAtom = atom<string>((get) => {
   }
   // Product default when nothing else is selected. Fable is currently disabled
   // with an indefinite timeline, so the default falls back to the 1M-context
-  // Opus (CLAUDE_4_OPUS, shown as "Opus (1M)"; SCU-1576). Fable stays available
+  // Opus (CLAUDE_4_OPUS, shown as "Opus 5 (1M)"; SCU-1576). Fable stays available
   // in the switcher for if/when it returns.
   return LlmModel.CLAUDE_4_OPUS;
 });

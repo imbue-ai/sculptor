@@ -13,8 +13,10 @@ export const hasNoUsableModel = (
 ): boolean => sourcesBackendModels && Array.isArray(backendModels) && backendModels.length === 0;
 
 const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
-  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (1M)", long: "Claude 4.8 Opus (1M)" },
-  [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus", long: "Claude 4.8 Opus" },
+  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus 5 (1M)", long: "Claude 5 Opus (1M)" },
+  [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus 5", long: "Claude 5 Opus" },
+  [LlmModel.CLAUDE_4_8_OPUS]: { short: "Opus 4.8 (1M)", long: "Claude 4.8 Opus (1M)" },
+  [LlmModel.CLAUDE_4_8_OPUS_200K]: { short: "Opus 4.8", long: "Claude 4.8 Opus" },
   [LlmModel.CLAUDE_4_7_OPUS]: { short: "Opus 4.7 (1M)", long: "Claude 4.7 Opus (1M)" },
   [LlmModel.CLAUDE_4_7_OPUS_200K]: { short: "Opus 4.7", long: "Claude 4.7 Opus" },
   [LlmModel.CLAUDE_4_6_OPUS]: { short: "Opus 4.6 (1M)", long: "Claude 4.6 Opus (1M)" },
@@ -34,6 +36,8 @@ const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_FABLE_5,
   LlmModel.CLAUDE_4_OPUS_200K,
   LlmModel.CLAUDE_4_OPUS,
+  LlmModel.CLAUDE_4_8_OPUS_200K,
+  LlmModel.CLAUDE_4_8_OPUS,
   LlmModel.CLAUDE_4_7_OPUS_200K,
   LlmModel.CLAUDE_4_7_OPUS,
   LlmModel.CLAUDE_4_6_OPUS_200K,

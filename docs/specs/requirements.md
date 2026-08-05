@@ -172,11 +172,11 @@ and flags the targets it does not currently define.
 - **REQ-NFR-070 (MUST).** New-agent defaults: model = the user's **configured Settings default** if
   set, else the **most-recently-used** model (recorded whenever the user switches model in chat;
   `lastUsedModelAtom`, `sculptor/frontend/src/common/state/atoms/userConfig.ts`), else a hardcoded
-  fallback of **`CLAUDE_4_OPUS` ("Opus (1M)")**, the 1M-context Opus variant (Fable, though listed in
+  fallback of **`CLAUDE_4_OPUS` ("Opus 5 (1M)")**, the rolling 1M-context Opus variant (Fable, though listed in
   the switcher, is disabled and so is never the fallback). Effort = **Extra High (`xhigh`)**, fast mode
   = **off** (`sculptor/sculptor/config/user_config.py`, `sculptor/sculptor/web/derived.py`). All three
   are user-overridable in Settings → Agent (`SPEC.md` §7.10). **Fast mode** is offered only on models
-  that support it — the Opus 4.x family, including Opus 4.8 (both the 1M and 200K variants) — and is
+  that support it — Opus 5 and the pinned Opus 4.x family (4.8/4.7/4.6, both 1M and 200K variants) — and is
   disabled for Sonnet/Haiku/Fable (`sculptor/frontend/src/common/modelCapabilities.ts`).
 
 ---
@@ -212,7 +212,7 @@ packaging Sculptor):
 
 ### 3.3 Required external binaries
 
-- **REQ-COMPAT-020 (MUST).** **Claude CLI** is required. Compatibility window: **recommended 2.1.202,
+- **REQ-COMPAT-020 (MUST).** **Claude CLI** is required. Compatibility window: **recommended 2.1.222,
   minimum 2.1.202, maximum 2.99.99, blocked 2.1.101**; supported platforms **darwin-arm64** and
   **linux-x64** (`sculptor/sculptor/services/managed_tools.py`). Sculptor can install/manage it and can use a
   user-supplied binary (`SPEC.md` §7.1, §7.10).

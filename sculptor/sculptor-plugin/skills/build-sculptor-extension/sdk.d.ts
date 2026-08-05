@@ -442,6 +442,8 @@ export type HarnessCapabilities = {
 declare const LlmModel: {
 	readonly CLAUDE_4_OPUS: "CLAUDE-4-OPUS";
 	readonly CLAUDE_4_OPUS_200K: "CLAUDE-4-OPUS-200K";
+	readonly CLAUDE_4_8_OPUS: "CLAUDE-4-8-OPUS";
+	readonly CLAUDE_4_8_OPUS_200K: "CLAUDE-4-8-OPUS-200K";
 	readonly CLAUDE_4_7_OPUS: "CLAUDE-4-7-OPUS";
 	readonly CLAUDE_4_7_OPUS_200K: "CLAUDE-4-7-OPUS-200K";
 	readonly CLAUDE_4_6_OPUS: "CLAUDE-4-6-OPUS";
