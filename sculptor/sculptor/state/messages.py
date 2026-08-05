@@ -12,7 +12,7 @@ from sculptor.state.chat_state import ContentBlockTypes
 
 
 class LLMModel(StrEnum):
-    # Rolling "latest Opus" (shortname `opus`), relabeled per generation.
+    # Rolling "latest Opus" (shortnames `opus[1m]` / `opus`), relabeled per generation.
     CLAUDE_4_OPUS = "CLAUDE-4-OPUS"
     CLAUDE_4_OPUS_200K = "CLAUDE-4-OPUS-200K"
     # Pinned Opus generations.

@@ -28,9 +28,10 @@ _OPUS_5_1M_MODEL_NAME = "Claude 5 Opus (1M)"
 _OPUS_5_MODEL_NAME = "Claude 5 Opus"
 
 
-@user_story("to only see the fast mode toggle when Opus 4.6 is selected")
+@user_story("to see the fast mode toggle only for models that support fast mode")
 def test_fast_mode_toggle_gated_by_model(sculptor_instance_: SculptorInstance) -> None:
-    """Fast mode toggle should only be present in the chat toolbar for Opus 4.6.
+    """Fast mode toggle is gated by model capability: present for a fast-mode
+    model (Opus 4.6), absent for one that isn't (Sonnet).
 
     Steps:
     1. Start with Fake Claude (which supports fast mode for testing) — toggle visible.
