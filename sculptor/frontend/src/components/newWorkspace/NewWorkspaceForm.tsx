@@ -27,6 +27,7 @@ import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { usePiModels } from "~/common/state/hooks/usePiModels.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { appendTranscript } from "~/common/voiceEntryText.ts";
 import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
 import { BranchSelector } from "~/components/BranchSelector.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
@@ -342,6 +343,12 @@ export const NewWorkspaceForm = ({
     setShuffleNonce((prev) => prev + 1);
   }, []);
 
+  // Dictated segments append to the prompt through its controlled state, so they
+  // persist and undo exactly like typed text.
+  const handleAppendPromptTranscript = useCallback((text: string): void => {
+    setPrompt((prev) => appendTranscript({ draft: prev, segment: text }));
+  }, []);
+
   const isPromptEmpty = prompt.trim() === "";
   // The pi catalog as the ModelSelector consumes it: the fetched list, or
   // NOT_FETCHED_YET while the host-side probe is still resolving (which drives the
@@ -645,6 +652,7 @@ export const NewWorkspaceForm = ({
                 onFastModeToggle={(): void => setIsAgentFastMode((v) => !v)}
                 isPlanMode={isAgentPlanMode}
                 onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
+                onAppendTranscript={handleAppendPromptTranscript}
               />
             ) : effectiveAgentType === "pi" ? (
               <Flex align="center" gap="2" data-testid={ElementIds.NEW_WORKSPACE_PI_MODEL_PICKER}>

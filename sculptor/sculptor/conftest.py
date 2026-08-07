@@ -194,7 +194,8 @@ def _block_managed_binary_downloads(request: pytest.FixtureRequest, monkeypatch:
         return
 
     # Block every network-touching entry point: startup auto-install becomes a no-op,
-    # and both the install kickoff and the download/verify/stage core raise on contact.
+    # and both the install kickoff and the download/verify/stage cores raise on contact.
     monkeypatch.setattr(DependencyManagementService, "_auto_install_if_needed", _noop_auto_install)
     monkeypatch.setattr(DependencyManagementService, "_install_managed_tool", _raise_on_managed_download)
     monkeypatch.setattr(DependencyManagementService, "_download_verify_stage", _raise_on_managed_download)
+    monkeypatch.setattr(DependencyManagementService, "_download_verify_stage_voice_models", _raise_on_managed_download)
