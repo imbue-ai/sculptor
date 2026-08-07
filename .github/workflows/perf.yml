@@ -241,23 +241,19 @@ jobs:
               --base perf-out/base.jsonl --head perf-out/head.jsonl \
               --base-sha "${{ steps.baseline.outputs.base_sha }}" \
               --format github --observational --intersect-head > perf-out/comment.md
-            # Full table always goes to the step summary.
-            cat perf-out/comment.md >> "$GITHUB_STEP_SUMMARY"
-            # Comment only when something is non-green (regression/improvement/
-            # new/removed). Grep the verdict line the renderer emits.
-            if grep -q "no perf change" perf-out/comment.md; then
-              echo "should_comment=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "should_comment=true" >> "$GITHUB_OUTPUT"
-            fi
           else
             # No baseline note yet: render the absolute head numbers so the PR's
             # perf profile is visible now (deltas begin once a main run seeds a
-            # note). Step summary only — nothing to diff, so no PR comment.
+            # note).
             python3 tools/perf/comment.py --head perf-out/head.jsonl \
-              --format github --observational >> "$GITHUB_STEP_SUMMARY"
-            echo "should_comment=false" >> "$GITHUB_OUTPUT"
+              --format github --observational > perf-out/comment.md
           fi
+          # Full body always goes to the step summary.
+          cat perf-out/comment.md >> "$GITHUB_STEP_SUMMARY"
+          # This lane is experimental/observational, so it comments on every run
+          # regardless of verdict — the body is collapsed to a verdict + one-line
+          # summary, so an unchanged run is a quiet one-liner, not noise.
+          echo "should_comment=true" >> "$GITHUB_OUTPUT"
 
       - name: Upsert PR comment
         if: github.event_name == 'pull_request' && steps.render.outputs.should_comment == 'true'
