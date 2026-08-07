@@ -1,0 +1,47 @@
+// Bare system line — the shared language for every background-process system
+// moment (triggered turns + restart). Mirrors the V2 "sysline" mock and the
+// workspace-intro info-line: dim icon, gray text (name bolded), mono detail,
+// right-aligned mono time. No left rule, no box. Single line that ellipsizes
+// (name/detail truncate, time pinned right). Status is never colored.
+.line {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.icon {
+  color: var(--gray-9);
+  display: flex;
+  flex-shrink: 0;
+}
+
+// Name + detail share one ellipsizing slot; the time stays pinned to the right.
+.label {
+  color: var(--gray-10);
+  flex: 1;
+  font-size: 12.5px; // stylelint-disable-line sculptor/no-hardcoded-values
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  color: var(--gray-11);
+  font-weight: var(--font-weight-medium);
+}
+
+.detail {
+  color: var(--gray-10);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+}
+
+.time {
+  color: var(--gray-10);
+  flex-shrink: 0;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+}

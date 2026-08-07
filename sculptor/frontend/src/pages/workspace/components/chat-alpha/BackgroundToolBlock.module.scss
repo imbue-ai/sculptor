@@ -1,0 +1,117 @@
+// Subagent-style transcript block for a background launch. Mirrors
+// AlphaSubagentPill's gutter + pill metrics (24px gutter, accent-a2 pill,
+// radius-1, 28px row). Status is conveyed without color: the running row
+// pulses gently, ended rows dim. The only color allowed is authentic terminal
+// log content inside the nested BackgroundProcessOutputBox.
+.root {
+  position: relative;
+  width: 100%;
+}
+
+.row {
+  position: relative;
+  width: 100%;
+}
+
+// Ended blocks dim — no status color, just reduced emphasis.
+.rowEnded {
+  opacity: 65%;
+}
+
+// Left gutter icon: spinner while running, corner-return arrow once ended.
+// Position mirrors AlphaSubagentPill so the block lines up with subagent pills.
+.gutterIcon {
+  align-items: center;
+  color: var(--gray-a7);
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  left: calc(-16px - var(--space-2));
+  position: absolute;
+  top: 0;
+  width: 16px;
+}
+
+.pill {
+  align-items: center;
+  background-color: var(--accent-a2);
+  border: 1px solid var(--accent-a3);
+  border-radius: var(--radius-1);
+  color: var(--gray-12);
+  display: flex;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+  height: 28px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+  width: 100%;
+}
+
+// Gentle opacity pulse while running — the only "running" signal (no color).
+@keyframes backgroundToolBlockPulse {
+  0%,
+  100% {
+    opacity: 100%;
+  }
+
+  50% {
+    opacity: 65%;
+  }
+}
+
+.pillRunning {
+  animation: backgroundToolBlockPulse 2s ease-in-out infinite;
+}
+
+// Neutral-gray type icon (bash → terminal, monitor → activity). Agent blocks
+// have no type icon, matching the bare subagent pill.
+.typeIcon {
+  color: var(--gray-a10);
+  flex-shrink: 0;
+}
+
+.primary {
+  color: var(--gray-a12);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Command-style kinds (bash/monitor) render the command in mono; agent prompts
+// stay in the default UI font.
+.primaryMono {
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+}
+
+// Dim mono trailing text — the resolved status word + elapsed time
+// ("background · 2m 14s", "exited · code 1 · 4m 12s"). Gray, never colored.
+.trailing {
+  color: var(--gray-a10);
+  flex-shrink: 0;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+  color: var(--gray-a10);
+  flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+// Inline output box sits beneath the row, indented to align with the pill (past
+// the gutter) and with a little breathing room above it.
+.output {
+  margin-top: var(--space-2);
+}
