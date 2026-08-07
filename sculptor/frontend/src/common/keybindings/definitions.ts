@@ -144,6 +144,23 @@ export const KEYBINDING_DEFINITIONS: ReadonlyArray<KeybindingDefinition> = [
     defaultBinding: "Meta+Shift+M",
   },
   {
+    id: "open_layouts",
+    name: "Layouts",
+    description: "Open the layouts switcher",
+    category: "panels",
+    defaultBinding: "Meta+Shift+L",
+  },
+  {
+    // Active only while the layouts switcher is open (the switcher owns a
+    // capture-phase listener); opens the more-options popover for the highlighted
+    // layout.
+    id: "layout_more_options",
+    name: "Layout options",
+    description: "Open more options for the highlighted layout in the switcher",
+    category: "panels",
+    defaultBinding: "Meta+J",
+  },
+  {
     id: "next_section",
     name: "Next section",
     description: "Cycle to the next section (including split sub-sections)",

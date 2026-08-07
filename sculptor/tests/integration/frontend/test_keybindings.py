@@ -87,15 +87,15 @@ def test_record_new_keybinding(sculptor_instance_: SculptorInstance) -> None:
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     mod = get_playwright_modifier_key()
 
-    # Set "Command palette" to a new binding. We use Meta+J because it has
+    # Set "Command palette" to a new binding. We use Meta+G because it has
     # no default binding — picking a key that's already bound to another
     # command (e.g. Meta+P → open_workspace) would trigger the conflict
     # warning instead of a clean record, and that is exercised separately
     # in test_duplicate_detection_reassign.
-    keybindings.set_keybinding("command_palette", f"{mod}+j")
+    keybindings.set_keybinding("command_palette", f"{mod}+g")
 
     display = keybindings.get_keybinding_display_text("command_palette")
-    expect(display).to_contain_text("J")
+    expect(display).to_contain_text("G")
 
     # Reset so subsequent tests on the same worker see defaults
     keybindings.reset_all_to_defaults()
@@ -123,12 +123,12 @@ def test_reset_all_to_defaults(sculptor_instance_: SculptorInstance) -> None:
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     mod = get_playwright_modifier_key()
 
-    # First customize a binding to an unbound key (Meta+J has no default,
+    # First customize a binding to an unbound key (Meta+G has no default,
     # so this records a clean new binding rather than triggering the
     # conflict warning that Meta+P would now fire against open_workspace).
-    keybindings.set_keybinding("command_palette", f"{mod}+j")
+    keybindings.set_keybinding("command_palette", f"{mod}+g")
     display = keybindings.get_keybinding_display_text("command_palette")
-    expect(display).to_contain_text("J")
+    expect(display).to_contain_text("G")
 
     keybindings.reset_all_to_defaults()
 
@@ -272,9 +272,9 @@ def test_help_dialog_reflects_customized_bindings(sculptor_instance_: SculptorIn
     # Ensure defaults so help (Meta+/) is bound
     keybindings.reset_all_to_defaults()
 
-    # Change "Command palette" to Meta+J (an unbound key — Meta+P would
+    # Change "Command palette" to Meta+G (an unbound key — Meta+P would
     # now collide with open_workspace and trigger the conflict warning).
-    keybindings.set_keybinding("command_palette", f"{mod}+j")
+    keybindings.set_keybinding("command_palette", f"{mod}+g")
 
     # Open help dialog with Cmd+/
     layout = PlaywrightProjectLayoutPage(page=page)
@@ -414,7 +414,7 @@ def test_default_command_palette_keybinding_works(sculptor_instance_: SculptorIn
 @pytest.mark.release
 @user_story("to use a customized keybinding after changing it in settings")
 def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) -> None:
-    """After remapping Command palette to Meta+J, Meta+J should open the modal and Meta+K should not."""
+    """After remapping Command palette to Meta+G, Meta+G should open the modal and Meta+K should not."""
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
 
@@ -422,19 +422,19 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     # suppresses global shortcuts while it is open — create a workspace first.
     _ensure_workspace(sculptor_instance_)
 
-    # Change "Command palette" from Meta+K to Meta+J in settings. Meta+J
+    # Change "Command palette" from Meta+K to Meta+G in settings. Meta+G
     # is unbound by default; Meta+P would now collide with open_workspace
     # and trigger the conflict-warning flow tested elsewhere.
     keybindings = _navigate_to_keybindings(sculptor_instance_)
     keybindings.reset_all_to_defaults()
-    keybindings.set_keybinding("command_palette", f"{mod}+j")
+    keybindings.set_keybinding("command_palette", f"{mod}+g")
 
     # Wait for the user-config update to propagate by asserting the
     # keybindings row in Settings now displays the new binding. The same
     # `userConfigAtom -> keybindingsAtom` chain feeds both the settings
     # UI and the global keyboard-shortcut handler, so once the row
     # reflects "J" the global handler has the new binding too.
-    expect(keybindings.get_keybinding_display_text("command_palette")).to_contain_text("J")
+    expect(keybindings.get_keybinding_display_text("command_palette")).to_contain_text("G")
 
     blur_active_element(page)
     layout = PlaywrightProjectLayoutPage(page=page)
@@ -444,8 +444,8 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     palette = layout.get_command_palette()
     expect(palette).not_to_be_visible()
 
-    # The new binding (Meta+J) should open the search modal
-    layout.press_keyboard_shortcut(f"{mod}+j")
+    # The new binding (Meta+G) should open the search modal
+    layout.press_keyboard_shortcut(f"{mod}+g")
     expect(palette).to_be_visible()
 
     dismiss_with_escape(palette)

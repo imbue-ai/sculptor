@@ -4,25 +4,22 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds, UserConfigField } from "~/api";
-import {
-  CATEGORY_DISPLAY_NAMES,
-  CATEGORY_ORDER,
-  KEYBINDING_DEFINITIONS,
-  type KeybindingId,
-  type ResolvedKeybinding,
-} from "~/common/keybindings";
+import { CATEGORY_DISPLAY_NAMES, CATEGORY_ORDER, type ResolvedKeybinding } from "~/common/keybindings";
 import { keybindingsAtom } from "~/common/keybindings/atoms.ts";
-import { formatShortcutForDisplay, parseShortcut } from "~/common/ShortcutUtils.ts";
+import { allNamedBindingsAtom, dynamicLayoutKeybindingsAtom } from "~/common/keybindings/layoutShortcuts.ts";
+import { chordsEqual, formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 
 import { HotkeyChip } from "./HotkeyChip.tsx";
 import { SettingRow } from "./SettingRow.tsx";
 import { SectionTitle, SettingsSectionLayout } from "./SettingsSection.tsx";
 
+// ids are plain strings, not the static KeybindingId union: a conflict can involve a
+// dynamic per-layout binding (layout.apply.<id>) on either side.
 type ConflictInfo = {
   recordedKeys: string;
-  targetId: KeybindingId;
-  conflictingId: KeybindingId;
+  targetId: string;
+  conflictingId: string;
 };
 
 type KeybindingsSectionProps = {
@@ -53,6 +50,9 @@ const HotkeyField = ({
 
 export const KeybindingsSection = ({ onSettingChange }: KeybindingsSectionProps): ReactElement => {
   const resolvedKeybindings = useAtomValue(keybindingsAtom);
+  const layoutKeybindings = useAtomValue(dynamicLayoutKeybindingsAtom);
+  // Static + per-layout bindings together, so conflict detection sees both lanes.
+  const allNamedBindings = useAtomValue(allNamedBindingsAtom);
   const userConfig = useAtomValue(userConfigAtom);
   const [searchQuery, setSearchQuery] = useState("");
   const [conflictInfo, setConflictInfo] = useState<ConflictInfo | null>(null);
@@ -70,42 +70,35 @@ export const KeybindingsSection = ({ onSettingChange }: KeybindingsSectionProps)
     await saveKeybindings({});
   }, [saveKeybindings]);
 
+  // Both static and per-layout bindings live in the same userConfig.keybindings
+  // dict (per-layout ones keyed by layout.apply.<id>), so the same write path
+  // serves both — `id` is just a string key.
   const handleSetBinding = useCallback(
-    async (id: KeybindingId, keys: string): Promise<void> => {
+    async (id: string, keys: string): Promise<void> => {
       await saveKeybindings({ ...currentOverrides, [id]: keys });
     },
     [currentOverrides, saveKeybindings],
   );
 
   const handleClearBinding = useCallback(
-    async (id: KeybindingId): Promise<void> => {
+    async (id: string): Promise<void> => {
       await saveKeybindings({ ...currentOverrides, [id]: null });
     },
     [currentOverrides, saveKeybindings],
   );
 
   const checkForConflict = useCallback(
-    (targetId: KeybindingId, recordedKeys: string): boolean | void => {
-      const parsedRecorded = parseShortcut(recordedKeys);
-      for (const kb of resolvedKeybindings) {
+    (targetId: string, recordedKeys: string): boolean | void => {
+      for (const kb of allNamedBindings) {
         if (kb.id === targetId) continue;
-        if (kb.binding) {
-          const parsedExisting = parseShortcut(kb.binding);
-          if (
-            parsedRecorded.meta === parsedExisting.meta &&
-            parsedRecorded.ctrl === parsedExisting.ctrl &&
-            parsedRecorded.alt === parsedExisting.alt &&
-            parsedRecorded.shift === parsedExisting.shift &&
-            parsedRecorded.key === parsedExisting.key
-          ) {
-            setConflictInfo({ recordedKeys, targetId, conflictingId: kb.id });
-            return false;
-          }
+        if (kb.binding && chordsEqual(recordedKeys, kb.binding)) {
+          setConflictInfo({ recordedKeys, targetId, conflictingId: kb.id });
+          return false;
         }
       }
       return true;
     },
-    [resolvedKeybindings],
+    [allNamedBindings],
   );
 
   const handleReassign = useCallback(async (): Promise<void> => {
@@ -149,9 +142,67 @@ export const KeybindingsSection = ({ onSettingChange }: KeybindingsSectionProps)
 
   const conflictingName = useMemo(() => {
     if (!conflictInfo) return "";
-    const def = KEYBINDING_DEFINITIONS.find((d) => d.id === conflictInfo.conflictingId);
-    return def?.name ?? conflictInfo.conflictingId;
-  }, [conflictInfo]);
+    const match = allNamedBindings.find((kb) => kb.id === conflictInfo.conflictingId);
+    return match?.name ?? conflictInfo.conflictingId;
+  }, [conflictInfo, allNamedBindings]);
+
+  // Per-layout shortcut rows for the "Layouts" group, filtered by the search box.
+  const filteredLayoutKeybindings = useMemo(() => {
+    const lowerQuery = searchQuery.toLowerCase();
+    if (!searchQuery) {
+      return layoutKeybindings;
+    }
+    return layoutKeybindings.filter(
+      (kb) => kb.name.toLowerCase().includes(lowerQuery) || kb.description.toLowerCase().includes(lowerQuery),
+    );
+  }, [layoutKeybindings, searchQuery]);
+
+  // One binding row + its inline conflict prompt. Shared by the static category
+  // groups and the dynamic Layouts group so both behave identically.
+  const renderBindingRow = (id: string, name: string, description: string, binding: string | null): ReactElement => (
+    <Flex key={id} direction="column" data-keybinding-id={id}>
+      <HotkeyField
+        title={name}
+        description={description}
+        value={binding ?? undefined}
+        onSet={(keys) => void handleSetBinding(id, keys)}
+        onClear={() => void handleClearBinding(id)}
+        onRecordComplete={(keys) => checkForConflict(id, keys)}
+      />
+      {conflictInfo?.targetId === id && (
+        <Flex
+          mt="2"
+          mb="2"
+          p="2"
+          gap="2"
+          align="center"
+          style={{ background: "var(--amber-a3)", borderRadius: "var(--radius-2)" }}
+          data-testid={ElementIds.SETTINGS_KEYBINDINGS_CONFLICT_WARNING}
+        >
+          <Text size="2">
+            &ldquo;{formatShortcutForDisplay(conflictInfo.recordedKeys)}&rdquo; is already assigned to &ldquo;
+            {conflictingName}&rdquo;
+          </Text>
+          <Button
+            size="1"
+            variant="solid"
+            onClick={() => void handleReassign()}
+            data-testid={ElementIds.SETTINGS_KEYBINDINGS_REASSIGN}
+          >
+            Reassign
+          </Button>
+          <Button
+            size="1"
+            variant="soft"
+            onClick={handleCancelConflict}
+            data-testid={ElementIds.SETTINGS_KEYBINDINGS_CANCEL_CONFLICT}
+          >
+            Cancel
+          </Button>
+        </Flex>
+      )}
+    </Flex>
+  );
 
   return (
     <SettingsSectionLayout
@@ -178,52 +229,19 @@ export const KeybindingsSection = ({ onSettingChange }: KeybindingsSectionProps)
       {filteredByCategory.map(({ category, displayName, bindings }, index) => (
         <Flex key={category} direction="column" mt={index > 0 ? "6" : "0"}>
           <SectionTitle>{displayName}</SectionTitle>
-          {bindings.map((kb) => (
-            <Flex key={kb.id} direction="column" data-keybinding-id={kb.id}>
-              <HotkeyField
-                title={kb.name}
-                description={kb.description}
-                value={kb.binding ?? undefined}
-                onSet={(keys) => void handleSetBinding(kb.id, keys)}
-                onClear={() => void handleClearBinding(kb.id)}
-                onRecordComplete={(keys) => checkForConflict(kb.id, keys)}
-              />
-              {conflictInfo?.targetId === kb.id && (
-                <Flex
-                  mt="2"
-                  mb="2"
-                  p="2"
-                  gap="2"
-                  align="center"
-                  style={{ background: "var(--amber-a3)", borderRadius: "var(--radius-2)" }}
-                  data-testid={ElementIds.SETTINGS_KEYBINDINGS_CONFLICT_WARNING}
-                >
-                  <Text size="2">
-                    &ldquo;{formatShortcutForDisplay(conflictInfo.recordedKeys)}&rdquo; is already assigned to &ldquo;
-                    {conflictingName}&rdquo;
-                  </Text>
-                  <Button
-                    size="1"
-                    variant="solid"
-                    onClick={() => void handleReassign()}
-                    data-testid={ElementIds.SETTINGS_KEYBINDINGS_REASSIGN}
-                  >
-                    Reassign
-                  </Button>
-                  <Button
-                    size="1"
-                    variant="soft"
-                    onClick={handleCancelConflict}
-                    data-testid={ElementIds.SETTINGS_KEYBINDINGS_CANCEL_CONFLICT}
-                  >
-                    Cancel
-                  </Button>
-                </Flex>
-              )}
-            </Flex>
-          ))}
+          {bindings.map((kb) => renderBindingRow(kb.id, kb.name, kb.description, kb.binding))}
         </Flex>
       ))}
+      {filteredLayoutKeybindings.length > 0 && (
+        <Flex
+          direction="column"
+          mt={filteredByCategory.length > 0 ? "6" : "0"}
+          data-testid={ElementIds.SETTINGS_KEYBINDINGS_LAYOUTS_GROUP}
+        >
+          <SectionTitle>Layouts</SectionTitle>
+          {filteredLayoutKeybindings.map((kb) => renderBindingRow(kb.id, kb.name, kb.description, kb.binding))}
+        </Flex>
+      )}
     </SettingsSectionLayout>
   );
 };

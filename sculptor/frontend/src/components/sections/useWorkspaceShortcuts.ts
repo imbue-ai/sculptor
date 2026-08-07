@@ -21,6 +21,7 @@ import { useCallback } from "react";
 import { useKeybindingHandler } from "~/common/keybindings";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { workspaceDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
+import { layoutsSwitcherOpenAtom } from "~/components/layouts/layoutUiAtoms.ts";
 
 import { listSubSections } from "./layoutQueries.ts";
 import { panelRegistryAtom } from "./registry/panelRegistry.ts";
@@ -71,6 +72,7 @@ export const useWorkspaceShortcuts = (): void => {
   const setActivePanel = useSetAtom(setActivePanelAtom);
   const setMaximizedSection = useSetAtom(maximizedSectionAtom);
   const setWorkspaceDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
+  const setLayoutsSwitcherOpen = useSetAtom(layoutsSwitcherOpenAtom);
   const { createRecentAgent } = useAddPanelActions();
 
   // Cycle the active section through the expanded sub-sections incl. split halves,
@@ -188,4 +190,10 @@ export const useWorkspaceShortcuts = (): void => {
   // New agent always lands in center regardless of the active section.
   useKeybindingHandler("new_agent", createRecentAgent);
   useKeybindingHandler("delete_workspace", beginDeleteWorkspace);
+  // Open the Layouts switcher. Mounted here (workspace-only) so ⌘⇧L is scoped to
+  // workspace pages, where an active workspace exists to apply a layout to.
+  useKeybindingHandler(
+    "open_layouts",
+    useCallback(() => setLayoutsSwitcherOpen(true), [setLayoutsSwitcherOpen]),
+  );
 };
