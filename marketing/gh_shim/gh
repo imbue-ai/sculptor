@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""Fake `gh` CLI for the demo harness: canned PR status without touching GitHub.
+
+Sculptor's PR polling shells out to `gh api graphql` (see
+sculptor/sculptor/web/pr_status.py) in exactly two shapes:
+
+  1. a token-wide search for open PRs      (query body contains `search(`)
+  2. a per-workspace repository lookup     (query body contains `repository(owner:`,
+                                            branch passed as `-f branch=<name>`)
+
+This shim answers both from a JSON fixtures file, so seeded demo workspaces
+render real PR pills through the real polling pipeline. Put this script's
+directory at the FRONT of the backend's PATH (marketing/seed/harness.py does
+this) and point SCULPTOR_DEMO_GH_FIXTURES at the fixtures file.
+
+Fixtures format — one entry per branch that should have a PR:
+
+  {
+    "owner": "imbue-ai",
+    "branches": {
+      "<head branch>": {
+        "repo": "<repo name>",
+        "number": 1342,
+        "title": "...",
+        "state": "OPEN" | "MERGED" | "CLOSED",
+        "base": "main",                      // optional, default "main"
+        "checks": "SUCCESS" | "FAILURE" | "PENDING" | null,   // optional
+        "approvals": [{"login": "alice", "approved": true}]   // optional
+      }
+    }
+  }
+
+Contract notes (all load-bearing, derived from the polling code):
+  - Always exit 0. A non-zero exit whose stderr smells like a rate limit puts
+    the whole poller into a 60s cooldown.
+  - The search response must include a healthy `rateLimit`, or the poll
+    governor may defer polling entirely.
+  - The search is `state:open`, so merged/closed PRs must NOT appear there;
+    they are served by the repository lookup (the poller's fallback path).
+  - Search nodes carry `repository.nameWithOwner` + `headRefName`; the poller
+    matches them against the workspace's origin remote and current branch, so
+    the fixtures' owner/repo must agree with the seeded remotes.
+"""
+
+import json
+import os
+import sys
+
+
+def _fail_soft(payload: dict) -> None:
+    """Print a well-formed empty payload; the poller treats it as 'no PRs'."""
+    json.dump(payload, sys.stdout)
+    sys.exit(0)
+
+
+def _load_fixtures() -> dict:
+    empty = {"owner": "imbue-ai", "branches": {}}
+    path = os.environ.get("SCULPTOR_DEMO_GH_FIXTURES", "")
+    if not path or not os.path.exists(path):
+        return empty
+    # A missing, unreadable, or non-JSON fixtures file must degrade to "no
+    # PRs", never to a traceback: a non-zero exit would break the exit-0
+    # contract above.
+    try:
+        with open(path) as f:
+            fixtures = json.load(f)
+    except (OSError, ValueError):
+        return empty
+    return fixtures if isinstance(fixtures, dict) else empty
+
+
+def _branches(fixtures: dict) -> dict:
+    branches = fixtures.get("branches")
+    return branches if isinstance(branches, dict) else {}
+
+
+def _flag_values(argv: list[str], flag: str) -> list[str]:
+    """Collect the values of every `-f key=value` / `-F key=value` argument."""
+    values = []
+    for i, arg in enumerate(argv):
+        if arg in ("-f", "-F") and i + 1 < len(argv):
+            key, _, value = argv[i + 1].partition("=")
+            if key == flag:
+                values.append(value)
+    return values
+
+
+def _pr_node(branch: str, spec: dict, owner: str, for_search: bool) -> dict:
+    base = spec.get("base", "main")
+    repo = spec["repo"]
+    node = {
+        "number": spec["number"],
+        "title": spec["title"],
+        "url": f"https://github.com/{owner}/{repo}/pull/{spec['number']}",
+        "state": spec["state"],
+        "baseRefName": base,
+    }
+    if spec["state"] == "OPEN":
+        checks = spec.get("checks")
+        node.update(
+            {
+                "mergeable": "MERGEABLE",
+                "commits": {
+                    "nodes": [{"commit": {"statusCheckRollup": {"state": checks} if checks else None}}],
+                },
+                "latestReviews": {
+                    "nodes": [
+                        {
+                            "state": "APPROVED" if a.get("approved") else "CHANGES_REQUESTED",
+                            "author": {"login": a["login"]},
+                        }
+                        for a in spec.get("approvals", [])
+                    ]
+                },
+                "reviewThreads": {"nodes": []},
+            }
+        )
+    if for_search:
+        node["repository"] = {"nameWithOwner": f"{owner}/{repo}"}
+        node["headRefName"] = branch
+    return node
+
+
+def _open_pr_search_nodes(fixtures: dict) -> list[dict]:
+    """Search nodes for every well-formed OPEN fixture entry.
+
+    A malformed entry (missing keys, wrong shapes) is skipped rather than
+    allowed to raise: one bad branch must not take down the whole response —
+    or the exit-0 contract — for the well-formed ones.
+    """
+    owner = fixtures.get("owner", "imbue-ai")
+    nodes = []
+    for branch, spec in _branches(fixtures).items():
+        try:
+            if spec["state"] != "OPEN":
+                continue
+            nodes.append(_pr_node(branch, spec, owner, for_search=True))
+        except (AttributeError, KeyError, TypeError):
+            continue
+    return nodes
+
+
+def _answer_search(fixtures: dict) -> dict:
+    nodes = _open_pr_search_nodes(fixtures)
+    return {
+        "data": {
+            "search": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": nodes},
+            "rateLimit": {"cost": 1, "remaining": 4999, "limit": 5000, "resetAt": "2100-01-01T00:00:00Z"},
+        }
+    }
+
+
+def _answer_repository(fixtures: dict, branch: str) -> dict:
+    owner = fixtures.get("owner", "imbue-ai")
+    spec = _branches(fixtures).get(branch)
+    try:
+        nodes = [_pr_node(branch, spec, owner, for_search=False)] if spec else []
+    except (AttributeError, KeyError, TypeError):
+        # A malformed fixture entry degrades to "no PR" rather than a crash.
+        nodes = []
+    return {"data": {"repository": {"pullRequests": {"nodes": nodes}}}}
+
+
+def main() -> None:
+    argv = sys.argv[1:]
+    if argv[:2] != ["api", "graphql"]:
+        # Anything else (auth checks, unrelated gh use) succeeds quietly.
+        sys.exit(0)
+
+    fixtures = _load_fixtures()
+    queries = _flag_values(argv, "query")
+    query = queries[0] if queries else ""
+
+    if "search(" in query:
+        json.dump(_answer_search(fixtures), sys.stdout)
+        sys.exit(0)
+
+    if "repository(owner:" in query:
+        branches = _flag_values(argv, "branch")
+        if not branches:
+            _fail_soft({"data": {"repository": {"pullRequests": {"nodes": []}}}})
+        json.dump(_answer_repository(fixtures, branches[0]), sys.stdout)
+        sys.exit(0)
+
+    # Unknown graphql query shape: succeed with an empty data object rather
+    # than risking an error path that reads like a rate limit.
+    _fail_soft({"data": {}})
+
+
+if __name__ == "__main__":
+    main()

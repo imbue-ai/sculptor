@@ -11,3 +11,7 @@
 # test excludes
 imbue_core/imbue_core/ratchets/ratchet_rules.py
 imbue_core/imbue_core/ratchets/test_ratchet_excludes.py
+
+# Demo/screenshot tooling: deliberately outside the linted product tree
+# (see marketing/README.md), so it doesn't count against code ratchets.
+marketing/**

@@ -223,7 +223,7 @@ describe("useCreateWorkspace agent-type gating", () => {
 
     const body = getAgentRequestBody();
     expect(body.agentType).toBe("terminal");
-    // The backend rejects a prompt for terminal/registered agents (422), so it must never be sent.
+    // The backend rejects a prompt for terminal/registered agents (400), so it must never be sent.
     expect(body.prompt).toBeUndefined();
     expect(body.model).toBeUndefined();
   });

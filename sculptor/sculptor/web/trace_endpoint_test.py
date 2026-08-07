@@ -178,8 +178,8 @@ def test_trace_stop_conflicts_when_not_running(client: TestClient) -> None:
 
 
 def test_trace_start_rejects_out_of_range_tracer_entries(client: TestClient) -> None:
-    assert client.post("/api/v1/trace/start", json={"tracer_entries": 0}).status_code == 422
-    assert client.post("/api/v1/trace/start", json={"tracer_entries": 10**12}).status_code == 422
+    assert client.post("/api/v1/trace/start", json={"tracer_entries": 0}).status_code == 400
+    assert client.post("/api/v1/trace/start", json={"tracer_entries": 10**12}).status_code == 400
     # The rejected starts must not have armed anything.
     assert client.get("/api/v1/trace/status").json()["enabled"] is False
 
