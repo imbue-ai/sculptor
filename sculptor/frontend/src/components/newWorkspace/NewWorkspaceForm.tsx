@@ -343,10 +343,33 @@ export const NewWorkspaceForm = ({
     setShuffleNonce((prev) => prev + 1);
   }, []);
 
+  // While an utterance is being spoken the prompt shows base + interim preview.
+  // The base is captured once per utterance so the final (or the next preview)
+  // replaces the shown preview instead of stacking on top of it.
+  const promptVoiceBaseRef = useRef<string | null>(null);
+  const [isVoiceCaptureLocked, setIsVoiceCaptureLocked] = useState(false);
+
   // Dictated segments append to the prompt through its controlled state, so they
   // persist and undo exactly like typed text.
   const handleAppendPromptTranscript = useCallback((text: string): void => {
-    setPrompt((prev) => appendTranscript({ draft: prev, segment: text }));
+    setPrompt((prev) => {
+      const base = promptVoiceBaseRef.current ?? prev;
+      promptVoiceBaseRef.current = null;
+      return appendTranscript({ draft: base, segment: text });
+    });
+  }, []);
+
+  // "" means the utterance produced no final, so the base prompt is restored.
+  const handlePromptVoicePreview = useCallback((preview: string): void => {
+    setPrompt((prev) => {
+      if (preview === "") {
+        const base = promptVoiceBaseRef.current;
+        promptVoiceBaseRef.current = null;
+        return base ?? prev;
+      }
+      promptVoiceBaseRef.current ??= prev;
+      return appendTranscript({ draft: promptVoiceBaseRef.current, segment: preview });
+    });
   }, []);
 
   const isPromptEmpty = prompt.trim() === "";
@@ -628,6 +651,7 @@ export const NewWorkspaceForm = ({
             ref={promptTextareaRef}
             value={prompt}
             onChange={(e): void => setPrompt(e.target.value)}
+            disabled={isVoiceCaptureLocked}
             placeholder="Describe a task for the agent (optional)"
             className={styles.promptTextarea}
             data-testid={ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA}
@@ -653,6 +677,8 @@ export const NewWorkspaceForm = ({
                 isPlanMode={isAgentPlanMode}
                 onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
                 onAppendTranscript={handleAppendPromptTranscript}
+                onPreviewChange={handlePromptVoicePreview}
+                onCaptureLockChange={setIsVoiceCaptureLocked}
               />
             ) : effectiveAgentType === "pi" ? (
               <Flex align="center" gap="2" data-testid={ElementIds.NEW_WORKSPACE_PI_MODEL_PICKER}>

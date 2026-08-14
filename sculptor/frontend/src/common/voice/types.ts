@@ -14,6 +14,9 @@ export type VoiceError = {
 
 export type VoiceEngineEvents = {
   onSegment(text: string): void;
+  /** Throttled interim transcription of the utterance currently being spoken.
+   *  An empty string clears the preview (utterance ended, misfired, or flushed). */
+  onPreview(text: string): void;
   onStateChange(state: VoiceEngineState): void;
   onError(error: VoiceError): void;
 };

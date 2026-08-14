@@ -1,12 +1,21 @@
 // On-device speech-to-text engine: microphone -> Silero VAD v5 (@ricky0123/vad-web)
-// segments speech -> each finished segment is transcribed by Moonshine base
+// segments speech -> each utterance is transcribed by Moonshine base
 // (onnx-community/moonshine-base-ONNX, q8, WASM) via @huggingface/transformers ->
-// emits the segment text.
+// emits throttled interim previews while the utterance is in progress and the
+// final segment text when it ends (naturally, or flushed by stop()).
 //
 // The speech libraries are large, so they are pulled in only via dynamic
 // `import()` at start() time and never join the initial bundle. Model weights
 // come exclusively from the backend's managed voice-models endpoint; the ONNX
 // Runtime wasm and the VAD audio worklet are code that ships with the app.
+//
+// Per-utterance event protocol (surfaces rely on this):
+//   - onPreview(text) with text.length > 0: show/replace the interim preview.
+//   - onPreview(""): the utterance produced no final (misfire, too short at
+//     stop, or transcription failure) — discard the preview.
+//   - onSegment(text): the utterance's final text; replaces any shown preview.
+//     A successful finalize does NOT emit onPreview("") first, so the preview
+//     stays visible as a bridge until the final lands.
 
 import type { MicVAD } from "@ricky0123/vad-web";
 
@@ -21,6 +30,17 @@ type AsrTranscriber = (audio: Float32Array) => Promise<AsrOutput | Array<AsrOutp
 const MOONSHINE_MODEL_ID = "onnx-community/moonshine-base-ONNX";
 const VAD_WORKLET_FILE = "vad.worklet.bundle.min.js";
 
+const PREVIEW_INTERVAL_MS = 900;
+// Below ~half a second of audio an interim transcription is mostly noise.
+const PREVIEW_MIN_SAMPLES = 8000;
+// A stop()-flush shorter than this is a click or breath, not speech.
+const MIN_FLUSH_SAMPLES = 4000;
+// Moonshine degrades beyond ~30 s of context; keep only the newest audio.
+const MAX_UTTERANCE_SAMPLES = 16000 * 30;
+// Pre-speech ring kept so an utterance's first syllable survives VAD detection
+// latency (~0.5 s at 512-sample/16 kHz frames), mirroring vad-web's own padding.
+const PREROLL_FRAMES = 16;
+
 /** App-served runtime code (ONNX Runtime wasm + VAD worklet), respecting the app base path. */
 const appAssetBase = (): string =>
   new URL(`${import.meta.env.BASE_URL || "/"}vendor/voice/`, window.location.href).href;
@@ -32,6 +52,27 @@ const voiceModelsBase = (): string => new URL(`${baseUrl}/api/v1/voice-models/`,
 // even from a freshly created engine — is warm.
 let sharedTranscriber: AsrTranscriber | undefined;
 let isFetchAuthInstalled = false;
+
+// Every pipeline call is serialized through one module-level chain: the wasm
+// session is not re-entrant, and a preview must never race a final (or another
+// engine instance).
+let sharedTranscribeChain: Promise<unknown> = Promise.resolve();
+
+const transcribeSerialized = (audio: Float32Array): Promise<string> => {
+  const run = async (): Promise<string> => {
+    const transcriber = sharedTranscriber;
+    if (transcriber === undefined) return "";
+    const output = await transcriber(audio);
+    const result = Array.isArray(output) ? output[0] : output;
+    return (result?.text ?? "").trim();
+  };
+  const next = sharedTranscribeChain.then(run, run);
+  sharedTranscribeChain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+};
 
 const extractRequestUrl = (input: RequestInfo | URL): string => {
   if (typeof input === "string") return input;
@@ -123,10 +164,20 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
   let state: VoiceEngineState = "idle";
   let vadInstance: MicVAD | undefined;
   let audioContext: AudioContext | undefined;
-  // Bumped on every stop()/dispose() so a transcription that was already in
-  // flight is discarded rather than emitted after the engine stopped listening.
+  // Bumped on dispose() so nothing emits into an unmounted surface. Deliberately
+  // NOT bumped on stop(): a transcription still in flight then is wanted output.
   let currentRunId = 0;
   let isDisposed = false;
+
+  // The in-progress utterance, accumulated from VAD frames so it can be
+  // preview-transcribed while being spoken and flushed if the user stops
+  // mid-utterance (the VAD only delivers onSpeechEnd audio after a silence gap).
+  let preroll: Array<Float32Array> = [];
+  let utterance: Array<Float32Array> | null = null;
+  let utteranceSamples = 0;
+  let utteranceId = 0;
+  let lastPreviewAt = 0;
+  let isPreviewInFlight = false;
 
   const setState = (next: VoiceEngineState): void => {
     state = next;
@@ -138,26 +189,104 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     events.onError({ kind, message: describeError(error) });
   };
 
-  const handleSegmentAudio = async (audio: Float32Array): Promise<void> => {
+  const concatUtterance = (): Float32Array => {
+    const chunks = utterance ?? [];
+    const joined = new Float32Array(utteranceSamples);
+    let offset = 0;
+    for (const chunk of chunks) {
+      joined.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return joined;
+  };
+
+  const clearUtterance = (): void => {
+    utterance = null;
+    utteranceSamples = 0;
+    utteranceId += 1;
+  };
+
+  const abortUtterance = (): void => {
+    const didHaveUtterance = utterance !== null;
+    clearUtterance();
+    if (didHaveUtterance) {
+      events.onPreview("");
+    }
+  };
+
+  const beginUtterance = (): void => {
+    utterance = [...preroll];
+    utteranceSamples = utterance.reduce((total, chunk) => total + chunk.length, 0);
+    preroll = [];
+    utteranceId += 1;
+    // The first preview waits one full interval from speech start.
+    lastPreviewAt = Date.now();
+  };
+
+  const maybePreview = (): void => {
+    if (isPreviewInFlight || utterance === null || utteranceSamples < PREVIEW_MIN_SAMPLES) return;
+    if (Date.now() - lastPreviewAt < PREVIEW_INTERVAL_MS) return;
+    const id = utteranceId;
     const runId = currentRunId;
-    const transcriber = sharedTranscriber;
-    if (transcriber === undefined || state !== "listening") return;
-    let output: AsrOutput | Array<AsrOutput>;
-    try {
-      output = await transcriber(audio);
-    } catch (error) {
-      // A single failed transcription surfaces an error but keeps listening.
-      if (runId === currentRunId && state === "listening") {
-        events.onError({ kind: "transcription-failed", message: describeError(error) });
+    isPreviewInFlight = true;
+    lastPreviewAt = Date.now();
+    transcribeSerialized(concatUtterance())
+      .then((text): void => {
+        // Stale previews (utterance ended or engine disposed meanwhile) are dropped.
+        if (runId === currentRunId && id === utteranceId && text.length > 0) {
+          events.onPreview(text);
+        }
+      })
+      .catch((): void => undefined)
+      .finally((): void => {
+        isPreviewInFlight = false;
+      });
+  };
+
+  const handleFrame = (frame: Float32Array): void => {
+    // vad-web reuses its frame buffers; copy before retaining.
+    const copy = new Float32Array(frame);
+    if (utterance === null) {
+      preroll.push(copy);
+      if (preroll.length > PREROLL_FRAMES) {
+        preroll.shift();
       }
       return;
     }
-    if (runId !== currentRunId || state !== "listening") return;
-    const result = Array.isArray(output) ? output[0] : output;
-    const text = (result?.text ?? "").trim();
+    utterance.push(copy);
+    utteranceSamples += copy.length;
+    while (utteranceSamples > MAX_UTTERANCE_SAMPLES && utterance.length > 1) {
+      utteranceSamples -= utterance[0].length;
+      utterance.shift();
+    }
+    maybePreview();
+  };
+
+  const emitFinal = async (audio: Float32Array): Promise<void> => {
+    const runId = currentRunId;
+    let text: string;
+    try {
+      text = await transcribeSerialized(audio);
+    } catch (error) {
+      if (runId === currentRunId) {
+        // A failed finalize surfaces an error and discards the shown preview.
+        events.onError({ kind: "transcription-failed", message: describeError(error) });
+        events.onPreview("");
+      }
+      return;
+    }
+    if (runId !== currentRunId) return;
     if (text.length > 0) {
       events.onSegment(text);
+    } else {
+      events.onPreview("");
     }
+  };
+
+  const finalizeUtterance = (audio: Float32Array): void => {
+    // Clear silently: the shown preview stays visible until the final replaces it.
+    clearUtterance();
+    void emitFinal(audio);
   };
 
   const ensureVad = async (): Promise<MicVAD> => {
@@ -173,15 +302,28 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
       ortConfig: (ort): void => {
         ort.env.wasm.numThreads = 1;
       },
+      onFrameProcessed: (_probabilities, frame): void => {
+        handleFrame(frame);
+      },
+      onSpeechStart: (): void => {
+        beginUtterance();
+      },
+      onVADMisfire: (): void => {
+        abortUtterance();
+      },
       onSpeechEnd: (audio: Float32Array): void => {
-        void handleSegmentAudio(audio);
+        // Prefer the VAD's own audio for the natural-end final: it carries the
+        // library's canonical pre/post padding.
+        finalizeUtterance(audio);
       },
     });
     return vadInstance;
   };
 
   const start = async (): Promise<void> => {
-    if (isDisposed || state === "initializing" || state === "listening") return;
+    if (isDisposed || state === "initializing" || state === "listening" || state === "stopping") return;
+    preroll = [];
+    clearUtterance();
     setState("initializing");
     let vad: MicVAD;
     try {
@@ -226,14 +368,34 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
   const stop = async (): Promise<void> => {
     if (state !== "listening") return;
     setState("stopping");
-    currentRunId += 1;
+    // The user usually clicks stop right after speaking, before any silence gap,
+    // so the VAD never delivers that last utterance — flush our accumulated copy
+    // instead of discarding it.
+    const flushAudio = utterance !== null && utteranceSamples >= MIN_FLUSH_SAMPLES ? concatUtterance() : null;
+    if (flushAudio !== null) {
+      clearUtterance();
+    } else {
+      abortUtterance();
+    }
     releaseCapture();
+    if (flushAudio !== null) {
+      await emitFinal(flushAudio);
+    } else {
+      // Let a natural final that was already transcribing settle before idling.
+      await sharedTranscribeChain.then(
+        () => undefined,
+        () => undefined,
+      );
+    }
     setState("idle");
   };
 
   const dispose = (): void => {
     isDisposed = true;
     currentRunId += 1;
+    // Silent cleanup — the owning surface is unmounting, so no events.
+    utterance = null;
+    utteranceSamples = 0;
     releaseCapture();
   };
 

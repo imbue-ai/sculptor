@@ -58,14 +58,19 @@ const makeStatus = (voiceModels?: DependencyInfo): DependenciesStatus => ({
 
 type RenderedButton = RenderResult & { onAppendTranscript: ReturnType<typeof vi.fn> };
 
-const renderButton = (voiceModels?: DependencyInfo): RenderedButton => {
+type ExtraButtonProps = {
+  onPreviewChange?: (preview: string) => void;
+  onCaptureLockChange?: (locked: boolean) => void;
+};
+
+const renderButton = (voiceModels?: DependencyInfo, extraProps?: ExtraButtonProps): RenderedButton => {
   const store = createStore();
   store.set(dependenciesStatusAtom, makeStatus(voiceModels));
   const onAppendTranscript = vi.fn();
   const view = render(
     <Provider store={store}>
       <Theme>
-        <VoiceEntryButton onAppendTranscript={onAppendTranscript} />
+        <VoiceEntryButton onAppendTranscript={onAppendTranscript} {...extraProps} />
       </Theme>
     </Provider>,
   );
@@ -188,6 +193,26 @@ describe("VoiceEntryButton", () => {
     const toggle = getToggle();
     expect(toggle).toHaveAttribute("data-voice-state", "voice-error");
     expect(toggle).toHaveAttribute("data-tooltip", expect.stringContaining("Microphone access is blocked"));
+  });
+
+  it("relays previews and holds the capture lock through listening and stopping", async () => {
+    const onPreviewChange = vi.fn();
+    const onCaptureLockChange = vi.fn();
+    renderButton(makeInfo({ installed: true }), { onPreviewChange, onCaptureLockChange });
+    const events = await startListening();
+
+    act(() => events.onStateChange("listening"));
+    await waitFor(() => expect(onCaptureLockChange).toHaveBeenLastCalledWith(true));
+
+    act(() => events.onPreview("partial wo"));
+    expect(onPreviewChange).toHaveBeenLastCalledWith("partial wo");
+
+    act(() => events.onStateChange("stopping"));
+    await waitFor(() => expect(getToggle()).toHaveAttribute("data-voice-state", "stopping"));
+    expect(onCaptureLockChange).toHaveBeenLastCalledWith(true);
+
+    act(() => events.onStateChange("idle"));
+    await waitFor(() => expect(onCaptureLockChange).toHaveBeenLastCalledWith(false));
   });
 
   it("disposes the engine on unmount so the mic never outlives the button", async () => {

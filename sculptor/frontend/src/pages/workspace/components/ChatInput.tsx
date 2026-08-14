@@ -369,18 +369,61 @@ export const ChatInput = ({
     setAttachedFiles([]);
   }, [editorRef, setPromptDraft, setAttachedFiles]);
 
+  // While an utterance is being spoken, the editor shows base + interim preview.
+  // The base is captured once per utterance so the final (or the next preview)
+  // replaces the shown preview instead of stacking on top of it.
+  const voiceBaseRef = useRef<string | null>(null);
+
+  const renderVoiceDraft = useCallback(
+    (draft: string): void => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      if (draft) {
+        editor.commands.setContent(draft, { contentType: "markdown" });
+      } else {
+        editor.commands.clearContent();
+      }
+    },
+    [editorRef],
+  );
+
   // Voice segments append with the spacing typing would produce, and
   // deliberately without the focus steal appendTextRef does — dictation fills
   // the composer while the user may be working elsewhere.
   const handleAppendVoiceTranscript = useCallback(
     (text: string): void => {
-      const currentDraft = getDraft() ?? "";
-      const nextDraft = appendTranscript({ draft: currentDraft, segment: text });
-      if (nextDraft === currentDraft) return;
-      editorRef.current?.commands.setContent(nextDraft, { contentType: "markdown" });
+      const base = voiceBaseRef.current ?? getDraft() ?? "";
+      voiceBaseRef.current = null;
+      const nextDraft = appendTranscript({ draft: base, segment: text });
+      renderVoiceDraft(nextDraft);
       setPromptDraft(nextDraft);
     },
-    [getDraft, setPromptDraft, editorRef],
+    [getDraft, setPromptDraft, renderVoiceDraft],
+  );
+
+  // Previews render into the editor but are never persisted to the draft atom;
+  // "" means the utterance produced no final, so the base text is restored.
+  const handleVoicePreviewChange = useCallback(
+    (preview: string): void => {
+      if (preview === "") {
+        if (voiceBaseRef.current !== null) {
+          renderVoiceDraft(voiceBaseRef.current);
+          voiceBaseRef.current = null;
+        }
+        return;
+      }
+      voiceBaseRef.current ??= getDraft() ?? "";
+      renderVoiceDraft(appendTranscript({ draft: voiceBaseRef.current, segment: preview }));
+    },
+    [getDraft, renderVoiceDraft],
+  );
+
+  // While voice owns the entry box, only transcription may write to it.
+  const handleVoiceCaptureLockChange = useCallback(
+    (locked: boolean): void => {
+      editorRef.current?.setEditable(!locked);
+    },
+    [editorRef],
   );
 
   const openBtwPopup = useSetAtom(openBtwPopupAtom);
@@ -1033,7 +1076,11 @@ export const ChatInput = ({
                       sourcesBackendModels={hasBackendModelSource}
                     />
                   </Flex>
-                  <VoiceEntryButton onAppendTranscript={handleAppendVoiceTranscript} />
+                  <VoiceEntryButton
+                    onAppendTranscript={handleAppendVoiceTranscript}
+                    onPreviewChange={handleVoicePreviewChange}
+                    onCaptureLockChange={handleVoiceCaptureLockChange}
+                  />
                 </>
               )}
               {isMissingUsableModel ? (

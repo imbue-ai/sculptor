@@ -57,6 +57,9 @@ type CapturedVadOptions = {
   onnxWASMBasePath: string;
   startOnLoad: boolean;
   audioContext: MockAudioContext;
+  onFrameProcessed: (probabilities: unknown, frame: Float32Array) => void;
+  onSpeechStart: () => void;
+  onVADMisfire: () => void;
   onSpeechEnd: (audio: Float32Array) => void;
 };
 
@@ -64,23 +67,38 @@ type Recorder = {
   events: VoiceEngineEvents;
   states: Array<VoiceEngineState>;
   segments: Array<string>;
+  previews: Array<string>;
   errors: Array<{ kind: string; message: string }>;
 };
 
 const createRecorder = (): Recorder => {
   const states: Array<VoiceEngineState> = [];
   const segments: Array<string> = [];
+  const previews: Array<string> = [];
   const errors: Array<{ kind: string; message: string }> = [];
   return {
     states,
     segments,
+    previews,
     errors,
     events: {
       onStateChange: (state): void => void states.push(state),
       onSegment: (text): void => void segments.push(text),
+      onPreview: (text): void => void previews.push(text),
       onError: (error): void => void errors.push(error),
     },
   };
+};
+
+const FRAME_SAMPLES = 512;
+
+// Marks speech start and feeds enough frames to cross the stop-flush minimum
+// (but stays under the preview minimum unless `frames` says otherwise).
+const speakFrames = (options: CapturedVadOptions, frames: number): void => {
+  options.onSpeechStart();
+  for (let index = 0; index < frames; index += 1) {
+    options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
+  }
 };
 
 // One macrotask flush drains the transcription microtask chain kicked off by
@@ -337,7 +355,7 @@ describe("createVoiceEngine segment handling", () => {
     expect(recorder.states[recorder.states.length - 1]).toBe("listening");
   });
 
-  it("discards an in-flight transcription when the engine stops", async () => {
+  it("emits a transcription that was still in flight when the engine stopped", async () => {
     let resolveTranscribe: (value: { text: string }) => void = () => undefined;
     h.transcribeMock.mockReturnValue(
       new Promise((resolve) => {
@@ -349,10 +367,106 @@ describe("createVoiceEngine segment handling", () => {
 
     await engine.start();
     capturedVadOptions().onSpeechEnd(new Float32Array(16000));
-    await engine.stop();
+    const stopping = engine.stop();
     resolveTranscribe({ text: "late result" });
+    await stopping;
     await flush();
 
+    expect(recorder.segments).toEqual(["late result"]);
+    expect(recorder.states[recorder.states.length - 1]).toBe("idle");
+  });
+});
+
+describe("createVoiceEngine utterance accumulation", () => {
+  it("flushes the in-progress utterance as a final segment on stop", async () => {
+    h.transcribeMock.mockResolvedValue({ text: "flushed words" });
+    const recorder = createRecorder();
+    const engine = createVoiceEngine(recorder.events);
+
+    await engine.start();
+    const options = capturedVadOptions();
+    // Two pre-speech frames land in the preroll ring and must survive into the flush.
+    options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
+    options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
+    speakFrames(options, 8);
+    await engine.stop();
+    await flush();
+
+    const flushedAudio = h.transcribeMock.mock.calls[0]?.[0] as Float32Array;
+    expect(flushedAudio.length).toBe(10 * FRAME_SAMPLES);
+    expect(recorder.segments).toEqual(["flushed words"]);
+    expect(recorder.states[recorder.states.length - 1]).toBe("idle");
+  });
+
+  it("does not flush an utterance too short to be speech", async () => {
+    const recorder = createRecorder();
+    const engine = createVoiceEngine(recorder.events);
+
+    await engine.start();
+    speakFrames(capturedVadOptions(), 2);
+    await engine.stop();
+    await flush();
+
+    expect(recorder.segments).toEqual([]);
+    // The aborted utterance discards its (never-shown) preview.
+    expect(recorder.previews).toEqual([""]);
+  });
+
+  it("emits a throttled preview while an utterance is in progress", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+    try {
+      h.transcribeMock.mockResolvedValue({ text: "partial words" });
+      const recorder = createRecorder();
+      const engine = createVoiceEngine(recorder.events);
+
+      await engine.start();
+      const options = capturedVadOptions();
+      speakFrames(options, 16);
+      expect(recorder.previews).toEqual([]);
+
+      nowSpy.mockReturnValue(1000);
+      options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
+      await flush();
+
+      expect(recorder.previews).toEqual(["partial words"]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("keeps the preview visible until the natural final replaces it", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+    try {
+      h.transcribeMock.mockResolvedValue({ text: "spoken sentence" });
+      const recorder = createRecorder();
+      const engine = createVoiceEngine(recorder.events);
+
+      await engine.start();
+      const options = capturedVadOptions();
+      speakFrames(options, 16);
+      nowSpy.mockReturnValue(1000);
+      options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
+      await flush();
+      options.onSpeechEnd(new Float32Array(16000));
+      await flush();
+
+      expect(recorder.previews).toEqual(["spoken sentence"]);
+      expect(recorder.segments).toEqual(["spoken sentence"]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("discards the preview on a VAD misfire", async () => {
+    const recorder = createRecorder();
+    const engine = createVoiceEngine(recorder.events);
+
+    await engine.start();
+    const options = capturedVadOptions();
+    speakFrames(options, 4);
+    options.onVADMisfire();
+
+    expect(recorder.previews).toEqual([""]);
     expect(recorder.segments).toEqual([]);
   });
 });

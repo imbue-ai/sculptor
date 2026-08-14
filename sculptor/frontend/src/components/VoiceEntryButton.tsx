@@ -55,6 +55,11 @@ type VoiceEntryButtonProps = {
   /** Receives each transcribed segment verbatim; the caller appends it to its
    *  own draft (with smart spacing) so persistence/undo match typing. */
   onAppendTranscript: (text: string) => void;
+  /** Interim transcription of the utterance being spoken; "" discards it. */
+  onPreviewChange?: (preview: string) => void;
+  /** Fires when voice takes/releases ownership of the surface's text entry;
+   *  the surface should lock typing/paste while held. */
+  onCaptureLockChange?: (locked: boolean) => void;
 };
 
 /**
@@ -65,9 +70,13 @@ type VoiceEntryButtonProps = {
  * (mic capture requires one). Harness-agnostic — always rendered, regardless of
  * the active agent type.
  */
-export const VoiceEntryButton = ({ onAppendTranscript }: VoiceEntryButtonProps): ReactElement | null => {
+export const VoiceEntryButton = ({
+  onAppendTranscript,
+  onPreviewChange,
+  onCaptureLockChange,
+}: VoiceEntryButtonProps): ReactElement | null => {
   const isMobile = useIsMobile();
-  const voice = useVoiceEntry({ onAppendTranscript });
+  const voice = useVoiceEntry({ onAppendTranscript, onPreviewChange, onCaptureLockChange });
 
   // Voice entry is desktop-only, and getUserMedia is unavailable off a secure
   // context, so there is nothing the button could do there.
