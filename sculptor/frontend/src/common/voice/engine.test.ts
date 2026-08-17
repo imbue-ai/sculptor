@@ -507,6 +507,94 @@ describe("createVoiceEngine utterance accumulation", () => {
     }
   });
 
+  it("yields the preview lane entirely while a commit fold is pending", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+    try {
+      let resolveHead: (value: { text: string }) => void = () => undefined;
+      h.transcribeMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveHead = resolve;
+        }),
+      );
+      h.transcribeMock.mockResolvedValue({ text: "late preview" });
+      const recorder = createRecorder();
+      const engine = createVoiceEngine(recorder.events);
+
+      await engine.start();
+      const options = capturedVadOptions();
+      options.onSpeechStart();
+      const loudFrame = (): Float32Array => {
+        const frame = new Float32Array(FRAME_SAMPLES);
+        frame.fill(0.1);
+        return frame;
+      };
+      for (let i = 0; i < 400; i += 1) options.onFrameProcessed({}, loudFrame());
+      for (let i = 0; i < 8; i += 1) options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
+      for (let i = 0; i < 300; i += 1) options.onFrameProcessed({}, loudFrame());
+
+      // The head slice is a pending commit; an elapsed preview interval must
+      // not even QUEUE a preview behind it.
+      nowSpy.mockReturnValue(10_000);
+      options.onFrameProcessed({}, loudFrame());
+      resolveHead({ text: "first chunk" });
+      await flush();
+      expect(h.transcribeMock).toHaveBeenCalledTimes(1);
+      expect(recorder.previews[recorder.previews.length - 1]).toBe("first chunk");
+
+      // With the commit lane empty, the next frame runs a preview again.
+      nowSpy.mockReturnValue(20_000);
+      options.onFrameProcessed({}, loudFrame());
+      await flush();
+      expect(h.transcribeMock).toHaveBeenCalledTimes(2);
+      expect(recorder.previews[recorder.previews.length - 1]).toBe("first chunk late preview");
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("folds every slice and drain chunk with no audio lost, with progress while draining", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+    try {
+      let call = 0;
+      h.transcribeMock.mockImplementation(async () => {
+        call += 1;
+        return { text: `part${call}` };
+      });
+      const recorder = createRecorder();
+      const engine = createVoiceEngine(recorder.events);
+
+      await engine.start();
+      const options = capturedVadOptions();
+      options.onSpeechStart();
+      const loudFrame = (): Float32Array => {
+        const frame = new Float32Array(FRAME_SAMPLES);
+        frame.fill(0.1);
+        return frame;
+      };
+      const totalFrames = 400 + 8 + 700;
+      for (let i = 0; i < 400; i += 1) options.onFrameProcessed({}, loudFrame());
+      for (let i = 0; i < 8; i += 1) options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
+      for (let i = 0; i < 700; i += 1) options.onFrameProcessed({}, loudFrame());
+      await flush();
+
+      options.onSpeechEnd(new Float32Array(16000));
+      await flush();
+      await flush();
+
+      // One pause-anchored head + a two-chunk forced-cut drain: nothing lost.
+      expect(recorder.segments).toEqual(["part1 part2 part3"]);
+      // The drain reported progress after its non-final fold.
+      expect(recorder.previews).toContain("part1 part2");
+      const transcribedSamples = h.transcribeMock.mock.calls.reduce(
+        (total, callArgs) => total + (callArgs[0] as Float32Array).length,
+        0,
+      );
+      expect(transcribedSamples).toBe(totalFrames * FRAME_SAMPLES);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it("discards the preview on a VAD misfire", async () => {
     const recorder = createRecorder();
     const engine = createVoiceEngine(recorder.events);

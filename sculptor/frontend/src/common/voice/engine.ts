@@ -187,6 +187,12 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
 
   let preroll: Array<Float32Array> = [];
   let activeTurn: StreamingTurn | null = null;
+  // Outstanding commit folds (head slices + drain chunks). Previews yield to
+  // this lane entirely: committed folds are the product, previews are
+  // decoration, and on a single-thread pipeline transcribing the rolling
+  // window while commits queue doubles the work and drowns the chain — the
+  // committed text then never catches up with the speech.
+  let pendingCommitCount = 0;
   // The finalize of the most recent naturally-ended turn, so stop() can wait
   // for THIS engine's own final — never the shared chain, which may be busy
   // with another engine's work.
@@ -228,6 +234,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
   // seam de-dup keeps the next fold safe.
   const commitHeadSlice = async (turn: StreamingTurn, head: Float32Array): Promise<void> => {
     const runId = currentRunId;
+    pendingCommitCount += 1;
     try {
       const text = await transcribeSerialized(head);
       if (runId !== currentRunId) return;
@@ -239,12 +246,15 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
       if (runId === currentRunId) {
         events.onError({ kind: "transcription-failed", message: describeError(error) });
       }
+    } finally {
+      pendingCommitCount -= 1;
     }
   };
 
   const maybePreview = (): void => {
     const turn = activeTurn;
-    if (turn === null || isPreviewInFlight || turn.bufferedSamples < PREVIEW_MIN_SAMPLES) return;
+    if (turn === null || isPreviewInFlight || pendingCommitCount > 0) return;
+    if (turn.bufferedSamples < PREVIEW_MIN_SAMPLES) return;
     if (Date.now() - lastPreviewAt < PREVIEW_INTERVAL_MS) return;
     const { audio, epoch } = turn.windowAudio();
     const runId = currentRunId;
@@ -292,17 +302,27 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
   const finalizeTurn = async (turn: StreamingTurn): Promise<void> => {
     const runId = currentRunId;
     let didReportError = false;
-    for (const chunk of turn.drainChunks()) {
+    const chunks = turn.drainChunks();
+    for (const [index, chunk] of chunks.entries()) {
+      pendingCommitCount += 1;
       try {
         const text = await transcribeSerialized(chunk);
         if (runId !== currentRunId) return;
         turn.commitText(text);
+        // A long drain gives visible progress: each fold (except the last,
+        // which the final immediately replaces) updates the preview so a
+        // stop() flush fills the composer instead of appearing hung.
+        if (index < chunks.length - 1 && activeTurn === null && turn.committedText.length > 0) {
+          events.onPreview(turn.committedText);
+        }
       } catch (error) {
         if (runId !== currentRunId) return;
         if (!didReportError) {
           didReportError = true;
           events.onError({ kind: "transcription-failed", message: describeError(error) });
         }
+      } finally {
+        pendingCommitCount -= 1;
       }
     }
     if (runId !== currentRunId) return;
