@@ -1,5 +1,9 @@
 """The static, in-repo pin for the "voice models" managed artifact bundle.
 
+Both Moonshine precisions are pinned: fp32 for WebGPU inference and q8 for the
+WASM fallback — the renderer picks per machine at load time, mirroring
+Local-Vocal's device selection.
+
 The chat input's on-device speech-to-text runs entirely in the renderer
 (Moonshine via transformers.js, plus Silero VAD for utterance detection). The
 model files are deliberately not shipped in the built app: the backend
@@ -72,7 +76,7 @@ def _moonshine_file(relative_path: str, sha256: str, size_bytes: int) -> VoiceMo
 
 
 VOICE_MODELS_PIN = VoiceModelsPin(
-    version="1",
+    version="2",
     files=(
         _moonshine_file(
             "config.json",
@@ -98,6 +102,16 @@ VOICE_MODELS_PIN = VoiceModelsPin(
             "preprocessor_config.json",
             sha256="fa43a7017ef85cd1d0fba0d9aae77c8adb16990ae6f11115631f41ec5d8aa679",
             size_bytes=128,
+        ),
+        _moonshine_file(
+            "onnx/encoder_model.onnx",
+            sha256="153e128e7abd64a74ee47f2c3f585c3171c4d46cbb368b032827934c4e01e779",
+            size_bytes=80818781,
+        ),
+        _moonshine_file(
+            "onnx/decoder_model_merged.onnx",
+            sha256="58778763ca8438963190244d6b26572bdca2cedec56a4b91e828f3f2d69ef3c5",
+            size_bytes=166211345,
         ),
         _moonshine_file(
             "onnx/encoder_model_quantized.onnx",

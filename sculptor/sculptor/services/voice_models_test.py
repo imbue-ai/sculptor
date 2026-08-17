@@ -53,6 +53,8 @@ def test_bundle_contains_the_expected_serve_paths() -> None:
         "onnx-community/moonshine-base-ONNX/resolve/main/tokenizer.json",
         "onnx-community/moonshine-base-ONNX/resolve/main/tokenizer_config.json",
         "onnx-community/moonshine-base-ONNX/resolve/main/preprocessor_config.json",
+        "onnx-community/moonshine-base-ONNX/resolve/main/onnx/encoder_model.onnx",
+        "onnx-community/moonshine-base-ONNX/resolve/main/onnx/decoder_model_merged.onnx",
         "onnx-community/moonshine-base-ONNX/resolve/main/onnx/encoder_model_quantized.onnx",
         "onnx-community/moonshine-base-ONNX/resolve/main/onnx/decoder_model_merged_quantized.onnx",
         "vad/silero_vad_v5.onnx",

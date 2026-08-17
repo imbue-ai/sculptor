@@ -52,6 +52,11 @@ type CapturedVadOptions = {
   onnxWASMBasePath: string;
   startOnLoad: boolean;
   audioContext: MockAudioContext;
+  positiveSpeechThreshold: number;
+  negativeSpeechThreshold: number;
+  redemptionMs: number;
+  preSpeechPadMs: number;
+  minSpeechMs: number;
   onFrameProcessed: (probabilities: unknown, frame: Float32Array) => void;
   onSpeechStart: () => void;
   onVADMisfire: () => void;
@@ -240,6 +245,8 @@ describe("createVoiceEngine model configuration", () => {
       wasmBaseUrl: expect.stringContaining("/vendor/voice/transformers-ort/"),
       token: null,
       tokenParam: "x-session-token",
+      device: "wasm",
+      dtype: "q8",
     });
   });
 
@@ -250,6 +257,11 @@ describe("createVoiceEngine model configuration", () => {
     const options = capturedVadOptions();
 
     expect(options.model).toBe("v5");
+    expect(options.positiveSpeechThreshold).toBe(0.5);
+    expect(options.negativeSpeechThreshold).toBe(0.35);
+    expect(options.redemptionMs).toBe(800);
+    expect(options.preSpeechPadMs).toBe(300);
+    expect(options.minSpeechMs).toBe(200);
     expect(options.baseAssetPath).toBe("https://backend.test/api/v1/voice-models/vad/");
     expect(options.onnxWASMBasePath).toContain("/vendor/voice/vad-ort/");
     expect(options.startOnLoad).toBe(false);
@@ -411,20 +423,17 @@ describe("createVoiceEngine utterance accumulation", () => {
 
     await engine.start();
     const options = capturedVadOptions();
-    // Two pre-speech frames land in the preroll ring and must survive into the flush.
-    options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
-    options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
     speakFrames(options, 8);
     await engine.stop();
     await flush();
 
     const flushedAudio = h.transcribeMock.mock.calls[0]?.[0] as Float32Array;
-    expect(flushedAudio.length).toBe(10 * FRAME_SAMPLES);
+    expect(flushedAudio.length).toBe(8 * FRAME_SAMPLES);
     expect(recorder.segments).toEqual(["flushed words"]);
     expect(recorder.states[recorder.states.length - 1]).toBe("idle");
   });
 
-  it("does not flush an utterance too short to be speech", async () => {
+  it("flushes even a very short utterance, and a junk fold discards itself", async () => {
     const recorder = createRecorder();
     const engine = createVoiceEngine(recorder.events);
 
@@ -433,8 +442,10 @@ describe("createVoiceEngine utterance accumulation", () => {
     await engine.stop();
     await flush();
 
+    // The blip is transcribed (the default mock returns junk-empty text) and
+    // the empty final discards rather than emitting.
+    expect(h.transcribeMock).toHaveBeenCalledTimes(1);
     expect(recorder.segments).toEqual([]);
-    // The aborted utterance discards its (never-shown) preview.
     expect(recorder.previews).toEqual([]);
     expect(recorder.discardCount).toBe(1);
   });
@@ -477,7 +488,8 @@ describe("createVoiceEngine utterance accumulation", () => {
       options.onSpeechEnd(new Float32Array(16000));
       await flush();
 
-      expect(recorder.previews).toEqual(["spoken sentence"]);
+      // The interim preview, then the drain fold's progress preview.
+      expect(recorder.previews).toEqual(["spoken sentence", "spoken sentence"]);
       expect(recorder.segments).toEqual(["spoken sentence"]);
       expect(recorder.discardCount).toBe(0);
     } finally {
@@ -522,7 +534,7 @@ describe("createVoiceEngine utterance accumulation", () => {
     }
   });
 
-  it("yields the preview lane entirely while a commit fold is pending", async () => {
+  it("parks the preview while a commit fold is pending and runs it at the first idle", async () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
     try {
       let resolveHead: (value: string) => void = () => undefined;
@@ -547,20 +559,18 @@ describe("createVoiceEngine utterance accumulation", () => {
       for (let i = 0; i < 8; i += 1) options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
       for (let i = 0; i < 300; i += 1) options.onFrameProcessed({}, loudFrame());
 
-      // The head slice is a pending commit; an elapsed preview interval must
-      // not even QUEUE a preview behind it.
+      // The head slice is a pending commit; the elapsed interval PARKS the
+      // preview (latest capture wins) without running it.
       nowSpy.mockReturnValue(10_000);
       options.onFrameProcessed({}, loudFrame());
-      resolveHead("first chunk");
       await flush();
       expect(h.transcribeMock).toHaveBeenCalledTimes(1);
-      expect(recorder.previews[recorder.previews.length - 1]).toBe("first chunk");
 
-      // With the commit lane empty, the next frame runs a preview again.
-      nowSpy.mockReturnValue(20_000);
-      options.onFrameProcessed({}, loudFrame());
+      // The fold settles -> the parked preview runs at the first idle moment.
+      resolveHead("first chunk");
       await flush();
       expect(h.transcribeMock).toHaveBeenCalledTimes(2);
+      expect(recorder.previews).toContain("first chunk");
       expect(recorder.previews[recorder.previews.length - 1]).toBe("first chunk late preview");
     } finally {
       nowSpy.mockRestore();

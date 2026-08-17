@@ -20,6 +20,8 @@ const INIT = {
   wasmBaseUrl: "https://app.test/vendor/voice/transformers-ort/",
   token: "secret-token",
   tokenParam: "x-session-token",
+  device: "wasm" as const,
+  dtype: "q8" as const,
 };
 
 let handleWorkerMessage: (request: AsrWorkerRequest, post: (response: AsrWorkerResponse) => void) => Promise<void>;
@@ -50,13 +52,13 @@ afterEach(() => {
 });
 
 describe("handleWorkerMessage", () => {
-  it("loads Moonshine q8/wasm from the backend with app-served wasm and reports ready", async () => {
+  it("loads Moonshine on the requested device from the backend and reports ready", async () => {
     await handleWorkerMessage(INIT, post);
 
     expect(posted).toEqual([{ type: "ready" }]);
     expect(h.pipelineMock).toHaveBeenCalledWith("automatic-speech-recognition", "onnx-community/moonshine-base-ONNX", {
-      dtype: "q8",
-      device: "wasm",
+      dtype: INIT.dtype,
+      device: INIT.device,
     });
     expect(h.env.allowLocalModels).toBe(false);
     expect(h.env.remoteHost).toBe(INIT.modelsBaseUrl);
@@ -76,6 +78,26 @@ describe("handleWorkerMessage", () => {
     expect(url).toContain("x-session-token=secret-token");
     expect(init.credentials).toBe("include");
     expect(globalThis.fetch).toBe(baseFetch);
+  });
+
+  it("falls back to wasm/q8 when the requested device fails to load", async () => {
+    h.pipelineMock.mockRejectedValueOnce(new Error("webgpu load failed"));
+
+    await handleWorkerMessage({ ...INIT, device: "webgpu", dtype: "fp32" }, post);
+
+    expect(posted).toEqual([{ type: "ready" }]);
+    expect(h.pipelineMock).toHaveBeenNthCalledWith(
+      1,
+      "automatic-speech-recognition",
+      "onnx-community/moonshine-base-ONNX",
+      { dtype: "fp32", device: "webgpu" },
+    );
+    expect(h.pipelineMock).toHaveBeenNthCalledWith(
+      2,
+      "automatic-speech-recognition",
+      "onnx-community/moonshine-base-ONNX",
+      { dtype: "q8", device: "wasm" },
+    );
   });
 
   it("reports init-error when the pipeline fails to load", async () => {

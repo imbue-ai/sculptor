@@ -18,6 +18,10 @@ export type AsrWorkerInit = {
   wasmBaseUrl: string;
   token: string | null;
   tokenParam: string;
+  /** Chosen on the main thread (only WebGPU when an adapter really exists);
+   *  the worker falls back to wasm/q8 itself if this device fails to load. */
+  device: "webgpu" | "wasm";
+  dtype: "fp32" | "q8";
 };
 
 export type AsrWorkerTranscribe = {
@@ -51,15 +55,23 @@ const loadPipeline = async (init: AsrWorkerInit): Promise<void> => {
     wasm.wasmPaths = init.wasmBaseUrl;
     wasm.numThreads = 1;
   }
+  // The explicit task type argument keeps `pipeline`'s return from widening
+  // into the whole-task union (which TS reports as "too complex to represent").
+  const load = (device: "webgpu" | "wasm", dtype: "fp32" | "q8"): Promise<AsrTranscriber> =>
+    transformers.pipeline<"automatic-speech-recognition">("automatic-speech-recognition", MOONSHINE_MODEL_ID, {
+      dtype,
+      device,
+    });
   transcriber = await withVoiceModelFetchAuth(
     { modelsBase: init.modelsBaseUrl, token: init.token, tokenParam: init.tokenParam },
-    // The explicit task type argument keeps `pipeline`'s return from widening
-    // into the whole-task union (which TS reports as "too complex to represent").
-    () =>
-      transformers.pipeline<"automatic-speech-recognition">("automatic-speech-recognition", MOONSHINE_MODEL_ID, {
-        dtype: "q8",
-        device: "wasm",
-      }),
+    async () => {
+      try {
+        return await load(init.device, init.dtype);
+      } catch {
+        // An adapter can exist yet fail to load the model; wasm/q8 always works.
+        return load("wasm", "q8");
+      }
+    },
   );
 };
 

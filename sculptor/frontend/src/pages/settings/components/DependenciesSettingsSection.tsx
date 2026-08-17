@@ -312,7 +312,7 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
 
       <SettingRow
         title="Status"
-        description="On-device speech-to-text models for voice entry (~66 MB), downloaded on demand and stored locally — never bundled with the app."
+        description="On-device speech-to-text models for voice entry (~316 MB), downloaded on demand and stored locally — never bundled with the app."
       >
         <Flex align="center" gap="2" data-testid={ElementIds.SETTINGS_VOICE_MODELS_STATUS}>
           {dependenciesStatus === null ? (

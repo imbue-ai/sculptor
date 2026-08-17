@@ -22,6 +22,8 @@ const CONFIG = {
   wasmBaseUrl: "https://app.test/vendor/voice/transformers-ort/",
   token: null,
   tokenParam: "x-session-token",
+  device: "wasm" as const,
+  dtype: "q8" as const,
 };
 
 let createAsrClient: (config: AsrClientConfig) => AsrClient;

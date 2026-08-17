@@ -43,11 +43,6 @@ const VAD_WORKLET_FILE = "vad.worklet.bundle.min.js";
 const PREVIEW_INTERVAL_MS = 500;
 // Below ~a third of a second of audio an interim transcription is mostly noise.
 const PREVIEW_MIN_SAMPLES = 4800;
-// A stop()-flush shorter than this (with nothing committed) is a click, not speech.
-const MIN_FLUSH_SAMPLES = 4000;
-// Pre-speech ring kept so an utterance's first syllable survives VAD detection
-// latency (~0.5 s at 512-sample/16 kHz frames), mirroring vad-web's own padding.
-const PREROLL_FRAMES = 16;
 
 /** App-served runtime code (ONNX Runtime wasm + VAD worklet), respecting the app base path. */
 const appAssetBase = (): string =>
@@ -62,21 +57,43 @@ const voiceModelsBase = (): string => new URL(`${baseUrl}/api/v1/voice-models/`,
 // start(), reloading the pipeline.
 let sharedAsrClient: AsrClient | undefined;
 
+let sharedAsrClientCreation: Promise<AsrClient> | undefined;
+
+// Pick the device on this thread: only use WebGPU if an adapter really exists
+// (the worker itself falls back to wasm/q8 if the WebGPU load then fails).
+const pickAsrDevice = async (): Promise<{ device: "webgpu" | "wasm"; dtype: "fp32" | "q8" }> => {
+  try {
+    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+    if (gpu && (await gpu.requestAdapter())) {
+      return { device: "webgpu", dtype: "fp32" };
+    }
+  } catch {
+    // No WebGPU: wasm below.
+  }
+  return { device: "wasm", dtype: "q8" };
+};
+
 const ensureAsrClient = async (): Promise<AsrClient> => {
   if (sharedAsrClient !== undefined && sharedAsrClient.isDead) {
     sharedAsrClient = undefined;
+    sharedAsrClientCreation = undefined;
   }
-
-  if (sharedAsrClient === undefined) {
-    sharedAsrClient = createAsrClient({
+  sharedAsrClientCreation ??= (async (): Promise<AsrClient> => {
+    const { device, dtype } = await pickAsrDevice();
+    const client = createAsrClient({
       modelsBaseUrl: voiceModelsBase(),
       wasmBaseUrl: `${appAssetBase()}transformers-ort/`,
       token: getSessionToken() ?? null,
       tokenParam: SESSION_TOKEN_HEADER_NAME,
+      device,
+      dtype,
     });
-  }
-  await sharedAsrClient.ready;
-  return sharedAsrClient;
+    sharedAsrClient = client;
+    return client;
+  })();
+  const client = await sharedAsrClientCreation;
+  await client.ready;
+  return client;
 };
 
 // Every transcription is serialized through one module-level chain: the worker
@@ -86,8 +103,9 @@ let sharedTranscribeChain: Promise<unknown> = Promise.resolve();
 
 const transcribeSerialized = (audio: Float32Array): Promise<string> => {
   const run = async (): Promise<string> => {
-    const client = sharedAsrClient;
-    if (client === undefined || client.isDead) return "";
+    // A dead worker (crash) respawns here, so jobs already queued replay
+    // against the reloaded pipeline instead of stalling until the next start.
+    const client = await ensureAsrClient();
     return client.transcribe(audio);
   };
   const next = sharedTranscribeChain.then(run, run);
@@ -136,14 +154,13 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
   let currentRunId = 0;
   let isDisposed = false;
 
-  let preroll: Array<Float32Array> = [];
   let activeTurn: StreamingTurn | null = null;
-  // Outstanding commit folds (head slices + drain chunks). Previews yield to
-  // this lane entirely: committed folds are the product, previews are
-  // decoration, and on a single-thread pipeline transcribing the rolling
-  // window while commits queue doubles the work and drowns the chain — the
-  // committed text then never catches up with the speech.
+  // Outstanding commit folds (head slices + drain chunks); the preview lane
+  // runs only while this is zero.
   let pendingCommitCount = 0;
+  // The parked live-preview request: captured every interval (latest capture
+  // wins, even while commits queue) and run at the first idle moment.
+  let pendingInterim: { audio: Float32Array; epoch: number; turn: StreamingTurn } | null = null;
   // The finalize of the most recent naturally-ended turn, so stop() can wait
   // for THIS engine's own final — never the shared chain, which may be busy
   // with another engine's work.
@@ -164,18 +181,14 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
   const abortTurn = (): void => {
     const didHaveTurn = activeTurn !== null;
     activeTurn = null;
+    pendingInterim = null;
     if (didHaveTurn) {
       events.onPreviewDiscard();
     }
   };
 
   const beginTurn = (): void => {
-    const turn = new StreamingTurn();
-    for (const frame of preroll) {
-      turn.addFrame(frame);
-    }
-    preroll = [];
-    activeTurn = turn;
+    activeTurn = new StreamingTurn();
     // The first preview waits one full interval from speech start.
     lastPreviewAt = Date.now();
   };
@@ -199,18 +212,19 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
       }
     } finally {
       pendingCommitCount -= 1;
+      pumpPreview();
     }
   };
 
-  const maybePreview = (): void => {
-    const turn = activeTurn;
-    if (turn === null || isPreviewInFlight || pendingCommitCount > 0) return;
-    if (turn.bufferedSamples < PREVIEW_MIN_SAMPLES) return;
-    if (Date.now() - lastPreviewAt < PREVIEW_INTERVAL_MS) return;
-    const { audio, epoch } = turn.windowAudio();
+  // Run the parked preview only when the commit lane is idle: committed folds
+  // are the product, previews are decoration, and transcribing the rolling
+  // window while commits queue doubles the work and drowns the pipeline.
+  const pumpPreview = (): void => {
+    if (isPreviewInFlight || pendingCommitCount > 0 || pendingInterim === null) return;
+    const { audio, epoch, turn } = pendingInterim;
+    pendingInterim = null;
     const runId = currentRunId;
     isPreviewInFlight = true;
-    lastPreviewAt = Date.now();
     transcribeSerialized(audio)
       .then((text): void => {
         if (runId !== currentRunId || turn !== activeTurn) return;
@@ -225,26 +239,29 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
       .catch((): void => undefined)
       .finally((): void => {
         isPreviewInFlight = false;
+        pumpPreview();
       });
   };
 
-  const handleFrame = (frame: Float32Array): void => {
-    // vad-web reuses its frame buffers; copy before retaining.
-    const copy = new Float32Array(frame);
+  const captureInterim = (): void => {
     const turn = activeTurn;
-    if (turn === null) {
-      preroll.push(copy);
-      if (preroll.length > PREROLL_FRAMES) {
-        preroll.shift();
-      }
-      return;
-    }
-    turn.addFrame(copy);
-    const head = turn.takeHeadSlice();
-    if (head !== null) {
+    if (turn === null || turn.bufferedSamples < PREVIEW_MIN_SAMPLES) return;
+    if (Date.now() - lastPreviewAt < PREVIEW_INTERVAL_MS) return;
+    lastPreviewAt = Date.now();
+    const { audio, epoch } = turn.windowAudio();
+    pendingInterim = { audio, epoch, turn };
+    pumpPreview();
+  };
+
+  const handleFrame = (frame: Float32Array): void => {
+    const turn = activeTurn;
+    if (turn === null) return;
+    // vad-web reuses its frame buffers; copy before retaining.
+    turn.addFrame(new Float32Array(frame));
+    for (let head = turn.takeHeadSlice(); head !== null; head = turn.takeHeadSlice()) {
       void commitHeadSlice(turn, head);
     }
-    maybePreview();
+    captureInterim();
   };
 
   // End of turn: drain the window as pause-anchored chunks, fold each, and emit
@@ -253,17 +270,16 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
   const finalizeTurn = async (turn: StreamingTurn): Promise<void> => {
     const runId = currentRunId;
     let didReportError = false;
-    const chunks = turn.drainChunks();
-    for (const [index, chunk] of chunks.entries()) {
+    for (const chunk of turn.drainChunks()) {
       pendingCommitCount += 1;
       try {
         const text = await transcribeSerialized(chunk);
         if (runId !== currentRunId) return;
         turn.commitText(text);
-        // A long drain gives visible progress: each fold (except the last,
-        // which the final immediately replaces) updates the preview so a
-        // stop() flush fills the composer instead of appearing hung.
-        if (index < chunks.length - 1 && activeTurn === null && turn.committedText.length > 0) {
+        // A long drain gives visible progress: each fold updates the preview
+        // (unless a newer turn owns it) so a stop() flush fills the composer
+        // instead of appearing hung; the final then replaces it.
+        if (activeTurn === null && turn.committedText.length > 0) {
           events.onPreview(turn.committedText);
         }
       } catch (error) {
@@ -274,6 +290,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
         }
       } finally {
         pendingCommitCount -= 1;
+        pumpPreview();
       }
     }
     if (runId !== currentRunId) return;
@@ -291,6 +308,14 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     audioContext = createWorkletRedirectingAudioContext(`${appAssetBase()}vad/${VAD_WORKLET_FILE}`);
     vadInstance = await vad.MicVAD.new({
       model: "v5",
+      // Local-Vocal's validated endpointing: ~0.8 s of silence ends an
+      // utterance, shorter dips stay inside the turn, and blips under 200 ms
+      // are misfires.
+      positiveSpeechThreshold: 0.5,
+      negativeSpeechThreshold: 0.35,
+      redemptionMs: 800,
+      preSpeechPadMs: 300,
+      minSpeechMs: 200,
       baseAssetPath: `${voiceModelsBase()}vad/`,
       onnxWASMBasePath: `${appAssetBase()}vad-ort/`,
       audioContext,
@@ -308,11 +333,15 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
         abortTurn();
       },
       onSpeechEnd: (_audio: Float32Array): void => {
-        // The turn's own frames (preroll included) are the final's audio; the
-        // VAD's padded copy would re-transcribe the whole history the window
-        // model already committed.
+        // The turn's own frames are the final's audio; the VAD's padded copy
+        // would re-transcribe the whole history the window model already
+        // committed.
         const turn = activeTurn;
         activeTurn = null;
+        if (pendingInterim?.turn === turn) {
+          pendingInterim = null;
+        }
+
         if (turn !== null) {
           pendingFinalize = finalizeTurn(turn);
         }
@@ -323,8 +352,8 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
 
   const start = async (): Promise<void> => {
     if (isDisposed || state === "initializing" || state === "listening" || state === "stopping") return;
-    preroll = [];
     activeTurn = null;
+    pendingInterim = null;
     setState("initializing");
     let vad: MicVAD;
     try {
@@ -376,15 +405,12 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     setState("stopping");
     // The user usually clicks stop right after speaking, before any silence gap,
     // so the VAD never delivers that last utterance — flush the turn's audio
-    // instead of discarding it.
+    // instead of discarding it (a junk fold discards itself).
     const turn = activeTurn;
     activeTurn = null;
-    const shouldFlush = turn !== null && (turn.committedWordCount > 0 || turn.bufferedSamples >= MIN_FLUSH_SAMPLES);
-    if (turn !== null && !shouldFlush) {
-      events.onPreviewDiscard();
-    }
+    pendingInterim = null;
     releaseCapture();
-    if (turn !== null && shouldFlush) {
+    if (turn !== null) {
       await finalizeTurn(turn);
     } else if (pendingFinalize !== null) {
       // Let this engine's natural final that was already finalizing settle
@@ -399,7 +425,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     currentRunId += 1;
     // Silent cleanup — the owning surface is unmounting, so no events.
     activeTurn = null;
-    preroll = [];
+    pendingInterim = null;
     releaseCapture();
   };
 
