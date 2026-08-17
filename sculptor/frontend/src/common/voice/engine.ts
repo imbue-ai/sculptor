@@ -178,6 +178,10 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
 
   let preroll: Array<Float32Array> = [];
   let activeTurn: StreamingTurn | null = null;
+  // The finalize of the most recent naturally-ended turn, so stop() can wait
+  // for THIS engine's own final — never the shared chain, which may be busy
+  // with another engine's work.
+  let pendingFinalize: Promise<void> | null = null;
   let lastPreviewAt = 0;
   let isPreviewInFlight = false;
 
@@ -330,7 +334,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
         const turn = activeTurn;
         activeTurn = null;
         if (turn !== null) {
-          void finalizeTurn(turn);
+          pendingFinalize = finalizeTurn(turn);
         }
       },
     });
@@ -397,12 +401,10 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     releaseCapture();
     if (turn !== null && shouldFlush) {
       await finalizeTurn(turn);
-    } else {
-      // Let a natural final that was already transcribing settle before idling.
-      await sharedTranscribeChain.then(
-        () => undefined,
-        () => undefined,
-      );
+    } else if (pendingFinalize !== null) {
+      // Let this engine's natural final that was already finalizing settle
+      // before idling.
+      await pendingFinalize;
     }
     setState("idle");
   };
