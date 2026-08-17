@@ -27,7 +27,7 @@ import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { usePiModels } from "~/common/state/hooks/usePiModels.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
-import { appendTranscript } from "~/common/voiceEntryText.ts";
+import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
 import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
 import { BranchSelector } from "~/components/BranchSelector.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
@@ -343,36 +343,33 @@ export const NewWorkspaceForm = ({
     setShuffleNonce((prev) => prev + 1);
   }, []);
 
-  // While an utterance is being spoken the prompt shows base + interim preview.
-  // The base is captured once per utterance so the final (or the next preview)
-  // replaces the shown preview instead of stacking on top of it.
-  const promptVoiceBaseRef = useRef<string | null>(null);
+  const promptVoiceComposerRef = useRef(createVoiceDraftComposer());
   const [isVoiceCaptureLocked, setIsVoiceCaptureLocked] = useState(false);
 
-  // Dictated segments append to the prompt through its controlled state, so they
-  // persist and undo exactly like typed text.
-  const handleAppendPromptTranscript = useCallback((text: string): void => {
-    setPrompt((prev) => {
-      const base = promptVoiceBaseRef.current ?? prev;
-      promptVoiceBaseRef.current = null;
-      return appendTranscript({ draft: base, segment: text });
-    });
-  }, []);
+  // Read the live prompt from the textarea rather than closing over state: the
+  // composer calls are stateful, so they must run once per event — never inside
+  // a functional setState updater, which StrictMode invokes twice.
+  const readPromptDraft = useCallback((): string => promptTextareaRef.current?.value ?? "", []);
 
-  const handlePromptVoicePreview = useCallback((preview: string): void => {
-    setPrompt((prev) => {
-      promptVoiceBaseRef.current ??= prev;
-      return appendTranscript({ draft: promptVoiceBaseRef.current, segment: preview });
-    });
-  }, []);
+  const handleAppendPromptTranscript = useCallback(
+    (text: string): void => {
+      setPrompt(promptVoiceComposerRef.current.commitText(readPromptDraft(), text));
+    },
+    [readPromptDraft],
+  );
 
-  // The utterance produced no final, so the base prompt is restored.
+  const handlePromptVoicePreview = useCallback(
+    (preview: string): void => {
+      setPrompt(promptVoiceComposerRef.current.previewText(readPromptDraft(), preview));
+    },
+    [readPromptDraft],
+  );
+
   const handlePromptVoiceDiscard = useCallback((): void => {
-    setPrompt((prev) => {
-      const base = promptVoiceBaseRef.current;
-      promptVoiceBaseRef.current = null;
-      return base ?? prev;
-    });
+    const restored = promptVoiceComposerRef.current.discard();
+    if (restored !== null) {
+      setPrompt(restored);
+    }
   }, []);
 
   const isPromptEmpty = prompt.trim() === "";

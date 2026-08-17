@@ -15,7 +15,7 @@ import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { getModelShortName, PRODUCTION_MODELS } from "~/common/modelConstants.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
-import { appendTranscript } from "~/common/voiceEntryText.ts";
+import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
 import { CapabilityGate } from "~/components/CapabilityGate.tsx";
 import { EFFORT_DISPLAY_NAMES, EFFORT_OPTIONS } from "~/components/effortConstants.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
@@ -369,10 +369,7 @@ export const ChatInput = ({
     setAttachedFiles([]);
   }, [editorRef, setPromptDraft, setAttachedFiles]);
 
-  // While an utterance is being spoken, the editor shows base + interim preview.
-  // The base is captured once per utterance so the final (or the next preview)
-  // replaces the shown preview instead of stacking on top of it.
-  const voiceBaseRef = useRef<string | null>(null);
+  const voiceComposerRef = useRef(createVoiceDraftComposer());
 
   const renderVoiceDraft = useCallback(
     (draft: string): void => {
@@ -392,9 +389,7 @@ export const ChatInput = ({
   // the composer while the user may be working elsewhere.
   const handleAppendVoiceTranscript = useCallback(
     (text: string): void => {
-      const base = voiceBaseRef.current ?? getDraft() ?? "";
-      voiceBaseRef.current = null;
-      const nextDraft = appendTranscript({ draft: base, segment: text });
+      const nextDraft = voiceComposerRef.current.commitText(getDraft() ?? "", text);
       renderVoiceDraft(nextDraft);
       setPromptDraft(nextDraft);
     },
@@ -404,17 +399,15 @@ export const ChatInput = ({
   // Previews render into the editor but are never persisted to the draft atom.
   const handleVoicePreviewChange = useCallback(
     (preview: string): void => {
-      voiceBaseRef.current ??= getDraft() ?? "";
-      renderVoiceDraft(appendTranscript({ draft: voiceBaseRef.current, segment: preview }));
+      renderVoiceDraft(voiceComposerRef.current.previewText(getDraft() ?? "", preview));
     },
     [getDraft, renderVoiceDraft],
   );
 
-  // The utterance produced no final, so the base text is restored.
   const handleVoicePreviewDiscard = useCallback((): void => {
-    if (voiceBaseRef.current !== null) {
-      renderVoiceDraft(voiceBaseRef.current);
-      voiceBaseRef.current = null;
+    const restored = voiceComposerRef.current.discard();
+    if (restored !== null) {
+      renderVoiceDraft(restored);
     }
   }, [renderVoiceDraft]);
 
