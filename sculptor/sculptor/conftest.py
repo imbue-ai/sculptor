@@ -14,6 +14,7 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.sql_implementation import SQLDataModelService
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.dependency_management_service import InstallResult
+from sculptor.services.dependency_management_service import VoiceModelsInstaller
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.default_implementation import DefaultGitRepoService
 from sculptor.services.pi_login_service import PiLoginService
@@ -198,4 +199,4 @@ def _block_managed_binary_downloads(request: pytest.FixtureRequest, monkeypatch:
     monkeypatch.setattr(DependencyManagementService, "_auto_install_if_needed", _noop_auto_install)
     monkeypatch.setattr(DependencyManagementService, "_install_managed_tool", _raise_on_managed_download)
     monkeypatch.setattr(DependencyManagementService, "_download_verify_stage", _raise_on_managed_download)
-    monkeypatch.setattr(DependencyManagementService, "_download_verify_stage_voice_models", _raise_on_managed_download)
+    monkeypatch.setattr(VoiceModelsInstaller, "_download_verify_stage", _raise_on_managed_download)

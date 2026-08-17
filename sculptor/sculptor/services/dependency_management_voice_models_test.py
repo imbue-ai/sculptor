@@ -19,6 +19,7 @@ import pytest
 
 from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.dependency_management_service import _is_voice_models_bundle_installed
 from sculptor.services.voice_models import VOICE_MODELS_PIN
 from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
 from sculptor.services.voice_models import VoiceModelFile
@@ -116,7 +117,8 @@ def _run_bundle_download(
     progress_events: list[tuple[int, int | None]] | None = None,
 ) -> Any:
     events = progress_events if progress_events is not None else []
-    return service._download_verify_stage_voice_models(lambda done, total: events.append((done, total)))
+    installer = service._get_voice_models_installer()
+    return installer._download_verify_stage(lambda done, total: events.append((done, total)))
 
 
 @patch("sculptor.services.dependency_management_service.get_internal_folder")
@@ -246,9 +248,10 @@ def test_install_voice_models_seeds_aggregate_progress_and_gates_reentry(
         assert first.in_progress is False
 
         # The download thread is blocked on the gate, so the seeded state is stable.
-        with service._progress_lock:
-            assert service._voice_models_installing is True
-            progress = service._voice_models_progress
+        installer = service._get_voice_models_installer()
+        with installer._lock:
+            assert installer._installing is True
+            progress = installer._progress
             assert progress is not None
             assert progress.tool == VOICE_MODELS_TOOL_NAME
             assert progress.bytes_downloaded == 0
@@ -259,17 +262,17 @@ def test_install_voice_models_seeds_aggregate_progress_and_gates_reentry(
         assert second.in_progress is True
 
         download_gate.set()
-        thread = service._voice_models_thread
+        thread = installer.thread
         assert thread is not None
         thread.join(timeout=10)
         assert not thread.is_alive()
 
-    with service._progress_lock:
-        assert service._voice_models_installing is False
-        assert service._voice_models_progress is None
-        assert service._voice_models_error is None
+    with installer._lock:
+        assert installer._installing is False
+        assert installer._progress is None
+        assert installer._error is None
     with patch("sculptor.services.dependency_management_service.VOICE_MODELS_PIN", pin):
-        assert service._is_voice_models_installed() is True
+        assert _is_voice_models_bundle_installed() is True
 
 
 def test_install_voice_models_refused_after_stop() -> None:
@@ -298,13 +301,14 @@ def test_background_install_failure_records_install_error(mock_folder: MagicMock
         result = service.install_voice_models()
         assert result.success is True
 
-        thread = service._voice_models_thread
+        installer = service._get_voice_models_installer()
+        thread = installer.thread
         assert thread is not None
         thread.join(timeout=10)
 
-    with service._progress_lock:
-        assert service._voice_models_installing is False
-        assert "Download failed" in (service._voice_models_error or "")
+    with installer._lock:
+        assert installer._installing is False
+        assert "Download failed" in (installer._error or "")
 
 
 @patch("sculptor.services.dependency_management_service.get_internal_folder")
@@ -312,21 +316,19 @@ def test_is_voice_models_installed_requires_every_pinned_file(mock_folder: Magic
     mock_folder.return_value = tmp_path
     version_dir = tmp_path / "dependencies" / "voice_models" / f"version-{VOICE_MODELS_PIN.version}"
 
-    mock_cg = _make_mock_cg()
-    service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
-    assert service._is_voice_models_installed() is False
+    assert _is_voice_models_bundle_installed() is False
 
     # All files but one: still not installed.
     for file in VOICE_MODELS_PIN.files[:-1]:
         path = version_dir / file.serve_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()
-    assert service._is_voice_models_installed() is False
+    assert _is_voice_models_bundle_installed() is False
 
     last = version_dir / VOICE_MODELS_PIN.files[-1].serve_path
     last.parent.mkdir(parents=True, exist_ok=True)
     last.touch()
-    assert service._is_voice_models_installed() is True
+    assert _is_voice_models_bundle_installed() is True
 
 
 @patch("sculptor.services.dependency_management_service.get_internal_folder")

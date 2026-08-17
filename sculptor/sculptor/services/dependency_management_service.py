@@ -206,6 +206,195 @@ def _report_bundle_file_progress(
     progress_callback(completed_bytes + file_bytes_downloaded, bundle_total_bytes)
 
 
+def _is_voice_models_bundle_installed() -> bool:
+    """Whether every pinned file of the pinned bundle version is present on disk."""
+    version_dir = _get_voice_models_version_dir()
+    return all((version_dir / file.serve_path).is_file() for file in VOICE_MODELS_PIN.files)
+
+
+class VoiceModelsInstaller:
+    """Owns the voice-models bundle install lifecycle: state, progress, thread.
+
+    Kept beside (not inside) the per-tool machinery because the bundle is not a
+    ``Dependency``: that enum is the agent-environment tool vocabulary, and
+    voice models must never be provisioned into agent environments. The shared
+    mechanisms — the download core, the install lock serializing all managed
+    downloads, and the notifier/status pipeline — are injected; every piece of
+    state the installer owns is guarded by its own single lock.
+    """
+
+    def __init__(
+        self,
+        download_file: Callable[[str, Path, str, Callable[[int, int | None], None]], None],
+        install_lock: threading.Lock,
+        stop_requested: threading.Event,
+        start_thread: Callable[[Callable[[], None], str], ObservableThread],
+        ensure_progress_notifier: Callable[[], None],
+        notify_observers: Callable[[], None],
+    ) -> None:
+        self._download_file = download_file
+        self._install_lock = install_lock
+        self._stop_requested = stop_requested
+        self._start_thread = start_thread
+        self._ensure_progress_notifier = ensure_progress_notifier
+        self._notify_observers = notify_observers
+        self._lock = threading.Lock()
+        self._installing = False
+        self._progress: InstallProgress | None = None
+        self._error: str | None = None
+        self._thread: ObservableThread | None = None
+
+    @property
+    def is_installing(self) -> bool:
+        with self._lock:
+            return self._installing
+
+    @property
+    def thread(self) -> ObservableThread | None:
+        with self._lock:
+            return self._thread
+
+    def build_info(self) -> DependencyInfo:
+        """Build the status entry for the voice-models bundle.
+
+        Data files rather than a binary, so there is no path, mode, or version
+        probe: installed means every pinned file of the pinned bundle version is
+        on disk.
+        """
+        with self._lock:
+            progress = self._progress
+            error = self._error
+        installed = _is_voice_models_bundle_installed()
+        return DependencyInfo(
+            installed=installed,
+            version=VOICE_MODELS_PIN.version if installed else None,
+            managed_version=VOICE_MODELS_PIN.version if installed else None,
+            install_progress=progress,
+            install_error=error,
+        )
+
+    def install(self) -> InstallResult:
+        """Trigger installation of the voice-models bundle.
+
+        Fire-and-forget like the tool installs: the bundle's contents come from
+        the static in-repo pin (no resolution step), so this only seeds the
+        aggregate progress and spawns the tracked download thread. Progress and
+        errors flow through the same notifier/status pipeline as the tools.
+        """
+        if self._stop_requested.is_set():
+            return InstallResult(success=False, error="Service is shutting down")
+
+        with self._lock:
+            if self._installing:
+                return InstallResult(success=True, in_progress=True)
+            self._installing = True
+            # Starting a fresh attempt clears the error from a prior one.
+            self._error = None
+            self._progress = InstallProgress(
+                tool=VOICE_MODELS_TOOL_NAME,
+                bytes_downloaded=0,
+                total_bytes=VOICE_MODELS_PIN.total_size_bytes,
+            )
+
+        self._ensure_progress_notifier()
+
+        thread = self._start_thread(self._run_install, "dependency-management-voice-models-download")
+        with self._lock:
+            self._thread = thread
+        self._notify_observers()
+
+        return InstallResult(success=True)
+
+    def _run_install(self) -> None:
+        """Background thread: drive the bundle install and own its bookkeeping."""
+        error: str | None = None
+        try:
+            # Serialize with any tool install via the shared install lock.
+            with self._install_lock:
+                result = self._download_verify_stage(self._on_progress)
+            if result.success:
+                logger.info("Background install of voice models bundle {} succeeded", result.version)
+            else:
+                error = result.error or "Installation failed"
+                logger.info("Background install failed: {}", result.error)
+        except Exception as e:
+            error = f"Installation failed: {e}"
+            logger.opt(exception=True).warning("Background install failed")
+        finally:
+            with self._lock:
+                self._installing = False
+                self._progress = None
+                self._error = error
+            # Best-effort push, skipped under shutdown for the same reasons as
+            # _run_managed_install_download.
+            if not self._stop_requested.is_set():
+                try:
+                    self._notify_observers()
+                except InvalidConcurrencyGroupStateError:
+                    logger.debug("Skipping status notify: concurrency group is exiting")
+
+    def _on_progress(self, bytes_downloaded: int, total_bytes: int | None) -> None:
+        """Record the bundle's aggregate install progress (download-thread hot path)."""
+        with self._lock:
+            self._progress = InstallProgress(
+                tool=VOICE_MODELS_TOOL_NAME,
+                bytes_downloaded=bytes_downloaded,
+                total_bytes=total_bytes,
+            )
+
+    def _download_verify_stage(self, progress_callback: Callable[[int, int | None], None]) -> InstallResult:
+        """Download -> verify -> activate flow for the voice-models bundle.
+
+        The multi-file variant of the tool flow: every pinned file is downloaded
+        into one staging dir (at its serve path) and verified against its pinned
+        sha256, then the whole tree is atomic-renamed into the versioned slot.
+        Progress is aggregated across files (cumulative bytes against the pinned
+        bundle total) so the UI gets a single 0-100%. These are data files, not
+        executables, so there is no ``--version`` gate.
+        """
+        bundle_dir = _get_voice_models_dir()
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        staging_dir = bundle_dir / f"{_TEMP_DIR_PREFIX}{uuid.uuid4()}"
+        staging_dir.mkdir()
+        total_bytes = VOICE_MODELS_PIN.total_size_bytes
+
+        try:
+            bytes_downloaded_before_current_file = 0
+            for file in VOICE_MODELS_PIN.files:
+                destination = staging_dir / file.serve_path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                on_chunk = functools.partial(
+                    _report_bundle_file_progress, progress_callback, bytes_downloaded_before_current_file, total_bytes
+                )
+                try:
+                    self._download_file(file.url, destination, file.sha256, on_chunk)
+                except _ManagedDownloadError as e:
+                    return InstallResult(success=False, error=f"{file.serve_path}: {e}")
+                # Advance by the pinned size (not the streamed byte count) so the
+                # aggregate stays consistent with the pinned total; the checksum
+                # already guarantees they match.
+                bytes_downloaded_before_current_file += file.size_bytes
+
+            # Activate via atomic rename of the staged tree into the versioned slot.
+            final_dir = _get_voice_models_version_dir()
+            if final_dir.exists():
+                shutil.rmtree(final_dir)
+            os.rename(str(staging_dir), str(final_dir))
+
+            # Only the pinned bundle version is ever served; stale versions are
+            # tens of megabytes of dead weight, so keep none of them.
+            for entry in bundle_dir.iterdir():
+                if entry.is_dir() and _is_version_dir(entry.name) and entry != final_dir:
+                    shutil.rmtree(entry, ignore_errors=True)
+
+            return InstallResult(success=True, version=VOICE_MODELS_PIN.version, path=str(final_dir))
+
+        finally:
+            # On success the rename consumed staging_dir, so this only fires on
+            # failure paths.
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+
 def _managed_binary_subpath(tool: Dependency) -> str:
     """Relative location of a managed tool's executable inside its version dir.
 
@@ -374,15 +563,9 @@ class DependencyManagementService(Service):
     # Per-tool reference to the in-flight install thread so stop() can wait for
     # each one's finally block to complete before the concurrency group exits.
     _install_thread: dict[Dependency, ObservableThread] = PrivateAttr(default_factory=dict)
-    # Install state of the voice-models bundle. Kept beside (not inside) the
-    # per-tool dicts above because the bundle is not a ``Dependency``: that enum
-    # is the agent-environment tool vocabulary, and voice models must never be
-    # provisioned into agent environments. Guarded by _progress_lock, except the
-    # thread handle, which mirrors _install_thread's locking.
-    _voice_models_installing: bool = PrivateAttr(default=False)
-    _voice_models_progress: InstallProgress | None = PrivateAttr(default=None)
-    _voice_models_error: str | None = PrivateAttr(default=None)
-    _voice_models_thread: ObservableThread | None = PrivateAttr(default=None)
+    # The voice-models bundle installer (created on first use); see
+    # VoiceModelsInstaller for why the bundle lives beside the per-tool dicts.
+    _voice_models_installer: VoiceModelsInstaller | None = PrivateAttr(default=None)
 
     def start(self) -> None:
         self._cleanup_stale_state()
@@ -400,8 +583,9 @@ class DependencyManagementService(Service):
         """
         self._stop_requested.set()
         threads = list(self._install_thread.values())
-        if self._voice_models_thread is not None:
-            threads.append(self._voice_models_thread)
+        installer = self._voice_models_installer
+        if installer is not None and installer.thread is not None:
+            threads.append(installer.thread)
         with self._progress_lock:
             if self._progress_notifier_thread is not None:
                 threads.append(self._progress_notifier_thread)
@@ -961,7 +1145,7 @@ class DependencyManagementService(Service):
             claude=claude_info,
             pi=pi_info,
             gh=gh_info,
-            voice_models=self._get_voice_models_info(),
+            voice_models=self._get_voice_models_installer().build_info(),
         )
 
     def _get_remote_cli_info(self, tool: Dependency) -> DependencyInfo:
@@ -980,29 +1164,27 @@ class DependencyManagementService(Service):
             is_authenticated=is_authenticated,
         )
 
-    def _get_voice_models_info(self) -> DependencyInfo:
-        """Build the status entry for the voice-models bundle.
-
-        Data files rather than a binary, so there is no path, mode, or version
-        probe: installed means every pinned file of the pinned bundle version is
-        on disk.
-        """
+    def _get_voice_models_installer(self) -> VoiceModelsInstaller:
         with self._progress_lock:
-            progress = self._voice_models_progress
-            error = self._voice_models_error
-        installed = self._is_voice_models_installed()
-        return DependencyInfo(
-            installed=installed,
-            version=VOICE_MODELS_PIN.version if installed else None,
-            managed_version=VOICE_MODELS_PIN.version if installed else None,
-            install_progress=progress,
-            install_error=error,
-        )
+            if self._voice_models_installer is None:
+                self._voice_models_installer = VoiceModelsInstaller(
+                    download_file=self._download_file_verified,
+                    install_lock=self._install_lock,
+                    stop_requested=self._stop_requested,
+                    start_thread=self._start_unchecked_thread,
+                    ensure_progress_notifier=self._ensure_progress_notifier_running,
+                    notify_observers=self._notify_observers,
+                )
+            return self._voice_models_installer
 
-    def _is_voice_models_installed(self) -> bool:
-        """Whether every pinned file of the pinned bundle version is present on disk."""
-        version_dir = _get_voice_models_version_dir()
-        return all((version_dir / file.serve_path).is_file() for file in VOICE_MODELS_PIN.files)
+    def _is_voice_models_installing(self) -> bool:
+        # A plain attribute read: the notifier calls this while holding
+        # _progress_lock, and the accessor above would re-acquire it.
+        installer = self._voice_models_installer
+        return installer is not None and installer.is_installing
+
+    def _start_unchecked_thread(self, target: Callable[[], None], name: str) -> ObservableThread:
+        return self.concurrency_group.start_new_thread(target=target, name=name, is_checked=False)
 
     def resolve_voice_model_path(self, serve_path: str) -> Path | None:
         """Resolve a pinned voice-models file to its on-disk path in the active bundle.
@@ -1076,19 +1258,6 @@ class DependencyManagementService(Service):
                 total_bytes=total_bytes,
             )
 
-    def _on_voice_models_progress(self, bytes_downloaded: int, total_bytes: int | None) -> None:
-        """Record the bundle's aggregate install progress (download-thread hot path).
-
-        Same cheapness constraint as :meth:`_on_install_progress`: no status
-        computation here.
-        """
-        with self._progress_lock:
-            self._voice_models_progress = InstallProgress(
-                tool=VOICE_MODELS_TOOL_NAME,
-                bytes_downloaded=bytes_downloaded,
-                total_bytes=total_bytes,
-            )
-
     def _ensure_progress_notifier_running(self) -> None:
         """Start the progress-notifier thread unless one is already running.
 
@@ -1114,7 +1283,7 @@ class DependencyManagementService(Service):
         has_warned_push_failure = False
         while not self._stop_requested.wait(self._PROGRESS_NOTIFY_INTERVAL_SECONDS):
             with self._progress_lock:
-                if not any(self._installing.values()) and not self._voice_models_installing:
+                if not any(self._installing.values()) and not self._is_voice_models_installing():
                     # Cleared in the same lock hold as the exit decision so
                     # _ensure_progress_notifier_running never races a dying notifier.
                     self._progress_notifier_thread = None
@@ -1253,71 +1422,8 @@ class DependencyManagementService(Service):
                     logger.debug("Skipping status notify: concurrency group is exiting")
 
     def install_voice_models(self) -> InstallResult:
-        """Trigger installation of the voice-models bundle.
-
-        Fire-and-forget like :meth:`install_managed`: the bundle's contents come
-        from the static in-repo pin (no resolution step), so this only seeds the
-        aggregate progress and spawns the tracked download thread. Progress and
-        errors flow through the same notifier/status pipeline as the tools.
-        """
-        if self._stop_requested.is_set():
-            return InstallResult(success=False, error="Service is shutting down")
-
-        with self._progress_lock:
-            if self._voice_models_installing:
-                return InstallResult(success=True, in_progress=True)
-            self._voice_models_installing = True
-            # Starting a fresh attempt clears the error from a prior one.
-            self._voice_models_error = None
-            self._voice_models_progress = InstallProgress(
-                tool=VOICE_MODELS_TOOL_NAME,
-                bytes_downloaded=0,
-                total_bytes=VOICE_MODELS_PIN.total_size_bytes,
-            )
-
-        self._ensure_progress_notifier_running()
-
-        self._voice_models_thread = self.concurrency_group.start_new_thread(
-            target=self._run_voice_models_install,
-            name="dependency-management-voice-models-download",
-            is_checked=False,
-        )
-        self._notify_observers()
-
-        return InstallResult(success=True)
-
-    def _run_voice_models_install(self) -> None:
-        """Background thread: drive the voice-models bundle install.
-
-        Owns the bundle bookkeeping (installing flag, progress clear, error
-        record/clear, best-effort notify under shutdown), mirroring
-        :meth:`_run_managed_install_download`.
-        """
-        error: str | None = None
-        try:
-            # Serialize with any tool install via the shared install lock.
-            with self._install_lock:
-                result = self._download_verify_stage_voice_models(self._on_voice_models_progress)
-            if result.success:
-                logger.info("Background install of voice models bundle {} succeeded", result.version)
-            else:
-                error = result.error or "Installation failed"
-                logger.info("Background install failed: {}", result.error)
-        except Exception as e:
-            error = f"Installation failed: {e}"
-            logger.opt(exception=True).warning("Background install failed")
-        finally:
-            with self._progress_lock:
-                self._voice_models_installing = False
-                self._voice_models_progress = None
-                self._voice_models_error = error
-            # Best-effort push, skipped under shutdown for the same reasons as
-            # _run_managed_install_download.
-            if not self._stop_requested.is_set():
-                try:
-                    self._notify_observers()
-                except InvalidConcurrencyGroupStateError:
-                    logger.debug("Skipping status notify: concurrency group is exiting")
+        """Trigger installation of the voice-models bundle (see VoiceModelsInstaller)."""
+        return self._get_voice_models_installer().install()
 
     def _download_file_verified(
         self,
@@ -1439,60 +1545,6 @@ class DependencyManagementService(Service):
             # Remove the download dir and any un-activated staging dir. On success the
             # rename consumed staging_dir, so that rmtree only fires on failure paths.
             shutil.rmtree(download_dir, ignore_errors=True)
-            shutil.rmtree(staging_dir, ignore_errors=True)
-
-    def _download_verify_stage_voice_models(
-        self, progress_callback: Callable[[int, int | None], None]
-    ) -> InstallResult:
-        """Download -> verify -> activate flow for the voice-models bundle.
-
-        The multi-file variant of ``_download_verify_stage``: every pinned file is
-        downloaded into one staging dir (at its serve path) and verified against
-        its pinned sha256, then the whole tree is atomic-renamed into the
-        versioned slot. Progress is aggregated across files (cumulative bytes
-        against the pinned bundle total) so the UI gets a single 0-100%. These
-        are data files, not executables, so there is no ``--version`` gate.
-        """
-        bundle_dir = _get_voice_models_dir()
-        bundle_dir.mkdir(parents=True, exist_ok=True)
-        staging_dir = bundle_dir / f"{_TEMP_DIR_PREFIX}{uuid.uuid4()}"
-        staging_dir.mkdir()
-        total_bytes = VOICE_MODELS_PIN.total_size_bytes
-
-        try:
-            bytes_downloaded_before_current_file = 0
-            for file in VOICE_MODELS_PIN.files:
-                destination = staging_dir / file.serve_path
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                on_chunk = functools.partial(
-                    _report_bundle_file_progress, progress_callback, bytes_downloaded_before_current_file, total_bytes
-                )
-                try:
-                    self._download_file_verified(file.url, destination, file.sha256, on_chunk)
-                except _ManagedDownloadError as e:
-                    return InstallResult(success=False, error=f"{file.serve_path}: {e}")
-                # Advance by the pinned size (not the streamed byte count) so the
-                # aggregate stays consistent with the pinned total; the checksum
-                # already guarantees they match.
-                bytes_downloaded_before_current_file += file.size_bytes
-
-            # Activate via atomic rename of the staged tree into the versioned slot.
-            final_dir = _get_voice_models_version_dir()
-            if final_dir.exists():
-                shutil.rmtree(final_dir)
-            os.rename(str(staging_dir), str(final_dir))
-
-            # Only the pinned bundle version is ever served; stale versions are
-            # tens of megabytes of dead weight, so keep none of them.
-            for entry in bundle_dir.iterdir():
-                if entry.is_dir() and _is_version_dir(entry.name) and entry != final_dir:
-                    shutil.rmtree(entry, ignore_errors=True)
-
-            return InstallResult(success=True, version=VOICE_MODELS_PIN.version, path=str(final_dir))
-
-        finally:
-            # On success the rename consumed staging_dir, so this only fires on
-            # failure paths.
             shutil.rmtree(staging_dir, ignore_errors=True)
 
     def cleanup_old_versions(self, tool: Dependency, keep: int = 2) -> None:
