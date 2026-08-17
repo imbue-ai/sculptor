@@ -309,6 +309,10 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
     const config: UserConfig = {
       root: opts.root,
       base: openhostProxyBase ?? opts.base ?? "/",
+      // The ASR worker dynamically imports its (large) speech runtime, which
+      // makes the worker build code-split — unsupported by the default "iife"
+      // worker format. Module workers are fine everywhere Sculptor runs.
+      worker: { format: "es" },
       optimizeDeps: sharedOptimizeDeps,
       define: sharedDefine(env, {
         apiUrlBaseExpr: opts.apiUrlBase(env),

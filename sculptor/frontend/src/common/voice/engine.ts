@@ -12,9 +12,12 @@
 // arbitrarily long utterance never re-transcribes its whole history.
 //
 // The speech libraries are large, so they are pulled in only via dynamic
-// `import()` at start() time and never join the initial bundle. Model weights
-// come exclusively from the backend's managed voice-models endpoint; the ONNX
-// Runtime wasm and the VAD audio worklet are code that ships with the app.
+// `import()` (or the lazily spawned ASR worker) at start() time and never join
+// the initial bundle. Model weights come exclusively from the backend's managed
+// voice-models endpoint; the ONNX Runtime wasm and the VAD audio worklet are
+// code that ships with the app. Moonshine inference runs in a dedicated worker
+// (asrWorker.ts) so it never blocks this thread — which also runs the UI and
+// the VAD's frame processing.
 //
 // Per-utterance event protocol (surfaces rely on this):
 //   - onPreview(text): show/replace the interim preview (always non-empty).
@@ -29,13 +32,11 @@ import type { MicVAD } from "@ricky0123/vad-web";
 import { baseUrl } from "~/apiClient.ts";
 import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "~/common/Auth.ts";
 
+import { type AsrClient, createAsrClient } from "./asrClient.ts";
+import { withVoiceModelFetchAuth } from "./fetchAuth.ts";
 import { StreamingTurn } from "./streamingTurn.ts";
 import type { VoiceEngine, VoiceEngineEvents, VoiceEngineState, VoiceErrorKind } from "./types.ts";
 
-type AsrOutput = { text: string };
-type AsrTranscriber = (audio: Float32Array) => Promise<AsrOutput | Array<AsrOutput>>;
-
-const MOONSHINE_MODEL_ID = "onnx-community/moonshine-base-ONNX";
 const VAD_WORKLET_FILE = "vad.worklet.bundle.min.js";
 
 // How often the live preview refreshes (each refresh transcribes the window).
@@ -55,22 +56,39 @@ const appAssetBase = (): string =>
 /** Backend-served managed model weights (Moonshine + Silero). Never a CDN. */
 const voiceModelsBase = (): string => new URL(`${baseUrl}/api/v1/voice-models/`, window.location.href).href;
 
-// The compiled Moonshine pipeline is cached at module scope so a later start() —
-// even from a freshly created engine — is warm.
-let sharedTranscriber: AsrTranscriber | undefined;
+// The ASR worker (owning the compiled Moonshine pipeline) is cached at module
+// scope so a later start() — even from a freshly created engine — is warm. A
+// dead worker (crash or failed init) is dropped and respawned on the next
+// start(), reloading the pipeline.
+let sharedAsrClient: AsrClient | undefined;
 
-// Every pipeline call is serialized through one module-level chain: the wasm
-// session is not re-entrant, a preview must never race a final, and commit
+const ensureAsrClient = async (): Promise<AsrClient> => {
+  if (sharedAsrClient !== undefined && sharedAsrClient.isDead) {
+    sharedAsrClient = undefined;
+  }
+
+  if (sharedAsrClient === undefined) {
+    sharedAsrClient = createAsrClient({
+      modelsBaseUrl: voiceModelsBase(),
+      wasmBaseUrl: `${appAssetBase()}transformers-ort/`,
+      token: getSessionToken() ?? null,
+      tokenParam: SESSION_TOKEN_HEADER_NAME,
+    });
+  }
+  await sharedAsrClient.ready;
+  return sharedAsrClient;
+};
+
+// Every transcription is serialized through one module-level chain: the worker
+// handles one request at a time, a preview must never race a final, and commit
 // folds must land in slice order (FIFO gives that for free).
 let sharedTranscribeChain: Promise<unknown> = Promise.resolve();
 
 const transcribeSerialized = (audio: Float32Array): Promise<string> => {
   const run = async (): Promise<string> => {
-    const transcriber = sharedTranscriber;
-    if (transcriber === undefined) return "";
-    const output = await transcriber(audio);
-    const result = Array.isArray(output) ? output[0] : output;
-    return (result?.text ?? "").trim();
+    const client = sharedAsrClient;
+    if (client === undefined || client.isDead) return "";
+    return client.transcribe(audio);
   };
   const next = sharedTranscribeChain.then(run, run);
   sharedTranscribeChain = next.then(
@@ -78,73 +96,6 @@ const transcribeSerialized = (audio: Float32Array): Promise<string> => {
     () => undefined,
   );
   return next;
-};
-
-const extractRequestUrl = (input: RequestInfo | URL): string => {
-  if (typeof input === "string") return input;
-  if (input instanceof URL) return input.href;
-  return input.url;
-};
-
-const authenticateVoiceModelUrl = (url: string): string => {
-  const token = getSessionToken();
-  // Web builds are same-origin and ride the SameSite session cookie, so there is
-  // no token to add. Packaged Electron is cross-origin (the cookie is
-  // SameSite=strict), so it must pass the token as a query param instead.
-  if (token === undefined) return url;
-  const resolved = new URL(url, window.location.href);
-  if (!resolved.searchParams.has(SESSION_TOKEN_HEADER_NAME)) {
-    resolved.searchParams.set(SESSION_TOKEN_HEADER_NAME, token);
-  }
-  return resolved.href;
-};
-
-// The speech libraries fetch model weights with a bare fetch() that carries no
-// session token, but GET /api/v1/voice-models/* sits behind the /api guard.
-// Patch fetch only for the duration of a model-loading action: voice-model
-// requests gain auth, every other fetch passes through untouched, and the
-// unpatched fetch is restored when the action settles.
-const withVoiceModelFetchAuth = async <T>(action: () => Promise<T>): Promise<T> => {
-  const modelsBase = voiceModelsBase();
-  const unpatchedFetch = globalThis.fetch;
-  const callFetch = unpatchedFetch.bind(globalThis);
-  const patched = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    if (!extractRequestUrl(input).startsWith(modelsBase)) {
-      return callFetch(input, init);
-    }
-    return callFetch(authenticateVoiceModelUrl(extractRequestUrl(input)), { ...init, credentials: "include" });
-  };
-  globalThis.fetch = patched;
-  try {
-    return await action();
-  } finally {
-    // Another patcher may have wrapped fetch meanwhile; only restore while the
-    // patch is still on top.
-    if (globalThis.fetch === patched) {
-      globalThis.fetch = unpatchedFetch;
-    }
-  }
-};
-
-const ensureTranscriber = async (): Promise<AsrTranscriber> => {
-  if (sharedTranscriber !== undefined) return sharedTranscriber;
-  const transformers = await import("@huggingface/transformers");
-  transformers.env.allowLocalModels = false;
-  transformers.env.remoteHost = voiceModelsBase();
-  // The default wasmPaths points at jsDelivr; serve the wasm from our own origin.
-  const wasm = transformers.env.backends.onnx.wasm;
-  if (wasm !== undefined) {
-    wasm.wasmPaths = `${appAssetBase()}transformers-ort/`;
-    wasm.numThreads = 1;
-  }
-  // The explicit task type argument keeps `pipeline`'s return from widening into
-  // the whole-task union (which TS reports as "too complex to represent").
-  sharedTranscriber = await transformers.pipeline<"automatic-speech-recognition">(
-    "automatic-speech-recognition",
-    MOONSHINE_MODEL_ID,
-    { dtype: "q8", device: "wasm" },
-  );
-  return sharedTranscriber;
 };
 
 // vad-web derives both the worklet URL and the Silero model URL from a single
@@ -377,10 +328,13 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     setState("initializing");
     let vad: MicVAD;
     try {
-      vad = await withVoiceModelFetchAuth(async () => {
-        await ensureTranscriber();
-        return ensureVad();
-      });
+      await ensureAsrClient();
+      // vad-web fetches the Silero weights on this thread; scope the auth patch
+      // to that load (the worker patches its own realm for Moonshine's files).
+      vad = await withVoiceModelFetchAuth(
+        { modelsBase: voiceModelsBase(), token: getSessionToken() ?? null, tokenParam: SESSION_TOKEN_HEADER_NAME },
+        () => ensureVad(),
+      );
     } catch (error) {
       fail("init-failed", error);
       return;

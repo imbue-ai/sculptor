@@ -5,19 +5,14 @@ import type { VoiceEngine, VoiceEngineEvents, VoiceEngineState } from "./types.t
 // Hoisted mocks stay stable across the per-test `vi.resetModules()`, so the
 // engine's module-level caches reset while these keep their identity.
 const h = vi.hoisted(() => ({
-  pipelineMock: vi.fn(),
   transcribeMock: vi.fn(),
+  createAsrClient: vi.fn(),
+  asrClientDead: { value: false },
   micVadNew: vi.fn(),
   micVadStart: vi.fn(),
   micVadPause: vi.fn(),
   micVadDestroy: vi.fn(),
   getSessionToken: vi.fn(),
-  env: {
-    allowLocalModels: true,
-    remoteHost: "",
-    remotePathTemplate: "{model}/resolve/{revision}/",
-    backends: { onnx: { wasm: {} as { wasmPaths?: string; numThreads?: number } } },
-  },
 }));
 
 vi.mock("~/apiClient.ts", () => ({ baseUrl: "https://backend.test" }));
@@ -25,7 +20,7 @@ vi.mock("~/common/Auth.ts", () => ({
   SESSION_TOKEN_HEADER_NAME: "x-session-token",
   getSessionToken: h.getSessionToken,
 }));
-vi.mock("@huggingface/transformers", () => ({ pipeline: h.pipelineMock, env: h.env }));
+vi.mock("./asrClient.ts", () => ({ createAsrClient: h.createAsrClient }));
 vi.mock("@ricky0123/vad-web", () => ({ MicVAD: { new: h.micVadNew } }));
 
 // jsdom has no Web Audio; the engine touches audioWorklet.addModule, state,
@@ -121,8 +116,16 @@ beforeEach(async () => {
   vi.resetModules();
   vi.resetAllMocks();
 
-  h.pipelineMock.mockResolvedValue(h.transcribeMock);
-  h.transcribeMock.mockResolvedValue({ text: "" });
+  h.asrClientDead.value = false;
+  h.createAsrClient.mockImplementation(() => ({
+    ready: Promise.resolve(),
+    get isDead(): boolean {
+      return h.asrClientDead.value;
+    },
+    transcribe: h.transcribeMock,
+    dispose: vi.fn(),
+  }));
+  h.transcribeMock.mockResolvedValue("");
   h.micVadNew.mockImplementation(async () => ({
     start: h.micVadStart,
     pause: h.micVadPause,
@@ -132,9 +135,6 @@ beforeEach(async () => {
   h.micVadPause.mockResolvedValue(undefined);
   h.micVadDestroy.mockResolvedValue(undefined);
   h.getSessionToken.mockReturnValue(undefined);
-  h.env.allowLocalModels = true;
-  h.env.remoteHost = "";
-  h.env.backends = { onnx: { wasm: {} } };
 
   baseFetch = vi.fn().mockResolvedValue({ ok: true });
   MockAudioContext.nextState = "running";
@@ -230,18 +230,17 @@ describe("createVoiceEngine state machine", () => {
 });
 
 describe("createVoiceEngine model configuration", () => {
-  it("loads Moonshine as q8/wasm from the backend, wasm from the app", async () => {
+  it("spawns the ASR worker pointed at the backend models and app-served wasm", async () => {
     const engine = createVoiceEngine(createRecorder().events);
 
     await engine.start();
 
-    expect(h.pipelineMock).toHaveBeenCalledWith("automatic-speech-recognition", "onnx-community/moonshine-base-ONNX", {
-      dtype: "q8",
-      device: "wasm",
+    expect(h.createAsrClient).toHaveBeenCalledWith({
+      modelsBaseUrl: "https://backend.test/api/v1/voice-models/",
+      wasmBaseUrl: expect.stringContaining("/vendor/voice/transformers-ort/"),
+      token: null,
+      tokenParam: "x-session-token",
     });
-    expect(h.env.allowLocalModels).toBe(false);
-    expect(h.env.remoteHost).toBe("https://backend.test/api/v1/voice-models/");
-    expect(h.env.backends.onnx.wasm.wasmPaths).toContain("/vendor/voice/transformers-ort/");
   });
 
   it("points the VAD at the backend model and app-served wasm, not autostarting", async () => {
@@ -271,11 +270,22 @@ describe("createVoiceEngine model configuration", () => {
     expect(MockAudioContext.lastAddModule).toHaveBeenLastCalledWith("https://cdn.example.com/other.js", undefined);
   });
 
-  it("reuses the cached Moonshine pipeline across engines (warm start)", async () => {
+  it("reuses the ASR worker across engines (warm start)", async () => {
     await createVoiceEngine(createRecorder().events).start();
     await createVoiceEngine(createRecorder().events).start();
 
-    expect(h.pipelineMock).toHaveBeenCalledTimes(1);
+    expect(h.createAsrClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("respawns a dead ASR worker on the next start", async () => {
+    const engine = createVoiceEngine(createRecorder().events);
+    await engine.start();
+    await engine.stop();
+
+    h.asrClientDead.value = true;
+    await engine.start();
+
+    expect(h.createAsrClient).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -300,7 +310,12 @@ describe("createVoiceEngine error mapping", () => {
   });
 
   it("maps a model load failure to init-failed", async () => {
-    h.pipelineMock.mockRejectedValueOnce(new Error("network down"));
+    h.createAsrClient.mockImplementation(() => ({
+      ready: Promise.reject(new Error("network down")),
+      isDead: true,
+      transcribe: h.transcribeMock,
+      dispose: vi.fn(),
+    }));
     const recorder = createRecorder();
 
     await createVoiceEngine(recorder.events).start();
@@ -321,7 +336,7 @@ describe("createVoiceEngine error mapping", () => {
 
 describe("createVoiceEngine segment handling", () => {
   it("emits a trimmed segment for a completed transcription", async () => {
-    h.transcribeMock.mockResolvedValue({ text: "  hello world  " });
+    h.transcribeMock.mockResolvedValue("  hello world  ");
     const recorder = createRecorder();
     const engine = createVoiceEngine(recorder.events);
 
@@ -335,7 +350,7 @@ describe("createVoiceEngine segment handling", () => {
   });
 
   it("swallows empty and whitespace-only transcriptions", async () => {
-    h.transcribeMock.mockResolvedValue({ text: "   " });
+    h.transcribeMock.mockResolvedValue("   ");
     const recorder = createRecorder();
     const engine = createVoiceEngine(recorder.events);
 
@@ -365,7 +380,7 @@ describe("createVoiceEngine segment handling", () => {
   });
 
   it("emits a transcription that was still in flight when the engine stopped", async () => {
-    let resolveTranscribe: (value: { text: string }) => void = () => undefined;
+    let resolveTranscribe: (value: string) => void = () => undefined;
     h.transcribeMock.mockReturnValue(
       new Promise((resolve) => {
         resolveTranscribe = resolve;
@@ -379,7 +394,7 @@ describe("createVoiceEngine segment handling", () => {
     speakFrames(options, 8);
     options.onSpeechEnd(new Float32Array(16000));
     const stopping = engine.stop();
-    resolveTranscribe({ text: "late result" });
+    resolveTranscribe("late result");
     await stopping;
     await flush();
 
@@ -390,7 +405,7 @@ describe("createVoiceEngine segment handling", () => {
 
 describe("createVoiceEngine utterance accumulation", () => {
   it("flushes the in-progress utterance as a final segment on stop", async () => {
-    h.transcribeMock.mockResolvedValue({ text: "flushed words" });
+    h.transcribeMock.mockResolvedValue("flushed words");
     const recorder = createRecorder();
     const engine = createVoiceEngine(recorder.events);
 
@@ -427,7 +442,7 @@ describe("createVoiceEngine utterance accumulation", () => {
   it("emits a throttled preview while an utterance is in progress", async () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
     try {
-      h.transcribeMock.mockResolvedValue({ text: "partial words" });
+      h.transcribeMock.mockResolvedValue("partial words");
       const recorder = createRecorder();
       const engine = createVoiceEngine(recorder.events);
 
@@ -449,7 +464,7 @@ describe("createVoiceEngine utterance accumulation", () => {
   it("keeps the preview visible until the natural final replaces it", async () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
     try {
-      h.transcribeMock.mockResolvedValue({ text: "spoken sentence" });
+      h.transcribeMock.mockResolvedValue("spoken sentence");
       const recorder = createRecorder();
       const engine = createVoiceEngine(recorder.events);
 
@@ -473,7 +488,7 @@ describe("createVoiceEngine utterance accumulation", () => {
   it("commits a head slice mid-turn so window transcriptions stay bounded", async () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
     try {
-      h.transcribeMock.mockResolvedValue({ text: "chunk words" });
+      h.transcribeMock.mockResolvedValue("chunk words");
       const recorder = createRecorder();
       const engine = createVoiceEngine(recorder.events);
 
@@ -510,13 +525,13 @@ describe("createVoiceEngine utterance accumulation", () => {
   it("yields the preview lane entirely while a commit fold is pending", async () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
     try {
-      let resolveHead: (value: { text: string }) => void = () => undefined;
+      let resolveHead: (value: string) => void = () => undefined;
       h.transcribeMock.mockReturnValueOnce(
         new Promise((resolve) => {
           resolveHead = resolve;
         }),
       );
-      h.transcribeMock.mockResolvedValue({ text: "late preview" });
+      h.transcribeMock.mockResolvedValue("late preview");
       const recorder = createRecorder();
       const engine = createVoiceEngine(recorder.events);
 
@@ -536,7 +551,7 @@ describe("createVoiceEngine utterance accumulation", () => {
       // not even QUEUE a preview behind it.
       nowSpy.mockReturnValue(10_000);
       options.onFrameProcessed({}, loudFrame());
-      resolveHead({ text: "first chunk" });
+      resolveHead("first chunk");
       await flush();
       expect(h.transcribeMock).toHaveBeenCalledTimes(1);
       expect(recorder.previews[recorder.previews.length - 1]).toBe("first chunk");
@@ -558,7 +573,7 @@ describe("createVoiceEngine utterance accumulation", () => {
       let call = 0;
       h.transcribeMock.mockImplementation(async () => {
         call += 1;
-        return { text: `part${call}` };
+        return `part${call}`;
       });
       const recorder = createRecorder();
       const engine = createVoiceEngine(recorder.events);
@@ -611,14 +626,16 @@ describe("createVoiceEngine utterance accumulation", () => {
 });
 
 describe("createVoiceEngine model fetch authentication", () => {
-  const MODEL_URL = "https://backend.test/api/v1/voice-models/onnx-community/x/resolve/main/config.json";
+  const MODEL_URL = "https://backend.test/api/v1/voice-models/vad/silero_vad_v5.onnx";
 
-  // The libraries fetch during pipeline construction; drive one such fetch and
-  // observe what the patched fetch forwards to the underlying one.
+  // vad-web fetches the Silero weights on the main thread during MicVAD.new;
+  // drive one such fetch and observe what the patched fetch forwards to the
+  // underlying one. (Moonshine's files are fetched inside the ASR worker, which
+  // patches its own realm — covered by the worker's tests.)
   const loadWithFetch = async (url: string): Promise<void> => {
-    h.pipelineMock.mockImplementation(async () => {
+    h.micVadNew.mockImplementation(async () => {
       await globalThis.fetch(url);
-      return h.transcribeMock;
+      return { start: h.micVadStart, pause: h.micVadPause, destroy: h.micVadDestroy };
     });
     await createVoiceEngine(createRecorder().events).start();
   };
