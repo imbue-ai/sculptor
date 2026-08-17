@@ -286,7 +286,7 @@ describe("createVoiceEngine error mapping", () => {
 
     await createVoiceEngine(recorder.events).start();
 
-    expect(recorder.states).toEqual(["initializing", "error"]);
+    expect(recorder.states).toEqual(["initializing", "idle"]);
     expect(recorder.errors).toEqual([{ kind: "mic-permission-denied", message: "Permission denied" }]);
   });
 
@@ -305,7 +305,7 @@ describe("createVoiceEngine error mapping", () => {
 
     await createVoiceEngine(recorder.events).start();
 
-    expect(recorder.states).toEqual(["initializing", "error"]);
+    expect(recorder.states).toEqual(["initializing", "idle"]);
     expect(recorder.errors[0]?.kind).toBe("init-failed");
   });
 

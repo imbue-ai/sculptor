@@ -250,7 +250,7 @@ export const useVoiceEntry = (params: VoiceEntryParams): VoiceEntryView => {
       }
       await engine.start();
     } catch (error) {
-      setEngineState("error");
+      setEngineState("idle");
       setVoiceError({
         kind: "init-failed",
         message: error instanceof Error ? error.message : "Could not start voice entry",
@@ -288,7 +288,7 @@ export const useVoiceEntry = (params: VoiceEntryParams): VoiceEntryView => {
   } else if (voiceError !== null) {
     status = "voice-error";
   } else {
-    status = engineState === "error" ? "voice-error" : engineState;
+    status = engineState;
   }
 
   // Voice owns the surface's text entry during capture and the trailing flush,

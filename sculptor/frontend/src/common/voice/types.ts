@@ -3,7 +3,9 @@
 // button carries no static dependency on the (large) speech runtime. This file
 // is the shared shape both sides agree on.
 
-export type VoiceEngineState = "idle" | "initializing" | "listening" | "stopping" | "error";
+// Errors are not a state: they arrive via onError while the machine settles
+// back to "idle", ready for a retry start().
+export type VoiceEngineState = "idle" | "initializing" | "listening" | "stopping";
 
 export type VoiceErrorKind = "mic-permission-denied" | "init-failed" | "transcription-failed";
 

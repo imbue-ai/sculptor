@@ -191,7 +191,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
   };
 
   const fail = (kind: VoiceErrorKind, error: unknown): void => {
-    setState("error");
+    setState("idle");
     events.onError({ kind, message: describeError(error) });
   };
 
