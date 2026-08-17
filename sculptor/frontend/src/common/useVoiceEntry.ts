@@ -230,13 +230,12 @@ export const useVoiceEntry = (params: VoiceEntryParams): VoiceEntryView => {
     setVoiceError(null);
     setEngineState("initializing");
     try {
-      // One engine per mounted button, restarted across toggles. The loader is
-      // imported dynamically so the heavy engine module stays off the initial
-      // bundle until dictation actually starts.
+      // One engine per mounted button, restarted across toggles. The engine
+      // module is imported dynamically so the heavy speech runtime stays off
+      // the initial bundle until dictation actually starts.
       let engine = engineRef.current;
       if (engine === null) {
-        const { loadVoiceEngine } = await import("~/common/voiceEngineLoader.ts");
-        const { createVoiceEngine } = await loadVoiceEngine();
+        const { createVoiceEngine } = await import("~/common/voice/engine.ts");
         engine = createVoiceEngine({
           onSegment: (text: string): void => onAppendTranscriptRef.current(text),
           onPreview: (text: string): void => onPreviewChangeRef.current?.(text),

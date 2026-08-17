@@ -11,9 +11,9 @@ import type { VoiceEngine, VoiceEngineEvents } from "~/common/voice/types.ts";
 
 import { VoiceEntryButton } from "./VoiceEntryButton.tsx";
 
-// The speech engine is loaded lazily through voiceEngineLoader; mocking the
-// loader stands in for the engine and captures its listeners so a test can
-// drive state/segment/error transitions.
+// The speech engine is dynamically imported; mocking its module stands in for
+// the engine and captures its listeners so a test can drive
+// state/segment/error transitions.
 const engineHarness = vi.hoisted(() => ({
   events: null as VoiceEngineEvents | null,
   start: vi.fn(async (): Promise<void> => {}),
@@ -21,13 +21,11 @@ const engineHarness = vi.hoisted(() => ({
   dispose: vi.fn(),
 }));
 
-vi.mock("~/common/voiceEngineLoader.ts", () => ({
-  loadVoiceEngine: async (): Promise<{ createVoiceEngine: (events: VoiceEngineEvents) => VoiceEngine }> => ({
-    createVoiceEngine: (events: VoiceEngineEvents): VoiceEngine => {
-      engineHarness.events = events;
-      return { start: engineHarness.start, stop: engineHarness.stop, dispose: engineHarness.dispose };
-    },
-  }),
+vi.mock("~/common/voice/engine.ts", () => ({
+  createVoiceEngine: (events: VoiceEngineEvents): VoiceEngine => {
+    engineHarness.events = events;
+    return { start: engineHarness.start, stop: engineHarness.stop, dispose: engineHarness.dispose };
+  },
 }));
 
 // Stub only the two managed-install calls; keep the rest of the generated client
