@@ -523,11 +523,21 @@ describe("createVoiceEngine utterance accumulation", () => {
 });
 
 describe("createVoiceEngine model fetch authentication", () => {
-  it("appends the session token to voice-model requests when one is available", async () => {
-    h.getSessionToken.mockReturnValue("secret-token");
-    await createVoiceEngine(createRecorder().events).start();
+  const MODEL_URL = "https://backend.test/api/v1/voice-models/onnx-community/x/resolve/main/config.json";
 
-    await globalThis.fetch("https://backend.test/api/v1/voice-models/onnx-community/x/resolve/main/config.json");
+  // The libraries fetch during pipeline construction; drive one such fetch and
+  // observe what the patched fetch forwards to the underlying one.
+  const loadWithFetch = async (url: string): Promise<void> => {
+    h.pipelineMock.mockImplementation(async () => {
+      await globalThis.fetch(url);
+      return h.transcribeMock;
+    });
+    await createVoiceEngine(createRecorder().events).start();
+  };
+
+  it("appends the session token to voice-model requests during model loading", async () => {
+    h.getSessionToken.mockReturnValue("secret-token");
+    await loadWithFetch(MODEL_URL);
 
     const [url, init] = lastCall(baseFetch) as [string, RequestInit];
     expect(url).toContain("x-session-token=secret-token");
@@ -536,9 +546,7 @@ describe("createVoiceEngine model fetch authentication", () => {
 
   it("leaves non voice-model requests untouched", async () => {
     h.getSessionToken.mockReturnValue("secret-token");
-    await createVoiceEngine(createRecorder().events).start();
-
-    await globalThis.fetch("https://backend.test/api/v1/other");
+    await loadWithFetch("https://backend.test/api/v1/other");
 
     const [url, init] = lastCall(baseFetch) as [string, RequestInit | undefined];
     expect(url).toBe("https://backend.test/api/v1/other");
@@ -547,13 +555,16 @@ describe("createVoiceEngine model fetch authentication", () => {
 
   it("relies on the same-origin cookie (no token param) for web builds", async () => {
     h.getSessionToken.mockReturnValue(undefined);
-    await createVoiceEngine(createRecorder().events).start();
-
-    await globalThis.fetch("https://backend.test/api/v1/voice-models/vad/silero_vad_v5.onnx");
+    await loadWithFetch(MODEL_URL);
 
     const [url, init] = lastCall(baseFetch) as [string, RequestInit];
-    expect(url).toBe("https://backend.test/api/v1/voice-models/vad/silero_vad_v5.onnx");
+    expect(url).toBe(MODEL_URL);
     expect(url).not.toContain("x-session-token");
     expect(init.credentials).toBe("include");
+  });
+
+  it("restores the unpatched fetch once loading settles", async () => {
+    await createVoiceEngine(createRecorder().events).start();
+    expect(globalThis.fetch).toBe(baseFetch);
   });
 });

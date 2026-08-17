@@ -58,7 +58,6 @@ const voiceModelsBase = (): string => new URL(`${baseUrl}/api/v1/voice-models/`,
 // The compiled Moonshine pipeline is cached at module scope so a later start() —
 // even from a freshly created engine — is warm.
 let sharedTranscriber: AsrTranscriber | undefined;
-let isFetchAuthInstalled = false;
 
 // Every pipeline call is serialized through one module-level chain: the wasm
 // session is not re-entrant, a preview must never race a final, and commit
@@ -102,18 +101,29 @@ const authenticateVoiceModelUrl = (url: string): string => {
 
 // The speech libraries fetch model weights with a bare fetch() that carries no
 // session token, but GET /api/v1/voice-models/* sits behind the /api guard.
-// Intercept only voice-model requests to attach auth; every other fetch passes
-// through untouched.
-const installVoiceModelFetchAuth = (modelsBase: string): void => {
-  if (isFetchAuthInstalled) return;
-  isFetchAuthInstalled = true;
-  const originalFetch = globalThis.fetch.bind(globalThis);
-  globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+// Patch fetch only for the duration of a model-loading action: voice-model
+// requests gain auth, every other fetch passes through untouched, and the
+// unpatched fetch is restored when the action settles.
+const withVoiceModelFetchAuth = async <T>(action: () => Promise<T>): Promise<T> => {
+  const modelsBase = voiceModelsBase();
+  const unpatchedFetch = globalThis.fetch;
+  const callFetch = unpatchedFetch.bind(globalThis);
+  const patched = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     if (!extractRequestUrl(input).startsWith(modelsBase)) {
-      return originalFetch(input, init);
+      return callFetch(input, init);
     }
-    return originalFetch(authenticateVoiceModelUrl(extractRequestUrl(input)), { ...init, credentials: "include" });
+    return callFetch(authenticateVoiceModelUrl(extractRequestUrl(input)), { ...init, credentials: "include" });
   };
+  globalThis.fetch = patched;
+  try {
+    return await action();
+  } finally {
+    // Another patcher may have wrapped fetch meanwhile; only restore while the
+    // patch is still on top.
+    if (globalThis.fetch === patched) {
+      globalThis.fetch = unpatchedFetch;
+    }
+  }
 };
 
 const ensureTranscriber = async (): Promise<AsrTranscriber> => {
@@ -127,7 +137,6 @@ const ensureTranscriber = async (): Promise<AsrTranscriber> => {
     wasm.wasmPaths = `${appAssetBase()}transformers-ort/`;
     wasm.numThreads = 1;
   }
-  installVoiceModelFetchAuth(voiceModelsBase());
   // The explicit task type argument keeps `pipeline`'s return from widening into
   // the whole-task union (which TS reports as "too complex to represent").
   sharedTranscriber = await transformers.pipeline<"automatic-speech-recognition">(
@@ -348,8 +357,10 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     setState("initializing");
     let vad: MicVAD;
     try {
-      await ensureTranscriber();
-      vad = await ensureVad();
+      vad = await withVoiceModelFetchAuth(async () => {
+        await ensureTranscriber();
+        return ensureVad();
+      });
     } catch (error) {
       fail("init-failed", error);
       return;
