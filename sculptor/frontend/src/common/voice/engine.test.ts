@@ -323,7 +323,9 @@ describe("createVoiceEngine segment handling", () => {
     const engine = createVoiceEngine(recorder.events);
 
     await engine.start();
-    capturedVadOptions().onSpeechEnd(new Float32Array(16000));
+    const options = capturedVadOptions();
+    speakFrames(options, 8);
+    options.onSpeechEnd(new Float32Array(16000));
     await flush();
 
     expect(recorder.segments).toEqual(["hello world"]);
@@ -335,7 +337,9 @@ describe("createVoiceEngine segment handling", () => {
     const engine = createVoiceEngine(recorder.events);
 
     await engine.start();
-    capturedVadOptions().onSpeechEnd(new Float32Array(16000));
+    const options = capturedVadOptions();
+    speakFrames(options, 8);
+    options.onSpeechEnd(new Float32Array(16000));
     await flush();
 
     expect(recorder.segments).toEqual([]);
@@ -348,7 +352,9 @@ describe("createVoiceEngine segment handling", () => {
     const engine = createVoiceEngine(recorder.events);
 
     await engine.start();
-    capturedVadOptions().onSpeechEnd(new Float32Array(16000));
+    const options = capturedVadOptions();
+    speakFrames(options, 8);
+    options.onSpeechEnd(new Float32Array(16000));
     await flush();
 
     expect(recorder.errors).toEqual([{ kind: "transcription-failed", message: "decode failed" }]);
@@ -366,7 +372,9 @@ describe("createVoiceEngine segment handling", () => {
     const engine = createVoiceEngine(recorder.events);
 
     await engine.start();
-    capturedVadOptions().onSpeechEnd(new Float32Array(16000));
+    const options = capturedVadOptions();
+    speakFrames(options, 8);
+    options.onSpeechEnd(new Float32Array(16000));
     const stopping = engine.stop();
     resolveTranscribe({ text: "late result" });
     await stopping;
@@ -452,6 +460,43 @@ describe("createVoiceEngine utterance accumulation", () => {
 
       expect(recorder.previews).toEqual(["spoken sentence"]);
       expect(recorder.segments).toEqual(["spoken sentence"]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("commits a head slice mid-turn so window transcriptions stay bounded", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+    try {
+      h.transcribeMock.mockResolvedValue({ text: "chunk words" });
+      const recorder = createRecorder();
+      const engine = createVoiceEngine(recorder.events);
+
+      await engine.start();
+      const options = capturedVadOptions();
+      options.onSpeechStart();
+      const loudFrame = (): Float32Array => {
+        const frame = new Float32Array(FRAME_SAMPLES);
+        frame.fill(0.1);
+        return frame;
+      };
+      for (let i = 0; i < 400; i += 1) options.onFrameProcessed({}, loudFrame());
+      // A genuine pause: long enough to qualify as an inter-word gap.
+      for (let i = 0; i < 8; i += 1) options.onFrameProcessed({}, new Float32Array(FRAME_SAMPLES));
+      for (let i = 0; i < 300; i += 1) options.onFrameProcessed({}, loudFrame());
+      await flush();
+
+      // The head committed while the turn was still live, and it is bounded.
+      expect(h.transcribeMock).toHaveBeenCalled();
+      const head = h.transcribeMock.mock.calls[0]?.[0] as Float32Array;
+      expect(head.length).toBeGreaterThan(0);
+      expect(head.length).toBeLessThanOrEqual(20 * 16000);
+
+      options.onSpeechEnd(new Float32Array(16000));
+      await flush();
+      // The final folds committed + drained tail; the seam de-dup collapses the
+      // mock's identical chunk texts into one.
+      expect(recorder.segments).toEqual(["chunk words"]);
     } finally {
       nowSpy.mockRestore();
     }
