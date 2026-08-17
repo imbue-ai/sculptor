@@ -401,22 +401,22 @@ export const ChatInput = ({
     [getDraft, setPromptDraft, renderVoiceDraft],
   );
 
-  // Previews render into the editor but are never persisted to the draft atom;
-  // "" means the utterance produced no final, so the base text is restored.
+  // Previews render into the editor but are never persisted to the draft atom.
   const handleVoicePreviewChange = useCallback(
     (preview: string): void => {
-      if (preview === "") {
-        if (voiceBaseRef.current !== null) {
-          renderVoiceDraft(voiceBaseRef.current);
-          voiceBaseRef.current = null;
-        }
-        return;
-      }
       voiceBaseRef.current ??= getDraft() ?? "";
       renderVoiceDraft(appendTranscript({ draft: voiceBaseRef.current, segment: preview }));
     },
     [getDraft, renderVoiceDraft],
   );
+
+  // The utterance produced no final, so the base text is restored.
+  const handleVoicePreviewDiscard = useCallback((): void => {
+    if (voiceBaseRef.current !== null) {
+      renderVoiceDraft(voiceBaseRef.current);
+      voiceBaseRef.current = null;
+    }
+  }, [renderVoiceDraft]);
 
   // While voice owns the entry box, only transcription may write to it.
   const handleVoiceCaptureLockChange = useCallback(
@@ -1079,6 +1079,7 @@ export const ChatInput = ({
                   <VoiceEntryButton
                     onAppendTranscript={handleAppendVoiceTranscript}
                     onPreviewChange={handleVoicePreviewChange}
+                    onPreviewDiscard={handleVoicePreviewDiscard}
                     onCaptureLockChange={handleVoiceCaptureLockChange}
                   />
                 </>

@@ -58,6 +58,7 @@ type RenderedButton = RenderResult & { onAppendTranscript: ReturnType<typeof vi.
 
 type ExtraButtonProps = {
   onPreviewChange?: (preview: string) => void;
+  onPreviewDiscard?: () => void;
   onCaptureLockChange?: (locked: boolean) => void;
 };
 
@@ -195,8 +196,9 @@ describe("VoiceEntryButton", () => {
 
   it("relays previews and holds the capture lock through listening and stopping", async () => {
     const onPreviewChange = vi.fn();
+    const onPreviewDiscard = vi.fn();
     const onCaptureLockChange = vi.fn();
-    renderButton(makeInfo({ installed: true }), { onPreviewChange, onCaptureLockChange });
+    renderButton(makeInfo({ installed: true }), { onPreviewChange, onPreviewDiscard, onCaptureLockChange });
     const events = await startListening();
 
     act(() => events.onStateChange("listening"));
@@ -204,6 +206,8 @@ describe("VoiceEntryButton", () => {
 
     act(() => events.onPreview("partial wo"));
     expect(onPreviewChange).toHaveBeenLastCalledWith("partial wo");
+    act(() => events.onPreviewDiscard());
+    expect(onPreviewDiscard).toHaveBeenCalledTimes(1);
 
     act(() => events.onStateChange("stopping"));
     await waitFor(() => expect(getToggle()).toHaveAttribute("data-voice-state", "stopping"));

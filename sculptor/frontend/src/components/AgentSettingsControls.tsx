@@ -21,8 +21,10 @@ type AgentSettingsControlsProps = {
   /** Receives each dictated voice segment so the creation prompt draft can append
    *  it (with smart spacing) through its own state. */
   onAppendTranscript: (text: string) => void;
-  /** Interim transcription of the utterance being spoken; "" discards it. */
+  /** Interim transcription (non-empty) of the utterance being spoken. */
   onPreviewChange?: (preview: string) => void;
+  /** The utterance produced no final; discard the shown preview. */
+  onPreviewDiscard?: () => void;
   /** Fires when voice takes/releases ownership of the prompt textarea. */
   onCaptureLockChange?: (locked: boolean) => void;
 };
@@ -55,6 +57,7 @@ export const AgentSettingsControls = ({
   onPlanModeToggle,
   onAppendTranscript,
   onPreviewChange,
+  onPreviewDiscard,
   onCaptureLockChange,
 }: AgentSettingsControlsProps): ReactElement => {
   const { supportsFastMode: doesSupportFastMode } = getModelCapabilities(model);
@@ -81,6 +84,7 @@ export const AgentSettingsControls = ({
       <VoiceEntryButton
         onAppendTranscript={onAppendTranscript}
         onPreviewChange={onPreviewChange}
+        onPreviewDiscard={onPreviewDiscard}
         onCaptureLockChange={onCaptureLockChange}
       />
     </Flex>

@@ -185,6 +185,16 @@ export const useVoiceModelsInstall = (): VoiceModelsInstall => {
 
 const CAPTURE_LOCKED_STATUSES: ReadonlySet<VoiceButtonStatus> = new Set(["listening", "stopping"]);
 
+export type VoiceEntryParams = {
+  onAppendTranscript: (text: string) => void;
+  /** Interim transcription (non-empty) of the utterance being spoken. */
+  onPreviewChange?: (preview: string) => void;
+  /** The utterance produced no final; discard the shown preview. */
+  onPreviewDiscard?: () => void;
+  /** Fires when voice takes/releases ownership of the surface's text entry. */
+  onCaptureLockChange?: (locked: boolean) => void;
+};
+
 /**
  * Owns the voice-entry mic button's full lifecycle: the managed voice-models
  * install (via `useVoiceModelsInstall`) and the on-device speech engine
@@ -192,15 +202,6 @@ const CAPTURE_LOCKED_STATUSES: ReadonlySet<VoiceButtonStatus> = new Set(["listen
  * segments are handed back verbatim through `onAppendTranscript`; the caller owns
  * how they land in its draft.
  */
-export type VoiceEntryParams = {
-  onAppendTranscript: (text: string) => void;
-  /** Interim transcription of the utterance being spoken; "" discards it (see
-   *  the per-utterance protocol in voice/engine.ts). */
-  onPreviewChange?: (preview: string) => void;
-  /** Fires when voice takes/releases ownership of the surface's text entry. */
-  onCaptureLockChange?: (locked: boolean) => void;
-};
-
 export const useVoiceEntry = (params: VoiceEntryParams): VoiceEntryView => {
   const install = useVoiceModelsInstall();
   const [engineState, setEngineState] = useState<VoiceEngineState>("idle");
@@ -211,12 +212,14 @@ export const useVoiceEntry = (params: VoiceEntryParams): VoiceEntryView => {
   // so a re-created callback never restarts the engine or goes stale.
   const onAppendTranscriptRef = useRef(params.onAppendTranscript);
   const onPreviewChangeRef = useRef(params.onPreviewChange);
+  const onPreviewDiscardRef = useRef(params.onPreviewDiscard);
   const onCaptureLockChangeRef = useRef(params.onCaptureLockChange);
   useEffect(() => {
     onAppendTranscriptRef.current = params.onAppendTranscript;
     onPreviewChangeRef.current = params.onPreviewChange;
+    onPreviewDiscardRef.current = params.onPreviewDiscard;
     onCaptureLockChangeRef.current = params.onCaptureLockChange;
-  }, [params.onAppendTranscript, params.onPreviewChange, params.onCaptureLockChange]);
+  }, [params.onAppendTranscript, params.onPreviewChange, params.onPreviewDiscard, params.onCaptureLockChange]);
 
   // Dispose the engine on unmount — the mic must never outlive the button.
   useEffect(() => {
@@ -239,6 +242,7 @@ export const useVoiceEntry = (params: VoiceEntryParams): VoiceEntryView => {
         engine = createVoiceEngine({
           onSegment: (text: string): void => onAppendTranscriptRef.current(text),
           onPreview: (text: string): void => onPreviewChangeRef.current?.(text),
+          onPreviewDiscard: (): void => onPreviewDiscardRef.current?.(),
           onStateChange: (state: VoiceEngineState): void => setEngineState(state),
           onError: (error: VoiceError): void => setVoiceError(error),
         });

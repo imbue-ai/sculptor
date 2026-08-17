@@ -359,16 +359,19 @@ export const NewWorkspaceForm = ({
     });
   }, []);
 
-  // "" means the utterance produced no final, so the base prompt is restored.
   const handlePromptVoicePreview = useCallback((preview: string): void => {
     setPrompt((prev) => {
-      if (preview === "") {
-        const base = promptVoiceBaseRef.current;
-        promptVoiceBaseRef.current = null;
-        return base ?? prev;
-      }
       promptVoiceBaseRef.current ??= prev;
       return appendTranscript({ draft: promptVoiceBaseRef.current, segment: preview });
+    });
+  }, []);
+
+  // The utterance produced no final, so the base prompt is restored.
+  const handlePromptVoiceDiscard = useCallback((): void => {
+    setPrompt((prev) => {
+      const base = promptVoiceBaseRef.current;
+      promptVoiceBaseRef.current = null;
+      return base ?? prev;
     });
   }, []);
 
@@ -678,6 +681,7 @@ export const NewWorkspaceForm = ({
                 onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
                 onAppendTranscript={handleAppendPromptTranscript}
                 onPreviewChange={handlePromptVoicePreview}
+                onPreviewDiscard={handlePromptVoiceDiscard}
                 onCaptureLockChange={setIsVoiceCaptureLocked}
               />
             ) : effectiveAgentType === "pi" ? (

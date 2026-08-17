@@ -17,12 +17,12 @@
 // Runtime wasm and the VAD audio worklet are code that ships with the app.
 //
 // Per-utterance event protocol (surfaces rely on this):
-//   - onPreview(text) with text.length > 0: show/replace the interim preview.
-//   - onPreview(""): the utterance produced no final (misfire, too short at
-//     stop, or transcription failure) — discard the preview.
+//   - onPreview(text): show/replace the interim preview (always non-empty).
+//   - onPreviewDiscard(): the utterance produced no final (misfire, too short
+//     at stop, or transcription failure) — discard the preview.
 //   - onSegment(text): the utterance's final text; replaces any shown preview.
-//     A successful finalize does NOT emit onPreview("") first, so the preview
-//     stays visible as a bridge until the final lands.
+//     A successful finalize does NOT emit onPreviewDiscard() first, so the
+//     preview stays visible as a bridge until the final lands.
 
 import type { MicVAD } from "@ricky0123/vad-web";
 
@@ -199,7 +199,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     const didHaveTurn = activeTurn !== null;
     activeTurn = null;
     if (didHaveTurn) {
-      events.onPreview("");
+      events.onPreviewDiscard();
     }
   };
 
@@ -301,7 +301,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     if (final.length > 0) {
       events.onSegment(final);
     } else {
-      events.onPreview("");
+      events.onPreviewDiscard();
     }
   };
 
@@ -396,7 +396,7 @@ export const createVoiceEngine = (events: VoiceEngineEvents): VoiceEngine => {
     activeTurn = null;
     const shouldFlush = turn !== null && (turn.committedWordCount > 0 || turn.bufferedSamples >= MIN_FLUSH_SAMPLES);
     if (turn !== null && !shouldFlush) {
-      events.onPreview("");
+      events.onPreviewDiscard();
     }
     releaseCapture();
     if (turn !== null && shouldFlush) {

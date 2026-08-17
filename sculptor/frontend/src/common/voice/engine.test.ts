@@ -68,26 +68,29 @@ type Recorder = {
   states: Array<VoiceEngineState>;
   segments: Array<string>;
   previews: Array<string>;
+  discardCount: number;
   errors: Array<{ kind: string; message: string }>;
 };
 
 const createRecorder = (): Recorder => {
-  const states: Array<VoiceEngineState> = [];
-  const segments: Array<string> = [];
-  const previews: Array<string> = [];
-  const errors: Array<{ kind: string; message: string }> = [];
-  return {
-    states,
-    segments,
-    previews,
-    errors,
-    events: {
-      onStateChange: (state): void => void states.push(state),
-      onSegment: (text): void => void segments.push(text),
-      onPreview: (text): void => void previews.push(text),
-      onError: (error): void => void errors.push(error),
-    },
+  const recorder: Recorder = {
+    states: [],
+    segments: [],
+    previews: [],
+    discardCount: 0,
+    errors: [],
+    events: undefined as unknown as VoiceEngineEvents,
   };
+  recorder.events = {
+    onStateChange: (state): void => void recorder.states.push(state),
+    onSegment: (text): void => void recorder.segments.push(text),
+    onPreview: (text): void => void recorder.previews.push(text),
+    onPreviewDiscard: (): void => {
+      recorder.discardCount += 1;
+    },
+    onError: (error): void => void recorder.errors.push(error),
+  };
+  return recorder;
 };
 
 const FRAME_SAMPLES = 512;
@@ -417,7 +420,8 @@ describe("createVoiceEngine utterance accumulation", () => {
 
     expect(recorder.segments).toEqual([]);
     // The aborted utterance discards its (never-shown) preview.
-    expect(recorder.previews).toEqual([""]);
+    expect(recorder.previews).toEqual([]);
+    expect(recorder.discardCount).toBe(1);
   });
 
   it("emits a throttled preview while an utterance is in progress", async () => {
@@ -460,6 +464,7 @@ describe("createVoiceEngine utterance accumulation", () => {
 
       expect(recorder.previews).toEqual(["spoken sentence"]);
       expect(recorder.segments).toEqual(["spoken sentence"]);
+      expect(recorder.discardCount).toBe(0);
     } finally {
       nowSpy.mockRestore();
     }
@@ -511,7 +516,8 @@ describe("createVoiceEngine utterance accumulation", () => {
     speakFrames(options, 4);
     options.onVADMisfire();
 
-    expect(recorder.previews).toEqual([""]);
+    expect(recorder.previews).toEqual([]);
+    expect(recorder.discardCount).toBe(1);
     expect(recorder.segments).toEqual([]);
   });
 });
