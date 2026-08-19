@@ -60,8 +60,15 @@ jobs:
           git config user.name "imbue-dev"
 
       - name: Install system packages
+        timeout-minutes: 10
         run: |
           # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          # The azure.archive.ubuntu.com mirror can also go fully dark and hang
+          # `apt-get update` past those per-connection timeouts, so drop it and
+          # let the canonical archive.ubuntu.com mirrors serve instead.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
           sudo apt-get $APT_OPTS update
           sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq ca-certificates
@@ -198,8 +205,15 @@ jobs:
           git config user.name "imbue-dev"
 
       - name: Install system packages
+        timeout-minutes: 10
         run: |
           # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          # The azure.archive.ubuntu.com mirror can also go fully dark and hang
+          # `apt-get update` past those per-connection timeouts, so drop it and
+          # let the canonical archive.ubuntu.com mirrors serve instead.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
           sudo apt-get $APT_OPTS update
           sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq ca-certificates
