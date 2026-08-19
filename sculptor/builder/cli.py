@@ -25,7 +25,9 @@ import typer
 from builder import darwin
 from builder.artifacts import ArtifactFile
 from builder.artifacts import BuildStage
+from builder.artifacts import NON_BLOCKING_TARGETS
 from builder.artifacts import PLATFORM_ARCH_TO_TARGET
+from builder.artifacts import Target
 from builder.artifacts import artifacts_for_target_and_stage
 from packaging.version import InvalidVersion
 from packaging.version import Version
@@ -442,7 +444,7 @@ def publish_build_artifacts(
         fg=typer.colors.YELLOW,
     )
 
-    files_to_copy: list[ArtifactFile] = []
+    artifacts_by_target: dict[Target, list[ArtifactFile]] = {}
     for stage in stages:
         for target in PLATFORM_ARCH_TO_TARGET.values():
             artifacts = artifacts_for_target_and_stage(
@@ -450,33 +452,37 @@ def publish_build_artifacts(
                 stage,
                 pipeline_id=os.environ.get("CI_PIPELINE_ID", ""),
             )
-            files_to_copy.extend(artifacts)
+            artifacts_by_target.setdefault(target, []).extend(artifacts)
 
     if not bypass_checks:
         typer.echo("  • Verifying source artifacts exist in S3")
-        are_artifacts_missing = False
-        for artifact in files_to_copy:
-            # Run s3 ls to verify the file exists
-            try:
-                _run_out(
-                    [
-                        "uv",
-                        "tool",
-                        "run",
-                        "--from",
-                        "awscli==1.41.12",
-                        "--refresh",
-                        "aws",
-                        "s3",
-                        "ls",
-                        artifact.input_path,
-                    ]
-                )
-            except subprocess.CalledProcessError:
+        blocked_targets: list[Target] = []
+        skipped_targets: list[Target] = []
+        for target, artifacts in artifacts_by_target.items():
+            missing = [artifact for artifact in artifacts if not _s3_object_exists(artifact.input_path)]
+            if not missing:
+                continue
+            for artifact in missing:
                 typer.secho(f"Source artifact not found: {artifact.input_path}", fg=typer.colors.RED)
-                are_artifacts_missing = True
-        if are_artifacts_missing:
+            (skipped_targets if target in NON_BLOCKING_TARGETS else blocked_targets).append(target)
+
+        if blocked_targets:
             raise typer.Exit(code=1)
+
+        for target in skipped_targets:
+            # Drop the target wholesale rather than publishing what did survive: a
+            # half-published target would leave its auto-update manifest pointing at
+            # binaries that aren't there. Skipping leaves the previous release's
+            # artifacts in place, so that architecture simply isn't offered an update.
+            typer.secho(
+                f"Skipping {target.value}: its build is non-blocking and its artifacts are absent.",
+                fg=typer.colors.YELLOW,
+            )
+            artifacts_by_target[target] = []
+
+    files_to_copy: list[ArtifactFile] = [
+        artifact for artifacts in artifacts_by_target.values() for artifact in artifacts
+    ]
 
     versioned_urls: list[str] = []
 
@@ -976,6 +982,15 @@ def s3_uri_to_https(s3_uri: str) -> str:
     without_scheme = s3_uri[len("s3://") :]
     bucket, _, key = without_scheme.partition("/")
     return f"https://{bucket}.s3.amazonaws.com/{key}"
+
+
+def _s3_object_exists(s3_uri: str) -> bool:
+    """Returns whether `aws s3 ls` can see an object at `s3_uri`."""
+    try:
+        _run_out(["uv", "tool", "run", "--from", "awscli==1.41.12", "--refresh", "aws", "s3", "ls", s3_uri])
+    except subprocess.CalledProcessError:
+        return False
+    return True
 
 
 def s3_copy(source: str, destination: str, dry_run: bool = False) -> None:
