@@ -75,6 +75,20 @@ sections:
 - **Never admin-merge past a failing required check.** If it genuinely needs a
   bypass, refuse and hand it to the user.
 
+`main` merges through a **merge queue**, so green checks are not the last step:
+the PR still has to be enqueued, the queue re-runs the required workflows against
+`main`, and a failure there **ejects** the PR silently — it goes back to looking
+open and green. An enqueue can also be swallowed with no error at all when a
+wedged `merge_group` run is still alive. Don't assume; check:
+
+```bash
+gh api repos/imbue-ai/sculptor/issues/<bump_pr>/timeline --paginate \
+  -q '.[] | select(.event | test("queue")) | .event + " @ " + .created_at'
+```
+
+See the playbook's **"Merging through the merge queue"** for the queue-state
+query and how to spot and clear a wedged run.
+
 Confirm it landed and `origin/main` advanced to `X.(Y+1).0.dev0`:
 
 ```bash
