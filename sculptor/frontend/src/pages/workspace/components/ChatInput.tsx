@@ -15,6 +15,7 @@ import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { getModelShortName, PRODUCTION_MODELS } from "~/common/modelConstants.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
+import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
 import { CapabilityGate } from "~/components/CapabilityGate.tsx";
 import { EFFORT_DISPLAY_NAMES, EFFORT_OPTIONS } from "~/components/effortConstants.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
@@ -25,6 +26,7 @@ import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
 import { SendButton } from "~/components/SendButton.tsx";
 import { CAPABILITY_UNSUPPORTED_COPY } from "~/components/useCapabilityGate.ts";
+import { VoiceEntryButton } from "~/components/VoiceEntryButton.tsx";
 
 import {
   btwAgent,
@@ -366,6 +368,56 @@ export const ChatInput = ({
     setPromptDraft(null);
     setAttachedFiles([]);
   }, [editorRef, setPromptDraft, setAttachedFiles]);
+
+  const voiceComposerRef = useRef(createVoiceDraftComposer());
+
+  const renderVoiceDraft = useCallback(
+    (draft: string): void => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      if (draft) {
+        editor.commands.setContent(draft, { contentType: "markdown" });
+      } else {
+        editor.commands.clearContent();
+      }
+    },
+    [editorRef],
+  );
+
+  // Voice segments append with the spacing typing would produce, and
+  // deliberately without the focus steal appendTextRef does — dictation fills
+  // the composer while the user may be working elsewhere.
+  const handleAppendVoiceTranscript = useCallback(
+    (text: string): void => {
+      const nextDraft = voiceComposerRef.current.commitText(getDraft() ?? "", text);
+      renderVoiceDraft(nextDraft);
+      setPromptDraft(nextDraft);
+    },
+    [getDraft, setPromptDraft, renderVoiceDraft],
+  );
+
+  // Previews render into the editor but are never persisted to the draft atom.
+  const handleVoicePreviewChange = useCallback(
+    (preview: string): void => {
+      renderVoiceDraft(voiceComposerRef.current.previewText(getDraft() ?? "", preview));
+    },
+    [getDraft, renderVoiceDraft],
+  );
+
+  const handleVoicePreviewDiscard = useCallback((): void => {
+    const restored = voiceComposerRef.current.discard();
+    if (restored !== null) {
+      renderVoiceDraft(restored);
+    }
+  }, [renderVoiceDraft]);
+
+  // While voice owns the entry box, only transcription may write to it.
+  const handleVoiceCaptureLockChange = useCallback(
+    (locked: boolean): void => {
+      editorRef.current?.setEditable(!locked);
+    },
+    [editorRef],
+  );
 
   const openBtwPopup = useSetAtom(openBtwPopupAtom);
   const closeBtwPopup = useSetAtom(closeBtwPopupAtom);
@@ -1017,6 +1069,12 @@ export const ChatInput = ({
                       sourcesBackendModels={hasBackendModelSource}
                     />
                   </Flex>
+                  <VoiceEntryButton
+                    onAppendTranscript={handleAppendVoiceTranscript}
+                    onPreviewChange={handleVoicePreviewChange}
+                    onPreviewDiscard={handleVoicePreviewDiscard}
+                    onCaptureLockChange={handleVoiceCaptureLockChange}
+                  />
                 </>
               )}
               {isMissingUsableModel ? (

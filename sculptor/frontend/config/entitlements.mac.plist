@@ -49,12 +49,9 @@
     <true/>
     -->
 
-    <!-- Allow microphone access if needed -->
-    <!-- Uncomment if app needs microphone -->
-    <!--
+    <!-- Allow microphone access (voice entry captures audio for on-device transcription) -->
     <key>com.apple.security.device.microphone</key>
     <true/>
-    -->
 
     <!-- Allow full file system access (for Git repositories anywhere) -->
     <!-- WARNING: This is broad access - consider using bookmarks instead -->

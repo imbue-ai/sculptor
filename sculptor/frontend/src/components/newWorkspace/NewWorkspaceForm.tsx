@@ -27,6 +27,7 @@ import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { usePiModels } from "~/common/state/hooks/usePiModels.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
 import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
 import { BranchSelector } from "~/components/BranchSelector.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
@@ -342,6 +343,35 @@ export const NewWorkspaceForm = ({
     setShuffleNonce((prev) => prev + 1);
   }, []);
 
+  const promptVoiceComposerRef = useRef(createVoiceDraftComposer());
+  const [isVoiceCaptureLocked, setIsVoiceCaptureLocked] = useState(false);
+
+  // Read the live prompt from the textarea rather than closing over state: the
+  // composer calls are stateful, so they must run once per event — never inside
+  // a functional setState updater, which StrictMode invokes twice.
+  const readPromptDraft = useCallback((): string => promptTextareaRef.current?.value ?? "", []);
+
+  const handleAppendPromptTranscript = useCallback(
+    (text: string): void => {
+      setPrompt(promptVoiceComposerRef.current.commitText(readPromptDraft(), text));
+    },
+    [readPromptDraft],
+  );
+
+  const handlePromptVoicePreview = useCallback(
+    (preview: string): void => {
+      setPrompt(promptVoiceComposerRef.current.previewText(readPromptDraft(), preview));
+    },
+    [readPromptDraft],
+  );
+
+  const handlePromptVoiceDiscard = useCallback((): void => {
+    const restored = promptVoiceComposerRef.current.discard();
+    if (restored !== null) {
+      setPrompt(restored);
+    }
+  }, []);
+
   const isPromptEmpty = prompt.trim() === "";
   // The pi catalog as the ModelSelector consumes it: the fetched list, or
   // NOT_FETCHED_YET while the host-side probe is still resolving (which drives the
@@ -621,6 +651,7 @@ export const NewWorkspaceForm = ({
             ref={promptTextareaRef}
             value={prompt}
             onChange={(e): void => setPrompt(e.target.value)}
+            disabled={isVoiceCaptureLocked}
             placeholder="Describe a task for the agent (optional)"
             className={styles.promptTextarea}
             data-testid={ElementIds.NEW_WORKSPACE_PROMPT_TEXTAREA}
@@ -645,6 +676,10 @@ export const NewWorkspaceForm = ({
                 onFastModeToggle={(): void => setIsAgentFastMode((v) => !v)}
                 isPlanMode={isAgentPlanMode}
                 onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
+                onAppendTranscript={handleAppendPromptTranscript}
+                onPreviewChange={handlePromptVoicePreview}
+                onPreviewDiscard={handlePromptVoiceDiscard}
+                onCaptureLockChange={setIsVoiceCaptureLocked}
               />
             ) : effectiveAgentType === "pi" ? (
               <Flex align="center" gap="2" data-testid={ElementIds.NEW_WORKSPACE_PI_MODEL_PICKER}>

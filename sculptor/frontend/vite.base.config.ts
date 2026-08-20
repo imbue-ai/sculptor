@@ -29,6 +29,7 @@ import {
 
 import { bundledExtensions } from "./vite-plugins/bundled-extensions.ts";
 import { extensionRuntimeStubs } from "./vite-plugins/extension-runtime-stubs.ts";
+import { voiceRuntimeAssets } from "./vite-plugins/voice-runtime-assets.ts";
 
 /**
  * Exclude ``@xterm/xterm`` from the bundle and serve it as a standalone
@@ -87,6 +88,7 @@ export function externalizeXterm(root: string): Plugin {
 /** Plugins shared by the web and Electron-renderer builds. */
 export const sharedPlugins = (root: string): Array<Plugin> => [
   externalizeXterm(root),
+  voiceRuntimeAssets(root),
   extensionRuntimeStubs(),
   bundledExtensions(),
   react(),
@@ -307,6 +309,10 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
     const config: UserConfig = {
       root: opts.root,
       base: openhostProxyBase ?? opts.base ?? "/",
+      // The ASR worker dynamically imports its (large) speech runtime, which
+      // makes the worker build code-split — unsupported by the default "iife"
+      // worker format. Module workers are fine everywhere Sculptor runs.
+      worker: { format: "es" },
       optimizeDeps: sharedOptimizeDeps,
       define: sharedDefine(env, {
         apiUrlBaseExpr: opts.apiUrlBase(env),

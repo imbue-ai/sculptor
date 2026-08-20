@@ -11,6 +11,7 @@ const makeStatus = (pi: DependencyInfo): DependenciesStatus => ({
   claude: makeInfo({ installed: true }),
   pi,
   gh: makeInfo({}),
+  voiceModels: makeInfo({}),
 });
 
 describe("isPiAvailableAtom", () => {
