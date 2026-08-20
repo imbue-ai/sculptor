@@ -190,11 +190,55 @@ self-heal. Don't fight them — **supersede** them:
   to retrigger fresh runs with new IDs:
   ```bash
   gh pr close <n> && sleep 3 && gh pr reopen <n>
-  gh pr merge <n> --auto --squash   # re-arm auto-merge; a merge queue may report "strategy set by the merge queue" — that's fine
+  gh pr merge <n> --auto --squash   # re-arm auto-merge
   ```
+  The "strategy set by the merge queue" notice is expected — see
+  "Merging through the merge queue", and verify the enqueue registered.
 - **Tag-triggered release build:** you can't cheaply re-dispatch a tag build.
   Cut a fresh RC instead — **`just fixup-release`** (`rcN → rc(N+1)`) pushes a new
   tag and a new, healthy build. It costs one RC number and sidesteps the zombie.
+
+## Merging through the merge queue
+
+`main` merges via a GitHub **merge queue**, so `gh pr merge <n>` does not merge
+anything — it *enqueues*. Two consequences worth internalising:
+
+- **Your strategy flag is ignored.** `gh` prints
+  `! The merge strategy for main is set by the merge queue` and the queue decides.
+  Passing `--merge` does not guarantee a merge commit (though in practice a
+  multi-commit PR has landed as its individual commits plus a merge commit).
+- **The queue re-runs the required workflows against `main` + your PR**, as
+  `merge_group` events on `gh-readonly-queue/main/pr-<n>-<sha>` refs. So a PR
+  whose own checks are green can still fail in the queue, and every queue attempt
+  spends another full CI cycle.
+
+```bash
+# Where am I in the queue?
+gh api graphql -f query='{repository(owner:"imbue-ai",name:"sculptor"){mergeQueue{entries(first:20){nodes{position state pullRequest{number}}}}}}' \
+  -q '.data.repository.mergeQueue.entries.nodes[] | "#" + (.pullRequest.number|tostring) + " pos=" + ((.position//0)|tostring) + " " + .state'
+# The queue's own check runs:
+gh run list --event merge_group --limit 5
+```
+
+State goes `QUEUED` → `AWAITING_CHECKS` → merged. If a queue check fails or times
+out, the PR is **ejected** (`removed_from_merge_queue` by `github-merge-queue[bot]`)
+and simply sits there open and green — nothing tells you. Re-queue with another
+`gh pr merge <n>`.
+
+**Always verify that an enqueue actually registered.** An enqueue can be silently
+swallowed — no error, no queue entry, no timeline event — when a wedged
+`merge_group` run from a previous attempt is still alive:
+
+```bash
+gh api repos/imbue-ai/sculptor/issues/<n>/timeline --paginate \
+  -q '.[] | select(.event | test("queue")) | .event + " @ " + .created_at'
+```
+
+If your `added_to_merge_queue` event isn't there, you are not queued, however
+confidently the UI or CLI implied otherwise. Look for a wedged run
+(`gh run list --event merge_group`): the signature is `in_progress` well past the
+job timeout with `updatedAt` frozen at its start time. `gh run cancel` may report
+success and be ignored; cancelling again and re-queuing has cleared it.
 
 ## Working in this colocated jj + git repo
 
@@ -263,3 +307,17 @@ Append dated, specific learnings here. Keep them short.
   published `rcN` prerelease in `gh release list` — that means its build went green
   *and* a human approved its gate. This also sets the release-notes range: it
   starts at the prior **promoted** tag, which may be several minors back.
+- **2026-08-20 — a wedged `merge_group` run silently swallowed an enqueue.** A PR
+  was ejected from the merge queue after its queue checks hung, and the follow-up
+  enqueue produced **no `added_to_merge_queue` timeline event and no error** — it
+  simply never queued, while the PR sat open and `CLEAN`. The blocker was the
+  previous attempt's `checks` run, still `in_progress` 2h30m later (job timeout is
+  1h) with `updatedAt` frozen at its start time; `gh run cancel` returned success
+  and the run ignored it. After cancelling it again and re-queuing, the same PR
+  merged in ~9 minutes on the first try. Lesson: after any `gh pr merge`, confirm
+  the enqueue registered before you start waiting on it.
+- **2026-08-20 — `jj git push --deleted` is not scoped to the bookmark you just
+  deleted.** It pushes *every* pending bookmark deletion, so cleaning up one
+  merged branch also deleted an unrelated stale branch from the remote (harmless
+  in that instance — already merged — but not intended). Push a specific deletion
+  with `jj git push -b <bookmark>` instead, or check what is pending first.
