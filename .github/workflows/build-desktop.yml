@@ -156,9 +156,16 @@ jobs:
 
       - name: Install Linux build dependencies
         if: matrix.os == 'linux'
+        timeout-minutes: 10
         # Electron, node-gyp, and AppImage-maker dependencies.
         run: |
           # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          # The azure.archive.ubuntu.com mirror can also go fully dark and hang
+          # `apt-get update` past those per-connection timeouts, so drop it and
+          # let the canonical archive.ubuntu.com mirrors serve instead.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
           sudo apt-get $APT_OPTS update -qq
           sudo apt-get $APT_OPTS install -y -qq \
@@ -356,12 +363,19 @@ jobs:
 
       - name: Install Linux test dependencies
         if: matrix.os == 'linux'
+        timeout-minutes: 10
         # Electron runtime libs + xvfb. The harness auto-wraps the app in
         # `xvfb-run` when no DISPLAY is set (PackagedElectronFrontend), so we
         # only need xvfb present, not a manually-started display. Package names
         # differ between 22.04 and 24.04 (t64 suffix), so fall back.
         run: |
           # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          # The azure.archive.ubuntu.com mirror can also go fully dark and hang
+          # `apt-get update` past those per-connection timeouts, so drop it and
+          # let the canonical archive.ubuntu.com mirrors serve instead.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
           sudo apt-get $APT_OPTS update -qq
           sudo apt-get $APT_OPTS install -y -qq \
