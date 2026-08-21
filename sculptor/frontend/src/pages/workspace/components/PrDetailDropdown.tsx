@@ -6,6 +6,7 @@ import { useEffect } from "react";
 
 import type { PrStatusInfo } from "../../../api";
 import { ElementIds } from "../../../api";
+import { reusableTabTarget } from "../../../common/reusableTabTarget.ts";
 import {
   ciBabysitterStatusAtomFamily,
   fetchCiBabysitterStatusAtom,
@@ -113,7 +114,14 @@ export const PrDetailDropdown = ({ prStatus }: PrDetailDropdownProps): ReactElem
     <div className={styles.dropdown} data-testid={ElementIds.PR_DROPDOWN}>
       <Flex align="center" gap="2" mb="3">
         {prStatus.prWebUrl ? (
-          <Link size="2" weight="medium" href={prStatus.prWebUrl} target="_blank" style={{ flex: 1 }} truncate>
+          <Link
+            size="2"
+            weight="medium"
+            href={prStatus.prWebUrl}
+            target={reusableTabTarget(prStatus.prWebUrl)}
+            style={{ flex: 1 }}
+            truncate
+          >
             {prStatus.prTitle ?? `#${prStatus.prIid}`}
             <ExternalLinkIcon size={12} style={{ marginLeft: "var(--space-1)", verticalAlign: "middle" }} />
           </Link>
@@ -133,7 +141,7 @@ export const PrDetailDropdown = ({ prStatus }: PrDetailDropdownProps): ReactElem
             {getPipelineBadge(prStatus.pipelineStatus)}
             {prStatus.pipelineId != null &&
               (prStatus.pipelineWebUrl ? (
-                <Link size="1" href={prStatus.pipelineWebUrl} target="_blank">
+                <Link size="1" href={prStatus.pipelineWebUrl} target={reusableTabTarget(prStatus.pipelineWebUrl)}>
                   #{prStatus.pipelineId}
                 </Link>
               ) : (
