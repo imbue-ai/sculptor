@@ -17,6 +17,8 @@ FILE_CHANGE_TOOL_NAMES: Final[tuple[AgentToolName, ...]] = (
 MODEL_SHORTNAME_MAP: Final[dict[LLMModel, str]] = {
     LLMModel.CLAUDE_4_OPUS: "opus[1m]",
     LLMModel.CLAUDE_4_OPUS_200K: "opus",
+    LLMModel.CLAUDE_4_8_OPUS: "claude-opus-4-8[1m]",
+    LLMModel.CLAUDE_4_8_OPUS_200K: "claude-opus-4-8",
     LLMModel.CLAUDE_4_7_OPUS: "claude-opus-4-7[1m]",
     LLMModel.CLAUDE_4_7_OPUS_200K: "claude-opus-4-7",
     LLMModel.CLAUDE_4_6_OPUS: "claude-opus-4-6[1m]",

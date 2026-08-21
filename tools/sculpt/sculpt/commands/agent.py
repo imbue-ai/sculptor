@@ -41,8 +41,9 @@ from sculpt.commands._follow_helpers import on_reconnect_json
 from sculpt.commands._follow_helpers import on_reconnect_separator
 from sculpt.commands._follow_helpers import on_reconnect_text
 from sculpt.commands._follow_helpers import on_status_json
+from sculpt.commands._harness_helpers import MODEL_HELP
 from sculpt.commands._harness_helpers import resolve_harness_selection
-from sculpt.commands._harness_helpers import resolve_pi_backend_model
+from sculpt.commands._harness_helpers import resolve_prompt_models
 from sculpt.commands.data_types import AgentCreateOutput
 from sculpt.commands.data_types import AgentDeleteOutput
 from sculpt.commands.data_types import AgentInterruptOutput
@@ -132,8 +133,7 @@ def create(
         None,
         "--model",
         "-m",
-        help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)",
-        show_default="opus",
+        help=MODEL_HELP,
     ),
     name: str | None = typer.Option(None, "--name", help="Agent name"),
     harness: str | None = typer.Option(
@@ -157,29 +157,18 @@ def create(
     client = get_authenticated_client(base_url, json_output)
     workspace_id = resolve_workspace(workspace, client, json_output)
 
-    model_lower = "opus" if model is None else model.lower()
-    if model_lower not in MODEL_MAPPING:
-        valid = ", ".join(MODEL_MAPPING.keys())
-        cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
-
-    llm_model = MODEL_MAPPING[model_lower]
-
     selection = resolve_harness_selection(harness, client, json_output)
     if prompt and selection is not None and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
         cli_error("Terminal agents do not take an initial prompt (--prompt)", json_output=json_output)
 
+    llm_model = None
     backend_model = None
-    if prompt and selection is not None and selection.agent_type == AgentTypeName.PI:
-        if model is not None:
-            cli_error(
-                "--model does not apply to the Pi harness — pi picks from its own catalog",
-                json_output=json_output,
-            )
-        backend_model = resolve_pi_backend_model(client, json_output)
+    if prompt:
+        llm_model, backend_model = resolve_prompt_models(selection, model, client, json_output)
 
     request = CreateAgentRequest(
         prompt=prompt,
-        model=llm_model if prompt and backend_model is None else None,
+        model=llm_model if llm_model is not None else UNSET,
         backend_model=backend_model if backend_model is not None else UNSET,
         interface="API",
         name=name,

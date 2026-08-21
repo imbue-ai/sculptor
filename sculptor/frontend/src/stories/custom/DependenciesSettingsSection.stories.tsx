@@ -70,6 +70,7 @@ const managedUpToDate: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const managedOutOfRange: DependenciesStatus = {
@@ -94,6 +95,7 @@ const managedOutOfRange: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const pathMode: DependenciesStatus = {
@@ -117,6 +119,7 @@ const pathMode: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const customMode: DependenciesStatus = {
@@ -140,6 +143,7 @@ const customMode: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const notInstalled: DependenciesStatus = {
@@ -163,6 +167,7 @@ const notInstalled: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const withInstallProgress: DependenciesStatus = {
@@ -204,6 +209,7 @@ const managedUpgradeFailed: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const ghInstalledAuthed: DependenciesStatus = {

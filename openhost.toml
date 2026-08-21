@@ -42,7 +42,12 @@ health_check = "/api/v1/health"
 # Sculptor runs Claude Code agents as local subprocesses inside this container,
 # so size it for the backend plus a few concurrent agents. Tune to taste / host.
 memory_mb = 4096
-cpu_millicores = 4000
+cpu_cores = 4.0
+# The from-source build (uv sync + a Vite production build with a 4 GB Node heap)
+# peaks well above the 4096 MB runtime limit; a measured clean --no-cache build
+# peaked at ~5.3 GB. build_memory_mb defaults to memory_mb, so pin it higher here
+# or the frontend build can OOM. Builds get unlimited swap, so this is a ceiling.
+build_memory_mb = 5632
 
 [data]
 # Persistent, backed-up directory mounted at /data/app_data/<app-name> (exposed as

@@ -1,4 +1,4 @@
-"""Regression test: a new workspace defaults to Opus (1M), not Fable.
+"""Regression test: a new workspace defaults to Opus 5 (1M), not Fable.
 
 SCU-1576: Fable was still shipping as the product default model even though it
 is currently disabled with an indefinite timeline. When the "Default model"
@@ -16,24 +16,24 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# The chat-panel model selector renders the model's short name; "Opus (1M)" is
+# The chat-panel model selector renders the model's short name; "Opus 5 (1M)" is
 # the short name for CLAUDE_4_OPUS, the 1M-context Opus (see frontend
-# modelConstants.ts). The plain "Opus" short name is the 200K variant.
-OPUS_MODEL_NAME = "Opus (1M)"
+# modelConstants.ts). The plain "Opus 5" short name is the 200K variant.
+OPUS_MODEL_NAME = "Opus 5 (1M)"
 
 
 @user_story("to have a new workspace default to Opus when I haven't picked a model")
 def test_new_workspace_defaults_to_opus(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """A brand-new workspace defaults to Opus (1M) when nothing else is selected.
+    """A brand-new workspace defaults to Opus 5 (1M) when nothing else is selected.
 
     Steps:
     1. Create a brand-new workspace without touching its model selector
        (``model_name=None``). The "Default model" setting is the product-default
        "Most Recently Used" (``defaultLlm`` is None) and no model has been used
        yet, so the default resolves to the product fallback.
-    2. Verify the workspace's model selector shows "Opus (1M)" — the product
+    2. Verify the workspace's model selector shows "Opus 5 (1M)" — the product
        default — rather than the old Fable fallback.
     """
     page = sculptor_instance_.page

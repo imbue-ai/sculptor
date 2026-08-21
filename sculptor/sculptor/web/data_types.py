@@ -814,6 +814,10 @@ class DependenciesStatus(SerializableModel):
     claude: DependencyInfo
     pi: DependencyInfo
     gh: DependencyInfo
+    # The renderer's speech-to-text model bundle — a managed artifact (data
+    # files, no binary), so only its installed/version/progress/error fields
+    # are meaningful.
+    voice_models: DependencyInfo
 
 
 class RemoteRepo(SerializableModel):

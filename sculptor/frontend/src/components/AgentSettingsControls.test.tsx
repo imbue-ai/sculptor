@@ -44,6 +44,7 @@ const defaultProps = {
   onFastModeToggle: (): void => {},
   isPlanMode: false,
   onPlanModeToggle: (): void => {},
+  onAppendTranscript: (): void => {},
 };
 
 describe("AgentSettingsControls", () => {

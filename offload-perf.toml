@@ -15,7 +15,6 @@
 max_parallel = 16
 # long_history builds 100 chat turns before it measures; give it real headroom.
 test_timeout_secs = 900
-stream_output = true
 sandbox_project_root = "/app/sculptor"
 sandbox_repo_root = "/app"
 sandbox_init_cmd = "bash /app/scripts/finalize-base-image.sh"

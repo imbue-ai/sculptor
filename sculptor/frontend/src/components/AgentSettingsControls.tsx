@@ -7,6 +7,7 @@ import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
+import { VoiceEntryButton } from "~/components/VoiceEntryButton.tsx";
 
 type AgentSettingsControlsProps = {
   model: LlmModel;
@@ -17,6 +18,15 @@ type AgentSettingsControlsProps = {
   onFastModeToggle: () => void;
   isPlanMode: boolean;
   onPlanModeToggle: () => void;
+  /** Receives each dictated voice segment so the creation prompt draft can append
+   *  it (with smart spacing) through its own state. */
+  onAppendTranscript: (text: string) => void;
+  /** Interim transcription (non-empty) of the utterance being spoken. */
+  onPreviewChange?: (preview: string) => void;
+  /** The utterance produced no final; discard the shown preview. */
+  onPreviewDiscard?: () => void;
+  /** Fires when voice takes/releases ownership of the prompt textarea. */
+  onCaptureLockChange?: (locked: boolean) => void;
 };
 
 /**
@@ -45,6 +55,10 @@ export const AgentSettingsControls = ({
   onFastModeToggle,
   isPlanMode,
   onPlanModeToggle,
+  onAppendTranscript,
+  onPreviewChange,
+  onPreviewDiscard,
+  onCaptureLockChange,
 }: AgentSettingsControlsProps): ReactElement => {
   const { supportsFastMode: doesSupportFastMode } = getModelCapabilities(model);
   return (
@@ -67,6 +81,12 @@ export const AgentSettingsControls = ({
       <Flex pr="1">
         <ModelSelector model={model} onModelChange={onModelChange} />
       </Flex>
+      <VoiceEntryButton
+        onAppendTranscript={onAppendTranscript}
+        onPreviewChange={onPreviewChange}
+        onPreviewDiscard={onPreviewDiscard}
+        onCaptureLockChange={onCaptureLockChange}
+      />
     </Flex>
   );
 };

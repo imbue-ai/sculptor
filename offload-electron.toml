@@ -16,7 +16,6 @@ max_parallel = 200
 # Electron is heavier than headless Chromium and its frontend launch alone can
 # take 50-60s, so give each batch more headroom than the browser lane's 900s.
 test_timeout_secs = 1200
-stream_output = true
 sandbox_project_root = "/app/sculptor"
 sandbox_repo_root = "/app"
 sandbox_init_cmd = "bash /app/scripts/finalize-base-image.sh"
