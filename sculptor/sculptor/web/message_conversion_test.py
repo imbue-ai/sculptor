@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.agents.pi_agent.harness import PI_HARNESS
@@ -8,6 +10,7 @@ from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMess
 from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
+from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
@@ -1159,6 +1162,93 @@ def test_preserved_pending_question_cleared_when_new_chat_turn_starts() -> None:
         harness=CLAUDE_CODE_HARNESS,
         completed_message_by_id=completed_by_id,
         current_state=state,
+    )
+
+    assert state.pending_user_question is None
+
+
+def _replay_two_auq_turn_answered_once(
+    make_terminal_message: Callable[[AgentMessageID], PersistentRequestCompleteAgentMessage],
+) -> TaskUpdate:
+    """Replay a pi turn whose single assistant message carries TWO
+    ask_user_question tool calls, where only the second was answered before the
+    turn terminated, and return the fully recomputed state (as the send-message
+    gate and the reload path compute it).
+
+    ``make_terminal_message`` builds the asking turn's terminal message from its
+    request id so both the interrupted-success and user-stop variants share the
+    setup.
+    """
+    task_id = TaskID()
+
+    user_message = ChatInputUserMessage(text="Ask me two questions", model_name=LLMModel.CLAUDE_4_SONNET)
+    first_tool_block = ToolUseBlock(
+        id=ToolUseID("ask_user_question:4"),
+        name="ask_user_question",
+        input={"question": "Which facets make the cut?", "options": ["All 8", "Core 5"]},
+    )
+    second_tool_block = ToolUseBlock(
+        id=ToolUseID("ask_user_question:5"),
+        name="ask_user_question",
+        input={"question": "How aggressive should the skill be?", "options": ["Full", "Partial"]},
+    )
+    response = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-two-auqs"),
+        message_id=AgentMessageID(),
+        content=(first_tool_block, second_tool_block),
+    )
+    second_question_data = build_ask_user_question_data(
+        "How aggressive should the skill be?", ["Full", "Partial"], tool_use_id="ask_user_question:5"
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"How aggressive should the skill be?": "Partial"},
+        question_data=second_question_data,
+        tool_use_id="ask_user_question:5",
+    )
+    return convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            response,
+            answer,
+            RequestStartedAgentMessage(request_id=answer.message_id),
+            # The answer-delivery turn finalizes first, detaching
+            # current_request_id from the asking turn...
+            RequestSuccessAgentMessage(request_id=answer.message_id),
+            # ...so the asking turn's terminal no longer matches the active request.
+            make_terminal_message(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+
+def test_unanswered_question_cleared_when_interrupted_success_detached_by_answer_turn() -> None:
+    """An interrupted RequestSuccess terminates the asking turn, so its pending
+    questions are no longer answerable and must clear — even when an
+    answer-delivery turn finalized in between and detached current_request_id
+    from the asking turn. Otherwise the unanswered question stays pending
+    forever and every subsequent message send is rejected with a 409."""
+    state = _replay_two_auq_turn_answered_once(
+        lambda request_id: RequestSuccessAgentMessage(request_id=request_id, interrupted=True)
+    )
+
+    assert state.pending_user_question is None
+
+
+def test_unanswered_question_cleared_when_user_stop_detached_by_answer_turn() -> None:
+    """Same detachment, through the user-stop terminal: an explicit Stop dismisses
+    the pending question even when an answer turn finalized in between."""
+    state = _replay_two_auq_turn_answered_once(
+        lambda request_id: RequestStoppedAgentMessage(
+            request_id=request_id,
+            error=_make_serialized_exception("Agent died with exit code 143"),
+            stopped_by_user=True,
+        )
     )
 
     assert state.pending_user_question is None
