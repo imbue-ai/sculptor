@@ -680,6 +680,14 @@ def convert_agent_messages_to_task_update(
             # partial assembly. All of it must wait for the turn's real
             # RequestSuccess. Mirrors the can_finalize gate in the RequestStopped
             # branch below.
+            # An interrupted success is only ever emitted as a turn's terminal,
+            # so its pending AUQs are no longer answerable and must clear even
+            # when this success is not the active request — e.g. the asking
+            # turn's terminal arriving after an answer-delivery turn finalized
+            # in between detached current_request_id from it. Leaving them
+            # pending blocks every subsequent message send with a 409.
+            if msg.interrupted:
+                pending_user_questions.clear()
             can_finalize = current_request_id is not None and current_request_id == msg.request_id
             if can_finalize:
                 # When the turn was interrupted before any content was streamed, there may
@@ -701,9 +709,6 @@ def convert_agent_messages_to_task_update(
                     )
                 if msg.interrupted:
                     in_progress_chat_message = _mark_stopped(in_progress_chat_message)
-                    # Clear any pending AUQs — the agent was interrupted so the questions
-                    # are no longer valid and the chat input should reappear.
-                    pending_user_questions.clear()
                 in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
                 pending_turn_metrics = None
             in_progress_chat_message, current_request_id = _finalize_request(
@@ -764,19 +769,21 @@ def convert_agent_messages_to_task_update(
             # RequestFailureAgentMessage and AgentCrashedRunnerMessage,
             # which still produce ErrorBlocks via the branches above and
             # below.
+            # Only a user-initiated stop dismisses pending AUQs — the user is
+            # moving on, so the chat input should reappear. A stop the user
+            # did not ask for (backend shutdown/restart SIGTERM) leaves the
+            # questions pending: they were reconstructed from the persisted
+            # ToolUseBlock above and remain answerable after resume via the
+            # runner's answer-after-turn-ended continuation. A user stop always
+            # terminates the asking turn, so it clears even when not the active
+            # request, like the RequestSuccess branch above.
+            if msg.stopped_by_user:
+                pending_user_questions.clear()
             can_finalize = current_request_id is not None and current_request_id == msg.request_id
             if can_finalize:
                 in_progress_chat_message = _mark_stopped(in_progress_chat_message)
                 in_progress_chat_message = _attach_turn_metrics(in_progress_chat_message, pending_turn_metrics)
                 pending_turn_metrics = None
-                # Only a user-initiated stop dismisses pending AUQs — the user is
-                # moving on, so the chat input should reappear. A stop the user
-                # did not ask for (backend shutdown/restart SIGTERM) leaves the
-                # questions pending: they were reconstructed from the persisted
-                # ToolUseBlock above and remain answerable after resume via the
-                # runner's answer-after-turn-ended continuation.
-                if msg.stopped_by_user:
-                    pending_user_questions.clear()
             in_progress_chat_message, current_request_id = _finalize_request(
                 current_request_id,
                 msg.request_id,
