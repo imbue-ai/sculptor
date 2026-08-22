@@ -33,8 +33,8 @@ function withFront(ids: ReadonlyArray<string>, id: string): Array<string> {
 // into tidy-on-apply, close the static panels it doesn't declare too: silently when
 // the user has globally dismissed the confirmation, otherwise via the Tidy
 // confirmation (which is itself a no-op when nothing would close). This is the single
-// choke point every apply path routes through — switcher, command palette, and
-// per-Layout shortcut — so the flags are honored consistently.
+// choke point every apply path routes through, so the flags are honored
+// consistently.
 export const applyLayoutAtom = atom(null, (get, set, layout: SavedLayout) => {
   const result = applyCapturedLayout(get(workspaceLayoutAtom), layout.captured);
   set(workspaceLayoutAtom, { ...result.layout, appliedLayoutId: layout.id });

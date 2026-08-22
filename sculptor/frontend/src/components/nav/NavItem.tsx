@@ -56,9 +56,6 @@ export const NavItem = ({
       {shortcut ? <ShortcutHint binding={shortcut} className={styles.navShortcut} /> : null}
     </button>
   );
-  // The row stays focusable while disabled (aria-disabled), so the tooltip anchors on
-  // the button itself and shows on hover or keyboard focus — keeping the "why can't I
-  // use this?" affordance discoverable instead of a silent no-op.
   if (disabled && disabledTooltip) {
     return (
       <Tooltip content={disabledTooltip} side="right">

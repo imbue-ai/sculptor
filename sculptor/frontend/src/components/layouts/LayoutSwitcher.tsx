@@ -136,7 +136,7 @@ export const LayoutSwitcher = (): ReactElement => {
   }, [setSaveRequest, close]);
 
   // Reopen the save form on an existing layout to change its name / shortcut / tidy /
-  // default — the single place those live now (no per-item toggles in this menu).
+  // default — the single place those live (no per-item toggles in this menu).
   const openEdit = useCallback(
     (layout: SavedLayout): void => {
       setSaveRequest({ mode: "edit", layout });
@@ -336,8 +336,8 @@ export const LayoutSwitcher = (): ReactElement => {
         return;
       }
 
-      // Enter applies the highlighted layout (⌘↵ collapses to the same — tidy is now
-      // a per-layout property applyLayoutAtom honors, not a separate verb).
+      // Enter applies the highlighted layout (⌘↵ collapses to the same — tidy is a
+      // per-layout property applyLayoutAtom honors, not a separate verb).
       if (event.key === "Enter" && state.highlighted !== undefined) {
         event.preventDefault();
         state.apply(state.highlighted);

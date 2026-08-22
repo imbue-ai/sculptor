@@ -1,9 +1,5 @@
 // The "Save current arrangement as a layout" dialog, on the PaletteDialog shell.
-// A name field (styled as the heading), a mini capture preview that shows what the
-// layout stores (solid cells = saved static panels; dashed chips mark where default
-// seeding creates an agent/terminal), then a clean options list — an inline keyboard
-// shortcut, a "tidy panels when applying" toggle, and "set as default" — and Save
-// (⌘↵). The same form doubles as the Edit surface for an existing layout: opened in
+// The same form doubles as the Edit surface for an existing layout: opened in
 // "edit" mode it prefills from the layout and updates its metadata on Save WITHOUT
 // re-capturing the arrangement (the preview then shows the layout's stored panels).
 // Atom-driven host, mounted in AppShell.

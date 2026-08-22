@@ -26,7 +26,7 @@ const PREVIEW_SECTIONS: ReadonlyArray<{ section: SectionId; areaClass: string }>
 ];
 
 // A layout never declares agents/terminals; default seeding creates them in fixed
-// sections. The preview marks those homes with a dashed chip.
+// sections.
 const DEFAULT_DYNAMIC_CHIPS: Partial<Record<SectionId, string>> = {
   center: "Agent default",
   bottom: "Terminal default",

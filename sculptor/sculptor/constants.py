@@ -651,7 +651,7 @@ class ElementIDs(StrEnum):
     LAYOUTS_MORE_OPTIONS_APPLY = "LAYOUTS_MORE_OPTIONS_APPLY"
     LAYOUTS_MORE_OPTIONS_SET_DEFAULT = "LAYOUTS_MORE_OPTIONS_SET_DEFAULT"
     # Opens the save form on this layout (name / shortcut / tidy / default all live
-    # there now, so the menu itself carries no per-field toggles).
+    # there, so the menu itself carries no per-field toggles).
     LAYOUTS_MORE_OPTIONS_EDIT = "LAYOUTS_MORE_OPTIONS_EDIT"
     LAYOUTS_MORE_OPTIONS_DELETE = "LAYOUTS_MORE_OPTIONS_DELETE"
     # Right-click context menu on a layout row (same actions as the ⌘J popover).

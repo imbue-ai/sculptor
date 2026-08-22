@@ -102,8 +102,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const gitAndOpenIn = useGitAndOpenInRuntime();
 
   // Resolved keybindings for the fixed nav actions, shown as quiet right-aligned
-  // hints (Add repo has no shortcut, so it shows none). Read live so a user's
-  // rebind in Settings is reflected here too.
+  // hints. Read live so a user's rebind in Settings is reflected here too.
   const homeShortcut = useKeybinding("home");
   const commandsShortcut = useKeybinding("command_palette");
   const layoutsShortcut = useKeybinding("open_layouts");

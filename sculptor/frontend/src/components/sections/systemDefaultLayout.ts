@@ -46,7 +46,7 @@ function buildSystemDefaultLayout(): SavedLayout {
 // Deterministic and side-effect-free, so it is safe to build once at module load.
 export const SYSTEM_DEFAULT_LAYOUT: SavedLayout = buildSystemDefaultLayout();
 
-// --- Task presets ----------------------------------------------------------
+// Task presets.
 
 export const SYSTEM_CHAT_LAYOUT_ID = "system-chat";
 export const SYSTEM_REVIEW_LAYOUT_ID = "system-review";

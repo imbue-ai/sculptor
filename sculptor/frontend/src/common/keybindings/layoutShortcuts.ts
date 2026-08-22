@@ -4,7 +4,7 @@
 // is stored in `userConfig.keybindings` under a namespaced string key
 // (`layout.apply.<layoutId>`) — the same arbitrary Record the static overrides use,
 // so it needs no backend/wire change — and surfaced here as its own resolved-binding
-// lane the Settings UI, the runtime dispatcher, and conflict detection read from.
+// lane.
 
 import type { Atom } from "jotai";
 import { atom } from "jotai";
@@ -45,7 +45,7 @@ export type LayoutKeybinding = {
 };
 
 // One resolved binding per selectable Layout (System Default included), in
-// resolvedLayoutsAtom order. Drives the Settings ▸ Keybindings "Layouts" group.
+// resolvedLayoutsAtom order.
 export const dynamicLayoutKeybindingsAtom: Atom<ReadonlyArray<LayoutKeybinding>> = atom((get) => {
   const overrides: Record<string, string | null> = get(userConfigAtom)?.keybindings ?? {};
   return get(resolvedLayoutsAtom).map((layout) => {
@@ -62,8 +62,8 @@ export const dynamicLayoutKeybindingsAtom: Atom<ReadonlyArray<LayoutKeybinding>>
   });
 });
 
-// layoutId → assigned chord, for every Layout that has one. Used for the switcher
-// row hint and by the runtime dispatcher; unbound Layouts are omitted.
+// layoutId → assigned chord, for every Layout that has one; unbound Layouts are
+// omitted.
 export const layoutShortcutBindingsAtom: Atom<Readonly<Record<string, string>>> = atom((get) => {
   const overrides: Record<string, string | null> = get(userConfigAtom)?.keybindings ?? {};
   const result: Record<string, string> = {};
@@ -78,8 +78,7 @@ export const layoutShortcutBindingsAtom: Atom<Readonly<Record<string, string>>> 
 
 // The minimal binding shape conflict detection needs, across BOTH the static
 // registry and the dynamic per-layout bindings — so a chord recorded in either lane
-// is checked against the other (a per-layout chord can't silently shadow a static
-// binding, and vice versa).
+// is checked against the other.
 export type NamedBinding = { id: string; name: string; binding: string | null };
 
 export const allNamedBindingsAtom: Atom<ReadonlyArray<NamedBinding>> = atom((get) => {

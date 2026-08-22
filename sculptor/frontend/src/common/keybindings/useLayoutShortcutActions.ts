@@ -1,8 +1,7 @@
 // Hooks for reading/writing a Layout's keyboard shortcut and checking chord
 // conflicts. Layout bindings live in userConfig.keybindings under the namespaced
 // `layout.apply.<id>` key (see layoutShortcuts.ts); these wrap the userConfig
-// update path so callers (the save dialog, the Settings ▸ Keybindings Layouts
-// group, and the delete cleanup) never touch the raw dict directly.
+// update path so callers never touch the raw dict directly.
 
 import { useStore } from "jotai";
 import { useCallback } from "react";
@@ -44,9 +43,7 @@ export function useSetLayoutShortcut(): (layoutId: string, chord: string | null)
 // shadow the other.
 //
 // Takes the LAYOUT id being edited (or undefined when creating a new Layout) and
-// resolves the namespaced `layout.apply.<id>` binding id itself — callers hold a
-// layout id, not a binding id, so resolving here removes the chance of passing the
-// wrong shape and defeating the self-skip.
+// resolves the namespaced `layout.apply.<id>` binding id itself.
 export function useLayoutBindingConflict(): (chord: string, selfLayoutId: string | undefined) => NamedBinding | null {
   const store = useStore();
   return useCallback(
