@@ -15,8 +15,8 @@ export type StoredAgentType = AgentTypeName | `registered:${string}`;
  * Registered terminal agents label from their registration's display name. */
 export const AGENT_TYPE_LABELS: Record<Exclude<AgentTypeName, "registered">, string> = {
   claude: "Claude",
-  pi: "pi",
-  terminal: "Terminal",
+  pi: "Pi",
+  terminal: "Terminal agent",
 };
 
 export const REGISTERED_AGENT_TYPE_PREFIX = "registered:";

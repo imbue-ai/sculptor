@@ -1,4 +1,5 @@
 import { Button, DropdownMenu, Flex, Select, Text, Tooltip } from "@radix-ui/themes";
+import { useAtomValue } from "jotai";
 import { memo, type ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
@@ -10,6 +11,7 @@ import {
   hasNoUsableModel,
   routeModelChange,
 } from "~/common/modelConstants.ts";
+import { fakeModelDisplayNameAtom } from "~/common/state/atoms/sculptorSettings.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
 import { useCapabilityGate } from "~/components/useCapabilityGate.ts";
 
@@ -55,6 +57,7 @@ export const ModelSelector = memo(function ModelSelector({
   sourcesBackendModels = false,
 }: ModelSelectorProps): ReactElement {
   const gate = useCapabilityGate(capabilityValue, ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION);
+  const fakeModelDisplayName = useAtomValue(fakeModelDisplayNameAtom);
 
   const models = Array.isArray(backendModels) ? backendModels : [];
   const isCatalogNotFetched = backendModels === ModelCatalogState.NOT_FETCHED_YET;
@@ -73,7 +76,9 @@ export const ModelSelector = memo(function ModelSelector({
   const value = hasBackendModels ? (selectedModelId ?? "") : model;
   const selectedBackendLabel =
     models.find((option) => option.modelId === selectedModelId)?.displayName ?? selectedModelId;
-  const triggerLabel = sourcesBackendModels ? (selectedBackendLabel ?? "Select model") : getModelShortName(model);
+  const triggerLabel = sourcesBackendModels
+    ? (selectedBackendLabel ?? "Select model")
+    : getModelShortName(model, fakeModelDisplayName);
 
   if (!gate.enabled) {
     // Radix Tooltip does not fire on a disabled trigger (pointer-events: none),

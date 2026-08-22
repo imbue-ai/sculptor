@@ -549,6 +549,7 @@ def test_handle_ask_user_question(monkeypatch: pytest.MonkeyPatch, capsys: pytes
     ) -> str:
         captured_request["request_id"] = expected_request_id
         captured_request["tool_use_id"] = tool_use_id
+        captured_request["timeout_seconds"] = timeout_seconds
         return 'User has answered your questions: "Which option?"="A". You can now continue with the user\'s answers in mind.'
 
     monkeypatch.setattr(
@@ -585,6 +586,38 @@ def test_handle_ask_user_question(monkeypatch: pytest.MonkeyPatch, capsys: pytes
     assert follow_up_text["type"] == "text"
     assert "[FakeClaude] Task completed." in follow_up_text["text"]
     assert captured_request["tool_use_id"] == tool_use["id"]
+    assert captured_request["timeout_seconds"] == 180.0
+
+
+def test_handle_ask_user_question_scriptable_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``timeout_seconds`` in the directive args controls how long the MCP
+    wait blocks for the user's answer, so scripted scenarios can hold the
+    waiting-on-input state for as long as they need."""
+    questions = [
+        {
+            "question": "Which option?",
+            "header": "Choice",
+            "options": [{"label": "A", "description": "Option A"}],
+            "multiSelect": False,
+        }
+    ]
+
+    captured_timeouts: list[float] = []
+
+    def fake_read(
+        expected_request_id: str, tool_use_id: str, timeout_seconds: float, expect_error: bool = False
+    ) -> str:
+        captured_timeouts.append(timeout_seconds)
+        return "answered"
+
+    monkeypatch.setattr(
+        "sculptor.agents.testing.fake_claude_commands._read_mcp_control_response_text",
+        fake_read,
+    )
+
+    handle_ask_user_question(args={"questions": questions, "timeout_seconds": 86400}, emit_streaming=False)
+
+    assert captured_timeouts == [86400]
 
 
 def test_handle_multi_step(tmp_path: Path) -> None:

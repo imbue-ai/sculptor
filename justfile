@@ -335,7 +335,7 @@ check-shellcheck:
     _do_check_shellcheck() {
       cd "{{justfile_directory()}}"
       echo "Running shellcheck on shell scripts..."
-      SHELL_FILES=$(git ls-files '*.sh' '*.bash' | grep -Ev '{{_style_exclude}}|infra_scripts')
+      SHELL_FILES=$(git ls-files '*.sh' '*.bash' | grep -Ev '{{_style_exclude}}|infra_scripts|^marketing/')
       if [ -z "$SHELL_FILES" ]; then
         echo "No shell scripts to check."
         exit 0
@@ -1808,3 +1808,11 @@ trigger-dev-build:
     fi
     echo "Triggering dev build on ref: $REF (sha: $LOCAL_SHA)"
     gh workflow run build-desktop.yml --ref "$REF"
+
+# Boot the demo QA harness (isolated backend + headless browser) if it isn't
+# already up, then seed the full demo state from marketing/seed/manifest.py.
+# See marketing/README.md for the architecture and knobs.
+[group("demo")]
+demo-seed:
+    uv run --project sculptor python marketing/seed/harness.py
+    uv run --project sculptor python marketing/seed/seed_all.py

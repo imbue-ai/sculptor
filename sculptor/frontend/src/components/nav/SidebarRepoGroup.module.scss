@@ -1,6 +1,6 @@
 // Shared height of every row-shaped element in a repo group (header, workspace
 // rows, the no-workspaces placeholder) so they can't drift apart.
-$row-min-height: 28px;
+$row-min-height: 30px;
 
 // Repo-group styling for SidebarRepoGroup.
 
@@ -58,10 +58,11 @@ $row-min-height: 28px;
   flex-shrink: 0;
 }
 
+// Repo names share the workspace rows' type treatment (same size, weight, and
+// color) so the group header and its rows read as one consistent list.
 .repoName {
   color: var(--gray-12);
   font-size: var(--font-size-2);
-  font-weight: var(--font-weight-medium);
   overflow: hidden;
 }
 
@@ -190,6 +191,9 @@ $row-min-height: 28px;
 .workspaceRowActive {
   background: var(--accent-a3);
   color: var(--accent-11);
+  // The selected workspace carries a touch more type weight so it grounds the
+  // list beyond the accent pill alone.
+  font-weight: var(--font-weight-medium);
 
   &:hover {
     background: var(--accent-a3);
@@ -204,7 +208,7 @@ $row-min-height: 28px;
   // The sidebar's own surface color (.sidebar in WorkspaceSidebar.module.scss),
   // not an elevated tint: an element clamped at the rail's edge sits away from
   // the pointer, where an off-color surface reads as a stray band.
-  background: var(--gray-2);
+  background: var(--gray-1);
   // Rounds the drag surface and its shadow ring on whichever element carries it:
   // workspace rows are already rounded, but a dragged repo group is a plain
   // container whose sharp-cornered box would read as a different treatment.
@@ -217,7 +221,7 @@ $row-min-height: 28px;
   // replace the drag surface mid-move — and pop back at the rail's edge where
   // the clamp separates the element from the pointer.
   &:hover {
-    background: var(--gray-2);
+    background: var(--gray-1);
   }
 
   // The dragged element keeps keyboard focus for the whole drag (the sensor

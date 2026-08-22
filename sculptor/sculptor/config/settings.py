@@ -25,6 +25,14 @@ class TestingConfig(BaseModel):
 
     INTEGRATION_ENABLED: bool = False
 
+    # When set, the frontend renders the deterministic testing models (FakeClaude) with
+    # this label and hides them from the model picker — lets a demo/screenshot harness
+    # present scripted agents without "Fake Claude" appearing in the UI. Unset
+    # (production and integration tests) keeps the real labels and picker entries.
+    # Settable via the TESTING__FAKE_MODEL_DISPLAY_NAME environment variable
+    # (see env_nested_delimiter="__" on SculptorSettings).
+    FAKE_MODEL_DISPLAY_NAME: str | None = None
+
 
 class SculptorSettings(BaseSettings):
     """

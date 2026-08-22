@@ -493,8 +493,8 @@ def start_task_and_wait_for_ready(
             # routes to Settings instead of selecting — until the picker's
             # availability re-check (fired on this open) observes a usable
             # binary. Tests install FakePi mid-session, so wait for the entry
-            # to flip to the selectable "pi" before clicking.
-            expect(option).to_have_text("pi", timeout=30_000)
+            # to flip to the selectable "Pi" before clicking.
+            expect(option).to_have_text("Pi", timeout=30_000)
         option.click()
 
     # The modal seeds the prompt with the `/sculptor:help` onboarding prefill

@@ -289,7 +289,7 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
           data-panel-tab-dot={definition.dotStatus}
           aria-hidden="true"
         >
-          <AgentStatusDot status={definition.dotStatus} size={8} />
+          <AgentStatusDot status={definition.dotStatus} />
         </div>
       )}
       {/* A terminal's connection-issue dot (amber pulsing = reconnecting, red static =
