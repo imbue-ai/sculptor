@@ -2,7 +2,6 @@ from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 from sculptor.testing.elements.settings_actions import PlaywrightActionsSettingsElement
 from sculptor.testing.elements.settings_agent import PlaywrightAgentSettingsElement
 from sculptor.testing.elements.settings_ci_babysitter import PlaywrightCIBabysitterSettingsElement
@@ -10,6 +9,7 @@ from sculptor.testing.elements.settings_claude_cli import PlaywrightClaudeCliSet
 from sculptor.testing.elements.settings_env_vars import PlaywrightEnvVarsSettingsElement
 from sculptor.testing.elements.settings_experimental import PlaywrightExperimentalSettingsElement
 from sculptor.testing.elements.settings_extensions import PlaywrightExtensionsSettingsElement
+from sculptor.testing.elements.settings_general import PlaywrightGeneralSettingsElement
 from sculptor.testing.elements.settings_git import PlaywrightGitSettingsElement
 from sculptor.testing.elements.settings_keybindings import PlaywrightKeybindingsSettingsElement
 from sculptor.testing.elements.settings_pi import PlaywrightPiSettingsElement
@@ -36,10 +36,10 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         self._get_dependencies_nav().click()
         return PlaywrightClaudeCliSettingsElement(locator=self._get_settings_content(), page=self._page)
 
-    def click_on_general(self) -> PlaywrightIntegrationTestElement:
+    def click_on_general(self) -> PlaywrightGeneralSettingsElement:
         """Navigate to General settings and return the section element."""
         self._get_general_nav().click()
-        return PlaywrightIntegrationTestElement(locator=self._get_settings_content(), page=self._page)
+        return PlaywrightGeneralSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_agent(self) -> PlaywrightAgentSettingsElement:
         """Navigate to Agent settings and return the section element."""

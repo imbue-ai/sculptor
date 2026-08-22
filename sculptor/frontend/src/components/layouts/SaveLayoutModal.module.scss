@@ -1,0 +1,112 @@
+// Fills the PaletteDialog shell (which caps its own height) so the body can
+// scroll while the footer stays pinned — the dialog is tall enough to clip on a
+// short viewport.
+.form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.titleInput {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  font-size: var(--font-size-6);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  outline: none;
+  padding: 0;
+  width: 100%;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
+
+.legend {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+}
+
+// Options list: label-left / control-right rows (mirrors the settings SettingRow),
+// separated by hairlines. Holds the inline shortcut control, the tidy-on-apply
+// toggle, and set-as-default.
+.options {
+  display: flex;
+  flex-direction: column;
+}
+
+.optionRow {
+  align-items: center;
+  border-top: 1px solid var(--gray-a3);
+  display: flex;
+  gap: var(--space-5);
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+
+  &:first-child {
+    border-top: none;
+    padding-top: var(--space-1);
+  }
+}
+
+.optionLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionTitle {
+  color: var(--gray-12);
+  font-size: var(--font-size-2);
+}
+
+.optionSub {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+}
+
+.optionControl {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.optionNote {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+}
+
+// Inline conflict warning under the shortcut row when a recorded chord is taken.
+.shortcutWarning {
+  color: var(--amber-11);
+  font-size: var(--font-size-1);
+}
+
+.footer {
+  align-items: center;
+  border-top: 1px solid var(--gray-a3);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  padding: var(--space-4) var(--space-5);
+}
+
+.saveHint {
+  color: var(--gray-8);
+  font-size: var(--font-size-1);
+}
