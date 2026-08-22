@@ -63,7 +63,7 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
   const taskModel = useTaskModel(taskID);
   const isAutoCompacting = useTaskIsAutoCompacting(taskID);
   const setChatActions = useSetAtom(chatActionsAtom);
-  const bottomSentinelRef = useSmoothStreamingViewportObserver();
+  const bottomSentinelRef = useSmoothStreamingViewportObserver(taskID);
   useSmoothStreamingOnTaskSwitch(taskID, bottomSentinelRef);
 
   // `chatActionsAtom` is a single slot shared by workspace-scoped consumers

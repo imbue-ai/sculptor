@@ -3,47 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatMessage } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { isSmoothStreamingEnabledAtom } from "~/common/state/atoms/smoothStreaming.ts";
+import { isSmoothStreamingEnabledAtomFamily } from "~/common/state/atoms/smoothStreaming.ts";
 import { useTask } from "~/common/state/hooks/useTaskHelpers.ts";
 
+import { computeDrainStep, snapToWordBoundary, updateDeliveryIntervalEma } from "../utils/smoothStreamingDrain.ts";
 import { StreamingEngine } from "../utils/StreamingEngine.ts";
-
-/** Hard flush when the buffer exceeds this many characters (~1.5s at high-speed streaming). */
-const MAX_BUFFER_CHARS = 500;
-
-/** Cap elapsed time per rAF frame to prevent huge jumps after browser tab idles. */
-const MAX_ELAPSED_CAP_MS = 100;
-
-/**
- * Minimum drain window — never drain faster than this even if the backend
- * delivers very rapidly.
- */
-const MIN_DRAIN_WINDOW_MS = 150;
-
-/**
- * Maximum drain window — if the backend stalls we don't want to stretch
- * a tiny batch over an unreasonably long period.
- */
-const MAX_DRAIN_WINDOW_MS = 1200;
-
-/** Fallback drain window used before we have delivery-interval data. */
-const DEFAULT_DRAIN_WINDOW_MS = 400;
-
-/** Smoothing factor for the exponential moving average of delivery intervals. */
-const DELIVERY_INTERVAL_SMOOTHING = 0.3;
-
-/**
- * Ignore arrival gaps longer than this when computing the delivery-interval
- * EMA. Gaps this large indicate a backend stall (not normal cadence) and
- * would distort the moving average.
- */
-const MAX_ARRIVAL_GAP_MS = 3000;
-
-/** Characters of look-ahead when snapping a reveal offset to a word boundary. */
-const WORD_BOUNDARY_LOOKAHEAD_CHARS = 15;
-
-/** Characters treated as word boundaries for snapping (whitespace and punctuation). */
-const WORD_BOUNDARY_PATTERN = /[\s\n.,;:!?)}\]"']/;
 
 /**
  * The currently animated message paired with the task it belongs to, so the
@@ -55,44 +19,25 @@ type RenderedState = {
 };
 
 /**
- * Snap a target character offset forward to the nearest word boundary.
- * Returns the adjusted number of characters to reveal.
- */
-const snapToWordBoundary = (text: string, currentOffset: number, rawCharsToReveal: number): number => {
-  const targetOffset = currentOffset + rawCharsToReveal;
-  if (targetOffset >= text.length) {
-    return rawCharsToReveal;
-  }
-
-  // Already at a boundary.
-  if (WORD_BOUNDARY_PATTERN.test(text[targetOffset])) {
-    return rawCharsToReveal;
-  }
-
-  const lookAhead = Math.min(targetOffset + WORD_BOUNDARY_LOOKAHEAD_CHARS, text.length);
-  for (let i = targetOffset + 1; i < lookAhead; i += 1) {
-    if (WORD_BOUNDARY_PATTERN.test(text[i])) {
-      return i - currentOffset;
-    }
-  }
-
-  // No boundary found within lookahead — use the raw value.
-  return rawCharsToReveal;
-};
-
-/**
  * Orchestrates a StreamingEngine against live task snapshots with smooth
  * time-based text draining via requestAnimationFrame.
  *
  * When smooth streaming is enabled:
  *   - New text accumulates in the engine's buffer.
- *   - A rAF loop drains the buffer at an adaptive rate. The drain window
- *     is set to the exponential moving average of the arrival-to-arrival
- *     interval between consecutive backend batches, so text spreads
- *     evenly across the full inter-batch period — creating continuous,
- *     fluid output.
- *   - The rendered text head never lags behind the received text by more
- *     than MAX_BUFFER_CHARS (~1500 ms equivalent).
+ *   - A rAF loop drains the buffer at an adaptive rate. The base drain
+ *     window is the exponential moving average of the arrival-to-arrival
+ *     interval between consecutive backend batches, so text spreads evenly
+ *     across the full inter-batch period — creating continuous, fluid
+ *     output.
+ *   - Each frame reveals a small, clamped number of characters
+ *     (MAX_CHARS_PER_FRAME) so even a fast stream crawls smoothly instead
+ *     of stepping in large chunks.
+ *   - If the buffer builds up (fast generation), the effective drain window
+ *     is progressively compressed so the reveal accelerates to catch up
+ *     without ever dumping the whole buffer in one frame. A hard flush is
+ *     reserved for pathological runaway buffers only.
+ *   - The drain math lives in ../utils/smoothStreamingDrain.ts so the
+ *     cadence can be unit-tested in isolation.
  *
  * When disabled (user toggle OFF, viewport off-screen, or per-task flag):
  *   - Text is flushed immediately (identical to previous ASAP behavior).
@@ -105,7 +50,8 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
   const taskID = agentID ?? "";
   const task = useTask(taskID);
   const isSmoothStreamingEnabledForTask = task?.isSmoothStreamingSupported ?? false;
-  const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingEnabledAtom) && isSmoothStreamingEnabledForTask;
+  const isSmoothStreamingEnabled =
+    useAtomValue(isSmoothStreamingEnabledAtomFamily(taskID)) && isSmoothStreamingEnabledForTask;
 
   const engineRef = useRef<StreamingEngine | null>(null);
   const activeMessageIdRef = useRef<string | null>(null);
@@ -160,26 +106,21 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
         return;
       }
 
-      // Enforce the hard max-latency cap.
-      if (bufferSize > MAX_BUFFER_CHARS) {
+      const elapsed = timestamp - lastFrameTimeRef.current;
+      lastFrameTimeRef.current = timestamp;
+
+      const step = computeDrainStep(bufferSize, elapsed, deliveryIntervalEmaRef.current);
+
+      // Runaway safety valve: reveal everything at once and stop the loop.
+      // Reserved for pathological bursts, not the common fast-streaming path.
+      if (step.shouldFlush) {
         rafIdRef.current = null;
         setRenderedState({ message: engine.flush(), taskID });
         return;
       }
 
-      const elapsed = Math.min(timestamp - lastFrameTimeRef.current, MAX_ELAPSED_CAP_MS);
-      lastFrameTimeRef.current = timestamp;
-
-      // Use the delivery-interval EMA as the drain window so text spreads
-      // evenly between backend batches, creating continuous flow.
-      const drainWindowMs = Math.min(
-        MAX_DRAIN_WINDOW_MS,
-        Math.max(MIN_DRAIN_WINDOW_MS, deliveryIntervalEmaRef.current ?? DEFAULT_DRAIN_WINDOW_MS),
-      );
-      const charsPerMs = bufferSize / drainWindowMs;
-      let charsToReveal = Math.max(1, Math.ceil(charsPerMs * elapsed));
-
       // Snap to the nearest word boundary to avoid mid-word cuts.
+      let charsToReveal = step.charsToReveal;
       const snapshot = engine.peekSnapshot();
       const cursorState = engine.peekCursor();
       if (snapshot && cursorState.blockIndex !== null && cursorState.offset !== null) {
@@ -248,11 +189,7 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
         const nowMs = performance.now();
         if (lastBatchArrivalTimeRef.current > 0) {
           const arrivalGap = nowMs - lastBatchArrivalTimeRef.current;
-          if (arrivalGap < MAX_ARRIVAL_GAP_MS) {
-            const prev = deliveryIntervalEmaRef.current;
-            deliveryIntervalEmaRef.current =
-              prev === null ? arrivalGap : prev + DELIVERY_INTERVAL_SMOOTHING * (arrivalGap - prev);
-          }
+          deliveryIntervalEmaRef.current = updateDeliveryIntervalEma(deliveryIntervalEmaRef.current, arrivalGap);
         }
         lastBatchArrivalTimeRef.current = nowMs;
       }
