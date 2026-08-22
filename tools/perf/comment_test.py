@@ -109,6 +109,50 @@ def test_attribution_details_on_regression() -> None:
     assert "FileTree" in joined and "Toast" in joined
 
 
+def _report(base_rows, head_rows):
+    bidx, bd = comment._index(base_rows)
+    hidx, hd = comment._index(head_rows)
+    return comment.compare(bidx, hidx, (bd, hd))
+
+
+def test_collapsible_structure_wraps_table_and_attribution() -> None:
+    # The whole point of the collapsed comment: the always-visible portion is
+    # just the summary, and the table + nested attribution live inside a
+    # <details>. GitHub only renders a markdown table / nested <details> when
+    # blank lines bracket the <summary> and the table, so pin those too — a
+    # future edit dropping a blank line would render as literal HTML.
+    rep = _report(
+        [_row("s", "v", commits=16, comps={"Toast": 16})],
+        [_row("s", "v", commits=30, comps={"Toast": 30, "FileTree": 8})],
+    )
+    md = comment.render_markdown(rep, "46720f07d8ff", observational=True)
+    visible = md.split("<details>", 1)[0]
+    # Above the fold: the one-line summary, not the table.
+    assert "regressed" in visible
+    assert "| scenario / variant |" not in visible
+    # Blank line after </summary> and before the table header (GitHub needs it).
+    assert "</summary>\n\n" in md
+    assert "\n\n| scenario / variant |" in md
+    # Attribution nests one level deeper; both <details> open and close.
+    assert "Attribution for changed scenarios" in md
+    assert md.count("<details>") == 2
+    assert md.count("</details>") == 2
+
+
+def test_all_green_summary_is_a_quiet_one_liner() -> None:
+    # A clean run must not lead with a red "❌ 0 regressed"; it reads as a
+    # single "✅ N unchanged" line and keeps the (empty) table collapsed.
+    rep = _report([_row("s", "v", commits=20)], [_row("s", "v", commits=20)])
+    md = comment.render_markdown(rep, "46720f07d8ff", observational=True)
+    visible = md.split("<details>", 1)[0]
+    assert "✅ no perf change" in visible
+    assert "regressed" not in visible
+    assert "✅ 1 unchanged" in visible
+    # No attribution on a clean run, so a single (table) <details>, still collapsed.
+    assert "| scenario / variant |" not in visible
+    assert md.count("<details>") == 1
+
+
 def test_head_only_renders_absolute_numbers() -> None:
     # With no base rows, the CLI renders a head-only absolute table rather than
     # a diff — the bootstrapping view before a main baseline note exists.
