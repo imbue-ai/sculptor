@@ -33,6 +33,7 @@ from typing import TypeVar
 from loguru import logger
 
 from sculptor.foundation.event_utils import MutableEvent
+from sculptor.foundation.processes.posix_spawn_process import LocalProcessHandle
 from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.foundation.subprocess_utils import ProcessSetupError
@@ -186,7 +187,7 @@ class RunningProcess:
         # The live ``subprocess.Popen`` handle, captured via ``on_popen_ready``
         # once the worker thread spawns it. Lets ``kill_now`` signal the process
         # (group) directly without coordinating with that worker thread.
-        self._popen: subprocess.Popen[bytes] | None = None
+        self._popen: LocalProcessHandle | None = None
 
     def read_stdout(self) -> str:
         return "".join(self._stdout_lines)
@@ -301,8 +302,8 @@ class RunningProcess:
             return
         send_shutdown_signal(popen, sig, kill_process_group=self._isolate_process_group)
 
-    def _set_popen(self, popen: subprocess.Popen[bytes]) -> None:
-        """Capture the live Popen handle (fired via ``on_popen_ready`` at spawn)."""
+    def _set_popen(self, popen: LocalProcessHandle) -> None:
+        """Capture the live process handle (fired via ``on_popen_ready`` at spawn)."""
         self._popen = popen
 
     def start(self, kwargs: Mapping[str, Any]) -> None:
@@ -476,6 +477,7 @@ def run_background(
     log_command: bool = True,
     open_stdin: bool = False,
     isolate_process_group: bool = False,
+    prefer_posix_spawn: bool = False,
 ) -> ProcessClassType:
     """
     Run a subprocess command in a non-blocking manner with output handling.
@@ -527,6 +529,7 @@ def run_background(
             shutdown_event=true_shutdown_event,
             shutdown_timeout_sec=shutdown_timeout_sec,
             env=env,
+            prefer_posix_spawn=prefer_posix_spawn,
         )
     )
     return process
