@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { PrStatusInfo } from "../../../api";
 import { ElementIds } from "../../../api";
+import { openInReusableTab } from "../../../common/reusableTabTarget.ts";
 import { chatActionsAtom } from "../../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../../common/state/atoms/prStatus.ts";
 import { prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
@@ -202,7 +203,7 @@ const OpenPrButton = ({ prStatus, isDropdownOpen, gitProvider }: OpenPrButtonPro
         git_provider: gitProvider,
         pr_state: "open",
       });
-      window.open(prStatus.prWebUrl, "_blank");
+      openInReusableTab(prStatus.prWebUrl);
     }
   };
 
@@ -251,7 +252,7 @@ const MergedPrButton = ({ prStatus, gitProvider }: MergedPrButtonProps): ReactEl
         git_provider: gitProvider,
         pr_state: "merged",
       });
-      window.open(prStatus.prWebUrl, "_blank");
+      openInReusableTab(prStatus.prWebUrl);
     }
   };
 
