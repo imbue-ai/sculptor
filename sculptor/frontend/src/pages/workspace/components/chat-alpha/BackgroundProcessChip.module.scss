@@ -1,0 +1,62 @@
+.chipAnchor {
+  // Let the chip shrink when the chat column is narrow (the parent flex row
+  // would otherwise demand the chip's intrinsic width and overflow). Mirrors
+  // the StatusPill anchor.
+  min-width: 0;
+  pointer-events: none;
+}
+
+// Surface mirrors the StatusPill `.pill` exactly.
+.chip {
+  align-items: center;
+  background: var(--gray-1);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  max-width: 100%;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  pointer-events: auto;
+}
+
+// Gentle opacity pulse for the running dot — mirrors the AlphaExpandedToolRow
+// statusDotPulse keyframes. Status reads from the pulse, never from color.
+@keyframes backgroundProcessChipPulse {
+  0%,
+  100% {
+    opacity: 30%;
+  }
+
+  50% {
+    opacity: 100%;
+  }
+}
+
+.dot {
+  animation: backgroundProcessChipPulse 1s ease-in-out infinite;
+  background: var(--gray-9);
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: 8px; // stylelint-disable-line sculptor/no-hardcoded-values
+  width: 8px; // stylelint-disable-line sculptor/no-hardcoded-values
+}
+
+.label {
+  color: var(--gray-11);
+}
+
+.chevron {
+  align-items: center;
+  color: var(--gray-8);
+  display: inline-flex;
+  flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
