@@ -21,7 +21,7 @@ const SYSTEM_DEFAULT_LAYOUT_NAME = "System Default";
 // The switcher summary shown for System Default. Fixed (rather than derived from the
 // captured statics) so it can name the dynamic terminal the seeding places, which a
 // static-only capture can't — matching the mock's "Terminal below".
-export const SYSTEM_DEFAULT_LAYOUT_SUMMARY = "Files, Changes & Commits · Terminal below";
+const SYSTEM_DEFAULT_LAYOUT_SUMMARY = "Files, Changes & Commits · Terminal below";
 
 function buildSystemDefaultLayout(): SavedLayout {
   // Placeholder ids only exist so buildDefaultWorkspaceLayout can place its center
@@ -127,10 +127,6 @@ export const SYSTEM_LAYOUT_SUMMARIES: Readonly<Record<string, string>> = {
 };
 
 const SYSTEM_LAYOUT_IDS: ReadonlySet<string> = new Set(SYSTEM_LAYOUTS.map((layout) => layout.id));
-
-export function isSystemDefaultLayoutId(id: string): boolean {
-  return id === SYSTEM_DEFAULT_LAYOUT_ID;
-}
 
 // True for any built-in (System Default or a preset) — the read-only set that can't
 // be edited, renamed, or deleted.

@@ -118,23 +118,19 @@ export const setDefaultLayoutAtom = atom(null, (_get, set, id: string) => {
 // Update a Layout's editable metadata (name, tidy-on-apply, and whether it's the
 // new-workspace default) from the Edit form — never the captured arrangement, which
 // stays exactly as it was saved. Built-in layouts have no stored record, so they're
-// ignored. An empty name is treated as "leave the name alone" rather than clearing
-// it. `setAsDefault` owns the default pointer for THIS Layout only: turning it on
-// points the default here, turning it off reverts to System Default only when this
-// Layout currently holds it (so editing a non-default Layout never steals it).
+// ignored. `setAsDefault` owns the default pointer for THIS Layout only: turning it
+// on points the default here, turning it off reverts to System Default only when
+// this Layout currently holds it (so editing a non-default Layout never steals it).
 export const updateLayoutAtom = atom(
   null,
   (get, set, params: { id: string; name: string; setAsDefault: boolean; tidyOnApply: boolean }) => {
     if (isSystemLayoutId(params.id)) {
       return;
     }
-    const name = params.name.trim();
     set(
       savedLayoutsAtom,
       get(savedLayoutsAtom).map((layout) =>
-        layout.id === params.id
-          ? { ...layout, name: name === "" ? layout.name : name, tidyOnApply: params.tidyOnApply }
-          : layout,
+        layout.id === params.id ? { ...layout, name: params.name.trim(), tidyOnApply: params.tidyOnApply } : layout,
       ),
     );
     if (params.setAsDefault) {

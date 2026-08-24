@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { SAVED_LAYOUT_VERSION } from "./persistence/types.ts";
 import { isMultiInstancePanelId } from "./registry/dynamicPanels.tsx";
 import {
-  isSystemDefaultLayoutId,
   isSystemLayoutId,
   SYSTEM_BROWSER_LAYOUT_ID,
   SYSTEM_CHAT_LAYOUT_ID,
@@ -36,11 +35,6 @@ describe("SYSTEM_DEFAULT_LAYOUT", () => {
     expect(captured.activeSubSection).toBe("center");
     expect(captured.maximizedSection).toBeNull();
   });
-
-  it("recognizes the System Default id", () => {
-    expect(isSystemDefaultLayoutId(SYSTEM_DEFAULT_LAYOUT_ID)).toBe(true);
-    expect(isSystemDefaultLayoutId("some-other-id")).toBe(false);
-  });
 });
 
 describe("system preset layouts", () => {
@@ -61,7 +55,7 @@ describe("system preset layouts", () => {
       expect(isSystemLayoutId(layout.id)).toBe(true);
     }
     // A preset is a system layout but NOT the System Default.
-    expect(isSystemDefaultLayoutId(SYSTEM_CHAT_LAYOUT_ID)).toBe(false);
+    expect(SYSTEM_CHAT_LAYOUT_ID).not.toBe(SYSTEM_DEFAULT_LAYOUT_ID);
     expect(isSystemLayoutId("saved-uuid")).toBe(false);
   });
 

@@ -13,7 +13,7 @@
 // Tidy is the explicit escape hatch: it closes the static panels the layout does
 // not declare (never agents/terminals).
 
-import { openPanelsInSubSection } from "./layoutQueries.ts";
+import { isSectionExpanded, openPanelsInSubSection } from "./layoutQueries.ts";
 import type { CapturedLayout, SavedLayout, WorkspaceLayoutState } from "./persistence/types.ts";
 import { isMultiInstancePanelId } from "./registry/dynamicPanels.tsx";
 import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
@@ -25,10 +25,6 @@ export type ApplyLayoutResult = {
   // maximize lives in the transient atom, so the caller applies it separately.
   maximizedSection: SectionId | null;
 };
-
-function isSectionExpandedIn(expanded: Partial<Record<SectionId, boolean>>, section: SectionId): boolean {
-  return section === "center" ? true : (expanded[section] ?? false);
-}
 
 // Apply a captured Layout additively onto the current workspace arrangement.
 export function applyCapturedLayout(current: WorkspaceLayoutState, captured: CapturedLayout): ApplyLayoutResult {
@@ -95,13 +91,13 @@ export function applyCapturedLayout(current: WorkspaceLayoutState, captured: Cap
   // Focus: keep the captured active sub-section only if its section ends up
   // expanded; a collapsed section can't be the active pane, so fall back to center.
   let activeSubSection = captured.activeSubSection;
-  if (activeSubSection !== null && !isSectionExpandedIn(expanded, toSection(activeSubSection))) {
+  if (activeSubSection !== null && !isSectionExpanded({ expanded }, toSection(activeSubSection))) {
     activeSubSection = "center";
   }
 
   // E — maximize: a collapsed section can't stay maximized.
   let maximizedSection = captured.maximizedSection;
-  if (maximizedSection !== null && !isSectionExpandedIn(expanded, maximizedSection)) {
+  if (maximizedSection !== null && !isSectionExpanded({ expanded }, maximizedSection)) {
     maximizedSection = null;
   }
 

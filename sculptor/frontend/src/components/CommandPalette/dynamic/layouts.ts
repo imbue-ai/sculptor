@@ -1,6 +1,6 @@
 import { createElement } from "react";
 
-import { describeLayout } from "~/components/layouts/layoutSummary.ts";
+import { layoutSummary } from "~/components/layouts/layoutSummary.ts";
 import { LayoutWireframeIcon } from "~/components/layouts/LayoutWireframeIcon.tsx";
 import { orderLayoutsByMru } from "~/components/layouts/switcherOrder.ts";
 import { applyLayoutAtom } from "~/components/sections/layoutActions.ts";
@@ -8,7 +8,6 @@ import type { SavedLayout } from "~/components/sections/persistence/types.ts";
 import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
 import { appliedLayoutIdAtom, layoutMruAtom, resolvedLayoutsAtom } from "~/components/sections/savedLayoutAtoms.ts";
 import type { PanelId } from "~/components/sections/sectionTypes.ts";
-import { SYSTEM_LAYOUT_SUMMARIES } from "~/components/sections/systemDefaultLayout.ts";
 
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, CommandIcon, DynamicProvider } from "../types.ts";
@@ -49,7 +48,7 @@ export const buildLayoutsProvider = (runtime: CommandRuntime): DynamicProvider =
       const nameOf = (id: PanelId): string => registry.find((definition) => definition.id === id)?.displayName ?? id;
 
       return orderLayoutsByMru(layouts, mru).map((layout, index): Command => {
-        const summary = SYSTEM_LAYOUT_SUMMARIES[layout.id] ?? describeLayout(layout.captured, nameOf);
+        const summary = layoutSummary(layout, nameOf);
         return {
           id: `layouts.switch.${layout.id}`,
           title: `Switch to ${layout.name}`,

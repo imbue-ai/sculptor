@@ -44,12 +44,18 @@ export type LayoutKeybinding = {
   isDefault: boolean;
 };
 
+// Resolve a Layout's binding from the raw userConfig.keybindings overrides:
+// missing or empty means unbound (the single place that coercion lives).
+function resolveLayoutBinding(overrides: Record<string, string | null>, layoutId: string): string | null {
+  return overrides[layoutShortcutBindingId(layoutId)] || null;
+}
+
 // One resolved binding per selectable Layout (System Default included), in
 // resolvedLayoutsAtom order.
 export const dynamicLayoutKeybindingsAtom: Atom<ReadonlyArray<LayoutKeybinding>> = atom((get) => {
   const overrides: Record<string, string | null> = get(userConfigAtom)?.keybindings ?? {};
   return get(resolvedLayoutsAtom).map((layout) => {
-    const binding = overrides[layoutShortcutBindingId(layout.id)] || null;
+    const binding = resolveLayoutBinding(overrides, layout.id);
     return {
       id: layoutShortcutBindingId(layout.id),
       layoutId: layout.id,
@@ -68,8 +74,8 @@ export const layoutShortcutBindingsAtom: Atom<Readonly<Record<string, string>>> 
   const overrides: Record<string, string | null> = get(userConfigAtom)?.keybindings ?? {};
   const result: Record<string, string> = {};
   for (const layout of get(resolvedLayoutsAtom)) {
-    const binding = overrides[layoutShortcutBindingId(layout.id)];
-    if (typeof binding === "string" && binding !== "") {
+    const binding = resolveLayoutBinding(overrides, layout.id);
+    if (binding !== null) {
       result[layout.id] = binding;
     }
   }

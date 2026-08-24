@@ -4,9 +4,10 @@
 // appear). Pure — the caller supplies a panel-id → display-name resolver from the
 // live registry.
 
-import type { CapturedLayout } from "~/components/sections/persistence/types.ts";
+import type { CapturedLayout, SavedLayout } from "~/components/sections/persistence/types.ts";
 import type { PanelId, SectionId } from "~/components/sections/sectionTypes.ts";
 import { SECTION_IDS, toSecondary, toSection } from "~/components/sections/sectionTypes.ts";
+import { SYSTEM_LAYOUT_SUMMARIES } from "~/components/sections/systemDefaultLayout.ts";
 
 // "below" reads better than "bottom" for the bottom section; the rest are literal.
 const SECTION_WORD: Readonly<Record<SectionId, string>> = {
@@ -58,4 +59,12 @@ export function describeLayout(captured: CapturedLayout, getPanelName: (id: Pane
   }
   // No tool panels means the layout is just the agent's space.
   return parts.length === 0 ? "Just the agent, full width" : parts.join(" · ");
+}
+
+// The summary any surface shows for a layout: the fixed one-liner for built-ins
+// (presets carry little or no static content, so a derived summary would read
+// empty), the derived panel summary for the user's own layouts. The single place
+// that rule lives, so the switcher and the command palette can't drift.
+export function layoutSummary(layout: SavedLayout, getPanelName: (id: PanelId) => string): string {
+  return SYSTEM_LAYOUT_SUMMARIES[layout.id] ?? describeLayout(layout.captured, getPanelName);
 }

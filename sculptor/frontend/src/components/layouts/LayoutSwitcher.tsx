@@ -29,10 +29,10 @@ import {
   resolvedLayoutsAtom,
 } from "~/components/sections/savedLayoutAtoms.ts";
 import type { PanelId } from "~/components/sections/sectionTypes.ts";
-import { isSystemLayoutId, SYSTEM_LAYOUT_SUMMARIES } from "~/components/sections/systemDefaultLayout.ts";
+import { isSystemLayoutId } from "~/components/sections/systemDefaultLayout.ts";
 import { ShortcutHint } from "~/components/ShortcutHint.tsx";
 
-import { describeLayout } from "./layoutSummary.ts";
+import { layoutSummary } from "./layoutSummary.ts";
 import styles from "./LayoutSwitcher.module.scss";
 import { layoutsSwitcherOpenAtom, saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
 import { LayoutWireframeIcon } from "./LayoutWireframeIcon.tsx";
@@ -109,11 +109,7 @@ export const LayoutSwitcher = (): ReactElement => {
     [registry],
   );
 
-  const summaryFor = useCallback(
-    (layout: SavedLayout): string =>
-      SYSTEM_LAYOUT_SUMMARIES[layout.id] ?? describeLayout(layout.captured, getPanelName),
-    [getPanelName],
-  );
+  const summaryFor = useCallback((layout: SavedLayout): string => layoutSummary(layout, getPanelName), [getPanelName]);
 
   const filtered = useMemo(() => {
     const trimmed = query.trim().toLowerCase();

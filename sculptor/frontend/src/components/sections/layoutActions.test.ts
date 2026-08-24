@@ -163,13 +163,6 @@ describe("updateLayoutAtom", () => {
     expect(updated.captured).toBe(original.captured);
   });
 
-  it("keeps the existing name when the edit clears it", () => {
-    const store = storeWith({ placement: { files: "left" } });
-    store.set(savedLayoutsAtom, [makeLayout("a", { name: "Keep" })]);
-    store.set(updateLayoutAtom, { id: "a", name: "   ", setAsDefault: false, tidyOnApply: false });
-    expect(store.get(savedLayoutsAtom)[0].name).toBe("Keep");
-  });
-
   it("owns the default pointer for this layout only", () => {
     const store = storeWith({ placement: { files: "left" } });
     store.set(savedLayoutsAtom, [makeLayout("a"), makeLayout("b")]);
