@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds, type PrStatusInfo } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { openInReusableTab } from "~/common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
@@ -134,7 +135,7 @@ export const ChangesPill = ({ onReviewAll }: ChangesPillProps): ReactElement | n
   const prPrefix = "#";
 
   const openPrUrl = (): void => {
-    if (prStatus?.prWebUrl) window.open(prStatus.prWebUrl, "_blank", "noopener,noreferrer");
+    if (prStatus?.prWebUrl) openInReusableTab(prStatus.prWebUrl);
   };
 
   const renderPrControl = (): ReactElement | null => {

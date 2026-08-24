@@ -6,6 +6,7 @@ import { type CSSProperties, type ReactElement, useCallback, useEffect, useMemo,
 import type { CodingAgentTaskView, PrStatusInfo } from "~/api";
 import { ElementIds, WorkspacePeekAgentStatus } from "~/api";
 import { useTimedLatch } from "~/common/Hooks.ts";
+import { reusableTabTarget } from "~/common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks";
 import { useProject, useProjects } from "~/common/state/hooks/useProjects";
@@ -238,8 +239,7 @@ const PeekHeader = ({
         <a
           className={styles.mrPill}
           href={prStatus.prWebUrl ?? "#"}
-          target="_blank"
-          rel="noopener noreferrer"
+          target={reusableTabTarget(prStatus.prWebUrl ?? "#")}
           onClick={(e) => e.stopPropagation()}
         >
           PR #{prStatus.prIid}
