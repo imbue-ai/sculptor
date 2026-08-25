@@ -39,6 +39,9 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
   }
 
   if (scope.kind === "workspace") {
+    // sectionSizes is deliberately not required: it moved here from the global
+    // store, so snapshots written before the move lack it — normalizeSnapshot
+    // fills the default. The other fields have always been present.
     return (
       isObject(value.placement) &&
       isObject(value.order) &&
@@ -48,15 +51,14 @@ function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
       "activeSubSection" in value
     );
   }
-  const sectionSizes = value.sectionSizes;
-  // sidebarOrder is deliberately absent here: it may be missing (snapshots written
-  // before the field existed) or corrupt without invalidating the user's other
-  // settings — normalizeSnapshot handles it field-level on read.
+  // sidebarOrder and the saved-layout fields (savedLayouts, layoutMru) are
+  // deliberately not required here: they may be missing (snapshots written before
+  // they existed) or a wrong kind without invalidating the user's other settings.
+  // normalizeSnapshot coerces each on read so a wrong-kind value never reaches the
+  // ordering/switcher atoms, which iterate these lists (same rationale as
+  // isValidSidebarOrder). A now-orphaned sectionSizes on an old global snapshot is
+  // ignored rather than validated.
   return (
-    isObject(sectionSizes) &&
-    typeof sectionSizes.left === "number" &&
-    typeof sectionSizes.right === "number" &&
-    typeof sectionSizes.bottom === "number" &&
     typeof value.sidebarWidthPx === "number" &&
     typeof value.sidebarCollapsed === "boolean" &&
     typeof value.explorerListWidthPx === "number"
@@ -74,6 +76,32 @@ function isValidSidebarOrder(value: unknown): value is SidebarOrderState {
   );
 }
 
+// A saved layout is rendered (summary + wireframe) and applied by dereferencing
+// captured.* — so a version-matching entry with a missing/broken captured payload
+// would crash at render, not just startup. Require the minimal readable shape so an
+// unreadable entry is dropped on read instead of reaching the switcher / apply path.
+// Value-level shape (versions, panel ids) is still gated by the version stamp.
+function isValidSavedLayout(value: unknown): boolean {
+  if (
+    !isObject(value) ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.version !== "number"
+  ) {
+    return false;
+  }
+  const captured = value.captured;
+  return (
+    isObject(captured) &&
+    isObject(captured.placement) &&
+    isObject(captured.order) &&
+    isObject(captured.activePanel) &&
+    isObject(captured.expanded) &&
+    isObject(captured.splits) &&
+    isObject(captured.sectionSizes)
+  );
+}
+
 // Fill fields a stored snapshot lacks from the scope's defaults, so additive
 // schema growth never needs a version bump and read() always returns the full
 // declared shape. A missing or corrupt sidebarOrder degrades to the default
@@ -88,7 +116,26 @@ function normalizeSnapshot<TScope extends LayoutScope>(
   const sidebarOrder = isValidSidebarOrder(snapshot.sidebarOrder)
     ? snapshot.sidebarOrder
     : DEFAULT_GLOBAL_LAYOUT.sidebarOrder;
-  return { ...DEFAULT_GLOBAL_LAYOUT, ...snapshot, sidebarOrder } as LayoutSnapshotFor<TScope>;
+  const normalized: Record<string, unknown> = { ...DEFAULT_GLOBAL_LAYOUT, ...snapshot, sidebarOrder };
+  // savedLayouts and layoutMru are optional, so an absent field stays absent (the
+  // savedLayoutAtoms `?? []` fallback covers it). A PRESENT value must be coerced,
+  // though — the container AND its members: the ordering/switcher atoms iterate these
+  // lists (`.filter`/`.map`) and the switcher/apply path dereferences `.version` and
+  // `captured.*` off each saved layout, so a non-array — or an array carrying a
+  // structurally-broken entry (or a non-string MRU id) — would throw. `?? []` does not
+  // rescue a non-null wrong kind.
+  if ("savedLayouts" in snapshot) {
+    normalized.savedLayouts = Array.isArray(snapshot.savedLayouts)
+      ? snapshot.savedLayouts.filter(isValidSavedLayout)
+      : [];
+  }
+
+  if ("layoutMru" in snapshot) {
+    normalized.layoutMru = Array.isArray(snapshot.layoutMru)
+      ? snapshot.layoutMru.filter((id): id is string => typeof id === "string")
+      : [];
+  }
+  return normalized as LayoutSnapshotFor<TScope>;
 }
 
 export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {

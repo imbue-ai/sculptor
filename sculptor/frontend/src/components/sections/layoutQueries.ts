@@ -12,8 +12,10 @@ import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
 import { isSecondary, SECTION_IDS, toSecondary, toSection } from "./sectionTypes.ts";
 
 // Center is always expanded and is never in the collapsed set; the other sections
-// are collapsed unless explicitly flagged expanded.
-export function isSectionExpanded(layout: WorkspaceLayoutState, section: SectionId): boolean {
+// are collapsed unless explicitly flagged expanded. Typed against just the
+// `expanded` map so pure reducers (e.g. layoutApply) can use it on a
+// CapturedLayout's geometry without re-implementing the rule.
+export function isSectionExpanded(layout: Pick<WorkspaceLayoutState, "expanded">, section: SectionId): boolean {
   return section === "center" ? true : (layout.expanded[section] ?? false);
 }
 
@@ -58,7 +60,7 @@ export function listSubSections(
 
 export type AddPanelLocation = { subSection: SubSectionId; label: string };
 
-const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
+export const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
   left: "Left",
   center: "Center",
   right: "Right",

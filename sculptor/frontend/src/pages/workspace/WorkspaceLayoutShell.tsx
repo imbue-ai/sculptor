@@ -16,6 +16,7 @@ import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { SectionGrid } from "~/components/sections/SectionGrid.tsx";
 import { isAnySectionMaximizedAtom } from "~/components/sections/transientAtoms.ts";
 import { useActiveSectionRing } from "~/components/sections/useActiveSectionRing.ts";
+import { useLayoutShortcutDispatcher } from "~/components/sections/useLayoutShortcutDispatcher.ts";
 import { useWorkspaceShortcuts } from "~/components/sections/useWorkspaceShortcuts.ts";
 
 import { AgentDeleteConfirmation } from "./components/AgentDeleteConfirmation.tsx";
@@ -40,6 +41,8 @@ export const WorkspaceLayoutShell = (): ReactElement => {
   // The new-shell section/panel keyboard shortcuts (collapse/cycle/maximize/sidebar/
   // new-agent), registered through the keybindings registry.
   useWorkspaceShortcuts();
+  // Per-Layout "apply" shortcuts (dynamic, not in the static registry).
+  useLayoutShortcutDispatcher();
   // Once-per-session idle sweep of layout snapshots whose workspace no longer exists.
   useOrphanedLayoutGc();
 
