@@ -1,8 +1,11 @@
 {
-  "offload-perf-fast.toml": {
-    "image_id": "im-4qmpfcjPjJT8OlIRLERi1L"
+  "offload-electron.toml": {
+    "image_id": "im-FeDlr8vx4cV2BV5xgiwyBW"
   },
   "offload.toml": {
     "image_id": "im-FeDlr8vx4cV2BV5xgiwyBW"
+  },
+  "offload-perf-fast.toml": {
+    "image_id": "im-4qmpfcjPjJT8OlIRLERi1L"
   }
 }
