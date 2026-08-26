@@ -15,7 +15,59 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  // Cap a tall question so the chat above stays readable and the footer stays
+  // reachable; the body scrolls inside. The drag handle overrides this with an
+  // inline max-height, and mobile bumps the cap below.
+  max-height: 55dvh; // stylelint-disable-line sculptor/no-hardcoded-values
+  min-height: 0;
   padding: var(--space-4) var(--space-5);
+}
+
+.resizeGrip {
+  background: var(--gray-7);
+  border-radius: var(--radius-2);
+  height: 4px; // stylelint-disable-line sculptor/no-hardcoded-values
+  transition: background var(--duration-fast) ease;
+  width: 40px; // stylelint-disable-line sculptor/no-hardcoded-values
+}
+
+.resizeHandle {
+  align-items: center;
+  cursor: ns-resize;
+  display: flex;
+  height: 14px; // stylelint-disable-line sculptor/no-hardcoded-values
+  justify-content: center;
+  margin-bottom: -2px; // stylelint-disable-line sculptor/no-hardcoded-values
+  touch-action: none;
+  width: 100%;
+
+  &:hover .resizeGrip {
+    background: var(--gray-9);
+  }
+}
+
+.header {
+  flex: 0 0 auto;
+}
+
+.scrollBody {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: var(--gray-7) transparent;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 8px; // stylelint-disable-line sculptor/no-hardcoded-values
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--gray-7);
+    border-radius: var(--radius-3);
+  }
 }
 
 .headerChip {
@@ -137,8 +189,19 @@
 .footer {
   align-items: center;
   display: flex;
+  flex: 0 0 auto;
   justify-content: space-between;
   padding-top: var(--space-1);
+  position: relative;
+}
+
+// Scroll cue shown when options run below the fold. Radix `Button` styles the
+// pill; JS positions it (left/top): centered in the panel, deflecting left to
+// clear the footer buttons, top-aligned with them.
+.morePill {
+  border-radius: var(--radius-6);
+  position: absolute;
+  white-space: nowrap;
 }
 
 .navigation {
@@ -207,21 +270,17 @@
   }
 }
 
-// On a short mobile viewport a tall question (long or many options) grows the
-// card past the visible area. The app runs at a fixed viewport height with no
-// page scroll, so the lower options and the submit button end up unreachable
-// below the fold — the user can't answer without switching to desktop. Cap the
-// card and let the options list scroll inside it, keeping the footer (submit +
-// nav dots) pinned and reachable. Gated on html.mobileUx (the app's single
-// mobile/desktop verdict, never set in the Electron renderer — see index.css /
-// useLayoutMode.ts); desktop is unaffected.
+// The card caps and scrolls its body on every viewport (see `.card`). A short
+// phone screen needs a taller cap to fit a usable number of options, and touch
+// has no precise drag affordance, so mobile bumps the cap and drops the resize
+// handle. Gated on html.mobileUx (the app's single mobile/desktop verdict,
+// never set in the Electron renderer — see index.css / useLayoutMode.ts).
 :global(html.mobileUx) {
   .card {
     max-height: 70dvh; // stylelint-disable-line sculptor/no-hardcoded-values
   }
 
-  .optionsList {
-    min-height: 0;
-    overflow-y: auto;
+  .resizeHandle {
+    display: none;
   }
 }
