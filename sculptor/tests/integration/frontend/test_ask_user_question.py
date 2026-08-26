@@ -11,13 +11,15 @@ import sys
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.ask_user_question import PlaywrightAskUserQuestionBlockElement
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_tool_blocks
 from sculptor.testing.elements.ask_user_question import get_first_ask_user_question_tool_block
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_away_and_back
 from sculptor.testing.playwright_utils import soft_reload_page
@@ -1018,9 +1020,9 @@ fake_claude:ask_user_question `{
         page = instance.page
 
         # The workspace still exists after restart.
-        workspace_tab = page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+        expect(workspace_row).to_be_visible()
+        workspace_row.click()
 
         # Wait for messages to fully load from persistence before checking tool blocks:
         # a visible chat panel does not guarantee messages have finished loading from the
@@ -1512,12 +1514,12 @@ def test_ask_user_question_draft_does_not_leak_across_agents(sculptor_instance_:
     chat_panel_1 = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_1, expected_message_count=2)
 
-    # Add agent 2 and send it a single-question AUQ.
-    add_agent_button = page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON)
-    add_agent_button.click()
+    # Add agent 2 (the add-panel dropdown creates it in the center section and
+    # navigates to it) and send it a single-question AUQ.
+    create_agent_panel(page, section="center")
 
-    agent_tabs = page.get_by_test_id(ElementIDs.AGENT_TAB)
-    expect(agent_tabs).to_have_count(2)
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     task_page_2 = PlaywrightTaskPage(page=page)
     chat_panel_2 = task_page_2.get_chat_panel()
@@ -1544,7 +1546,7 @@ fake_claude:ask_user_question `{
     expect(ask_panel.get_question_text()).to_contain_text("framework")
 
     # Switch to agent 1 (agent 2's AUQ unmounts because agent 1 has no pending AUQ).
-    agent_tabs.first.click()
+    tabs.first.click()
 
     # Send agent 1 a 3-question AUQ.
     chat_panel_1 = PlaywrightTaskPage(page=page).get_chat_panel()
@@ -1603,7 +1605,7 @@ fake_claude:ask_user_question `{
     # Now both agents have pending AUQs. Switch to agent 2.
     # Bug: React reuses AskUserQuestion (both branches render it), so currentIndex=2
     # carries over, but agent 2 only has 1 question → questions[2] is undefined → crash.
-    agent_tabs.last.click()
+    tabs.last.click()
     expect(ask_panel).to_be_visible()
     expect(ask_panel.get_question_text()).to_contain_text("framework")
 

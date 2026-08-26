@@ -194,11 +194,16 @@ def test_dismissed_download_toast_stays_dismissed(
     page = sculptor_instance_.page
     toast = PlaywrightToastElement(page=page)
 
-    # Show and dismiss download toast
+    # Show and dismiss download toast. Use ``dismiss_all`` rather than clicking the
+    # close button directly: the toast slides in over ~150ms, so a click fired the
+    # instant ``to_be_visible`` returns can race the slide-in (and, on the shared
+    # page, a mid-unmount toast lingering in the DOM), failing the
+    # "visible, enabled and stable" actionability check. ``dismiss_all`` targets only
+    # open-state (not unmounting) close buttons and waits for the count to settle.
     mock_electron_api.push_status({"type": "downloading", "channel": "STABLE", "percent": 20})
     expect(toast).to_be_visible()
 
-    toast.get_close_buttons().click()
+    toast.dismiss_all()
     expect(toast.get_toasts()).not_to_be_visible()
 
     # Push another downloading event — toast should NOT reappear
@@ -224,9 +229,13 @@ def test_channel_switch_calls_ipc_and_shows_pending(
 
     update_controls = PlaywrightSettingsUpdateElement(page=page)
 
-    # Open the channel Select and pick RC
+    # Open the channel Select and pick RC. Wait for the trigger to be *enabled*,
+    # not just visible: the Select stays disabled until the pushed status and its
+    # channel propagate into the autoUpdate atoms after the Settings page mounts,
+    # so clicking on visibility alone races that propagation and fails the
+    # "visible, enabled and stable" actionability check.
     channel_select = update_controls.get_channel_select()
-    expect(channel_select).to_be_visible()
+    expect(channel_select).to_be_enabled()
     channel_select.click()
 
     update_controls.get_channel_option_rc().click()
@@ -269,9 +278,13 @@ def test_channel_switch_failure_shows_error_toast(
 
     update_controls = PlaywrightSettingsUpdateElement(page=page)
 
-    # Open the channel Select and pick RC
+    # Open the channel Select and pick RC. Wait for the trigger to be *enabled*,
+    # not just visible: the Select stays disabled until the pushed status and its
+    # channel propagate into the autoUpdate atoms after the Settings page mounts,
+    # so clicking on visibility alone races that propagation and fails the
+    # "visible, enabled and stable" actionability check.
     channel_select = update_controls.get_channel_select()
-    expect(channel_select).to_be_visible()
+    expect(channel_select).to_be_enabled()
     channel_select.click()
 
     update_controls.get_channel_option_rc().click()
@@ -294,7 +307,11 @@ def test_check_for_updates_button(
 
     update_controls = PlaywrightSettingsUpdateElement(page=page)
     check_button = update_controls.get_check_button()
-    expect(check_button).to_be_visible()
+    # Wait for the button to be *enabled*, not just visible: it stays disabled until
+    # the pushed idle status propagates into the autoUpdate atom after the Settings
+    # page mounts, so clicking on visibility alone races that propagation and fails
+    # the "visible, enabled and stable" actionability check.
+    expect(check_button).to_be_enabled()
     check_button.click()
 
     calls = mock_electron_api.get_ipc_calls(method="checkForUpdate")

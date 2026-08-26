@@ -20,6 +20,7 @@ from sculptor.testing.elements.entity_picker import insert_workspace_entity_ment
 from sculptor.testing.elements.user_config import enable_entity_mentions
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_home_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -76,11 +77,9 @@ def test_entity_mention_chip_persists_after_workspace_switch(
     expect(entity_chip).to_be_visible()
     expect(entity_chip).to_contain_text(_SINGLE_MENTION_WORKSPACE_NAME)
 
-    # Navigate to home, then click the workspace tab to return to the task.
+    # Navigate to home, then click the workspace row to return to the task.
     navigate_to_home_page(page)
-    workspace_tab = task_page.get_workspace_tabs()
-    expect(workspace_tab).to_be_visible()
-    workspace_tab.click()
+    navigate_to_workspace(page)
 
     # Re-acquire the chat input — the prior locator may be stale if the
     # editor was remounted on remount of the workspace page.
@@ -136,9 +135,7 @@ def test_entity_mentions_in_two_paragraphs_persist_after_workspace_switch(
     # Round-trip the draft through markdown via remount: navigate Home and
     # back so the editor unmounts and rebuilds from the localStorage draft.
     navigate_to_home_page(page)
-    workspace_tab = task_page.get_workspace_tabs()
-    expect(workspace_tab).to_be_visible()
-    workspace_tab.click()
+    navigate_to_workspace(page)
 
     chat_panel = task_page.get_chat_panel()
     chat_input = chat_panel.get_chat_input()

@@ -6,12 +6,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
-from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.file_preview_and_upload import PlaywrightFilePreviewAndUploadMixin
-from sculptor.testing.elements.task import navigate_to_task_page
-from sculptor.testing.elements.task_list import PlaywrightTaskListElement
-from sculptor.testing.elements.task_list import wait_for_tasks_to_finish
-from sculptor.testing.pages.task_page import PlaywrightTaskPage
 
 
 class PlaywrightTaskStarterElement(PlaywrightFilePreviewAndUploadMixin, PlaywrightIntegrationTestElement):
@@ -20,9 +15,6 @@ class PlaywrightTaskStarterElement(PlaywrightFilePreviewAndUploadMixin, Playwrig
 
     def get_task_name_input(self) -> Locator:
         return self.get_by_test_id(ElementIDs.TASK_NAME_INPUT)
-
-    def get_start_button(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.START_TASK_BUTTON)
 
     def get_branch_selector(self) -> Locator:
         return self.get_by_test_id(ElementIDs.BRANCH_SELECTOR)
@@ -51,46 +43,6 @@ FAKE_CLAUDE_2_MODEL_NAME = "Fake Claude 2"
 # Tag for the harness-parametrized integration fixture; pi selection flows
 # through the per-agent type chosen at creation, not the model name.
 FAKE_PI_MODEL_NAME = "Fake Pi"
-
-
-def create_task(
-    task_starter: PlaywrightTaskStarterElement,
-    task_text: str,
-    branch_name: str | None = None,
-    model_name: str = FAKE_CLAUDE_MODEL_NAME,
-) -> None:
-    """Create a task without waiting for it to be ready.
-
-    Defaults to the Fake Claude model, which returns deterministic responses without
-    LLM calls.  Tests that need a real agent should pass an explicit model name
-    (e.g. ``model_name="Opus"``).
-
-    Args:
-        task_starter: The task starter element
-        task_text: The prompt text for the task
-        branch_name: Optional branch name to select before creating the task
-        model_name: Model name to select (default ``"Fake Claude"``).
-    """
-    if branch_name is not None:
-        select_branch(task_starter, branch_name)
-
-    task_input = task_starter.get_task_input()
-    expect(task_input).to_have_attribute("contenteditable", "true")
-    type_into_tiptap(task_starter._page, task_input, task_text)
-
-    # Select the model.
-    page: Page = task_starter._page
-    model_selector = page.get_by_test_id(ElementIDs.MODEL_SELECTOR)
-    model_selector.click()
-    # Use exact text matching to distinguish e.g. "Fake Claude" from "Fake Claude 2"
-    target = page.get_by_test_id(re.compile(rf"^{re.escape(ElementIDs.MODEL_OPTION)}-")).filter(
-        has=page.get_by_text(model_name, exact=True)
-    )
-    expect(target).to_be_visible(timeout=10_000)
-    target.click()
-
-    expect(task_starter.get_start_button()).to_be_enabled()
-    task_starter.get_start_button().click()
 
 
 def select_home_page_model(page: Page, model_name: str) -> None:
@@ -186,20 +138,3 @@ def set_home_page_system_prompt(task_starter: PlaywrightTaskStarterElement, syst
     system_prompt_input_box.fill(system_prompt)
     task_starter.get_system_prompt_save_button().click()
     expect(system_prompt_input_box).not_to_be_visible()
-
-
-def create_and_navigate_to_task(
-    task_starter: PlaywrightTaskStarterElement,
-    task_list: PlaywrightTaskListElement,
-    task_text: str,
-    model_name: str = FAKE_CLAUDE_MODEL_NAME,
-) -> PlaywrightTaskPage:
-    create_task(task_starter=task_starter, task_text=task_text, model_name=model_name)
-    wait_for_tasks_to_finish(task_list=task_list)
-
-    # New tasks appear at the top of the list
-    task = task_list.get_tasks().first
-    expect(task).to_be_visible()
-
-    task_page = navigate_to_task_page(task)
-    return task_page

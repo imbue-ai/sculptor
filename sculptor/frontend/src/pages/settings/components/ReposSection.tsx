@@ -6,7 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { deleteProject, ElementIds, type Project, updateNamingPattern, updateWorkspaceSetupCommand } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
+import { getErrorMessage } from "~/common/Errors.ts";
 import { projectAtomFamily, removeProjectAtom } from "~/common/state/atoms/projects.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useProjects } from "~/common/state/hooks/useProjects.ts";
@@ -23,17 +23,6 @@ type RemoveDialogState =
   | { status: "closed" }
   | { status: "confirming"; projectId: string; projectName: string; agentCount: number }
   | { status: "deleting"; projectId: string; projectName: string; agentCount: number };
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof HTTPException) {
-    return error.detail;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return fallback;
-};
 
 export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | null) => void }): ReactElement => {
   const projects = useProjects();

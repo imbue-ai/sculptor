@@ -139,8 +139,8 @@ def test_github_picker_happy_path_clones_and_adds_project(
         repos_settings = settings_page.click_on_repositories()
         add_repo_dialog = repos_settings.open_add_repo_dialog()
 
-        # GitHub is the default selection; click explicitly to exercise the
-        # source-card binding.
+        # The dialog opens on the Local source; select GitHub to drive the
+        # remote picker flow.
         add_repo_dialog.get_source_github_card().click()
 
         # The combobox row for our fake repo should mount (driven by the

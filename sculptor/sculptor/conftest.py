@@ -14,8 +14,10 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.sql_implementation import SQLDataModelService
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.dependency_management_service import InstallResult
+from sculptor.services.dependency_management_service import VoiceModelsInstaller
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.default_implementation import DefaultGitRepoService
+from sculptor.services.pi_login_service import PiLoginService
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.project_service.default_implementation import DefaultProjectService
 from sculptor.services.task_service.api import TaskService
@@ -139,6 +141,11 @@ def test_service_collection(
         git_repo_service=_test_git_repo_service,
         pr_polling_service=pr_polling_service,
     )
+    pi_login_service = PiLoginService(
+        concurrency_group=test_root_concurrency_group.make_concurrency_group("pi_login_service"),
+        data_model_service=_test_data_model_service,
+        task_service=_test_task_service,
+    )
     services = CompleteServiceCollection(
         settings=test_settings,
         data_model_service=_test_data_model_service,
@@ -150,6 +157,7 @@ def test_service_collection(
         pr_polling_service=pr_polling_service,
         btw_service=BtwService(concurrency_group=test_root_concurrency_group.make_concurrency_group("btw_service")),
         ci_babysitter_service=ci_babysitter_service,
+        pi_login_service=pi_login_service,
     )
     with services.run_all():
         yield services
@@ -187,7 +195,8 @@ def _block_managed_binary_downloads(request: pytest.FixtureRequest, monkeypatch:
         return
 
     # Block every network-touching entry point: startup auto-install becomes a no-op,
-    # and both the install kickoff and the download/verify/stage core raise on contact.
+    # and both the install kickoff and the download/verify/stage cores raise on contact.
     monkeypatch.setattr(DependencyManagementService, "_auto_install_if_needed", _noop_auto_install)
     monkeypatch.setattr(DependencyManagementService, "_install_managed_tool", _raise_on_managed_download)
     monkeypatch.setattr(DependencyManagementService, "_download_verify_stage", _raise_on_managed_download)
+    monkeypatch.setattr(VoiceModelsInstaller, "_download_verify_stage", _raise_on_managed_download)

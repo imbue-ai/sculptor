@@ -1,17 +1,35 @@
 from playwright.sync_api import Locator
+from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
+from sculptor.testing.utils import get_playwright_modifier_key
 
 
 class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
+    def add_local_repo(self, path: str) -> None:
+        """Select the local source, fill the path, submit, and wait for the dialog to close.
+
+        Ctrl/Cmd+Enter submits regardless of the autocomplete dropdown state,
+        avoiding the Escape+Enter race with the debounced directory fetch. Assumes
+        the path is a git repo with at least one commit, so no validation dialog
+        interrupts the submit.
+        """
+        self.select_local_source()
+        path_input = self.get_path_input()
+        path_input.fill(path)
+        path_input.press(f"{get_playwright_modifier_key()}+Enter")
+        expect(self._locator).to_be_hidden()
+
     def select_local_source(self) -> None:
         """Click the "Local" source radio card so the path-input form is shown.
 
-        The dialog defaults to GitHub, which keeps the Local form mounted but
-        hidden (`display:none`). Tests that drive the path input must select
-        Local first or Playwright will time out waiting for the input to
-        become visible.
+        Local is the dialog's default source, so on a freshly opened dialog
+        this click is an idempotent no-op (radio semantics: clicking the
+        selected card keeps it selected). Tests still call it to make their
+        precondition explicit — and it stays required for flows that switched
+        to GitHub, where the Local form is mounted but hidden (`display:none`)
+        and Playwright would time out waiting for the path input.
         """
         self.get_source_local_card().click()
 

@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SCU-1610 — Homepage plugin slot mocks</title>
+    <style>
+      :root {
+        --gray-1: #111113;
+        --gray-2: #18191b;
+        --gray-3: #212225;
+        --gray-4: #292a2e;
+        --gray-5: #303136;
+        --gray-6: #3a3b40;
+        --gray-border: #2b2c30;
+        --text-hi: #ededef;
+        --text-mid: #b0b0b8;
+        --text-lo: #7c7d85;
+        --accent: #5b9dff;
+        --accent-dim: #2c3a52;
+        --green: #46c46e;
+        --amber: #e0a23b;
+        --red: #e5564b;
+        --blue: #5b9dff;
+        --radius: 10px;
+        font-synthesis: none;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        background: var(--gray-1);
+        color: var(--text-hi);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ---------- mode switcher (not part of the product) ---------- */
+      .modebar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        background: #0c0c0e;
+        border-bottom: 1px solid var(--gray-border);
+      }
+      .modebar .label { color: var(--text-lo); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+      .modebar button {
+        appearance: none;
+        border: 1px solid var(--gray-border);
+        background: var(--gray-3);
+        color: var(--text-mid);
+        padding: 7px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-family: inherit;
+      }
+      .modebar button.active { background: var(--accent-dim); border-color: var(--accent); color: var(--text-hi); }
+      .modebar .spacer { flex: 1; }
+      .modebar .note { color: var(--text-lo); font-size: 12px; }
+
+      /* ---------- app frame ---------- */
+      .app {
+        height: calc(100vh - 53px);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 12px;
+        height: 44px;
+        background: var(--gray-2);
+        border-bottom: 1px solid var(--gray-border);
+        flex: 0 0 auto;
+      }
+      .iconbtn {
+        width: 30px; height: 30px;
+        display: grid; place-items: center;
+        border-radius: 7px;
+        color: var(--text-mid);
+        cursor: pointer;
+      }
+      .iconbtn:hover { background: var(--gray-4); color: var(--text-hi); }
+      .iconbtn.active { background: var(--gray-4); color: var(--text-hi); }
+      .tabs { display: flex; gap: 6px; align-items: center; }
+      .tab {
+        display: flex; align-items: center; gap: 7px;
+        padding: 5px 11px; border-radius: 7px;
+        background: transparent; color: var(--text-mid);
+        font-size: 13px; cursor: pointer;
+      }
+      .tab:hover { background: var(--gray-3); }
+      .tab .dot { width: 7px; height: 7px; border-radius: 50%; }
+      .grow { flex: 1; }
+
+      /* ---------- homepage body ---------- */
+      .home {
+        flex: 1;
+        min-height: 0;
+        background: var(--gray-2);
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        padding: 56px 24px 24px 24px;
+      }
+      .col {
+        width: 100%;
+        max-width: 850px;
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .searchbar {
+        display: flex; align-items: center; gap: 10px;
+        background: var(--gray-3);
+        border: 1px solid var(--gray-border);
+        border-radius: var(--radius);
+        padding: 11px 14px;
+        color: var(--text-lo);
+        margin-bottom: 18px;
+        flex: 0 0 auto;
+      }
+      .section-label {
+        color: var(--text-lo);
+        font-size: 12px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        margin: 4px 2px 12px;
+      }
+      .ws-list { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+      .ws-row {
+        display: flex; align-items: center; gap: 14px;
+        padding: 13px 14px;
+        background: var(--gray-3);
+        border: 1px solid var(--gray-border);
+        border-radius: var(--radius);
+        cursor: pointer;
+      }
+      .ws-row:hover { background: var(--gray-4); }
+      .status { display: flex; gap: 3px; width: 22px; justify-content: center; flex: 0 0 auto; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; }
+      .dot.running { background: var(--green); box-shadow: 0 0 0 3px rgba(70,196,110,0.18); }
+      .dot.waiting { background: var(--amber); box-shadow: 0 0 0 3px rgba(224,162,59,0.16); }
+      .dot.error { background: var(--red); }
+      .dot.unread { background: var(--blue); }
+      .dot.idle { background: var(--gray-6); }
+      .ws-main { flex: 1; min-width: 0; }
+      .ws-title { color: var(--text-hi); font-size: 14px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ws-meta { color: var(--text-lo); font-size: 12px; display: flex; gap: 10px; align-items: center; }
+      .branch { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .pr {
+        font-size: 11px; padding: 3px 8px; border-radius: 6px;
+        background: var(--accent-dim); color: var(--accent);
+        border: 1px solid #34507a; flex: 0 0 auto;
+      }
+      .ws-time { color: var(--text-lo); font-size: 12px; flex: 0 0 auto; }
+
+      .slot-tag {
+        font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+        color: var(--accent); border: 1px dashed #3a567d;
+        padding: 2px 7px; border-radius: 6px; background: rgba(91,157,255,0.06);
+      }
+
+      /* ---------- Direction 1: side widget ---------- */
+      .home.d1 .col { max-width: 1180px; flex-direction: row; gap: 22px; }
+      .home.d1 .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .rail {
+        width: 320px; flex: 0 0 auto;
+        display: flex; flex-direction: column; gap: 14px;
+        min-height: 0;
+      }
+      .widget {
+        background: var(--gray-3);
+        border: 1px solid var(--gray-border);
+        border-radius: var(--radius);
+        padding: 14px;
+        display: flex; flex-direction: column; min-height: 0;
+      }
+      .widget.plugin { border-color: #34507a; box-shadow: inset 0 0 0 1px rgba(91,157,255,0.06); }
+      .widget-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+      .widget-title { font-size: 13px; color: var(--text-hi); display: flex; align-items: center; gap: 8px; }
+      .widget-body { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 9px; }
+      .task-line { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; background: var(--gray-2); }
+      .task-line:hover { background: var(--gray-4); }
+      .task-line .tl-main { flex: 1; min-width: 0; }
+      .task-line .tl-title { font-size: 13px; color: var(--text-hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .task-line .tl-sub { font-size: 11px; color: var(--text-lo); }
+      .group-h { font-size: 11px; color: var(--text-lo); text-transform: uppercase; letter-spacing: 0.05em; margin: 4px 2px 2px; }
+      .pill-count { font-size: 11px; color: var(--text-mid); background: var(--gray-5); border-radius: 999px; padding: 1px 8px; }
+
+      /* ---------- Direction 2: replacement view ---------- */
+      .view-switch { display: flex; gap: 4px; background: var(--gray-3); border: 1px solid var(--gray-border); border-radius: 9px; padding: 3px; margin-bottom: 18px; flex: 0 0 auto; align-self: flex-start; }
+      .view-switch button {
+        appearance: none; border: 0; background: transparent; color: var(--text-mid);
+        padding: 6px 14px; border-radius: 7px; cursor: pointer; font-size: 13px; font-family: inherit;
+        display: flex; align-items: center; gap: 7px;
+      }
+      .view-switch button.active { background: var(--gray-5); color: var(--text-hi); }
+      .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; overflow: hidden; min-height: 0; flex: 1; }
+      .board.full { grid-template-columns: repeat(3, 1fr); }
+      .lane { display: flex; flex-direction: column; min-height: 0; background: var(--gray-3); border: 1px solid var(--gray-border); border-radius: var(--radius); }
+      .lane-head { display: flex; align-items: center; gap: 9px; padding: 12px 14px; border-bottom: 1px solid var(--gray-border); font-size: 13px; }
+      .lane-body { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+      .card { background: var(--gray-2); border: 1px solid var(--gray-border); border-radius: 9px; padding: 12px; cursor: pointer; }
+      .card:hover { background: var(--gray-4); }
+      .card-title { font-size: 13px; color: var(--text-hi); margin-bottom: 6px; }
+      .card-meta { display: flex; align-items: center; gap: 9px; color: var(--text-lo); font-size: 11px; flex-wrap: wrap; }
+      .chip { background: var(--gray-5); border-radius: 6px; padding: 2px 7px; font-size: 11px; color: var(--text-mid); }
+      .stream { color: var(--green); font-size: 11px; display: flex; align-items: center; gap: 6px; }
+      .full-tag { position: absolute; }
+
+      .hidden { display: none !important; }
+      .d2-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+      .d2-head { display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto; }
+    </style>
+  </head>
+  <body>
+    <div class="modebar">
+      <span class="label">Mock</span>
+      <button data-mode="today" class="active">Today (baseline)</button>
+      <button data-mode="d1">Direction 1 — Side widget</button>
+      <button data-mode="d2">Direction 2 — Replacement view</button>
+      <span class="spacer"></span>
+      <span class="note">SCU-1610 · homepage plugin slot · dashed accent = plugin-contributed surface</span>
+    </div>
+
+    <div class="app">
+      <!-- top bar (shared) -->
+      <div class="topbar">
+        <div class="iconbtn active" title="Home">⌂</div>
+        <div class="tabs">
+          <div class="tab"><span class="dot" style="background:var(--green)"></span> auth-refactor</div>
+          <div class="tab"><span class="dot" style="background:var(--amber)"></span> flaky-test-fix</div>
+          <div class="tab"><span class="dot" style="background:var(--blue)"></span> docs-pass</div>
+        </div>
+        <div class="grow"></div>
+        <div class="iconbtn" title="Search">⌕</div>
+        <div class="iconbtn" title="Settings">⚙</div>
+        <div class="iconbtn" title="Help">?</div>
+      </div>
+
+      <!-- ===================== TODAY ===================== -->
+      <div class="home today" id="view-today">
+        <div class="col">
+          <div class="searchbar">⌕&nbsp; Search workspaces…</div>
+          <div class="section-label">Recent workspaces</div>
+          <div class="ws-list" id="ws-list-today"></div>
+        </div>
+      </div>
+
+      <!-- ===================== DIRECTION 1 ===================== -->
+      <div class="home d1 hidden" id="view-d1">
+        <div class="col">
+          <div class="main-col">
+            <div class="searchbar">⌕&nbsp; Search workspaces…</div>
+            <div class="section-label">Recent workspaces</div>
+            <div class="ws-list" id="ws-list-d1"></div>
+          </div>
+          <div class="rail">
+            <div class="widget plugin" style="flex:1">
+              <div class="widget-head">
+                <span class="widget-title">⚡ Current tasks <span class="slot-tag">plugin widget</span></span>
+                <span class="pill-count">7 active</span>
+              </div>
+              <div class="widget-body" id="rail-tasks"></div>
+            </div>
+            <div class="widget">
+              <div class="widget-head"><span class="widget-title">＋ Quick actions</span></div>
+              <div class="widget-body">
+                <div class="task-line"><span class="dot idle"></span><div class="tl-main"><div class="tl-title">New workspace</div></div></div>
+                <div class="task-line"><span class="dot idle"></span><div class="tl-main"><div class="tl-title">Open settings</div></div></div>
+              </div>
+              <div style="margin-top:10px"><span class="slot-tag">another slot could live here</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== DIRECTION 2 ===================== -->
+      <div class="home d2 hidden" id="view-d2">
+        <div class="col" style="max-width:1180px">
+          <div class="d2-wrap">
+            <div class="d2-head">
+              <div class="view-switch">
+                <button data-d2="recent">≣ Recent</button>
+                <button data-d2="board" class="active">▦ Tasks board <span class="slot-tag" style="margin-left:4px">plugin view</span></button>
+              </div>
+              <div class="searchbar" style="margin-bottom:18px; width:280px">⌕&nbsp; Filter tasks…</div>
+            </div>
+
+            <!-- recent (built-in) sub-view -->
+            <div id="d2-recent" class="hidden" style="display:flex; flex-direction:column; min-height:0; flex:1">
+              <div class="section-label">Recent workspaces</div>
+              <div class="ws-list" id="ws-list-d2"></div>
+            </div>
+
+            <!-- board (plugin) sub-view -->
+            <div id="d2-board" class="board"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const workspaces = [
+        { st: ["running"], title: "Refactor auth token validation", branch: "auth-refactor", project: "sculptor", pr: "#214", time: "2m ago" },
+        { st: ["waiting"], title: "Fix flaky offload integration test", branch: "scu-1577-flaky", project: "sculptor", pr: null, time: "11m ago" },
+        { st: ["error", "unread"], title: "Migrate panel registry to atoms", branch: "panel-atoms", project: "sculptor", pr: "#208", time: "26m ago" },
+        { st: ["unread"], title: "Docs pass for plugin SDK", branch: "docs-pass", project: "sculptor", pr: null, time: "1h ago" },
+        { st: ["running"], title: "Compact workspace layout", branch: "scu-1474-compact", project: "sculptor", pr: "#198", time: "1h ago" },
+        { st: ["idle"], title: "Linear example plugin", branch: "scu-1495-linear", project: "sculptor-plugins", pr: "#74", time: "yesterday" },
+        { st: ["idle"], title: "Top-level coordinator agent", branch: "top-level-agent", project: "sculptor", pr: null, time: "2d ago" },
+      ];
+
+      function wsRow(w) {
+        const dots = w.st.map((s) => `<span class="dot ${s}"></span>`).join("");
+        return `<div class="ws-row">
+          <div class="status">${dots}</div>
+          <div class="ws-main">
+            <div class="ws-title">${w.title}</div>
+            <div class="ws-meta"><span class="branch">⎇ ${w.branch}</span><span>${w.project}</span></div>
+          </div>
+          ${w.pr ? `<span class="pr">PR ${w.pr}</span>` : ""}
+          <span class="ws-time">${w.time}</span>
+        </div>`;
+      }
+      const listHTML = workspaces.map(wsRow).join("");
+      ["ws-list-today", "ws-list-d1", "ws-list-d2"].forEach((id) => (document.getElementById(id).innerHTML = listHTML));
+
+      // rail tasks for D1 (grouped by status)
+      const railGroups = [
+        { h: "Running", items: [
+          { c: "running", t: "Refactor auth token validation", s: "auth-refactor · streaming" },
+          { c: "running", t: "Compact workspace layout", s: "scu-1474 · calling tools" },
+        ]},
+        { h: "Waiting on you", items: [
+          { c: "waiting", t: "Fix flaky offload test", s: "needs a decision" },
+        ]},
+        { h: "Needs review", items: [
+          { c: "error", t: "Migrate panel registry", s: "agent hit an error" },
+          { c: "unread", t: "Docs pass for plugin SDK", s: "2 unread updates" },
+        ]},
+      ];
+      document.getElementById("rail-tasks").innerHTML = railGroups.map((g) =>
+        `<div class="group-h">${g.h}</div>` + g.items.map((i) =>
+          `<div class="task-line"><span class="dot ${i.c}"></span><div class="tl-main"><div class="tl-title">${i.t}</div><div class="tl-sub">${i.s}</div></div></div>`
+        ).join("")
+      ).join("");
+
+      // board for D2
+      const lanes = [
+        { h: "Running", c: "running", cards: [
+          { t: "Refactor auth token validation", chips: ["auth-refactor", "PR #214"], stream: "streaming…" },
+          { t: "Compact workspace layout", chips: ["scu-1474", "PR #198"], stream: "calling tools…" },
+        ]},
+        { h: "Waiting on you", c: "waiting", cards: [
+          { t: "Fix flaky offload integration test", chips: ["scu-1577-flaky"], q: "“Should I bump the timeout or re-resolve the locator?”" },
+        ]},
+        { h: "Needs review", c: "error", cards: [
+          { t: "Migrate panel registry to atoms", chips: ["panel-atoms", "PR #208"], err: "agent errored" },
+          { t: "Docs pass for plugin SDK", chips: ["docs-pass"], note: "2 unread updates" },
+        ]},
+      ];
+      document.getElementById("d2-board").innerHTML = lanes.map((l) =>
+        `<div class="lane">
+          <div class="lane-head"><span class="dot ${l.c}"></span> ${l.h} <span class="pill-count" style="margin-left:auto">${l.cards.length}</span></div>
+          <div class="lane-body">${l.cards.map((card) =>
+            `<div class="card">
+              <div class="card-title">${card.t}</div>
+              <div class="card-meta">${card.chips.map((c) => `<span class="chip">${c}</span>`).join("")}</div>
+              ${card.stream ? `<div class="stream" style="margin-top:8px">● ${card.stream}</div>` : ""}
+              ${card.q ? `<div class="card-meta" style="margin-top:8px; color:var(--amber)">${card.q}</div>` : ""}
+              ${card.err ? `<div class="card-meta" style="margin-top:8px; color:var(--red)">${card.err}</div>` : ""}
+              ${card.note ? `<div class="card-meta" style="margin-top:8px; color:var(--blue)">${card.note}</div>` : ""}
+            </div>`
+          ).join("")}</div>
+        </div>`
+      ).join("");
+
+      // mode switching
+      const views = { today: "view-today", d1: "view-d1", d2: "view-d2" };
+      document.querySelectorAll(".modebar button").forEach((b) =>
+        b.addEventListener("click", () => {
+          document.querySelectorAll(".modebar button").forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+          Object.values(views).forEach((id) => document.getElementById(id).classList.add("hidden"));
+          document.getElementById(views[b.dataset.mode]).classList.remove("hidden");
+        })
+      );
+
+      // D2 sub-view switch
+      document.querySelectorAll("[data-d2]").forEach((b) =>
+        b.addEventListener("click", () => {
+          document.querySelectorAll("[data-d2]").forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+          const board = b.dataset.d2 === "board";
+          document.getElementById("d2-board").classList.toggle("hidden", !board);
+          document.getElementById("d2-recent").classList.toggle("hidden", board);
+        })
+      );
+    </script>
+  </body>
+</html>

@@ -1,7 +1,7 @@
 import { Flex } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
-import { getTitleBarLeftPadding, TITLEBAR_HEIGHT } from "../electron/utils.ts";
+import { getTitleBarLeftPadding } from "../electron/utils.ts";
 import styles from "./TitleBar.module.scss";
 
 type TitleBarProps = {
@@ -16,7 +16,7 @@ export const TitleBar = ({ className }: TitleBarProps): ReactElement => {
       left="0"
       width="100%"
       pl={getTitleBarLeftPadding(false)}
-      height={`${TITLEBAR_HEIGHT}px`}
+      height="var(--titlebar-height)"
       align="center"
       justify="end"
       pr="10px"

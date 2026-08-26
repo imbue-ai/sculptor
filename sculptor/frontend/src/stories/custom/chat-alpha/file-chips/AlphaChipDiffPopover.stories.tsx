@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import type { ToolResultBlock } from "~/api";
 import { AlphaChipDiffPopover } from "~/pages/workspace/components/chat-alpha/AlphaChipDiffPopover.tsx";
+import { ChatTaskProvider } from "~/pages/workspace/components/chat-alpha/ChatTaskContext.tsx";
 import type { ChipData } from "~/pages/workspace/components/chat-alpha/chipRow.types.ts";
 
 const sampleDiff = `--- a/src/components/Button.tsx
@@ -113,7 +114,10 @@ const longPathChip: ChipData = {
   errorContentType: null,
 };
 
-// Provides the routing + Jotai context required by the popover.
+// The popover reads its workspace/task identity from ChatTaskProvider. The
+// router is still required because the popover's transitive useWorkspaceCodePath
+// lookup calls useWorkspacePageParams, which throws outside a route with a
+// workspaceID param.
 const Wrapper = ({
   chipData,
   onClose,
@@ -128,9 +132,13 @@ const Wrapper = ({
       <Route
         path="/ws/:workspaceID/agent/:id"
         element={
-          <div style={{ width: "520px", border: "1px solid var(--gray-a4)", borderRadius: "8px", overflow: "hidden" }}>
-            <AlphaChipDiffPopover chipData={chipData} onClose={onClose} onNavigate={onNavigate} />
-          </div>
+          <ChatTaskProvider workspaceId="storybook-ws" taskId="storybook-agent">
+            <div
+              style={{ width: "520px", border: "1px solid var(--gray-a4)", borderRadius: "8px", overflow: "hidden" }}
+            >
+              <AlphaChipDiffPopover chipData={chipData} onClose={onClose} onNavigate={onNavigate} />
+            </div>
+          </ChatTaskProvider>
         }
       />
     </Routes>

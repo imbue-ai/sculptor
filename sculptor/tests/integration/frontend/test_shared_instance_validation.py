@@ -2,8 +2,8 @@
 
 These tests verify that the session-scoped shared instance, between-test
 cleanup, git repo isolation, and fail-fast mechanism all work correctly.
-They are a smoke-test for Phase 1 infrastructure; comprehensive coverage
-comes during Phase 2 test migration.
+They are a smoke-test for the shared-instance infrastructure itself;
+comprehensive coverage comes from the test suites built on top of it.
 
 NOTE: Tests within a file run in definition order by default.  The "first /
 second" test pairs below rely on this ordering.
@@ -12,7 +12,7 @@ second" test pairs below rely on this ordering.
 import pytest
 from playwright.sync_api import expect
 
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -23,21 +23,21 @@ from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 
 
 def test_cleanup_between_tests_first(sculptor_instance_: SculptorInstance) -> None:
-    """Create a workspace and verify it exists as a tab."""
+    """Create a workspace and verify it exists as a sidebar row."""
     start_task_and_wait_for_ready(
         sculptor_page=sculptor_instance_.page,
         prompt="Cleanup test task",
     )
 
-    # Verify the workspace tab was created
-    layout = PlaywrightProjectLayoutPage(sculptor_instance_.page)
-    expect(layout.get_workspace_tabs()).to_have_count(1)
+    # Verify the workspace row was created
+    page = sculptor_instance_.page
+    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(1)
 
 
 def test_cleanup_between_tests_second(sculptor_instance_: SculptorInstance) -> None:
-    """Verify that the first test's workspace tab was cleaned up."""
-    layout = PlaywrightProjectLayoutPage(sculptor_instance_.page)
-    expect(layout.get_workspace_tabs()).to_have_count(0)
+    """Verify that the first test's workspace row was cleaned up."""
+    page = sculptor_instance_.page
+    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(0)
 
 
 # ------------------------------------------------------------------

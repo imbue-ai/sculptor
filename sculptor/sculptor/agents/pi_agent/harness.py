@@ -1,20 +1,20 @@
 """The pi harness — non-Claude implementor of `Harness`.
 
-Pi is no longer a fully degraded harness. It renders tool calls
+Pi is a capable harness that renders tool calls
 (`supports_tool_use_rendering=True`): pi's tool-execution lane is adapted onto
 Sculptor's harness-agnostic tool blocks (see `agent_wrapper` / `tool_rendering`).
-Session resume IS supported — pi persists a per-task JSONL session
+Session resume is supported — pi persists a per-task JSONL session
 (`--session-dir`/`--session-id`) that a relaunched process resumes (see
-`agent_wrapper.PiAgent`). Skills ARE supported — pi is pointed at the
+`agent_wrapper.PiAgent`). Skills are supported — pi is pointed at the
 workspace's skill directories via `--skill` flags and follows an invoked skill
 (see `agent_wrapper._build_skill_launch_args` / `_rewrite_skill_invocation`).
 It also carries file references, image input, and file attachments (delivered
 by prompt assembly), and compacts context — `compaction_start/end` events drive
-the StatusPill "Compacting" chrome. And it gains an interactive backchannel
+the StatusPill "Compacting" chrome. It has an interactive backchannel
 (ask-user-question + plan mode) from the Sculptor-pinned `sculptor_backchannel`
 extension (see `backchannel.py` and `extensions/sculptor_backchannel.ts`), so
 `supports_interactive_backchannel` is `True` and the gated methods recognize
-that extension's tool names. Sub-agents ARE supported — the pinned
+that extension's tool names. Sub-agents are supported — the pinned
 `sculptor_subagent` extension spawns each child as its own `pi` process and
 streams structured per-child progress that the adapter renders as nested,
 attributed child messages under the parent `Agent` tool (see `subagent.py` and
@@ -45,7 +45,9 @@ from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ModelCatalog
 from sculptor.state.messages import ModelOption
+from sculptor.state.messages import NOT_FETCHED_YET
 
 # Pi has no MCP / AskUserQuestion / ExitPlanMode surface; the Claude
 # prompt's tool-instructions block is deliberately absent. Names Sculptor
@@ -84,7 +86,7 @@ class PiHarness(Harness):
 
     def capabilities(self) -> HarnessCapabilities:
         return HarnessCapabilities(
-            # Pi's chat is degraded but real — its main panel is the chat interface.
+            # Pi's chat is fully functional — its main panel is the chat interface.
             supports_chat_interface=True,
             # Delivered via the pinned `sculptor_backchannel` extension (AUQ +
             # plan mode); the gated methods below recognize its tool names.
@@ -161,11 +163,20 @@ class PiHarness(Harness):
     def get_available_models(self, task_state: AgentTaskStateV2 | None) -> list[ModelOption]:
         # The agent fetches and curates pi's catalog at start and persists it on
         # the task state (agent_wrapper._fetch_models_into_state); the switcher
-        # reads it from here. Empty until the agent has run, or when task_state
-        # is absent — the frontend then falls back to its built-in list.
+        # reads it from here. Coalesce a not-yet-fetched catalog to [] for callers
+        # that only offer models (agent runtime, the set-model endpoint) — the
+        # NOT_FETCHED_YET distinction is preserved by get_model_catalog for the UI.
+        catalog = self.get_model_catalog(task_state)
+        return list(catalog) if isinstance(catalog, list) else []
+
+    def get_model_catalog(self, task_state: AgentTaskStateV2 | None) -> ModelCatalog:
+        # The raw catalog: NOT_FETCHED_YET until the start-time probe persists a
+        # list (possibly [] = authenticated but no providers). Preserved so the
+        # switcher shows a loading state during startup rather than flashing the
+        # empty state. Also NOT_FETCHED_YET when task_state is absent (nothing known).
         if task_state is None:
-            return []
-        return list(task_state.available_models)
+            return NOT_FETCHED_YET
+        return task_state.available_models
 
     def get_selected_model_id(self, task_state: AgentTaskStateV2 | None) -> str | None:
         # The model_id pi reported as current at start (get_state.model), or None
@@ -177,6 +188,12 @@ class PiHarness(Harness):
     def sources_backend_models(self) -> bool:
         # Pi sources its catalog from its authenticated providers.
         return True
+
+    def configuration_settings_section(self) -> str:
+        # Pi authenticates providers under Settings -> Pi (its own provider-auth area),
+        # not the shared Dependencies binary/auth surface, so the no-usable-model CTA
+        # routes there.
+        return "PI"
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return tool_name == ASK_USER_QUESTION_TOOL_NAME

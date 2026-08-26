@@ -3,8 +3,8 @@
 Measures re-renders triggered when the user types in the TipTap chat input.
 Only ChatInput should re-render (it subscribes to usePromptDraft which updates
 a per-task Jotai atom on every keystroke).  All components outside the chat
-input — sidebars, DockingLayout, AlphaChatInterface, ZoneContent — should remain
-stable.
+input — the workspace sidebar, the section grid, AlphaChatInterface — should
+remain stable.
 """
 
 import time
@@ -12,22 +12,21 @@ import time
 
 DESCRIPTION = "TipTap editor typing render cascade"
 
+# Memo-wrapped exports (e.g. SplittableSection) are recorded under their inner
+# function names ("SplittableSectionComponent").
 TARGET_COMPONENTS = [
     "WorkspacePageContent",
-    "DockingLayout",
-    "LeftSidebar",
-    "LeftSidebarInner",
-    "RightSidebar",
-    "RightSidebarInner",
-    "ZoneContent",
-    "ZoneContentInner",
-    "DiffSplitContainer",
-    "DiffSplitContainerInner",
+    "WorkspaceLayoutShell",
+    "WorkspaceSidebar",
+    "WorkspaceHeaderComponent",
+    "SectionGrid",
+    "SplittableSectionComponent",
+    "PanelSectionComponent",
+    "SectionHeaderComponent",
+    "SectionBodyComponent",
     "AlphaChatInterface",
-    "AlphaChatInterfaceInner",
+    "ChatPanelContent",
     "ChatInput",
-    "WorkspaceBanner",
-    "AgentTabs",
 ]
 
 

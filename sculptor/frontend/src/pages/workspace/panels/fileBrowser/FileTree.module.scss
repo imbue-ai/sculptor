@@ -11,7 +11,9 @@
   // newly inserted at the top.
   overflow-anchor: none;
 
-  @include thin-scrollbar;
+  // Native scrollbar suppressed in favour of <VerticalOverlayScrollbar>, whose
+  // overlay thumb coexists with the side-panel resize handle (SCU-1321).
+  @include hidden-scrollbar;
 }
 
 .row {

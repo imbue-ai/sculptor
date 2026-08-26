@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.agents.pi_agent.harness import PI_HARNESS
@@ -6,7 +8,9 @@ from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
+from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
+from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
@@ -18,6 +22,7 @@ from sculptor.interfaces.agents.agent import ResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import StreamingMessageCompleteAgentMessage
 from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import TaskID
@@ -37,6 +42,10 @@ from sculptor.state.chat_state import UserQuestion
 from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.workflow_state import WorkflowAgentProgress
+from sculptor.state.workflow_state import WorkflowPhaseProgress
+from sculptor.state.workflow_state import WorkflowTaskState
+from sculptor.state.workflow_state import WorkflowUsage
 from sculptor.web.derived import TaskUpdate
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 
@@ -958,6 +967,308 @@ def test_user_question_answer_sets_in_progress_user_message_id() -> None:
 
     # in_progress_user_message_id should be set immediately, not wait for RequestStartedAgentMessage
     assert state.in_progress_user_message_id == answer_message.message_id
+
+
+def _make_simple_question_data(question_text: str, tool_use_id: str) -> AskUserQuestionData:
+    return AskUserQuestionData(
+        questions=[
+            UserQuestion(
+                question=question_text,
+                header="Header",
+                options=[
+                    QuestionOption(label="A", description="first"),
+                    QuestionOption(label="B", description="second"),
+                ],
+                multi_select=False,
+            )
+        ],
+        tool_use_id=tool_use_id,
+    )
+
+
+def test_answering_one_of_two_pending_questions_surfaces_the_other() -> None:
+    """Two questions can pend concurrently (e.g. two subagents each asking
+    mid-turn). Answering the visible one must surface the other instead of
+    forgetting it — the frozen-question half of the subagent AUQ bug.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    question_a = _make_simple_question_data("Question A?", "tool-use-ask-a")
+    question_b = _make_simple_question_data("Question B?", "tool-use-ask-b")
+
+    state = convert_agent_messages_to_task_update(
+        [
+            AskUserQuestionAgentMessage(message_id=AgentMessageID(), question_data=question_a),
+            AskUserQuestionAgentMessage(message_id=AgentMessageID(), question_data=question_b),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    # The most recent question is the visible one; both are tracked.
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "tool-use-ask-b"
+    assert [q.tool_use_id for q in state.pending_user_questions] == ["tool-use-ask-a", "tool-use-ask-b"]
+
+    answer_b = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Question B?": "A"},
+        question_data=question_b,
+        tool_use_id="tool-use-ask-b",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer_b],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "tool-use-ask-a"
+
+    answer_a = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Question A?": "B"},
+        question_data=question_a,
+        tool_use_id="tool-use-ask-a",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer_a],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is None
+    assert state.pending_user_questions == ()
+
+
+def test_subagent_question_reconstructed_from_persisted_child_block() -> None:
+    """On page reload the live AskUserQuestionAgentMessage (ephemeral) is gone;
+    a SUBAGENT's pending question must be reconstructed from the persisted
+    child ResponseBlockAgentMessage carrying its ToolUseBlock, just as
+    main-agent questions are reconstructed from theirs.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    question_data = _make_simple_question_data("Subagent question?", "toolu_sub_ask")
+    ask_tool_block = ToolUseBlock(
+        id=ToolUseID("toolu_sub_ask"),
+        name="mcp__sculptor__ask_user_question",
+        input={"questions": [q.model_dump() for q in question_data.questions]},
+    )
+    child_message = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-subagent-ask"),
+        message_id=AgentMessageID(),
+        content=(ask_tool_block,),
+        parent_tool_use_id="toolu_agent_launch",
+    )
+
+    # Fresh state (as after a reload) — only the persisted child message replays.
+    state = convert_agent_messages_to_task_update(
+        [child_message],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "toolu_sub_ask"
+
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Subagent question?": "A"},
+        question_data=question_data,
+        tool_use_id="toolu_sub_ask",
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.pending_user_question is None
+
+
+def _replay_history_with_stopped_auq_turn(is_stopped_by_user: bool) -> tuple[TaskUpdate, dict, TaskID]:
+    """Replay from scratch (as after a restart) a history whose AUQ turn ended
+    in a ``RequestStoppedAgentMessage`` attributed per ``is_stopped_by_user``."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Ask me a question", model_name=LLMModel.CLAUDE_4_SONNET)
+    question_data = _make_simple_question_data("Pick a color?", "toolu_stopped_auq")
+    tool_block = ToolUseBlock(
+        id=ToolUseID("toolu_stopped_auq"),
+        name="mcp__sculptor__ask_user_question",
+        input={"questions": [q.model_dump() for q in question_data.questions]},
+    )
+    response = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-stopped-auq"),
+        message_id=AgentMessageID(),
+        content=(tool_block,),
+    )
+    stopped = RequestStoppedAgentMessage(
+        request_id=user_message.message_id,
+        error=_make_serialized_exception("Agent died with exit code 143"),
+        stopped_by_user=is_stopped_by_user,
+    )
+    state = convert_agent_messages_to_task_update(
+        [user_message, RequestStartedAgentMessage(request_id=user_message.message_id), response, stopped],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    return state, completed_by_id, task_id
+
+
+def test_pending_question_preserved_when_auq_turn_stopped_by_restart() -> None:
+    """A stop the user did not ask for (shutdown/restart SIGTERM) must keep the
+    reconstructed question pending so the interactive panel re-renders after
+    the restart — the question is still answerable via the runner's
+    answer-after-turn-ended continuation."""
+    state, _, _ = _replay_history_with_stopped_auq_turn(is_stopped_by_user=False)
+
+    assert state.pending_user_question is not None
+    assert state.pending_user_question.tool_use_id == "toolu_stopped_auq"
+
+
+def test_pending_question_cleared_when_auq_turn_stopped_by_user() -> None:
+    """An explicit user Stop dismisses the pending question — the user is
+    moving on, and the chat input should reappear."""
+    state, _, _ = _replay_history_with_stopped_auq_turn(is_stopped_by_user=True)
+
+    assert state.pending_user_question is None
+
+
+def test_preserved_pending_question_cleared_when_new_chat_turn_starts() -> None:
+    """A newly started user turn supersedes a question preserved across a
+    non-user stop: the user chose a fresh prompt over answering, so the stale
+    panel must not linger while the agent works on the new turn."""
+    state, completed_by_id, task_id = _replay_history_with_stopped_auq_turn(is_stopped_by_user=False)
+    assert state.pending_user_question is not None
+
+    new_chat = ChatInputUserMessage(text="Never mind, do something else", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [new_chat, RequestStartedAgentMessage(request_id=new_chat.message_id)],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    assert state.pending_user_question is None
+
+
+def _replay_two_auq_turn_answered_once(
+    make_terminal_message: Callable[[AgentMessageID], PersistentRequestCompleteAgentMessage],
+) -> TaskUpdate:
+    """Replay a pi turn whose single assistant message carries TWO
+    ask_user_question tool calls, where only the second was answered before the
+    turn terminated, and return the fully recomputed state (as the send-message
+    gate and the reload path compute it).
+
+    ``make_terminal_message`` builds the asking turn's terminal message from its
+    request id so both the interrupted-success and user-stop variants share the
+    setup.
+    """
+    task_id = TaskID()
+
+    user_message = ChatInputUserMessage(text="Ask me two questions", model_name=LLMModel.CLAUDE_4_SONNET)
+    first_tool_block = ToolUseBlock(
+        id=ToolUseID("ask_user_question:4"),
+        name="ask_user_question",
+        input={"question": "Which facets make the cut?", "options": ["All 8", "Core 5"]},
+    )
+    second_tool_block = ToolUseBlock(
+        id=ToolUseID("ask_user_question:5"),
+        name="ask_user_question",
+        input={"question": "How aggressive should the skill be?", "options": ["Full", "Partial"]},
+    )
+    response = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-two-auqs"),
+        message_id=AgentMessageID(),
+        content=(first_tool_block, second_tool_block),
+    )
+    second_question_data = build_ask_user_question_data(
+        "How aggressive should the skill be?", ["Full", "Partial"], tool_use_id="ask_user_question:5"
+    )
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"How aggressive should the skill be?": "Partial"},
+        question_data=second_question_data,
+        tool_use_id="ask_user_question:5",
+    )
+    return convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            response,
+            answer,
+            RequestStartedAgentMessage(request_id=answer.message_id),
+            # The answer-delivery turn finalizes first, detaching
+            # current_request_id from the asking turn...
+            RequestSuccessAgentMessage(request_id=answer.message_id),
+            # ...so the asking turn's terminal no longer matches the active request.
+            make_terminal_message(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+
+def test_unanswered_question_cleared_when_interrupted_success_detached_by_answer_turn() -> None:
+    """An interrupted RequestSuccess terminates the asking turn, so its pending
+    questions are no longer answerable and must clear — even when an
+    answer-delivery turn finalized in between and detached current_request_id
+    from the asking turn. Otherwise the unanswered question stays pending
+    forever and every subsequent message send is rejected with a 409."""
+    state = _replay_two_auq_turn_answered_once(
+        lambda request_id: RequestSuccessAgentMessage(request_id=request_id, interrupted=True)
+    )
+
+    assert state.pending_user_question is None
+
+
+def test_unanswered_question_cleared_when_user_stop_detached_by_answer_turn() -> None:
+    """Same detachment, through the user-stop terminal: an explicit Stop dismisses
+    the pending question even when an answer turn finalized in between."""
+    state = _replay_two_auq_turn_answered_once(
+        lambda request_id: RequestStoppedAgentMessage(
+            request_id=request_id,
+            error=_make_serialized_exception("Agent died with exit code 143"),
+            stopped_by_user=True,
+        )
+    )
+
+    assert state.pending_user_question is None
+
+
+def test_preserved_pending_question_cleared_on_context_clear() -> None:
+    """A cleared context wipes the session that asked — a question preserved
+    across a non-user stop can no longer be answered against it."""
+    state, completed_by_id, task_id = _replay_history_with_stopped_auq_turn(is_stopped_by_user=False)
+    assert state.pending_user_question is not None
+
+    state = convert_agent_messages_to_task_update(
+        [ContextClearedMessage(message_id=AgentMessageID())],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    assert state.pending_user_question is None
 
 
 def test_request_started_sets_current_request_id_without_queued_message() -> None:
@@ -3075,9 +3386,9 @@ def test_streaming_state_reset_after_interrupt_success_prevents_staircase() -> N
     assert in_progress is not None
     # BUG: Without the fix, this would be 2 (staircase: ["Good", "Good question."])
     assert len(in_progress.content) == 1, (
-        f"Second partial should replace the first, producing 1 content block. "
-        f"Got {len(in_progress.content)} blocks (staircase bug): "
-        f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
+        "Second partial should replace the first, producing 1 content block. "
+        + f"Got {len(in_progress.content)} blocks (staircase bug): "
+        + f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
     )
     second_block = in_progress.content[0]
     assert isinstance(second_block, TextBlock)
@@ -3103,7 +3414,7 @@ def test_streaming_state_reset_after_interrupt_success_prevents_staircase() -> N
     assert in_progress is not None
     assert len(in_progress.content) == 1, (
         f"Third partial should still be 1 block. Got {len(in_progress.content)} blocks: "
-        f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
+        + f"{[b.text if isinstance(b, TextBlock) else type(b).__name__ for b in in_progress.content]}"
     )
     third_block = in_progress.content[0]
     assert isinstance(third_block, TextBlock)
@@ -3526,6 +3837,232 @@ def test_turn_metrics_attached_when_stopped() -> None:
     assert len(completed_assistant) == 1
     assert completed_assistant[0].turn_metrics == metrics
     assert completed_assistant[0].stopped is True
+
+
+def test_unqueue_during_background_wait_does_not_stamp_turn_footer() -> None:
+    """Unqueuing a message while the turn is still running (waiting on a
+    background task) must not stamp that turn's pending metrics onto its
+    in-progress message.
+
+    Repro: while the agent waits for a background task, its foreground turn has
+    already emitted ``TurnMetricsAgentMessage`` (so metrics are *pending*) but the
+    request stays open — ``RequestSuccess`` for the real turn has not arrived yet.
+    Queue a message and then unqueue it in that window: the RemoveQueuedMessage
+    lifecycle emits its OWN ``RequestStarted``/``RequestSuccess`` pair. That
+    lifecycle ``RequestSuccess`` does NOT belong to the active turn, so it must
+    not run end-of-turn side effects. Previously it did — unconditionally
+    attaching the pending metrics (a spurious turn footer with token counts that
+    persisted until the turn actually finished and survived a reload) and
+    clearing the background-task wait state. Mirrors the ``can_finalize`` gate in
+    the RequestStopped branch.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    # Turn A streams its foreground response and launches a background task.
+    user_message = ChatInputUserMessage(text="do a bg thing", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [user_message],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    assistant_message_id = AssistantMessageID("assistant-bg-wait")
+    metrics = _make_turn_metrics()
+    state = convert_agent_messages_to_task_update(
+        [
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=assistant_message_id,
+                message_id=AgentMessageID(),
+                content=(TextBlock(text="Launching background work"),),
+            ),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="bg-task-1",
+                tool_use_id=ToolUseID("toolu-bg"),
+                description="Find Python files",
+            ),
+            # Foreground turn-end: metrics are emitted but the request stays open
+            # because the background task is still in flight (no RequestSuccess yet).
+            TurnMetricsAgentMessage(turn_metrics=metrics),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    # Sanity: the turn is still running (metrics only pending, not attached), and
+    # the background-task wait is in effect.
+    assert state.in_progress_chat_message is not None
+    assert state.in_progress_chat_message.turn_metrics is None
+    assert state.in_progress_user_message_id == user_message.message_id
+    assert set(state.pending_background_task_ids) == {"bg-task-1"}
+
+    # User queues a message, then unqueues it via the RemoveQueuedMessage
+    # lifecycle (its own RequestStarted/RequestSuccess pair).
+    queued_message = ChatInputUserMessage(text="test", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [queued_message],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert len(state.queued_chat_messages) == 1
+
+    remove_request_id = AgentMessageID()
+    state = convert_agent_messages_to_task_update(
+        [
+            RequestStartedAgentMessage(request_id=remove_request_id),
+            RemoveQueuedMessageAgentMessage(removed_message_id=queued_message.message_id),
+            RequestSuccessAgentMessage(request_id=remove_request_id, interrupted=False),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    # The turn is still running — the lifecycle RequestSuccess must NOT have
+    # finalized it or stamped the pending metrics onto the in-progress message.
+    assert state.in_progress_chat_message is not None, "the active turn must not be finalized by the remove lifecycle"
+    assert state.in_progress_chat_message.turn_metrics is None, (
+        "pending turn metrics must not be attached to the still-running turn (spurious turn footer)"
+    )
+    assert state.in_progress_chat_message.stopped is False
+    assert state.in_progress_user_message_id == user_message.message_id
+    assert len(state.queued_chat_messages) == 0
+    # The background-task wait must survive — the lifecycle success must not clear it.
+    assert set(state.pending_background_task_ids) == {"bg-task-1"}
+
+    # When the real turn finally finishes, the (preserved) metrics attach then —
+    # so the footer still shows on the completed message at the correct time.
+    state = convert_agent_messages_to_task_update(
+        [RequestSuccessAgentMessage(request_id=user_message.message_id)],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.in_progress_chat_message is None
+    completed_assistant = [m for m in state.chat_messages if m.role == ChatMessageRole.ASSISTANT]
+    assert len(completed_assistant) == 1
+    assert completed_assistant[0].turn_metrics == metrics
+
+
+def _setup_turn_running_with_background_wait() -> tuple[
+    TaskID, dict[AgentMessageID, ChatMessage], ChatInputUserMessage, TurnMetrics, TaskUpdate
+]:
+    """Set up a turn that is streaming a foreground response and waiting on a
+    background task: its metrics are emitted but still pending because the
+    request has not received its RequestSuccess yet."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="do a bg thing", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [user_message],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    metrics = _make_turn_metrics()
+    state = convert_agent_messages_to_task_update(
+        [
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("assistant-bg-sibling"),
+                message_id=AgentMessageID(),
+                content=(TextBlock(text="Launching background work"),),
+            ),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="bg-task-1",
+                tool_use_id=ToolUseID("toolu-bg"),
+                description="Find Python files",
+            ),
+            TurnMetricsAgentMessage(turn_metrics=metrics),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    assert state.in_progress_chat_message is not None
+    assert state.in_progress_chat_message.turn_metrics is None
+    assert state.in_progress_user_message_id == user_message.message_id
+    assert set(state.pending_background_task_ids) == {"bg-task-1"}
+    return task_id, completed_by_id, user_message, metrics, state
+
+
+def test_skip_of_removed_message_during_background_wait_does_not_corrupt_active_turn() -> None:
+    """When the agent skips an already-removed queued message mid-turn, the
+    RequestSkipped is for that skipped message — not the active turn — so it
+    must not reset the running turn's streaming / background-wait state."""
+    task_id, completed_by_id, user_message, metrics, state = _setup_turn_running_with_background_wait()
+
+    # A message was queued and removed; the agent reaches it and skips it. The
+    # RequestStarted does not promote (it is no longer queued) and must not
+    # clobber the active request; RequestSkipped carries the skipped id.
+    skipped_id = AgentMessageID()
+    state = convert_agent_messages_to_task_update(
+        [
+            RequestStartedAgentMessage(request_id=skipped_id),
+            RequestSkippedAgentMessage(request_id=skipped_id),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    assert state.in_progress_chat_message is not None
+    assert state.in_progress_chat_message.turn_metrics is None
+    assert state.in_progress_user_message_id == user_message.message_id
+    assert set(state.pending_background_task_ids) == {"bg-task-1"}
+
+    # The real turn still finalizes correctly, attaching its metrics.
+    state = convert_agent_messages_to_task_update(
+        [RequestSuccessAgentMessage(request_id=user_message.message_id)],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    completed_assistant = [m for m in state.chat_messages if m.role == ChatMessageRole.ASSISTANT]
+    assert len(completed_assistant) == 1
+    assert completed_assistant[0].turn_metrics == metrics
+
+
+def test_failure_of_lifecycle_request_during_background_wait_does_not_corrupt_active_turn() -> None:
+    """A RequestFailure for a non-active (lifecycle) request must not stamp an
+    error block onto the running turn's message or reset its state."""
+    task_id, completed_by_id, user_message, metrics, state = _setup_turn_running_with_background_wait()
+
+    # A lifecycle request (e.g. a failed RemoveQueuedMessage handler) fails with
+    # its own request_id while the real turn is still open.
+    lifecycle_id = AgentMessageID()
+    state = convert_agent_messages_to_task_update(
+        [RequestFailureAgentMessage(request_id=lifecycle_id, error=_make_serialized_exception("write failed"))],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    in_progress = state.in_progress_chat_message
+    assert in_progress is not None
+    assert not any(isinstance(block, ErrorBlock) for block in in_progress.content), (
+        "a lifecycle failure must not stamp an error block onto the active turn"
+    )
+    assert in_progress.turn_metrics is None
+    assert state.in_progress_user_message_id == user_message.message_id
+    assert set(state.pending_background_task_ids) == {"bg-task-1"}
 
 
 # ========== Background Task Notification Tests ==========
@@ -5783,6 +6320,88 @@ class TestChatMessageIdCollisionContract:
             expected_tool_ids=("toolu_agent", "toolu_sub", "toolu_b"),
         )
 
+    def test_two_level_nested_subagent_turns_keep_parent_attribution(self) -> None:
+        """Two-level nesting (a subagent that spawns its own subagent) must preserve each
+        level's parent_tool_use_id so the frontend can rebuild the depth-2 tree.
+
+        Claude 2.1.172 lets a sub-agent spawn its own sub-agents.  A foreground grandchild's
+        messages carry their *immediate* parent's tool_use id (the level-1 Agent tool_use),
+        which itself lives in a message whose parent is the top-level Agent tool_use.  The
+        converter must keep all three parent contexts distinct as control descends
+        None -> toolu_l1 -> toolu_l2 and returns back to None: collapsing any adjacent pair
+        merges turns and loses an Agent tool_use or a subagent reply (the SCU-1421/1422
+        collapse class, one level deeper than
+        ``test_interleaved_subagent_and_main_turns_keep_distinct_ids``).  buildSubagentTree
+        reconstructs the nesting purely from these ids, so a flattened/dropped parent here
+        silently breaks the rendered tree.
+        """
+        request_id = AgentMessageID()
+        assistant = AssistantMessageID("assistant-1")
+        main_a, main_b = AgentMessageID(), AgentMessageID()
+        child, grandchild = AgentMessageID(), AgentMessageID()
+
+        stream = self._user_and_start(request_id) + [
+            # Main agent spawns the level-1 subagent (parent None).
+            PartialResponseBlockAgentMessage(
+                assistant_message_id=assistant,
+                message_id=AgentMessageID(),
+                first_response_message_id=main_a,
+                content=(TextBlock(text="MAIN_BEFORE"), ToolUseBlock(id=ToolUseID("toolu_l1"), name="Task", input={})),
+            ),
+            # Level-1 subagent runs and itself spawns the level-2 subagent
+            # (parent = the main agent's Agent tool_use).
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("subagent-l1"),
+                message_id=child,
+                content=(TextBlock(text="L1_TEXT"), ToolUseBlock(id=ToolUseID("toolu_l2"), name="Task", input={})),
+                parent_tool_use_id="toolu_l1",
+            ),
+            # Level-2 grandchild runs a leaf tool (parent = the level-1 Agent tool_use).
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("subagent-l2"),
+                message_id=grandchild,
+                content=(
+                    TextBlock(text="L2_TEXT"),
+                    ToolUseBlock(id=ToolUseID("toolu_l2_bash"), name="Bash", input={}),
+                ),
+                parent_tool_use_id="toolu_l2",
+            ),
+            # Control returns to the main agent (parent None again).
+            PartialResponseBlockAgentMessage(
+                assistant_message_id=assistant,
+                message_id=AgentMessageID(),
+                first_response_message_id=main_b,
+                content=(TextBlock(text="MAIN_AFTER"),),
+            ),
+            RequestSuccessAgentMessage(request_id=request_id),
+        ]
+
+        update = convert_agent_messages_to_task_update(
+            stream, task_id=TaskID(), harness=CLAUDE_CODE_HARNESS, completed_message_by_id={}
+        )
+        _assert_turns_survive(
+            update,
+            expected_text_markers=("MAIN_BEFORE", "L1_TEXT", "L2_TEXT", "MAIN_AFTER"),
+            expected_tool_ids=("toolu_l1", "toolu_l2", "toolu_l2_bash"),
+        )
+
+        # Every turn keeps its own nesting context: the grandchild points at the level-1
+        # Agent tool_use, the child at the top-level Agent tool_use, and the main turns at
+        # nothing.  A regression that flattened deep nesting would surface here as a wrong
+        # (or None) parent on L2_TEXT even while the survival assertion above still passes.
+        parent_by_marker = {
+            block.text: message.parent_tool_use_id
+            for message in _rendered_chat_messages(update)
+            for block in message.content
+            if isinstance(block, TextBlock)
+        }
+        assert parent_by_marker.get("MAIN_BEFORE") is None
+        assert parent_by_marker.get("L1_TEXT") == "toolu_l1"
+        assert parent_by_marker.get("L2_TEXT") == "toolu_l2"
+        assert parent_by_marker.get("MAIN_AFTER") is None
+
     def test_multi_step_turn_reusing_id_preserves_every_step(self) -> None:
         """A multi-step turn legitimately reuses one first_response_message_id across segments
         (text -> tool -> more text), separated by StreamingMessageComplete.  Reusing the id must
@@ -6258,3 +6877,442 @@ def test_streamed_edit_tool_use_input_survives_mid_stream_tool_result() -> None:
     tool_result_blocks = [b for b in completed.content if isinstance(b, ToolResultBlock)]
     assert len(tool_result_blocks) == 1
     assert tool_result_blocks[0].tool_use_id == str(edit_tool_use_id)
+
+
+def _make_workflow_tool_response_block(tool_use_id: str) -> ResponseBlockAgentMessage:
+    return ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-workflow"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolUseBlock(
+                id=ToolUseID(tool_use_id),
+                name="Workflow",
+                input={"script": "export const meta = {name: 'review'}"},
+            ),
+        ),
+    )
+
+
+def _make_workflow_entries(agent_state: str = "progress") -> tuple[WorkflowPhaseProgress | WorkflowAgentProgress, ...]:
+    return (
+        WorkflowPhaseProgress(index=0, title="Review"),
+        WorkflowAgentProgress(index=0, label="review:bugs", phase_index=0, phase_title="Review", state=agent_state),
+    )
+
+
+def _workflow_states_of(state: TaskUpdate) -> dict[str, WorkflowTaskState]:
+    """Narrow the Optional: the fold always populates the map — None exists
+    only on wire copies where the stream layer suppressed an unchanged map."""
+    assert state.workflow_task_states is not None
+    return state.workflow_task_states
+
+
+def test_workflow_task_started_seeds_running_entry() -> None:
+    """A local_workflow task_started seeds a running entry keyed by tool_use_id;
+    other task types leave the map untouched."""
+    task_id = TaskID()
+
+    state = convert_agent_messages_to_task_update(
+        [
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                description="review",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-bash-1",
+                tool_use_id="toolu-bash-1",
+                description="bg sleep",
+                task_type="local_bash",
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+    assert set(_workflow_states_of(state)) == {"toolu-wf-1"}
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "running"
+    assert entry.workflow_name == "review"
+    assert entry.entries == ()
+
+
+def test_workflow_progress_upserts_entry_and_carries_across_batches() -> None:
+    task_id = TaskID()
+
+    state = convert_agent_messages_to_task_update(
+        [
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            WorkflowTaskProgressAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                workflow_name="review",
+                entries=_make_workflow_entries(),
+                usage=WorkflowUsage(total_tokens=3100, tool_uses=4),
+                last_tool_name="Grep",
+                summary="Review: review:bugs",
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "running"
+    assert len(entry.entries) == 2
+    assert entry.usage is not None and entry.usage.total_tokens == 3100
+    assert entry.last_tool_name == "Grep"
+
+    # An unrelated later batch must carry the map through untouched.
+    state = convert_agent_messages_to_task_update(
+        [],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=state,
+    )
+    assert "toolu-wf-1" in _workflow_states_of(state)
+
+
+def test_workflow_progress_preserves_workflow_name_when_incoming_is_empty() -> None:
+    task_id = TaskID()
+
+    state = convert_agent_messages_to_task_update(
+        [
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            WorkflowTaskProgressAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                entries=_make_workflow_entries(),
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+    assert _workflow_states_of(state)["toolu-wf-1"].workflow_name == "review"
+
+
+def test_workflow_notification_flips_status_without_synthesizing_child() -> None:
+    """Completion flips the entry to its final status with the final tree, and
+    the Workflow tool must not gain a synthetic child ChatMessage (which would
+    make AlphaToolGroup misclassify it as a subagent)."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            _make_workflow_tool_response_block("toolu-wf-1"),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            WorkflowTaskProgressAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                entries=_make_workflow_entries(),
+            ),
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="completed",
+                summary="Reviewed 4 files",
+                workflow_name="review",
+                final_workflow_entries=_make_workflow_entries(agent_state="done"),
+                workflow_usage=WorkflowUsage(total_tokens=9000),
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "completed"
+    assert entry.summary == "Reviewed 4 files"
+    agent_entry = entry.entries[1]
+    assert isinstance(agent_entry, WorkflowAgentProgress)
+    assert agent_entry.state == "done"
+    assert entry.usage is not None and entry.usage.total_tokens == 9000
+
+    # No synthetic child attached to the Workflow tool_use_id.
+    child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
+    assert child_messages == []
+    assert state.in_progress_chat_message is not None
+    assert state.in_progress_chat_message.parent_tool_use_id is None
+
+
+def test_workflow_notification_skips_child_synthesis_when_tool_use_is_result_replaced() -> None:
+    """In streamed turns the finalized message carries the Workflow tool call
+    as a bare ToolResultBlock (the tool_use is result-replaced), so the
+    notification handler cannot identify the parent by ToolUseBlock lookup.
+    It must still skip child synthesis — a synthetic child makes the frontend
+    misclassify the Workflow call as a subagent and drop the pill."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    result_only_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-workflow-streamed"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolResultBlock(
+                tool_use_id="toolu-wf-1",
+                tool_name="Workflow",
+                invocation_string="review",
+                content=GenericToolContent(text="Workflow launched in background. Task ID: task-wf-1"),
+            ),
+        ),
+    )
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            result_only_block,
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="completed",
+                summary="Reviewed 4 files",
+                workflow_name="review",
+                final_workflow_entries=_make_workflow_entries(agent_state="done"),
+            ),
+            _make_request_success(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    assert _workflow_states_of(state)["toolu-wf-1"].status == "completed"
+    child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
+    assert child_messages == []
+
+
+def test_workflow_notification_with_empty_tree_skips_child_synthesis_on_replay() -> None:
+    """A workflow that finished before reporting any tree replays with an
+    EMPTY final_workflow_entries tuple (the workflow marker). Even with no
+    ToolUseBlock in history (result-replaced) and no prior map entry, the
+    notification must rebuild a completed entry rather than synthesize a
+    subagent child."""
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    result_only_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-workflow-streamed"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolResultBlock(
+                tool_use_id="toolu-wf-1",
+                tool_name="Workflow",
+                invocation_string="review",
+                content=GenericToolContent(text="Workflow launched in background. Task ID: task-wf-1"),
+            ),
+        ),
+    )
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            result_only_block,
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="failed",
+                summary="Workflow script error",
+                workflow_name="review",
+                final_workflow_entries=(),
+            ),
+            _make_request_success(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "failed"
+    assert entry.entries == ()
+    child_messages = [m for m in completed_by_id.values() if m.parent_tool_use_id == "toolu-wf-1"]
+    assert child_messages == []
+
+
+def test_workflow_notification_rebuilds_entry_on_replay() -> None:
+    """On history replay (fresh connection, no ephemeral messages, no current
+    state) the persisted notification alone rebuilds a completed entry."""
+    task_id = TaskID()
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            _make_workflow_tool_response_block("toolu-wf-1"),
+            BackgroundTaskNotificationAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                status="completed",
+                summary="Reviewed 4 files",
+                workflow_name="review",
+                final_workflow_entries=_make_workflow_entries(agent_state="done"),
+                workflow_usage=WorkflowUsage(total_tokens=9000),
+            ),
+            _make_request_success(user_message.message_id),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+
+    entry = _workflow_states_of(state)["toolu-wf-1"]
+    assert entry.status == "completed"
+    assert entry.workflow_name == "review"
+    assert len(entry.entries) == 2
+
+
+def test_workflow_states_survive_request_success() -> None:
+    """Unlike pending_background_task_ids, completed workflow entries must not
+    be cleared when the request finishes."""
+    task_id = TaskID()
+
+    user_message = ChatInputUserMessage(text="Review this", model_name=LLMModel.CLAUDE_4_SONNET)
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            RequestStartedAgentMessage(request_id=user_message.message_id),
+            _make_workflow_tool_response_block("toolu-wf-1"),
+            BackgroundTaskStartedAgentMessage(
+                background_task_id="task-wf-1",
+                tool_use_id="toolu-wf-1",
+                task_type="local_workflow",
+                workflow_name="review",
+            ),
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+    assert "toolu-wf-1" in _workflow_states_of(state)
+    assert "task-wf-1" in state.pending_background_task_ids
+
+    state = convert_agent_messages_to_task_update(
+        [_make_request_success(user_message.message_id)],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id={},
+        current_state=state,
+    )
+
+    assert "toolu-wf-1" in _workflow_states_of(state)
+    assert state.pending_background_task_ids == frozenset()
+
+
+def test_pi_partial_response_extracts_img_tags_into_file_blocks() -> None:
+    """A Pi agent streaming partial whose TextBlock contains <img> tags must
+    produce FileBlocks in the chat content, not raw <img> text.
+
+    Regression test for SCU-1830: _handle_partial_response did not call
+    split_text_and_media() on TextBlocks, so the frontend MarkdownBlock
+    suppressed the <img> tag and no image appeared in chat.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+    assistant_message_id = AssistantMessageID("assistant-pi-img")
+    chat_message_id = AgentMessageID()
+
+    user_message = ChatInputUserMessage(
+        text="Show me the screenshot",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    state = convert_agent_messages_to_task_update(
+        [user_message],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    request_started = RequestStartedAgentMessage(request_id=user_message.message_id)
+
+    partial_with_img = PartialResponseBlockAgentMessage(
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        first_response_message_id=chat_message_id,
+        content=(TextBlock(text="Here is a screenshot:\n\n<img src='/tmp/test.png' alt='test'>\n\nDone."),),
+    )
+
+    response_block = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=chat_message_id,
+        content=(TextBlock(text="Here is a screenshot:\n\n<img src='/tmp/test.png' alt='test'>\n\nDone."),),
+    )
+
+    request_success = _make_request_success(request_id=user_message.message_id)
+
+    state = convert_agent_messages_to_task_update(
+        [
+            request_started,
+            partial_with_img,
+            response_block,
+            request_success,
+        ],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+
+    # After the full flow (partial → response → request_success), the completed
+    # message should have the <img> tag extracted into a FileBlock.
+    assert len(state.chat_messages) == 2  # user + assistant
+    assistant_reply = state.chat_messages[1]
+
+    file_blocks = [b for b in assistant_reply.content if isinstance(b, FileBlock)]
+    assert len(file_blocks) == 1, f"Expected one FileBlock, got content: {assistant_reply.content}"
+    assert file_blocks[0].source == "/tmp/test.png"
+
+    text_blocks = [b for b in assistant_reply.content if isinstance(b, TextBlock)]
+    text_content = "".join(b.text for b in text_blocks)
+    assert "Here is a screenshot" in text_content
+    assert "Done." in text_content
+    # The <img> tag should NOT be present as raw text
+    assert "<img" not in text_content

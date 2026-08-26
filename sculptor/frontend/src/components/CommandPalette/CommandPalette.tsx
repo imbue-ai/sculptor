@@ -1,16 +1,18 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { IconButton, Spinner, Tooltip, VisuallyHidden } from "@radix-ui/themes";
+import { Badge, IconButton, Spinner, Tooltip, VisuallyHidden } from "@radix-ui/themes";
 import { Command } from "cmdk";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useStore } from "jotai";
 import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-react";
 import type { KeyboardEvent, ReactElement } from "react";
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "../../api";
 import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
-import { formatShortcutForDisplay, shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
+import { shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
+import { ShortcutHint } from "../ShortcutHint.tsx";
 import { commandPaletteOpenAtom, commandPalettePendingAtom, commandPaletteSearchAtom } from "./atoms.ts";
 import styles from "./CommandPalette.module.scss";
+import { agentRenameTargetAtom, palettePendingRenameAtom, renamingWorkspaceIdAtom } from "./contextActions/atoms.ts";
 import { buildItemValue, makePaletteFilter, ROW_VALUE_SEP } from "./filter.ts";
 import { groupCommands } from "./groupCommands.ts";
 import { groupHeading } from "./groups.ts";
@@ -39,25 +41,6 @@ const kindLabelForRow = (groupId: CommandGroupId, isSearching: boolean): string 
 // Tab, Backspace. We skip these in the window-level shortcut listener so
 // in-palette navigation isn't intercepted as a command shortcut.
 const CMDK_KEYS = new Set(["Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape", "Tab", "Backspace"]);
-
-/**
- * Render a keybinding hint as a single <kbd> with the platform-formatted
- * display string. We deliberately do NOT split into per-character <kbd>s:
- * the Mac modifier glyphs (⌘ ⇧ ⌥ ⌃) only render legibly when the system
- * font can lay them out as a single text run with kerning / ligature
- * lookups in play. Splitting per-character broke that, especially for
- * thin glyphs like ⇧ which then looked like a ghost. Same approach as
- * the chat input's `<KeyboardHint>`.
- */
-const ShortcutHint = ({ binding }: { binding: string }): ReactElement => {
-  const display = formatShortcutForDisplay(binding);
-  if (!display) return <></>;
-  return (
-    <kbd className={styles.itemShortcut} aria-label={`Shortcut: ${display}`}>
-      {display}
-    </kbd>
-  );
-};
 
 const PaletteRow = ({
   command,
@@ -107,6 +90,10 @@ const PaletteRow = ({
       <div className={styles.itemBody}>
         <span className={styles.itemTitle}>{displayTitle}</span>
         {displaySubtitle ? <span className={styles.itemSubtitle}>{displaySubtitle}</span> : null}
+        {/* The visible trailing badge lives in an aria-hidden slot, so surface
+            the same project context to assistive tech here — otherwise two
+            same-named workspaces in different projects are indistinguishable. */}
+        {command.trailingBadge ? <VisuallyHidden>{`Project: ${command.trailingBadge}`}</VisuallyHidden> : null}
       </div>
       {/* Trailing slot is fixed-min-width so swapping spinner <-> shortcut
           / kind label doesn't cause a layout shift. Shortcut hint takes
@@ -117,8 +104,13 @@ const PaletteRow = ({
           <Spinner size="1" />
         ) : (
           <>
+            {command.trailingBadge ? (
+              <Badge variant="soft" color="gray" size="1" className={styles.itemBadge}>
+                {command.trailingBadge}
+              </Badge>
+            ) : null}
             {binding ? (
-              <ShortcutHint binding={binding} />
+              <ShortcutHint binding={binding} className={styles.itemShortcut} />
             ) : kind ? (
               <span className={styles.itemKind}>{kind}</span>
             ) : null}
@@ -157,6 +149,7 @@ export const CommandPalette = (): ReactElement => {
   const pendingCommandId = useAtomValue(commandPalettePendingAtom);
 
   const { close, popPage, pushPage } = useCommandPalette();
+  const store = useStore();
   const ctx = usePaletteContext();
   const allCommands = useVisibleCommands(ctx);
   const runCommand = useRunCommand();
@@ -451,7 +444,7 @@ export const CommandPalette = (): ReactElement => {
   // them against every visible command's `shortcut`. A match closes the
   // palette and runs the command — so `Cmd+T` (toggle theme) fires its
   // command directly, instead of being swallowed by the overlay
-  // suppression in `usePageLayoutKeyboardShortcuts`.
+  // suppression in `useGlobalKeyboardShortcuts`.
   //
   // We use the capture phase so we run BEFORE that suppression handler
   // (which is registered on `window` in bubble phase). cmdk's own input
@@ -549,6 +542,25 @@ export const CommandPalette = (): ReactElement => {
           if (inputRef.current != null && inputRef.current.value !== "") {
             e.preventDefault();
             setSearch("");
+          }
+        }}
+        // Flush a stashed rename handoff now that the dialog — and its focus trap —
+        // is gone (see palettePendingRenameAtom). Suppressing the default focus
+        // restore matters as much as the deferral: restoring focus to the element
+        // focused before the palette opened would blur — and cancel — the inline
+        // rename input the deferred write mounts. Every other close reason keeps
+        // the normal focus return.
+        onCloseAutoFocus={(e): void => {
+          const pendingRename = store.get(palettePendingRenameAtom);
+          if (pendingRename === null) {
+            return;
+          }
+          store.set(palettePendingRenameAtom, null);
+          e.preventDefault();
+          if (pendingRename.kind === "agent") {
+            store.set(agentRenameTargetAtom, pendingRename.panelId);
+          } else {
+            store.set(renamingWorkspaceIdAtom, pendingRename.workspaceId);
           }
         }}
       >

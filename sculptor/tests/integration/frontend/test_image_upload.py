@@ -9,10 +9,12 @@ from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import expect_message_to_have_role
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -192,10 +194,9 @@ def test_image_upload_from_second_agent(sculptor_instance_: SculptorInstance, te
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    create_agent_panel(page, section="center")
 
-    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
+    expect(PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()).to_have_count(2)
 
     new_task_page = PlaywrightTaskPage(page=page)
     new_chat_panel = new_task_page.get_chat_panel()

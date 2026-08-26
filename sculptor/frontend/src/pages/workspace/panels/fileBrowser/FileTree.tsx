@@ -1,12 +1,12 @@
 import { Flex, Text } from "@radix-ui/themes";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useAtom, useSetAtom } from "jotai";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef } from "react";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { type ReactElement, useCallback, useEffect, useId, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
 
+import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
 import { expandFoldersAtom, fileBrowserStateAtomFamily, toggleFolderAtom } from "./atoms.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
 import styles from "./FileTree.module.scss";
@@ -36,16 +36,32 @@ type FileTreeProps = {
   workspaceId: string;
   viewMode: ViewMode;
   searchMatchingPaths?: Set<string> | null;
+  /**
+   * A file click calls this with the clicked path. The FilesPanel drives its
+   * embedded viewer from per-panel selection state rather than the shared
+   * diff-panel tab list.
+   */
+  onSelectFile: (path: string) => void;
+  /** The currently selected file path, highlighted in the list. */
+  selectedPath?: string | null;
 };
 
-export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTreeProps): ReactElement => {
+export const FileTree = ({
+  workspaceId,
+  viewMode,
+  searchMatchingPaths,
+  onSelectFile,
+  selectedPath,
+}: FileTreeProps): ReactElement => {
   const [fileBrowserState, setFileBrowserState] = useAtom(fileBrowserStateAtomFamily(workspaceId));
   const toggleFolder = useSetAtom(toggleFolderAtom);
   const expandFolders = useSetAtom(expandFoldersAtom);
-  const openFileViewTab = useSetAtom(openFileViewTabAtom);
 
-  const { agentID } = useWorkspacePageParams();
-  const activeOperation = useActiveFileOperation(agentID);
+  // Track file operations of the workspace's current agent, resolved from the
+  // section shell rather than the route: activating a different center tab
+  // doesn't navigate, so the route's agent id goes stale.
+  const agentId = useAtomValue(activeAgentIdAtomFamily(workspaceId));
+  const activeOperation = useActiveFileOperation(agentId);
 
   const { tree: rawTree, folderChangeCounts } = useFileTree(workspaceId, "vs-target-branch");
 
@@ -87,6 +103,8 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
   );
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Links the scroll container to the overlay scrollbar's `aria-controls`.
+  const scrollContainerId = useId();
 
   const itemCount = viewMode === "tree" ? flatRows.length : flatFiles.length;
 
@@ -156,9 +174,9 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
 
   const handleFileClick = useCallback(
     (path: string): void => {
-      openFileViewTab({ workspaceId, filePath: path });
+      onSelectFile(path);
     },
-    [openFileViewTab, workspaceId],
+    [onSelectFile],
   );
 
   const handleCollapseChildren = useCollapseChildren({
@@ -216,6 +234,7 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
   return (
     <div
       ref={scrollContainerRef}
+      id={scrollContainerId}
       className={styles.scrollContainer}
       onScroll={handleScroll}
       onKeyDown={onKeyDown}
@@ -254,6 +273,7 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
                   <FlatListRow
                     entry={entry}
                     isFocused={virtualItem.index === focusedIndex}
+                    isSelected={entry.path === selectedPath}
                     onFileClick={handleFileClick}
                   />
                 </FileContextMenu>
@@ -300,6 +320,7 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
                   isExpanded={isExpanded}
                   isFocused={virtualItem.index === focusedIndex}
                   isActiveFile={node.path === activeOperation?.filePath}
+                  isSelected={node.path === selectedPath}
                   folderChangeCount={folderChangeCount}
                   onToggleExpand={handleToggleExpand}
                   onFileClick={handleFileClick}
@@ -309,6 +330,11 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
           );
         })}
       </div>
+      <VerticalOverlayScrollbar
+        scrollRef={scrollContainerRef}
+        scrollContainerId={scrollContainerId}
+        thumbTestId={ElementIds.FILE_BROWSER_SCROLLBAR_THUMB}
+      />
     </div>
   );
 };

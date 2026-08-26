@@ -13,6 +13,7 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import expect_message_to_have_role
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -289,10 +290,9 @@ def test_assistant_img_tag_persists_after_restart(
 
     # Phase 2: Restart and verify the image persisted
     with sculptor_instance_factory_.spawn_instance() as instance:
-        new_task_page = PlaywrightTaskPage(page=instance.page)
-        workspace_tab = new_task_page.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        page = instance.page
+        new_task_page = PlaywrightTaskPage(page=page)
+        navigate_to_workspace(page)
 
         chat_panel = new_task_page.get_chat_panel()
         wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
@@ -406,10 +406,9 @@ def test_assistant_img_tag_persists_after_tool_call_and_restart(
 
     # Phase 2: Restart and verify the image persisted
     with sculptor_instance_factory_.spawn_instance() as instance:
-        new_task_page = PlaywrightTaskPage(page=instance.page)
-        workspace_tab = new_task_page.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        page = instance.page
+        new_task_page = PlaywrightTaskPage(page=page)
+        navigate_to_workspace(page)
 
         chat_panel = new_task_page.get_chat_panel()
         wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)

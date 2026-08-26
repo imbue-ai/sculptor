@@ -7,7 +7,6 @@ they start collapsed, and the expand-all button works.
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -95,21 +94,11 @@ fake_claude:multi_step `{
 }`"""
 
 
-def _enable_review_all_via_settings(page) -> None:  # noqa: ANN001
-    """Enable the Review All setting via the Settings UI (idempotent)."""
-    settings_page = navigate_to_settings_page(page=page)
-    experimental_section = settings_page.click_on_experimental()
-    experimental_section.enable_review_all()
-
-
 @user_story("to see files auto-collapsed when there are many files in Review All")
 def test_many_files_start_collapsed_in_review_all(sculptor_instance_: SculptorInstance) -> None:
     """When the combined diff view has more than 5 files, all files should
     start collapsed. File headers should be visible but diff content hidden."""
     page = sculptor_instance_.page
-
-    # Enable Review All via Settings UI (persists through navigation)
-    _enable_review_all_via_settings(page)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_SEVEN_FILES_PROMPT, wait_for_agent_to_finish=False)
     chat_panel = task_page.get_chat_panel()
@@ -118,17 +107,18 @@ def test_many_files_start_collapsed_in_review_all(sculptor_instance_: SculptorIn
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
+    # Review All opens on the "All" (vs target branch) scope by default, so the
+    # committed files count without any scope click.
+    review_all_panel = task_page.get_review_all_panel()
+    expect(review_all_panel).to_be_visible()
+
     # All 9 file section headers should be visible (7 uncommitted + 2 committed
-    # on the testing branch vs main, since Review All defaults to "All" scope).
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
-    file_sections = diff_panel.get_file_sections()
-    expect(file_sections).to_have_count(9)
+    # on the testing branch vs main, since Review All is scoped to "All").
+    expect(review_all_panel.get_file_sections()).to_have_count(9)
 
     # But diff content should not be visible (files are collapsed) — check that
     # no unified diff view is shown
-    diff_views = diff_panel.get_unified_diff_views()
-    expect(diff_views).to_have_count(0)
+    expect(review_all_panel.get_unified_diff_views()).to_have_count(0)
 
 
 @user_story("to see files NOT auto-collapsed when there are few files in Review All")
@@ -137,8 +127,6 @@ def test_few_files_start_expanded_in_review_all(sculptor_instance_: SculptorInst
     start expanded (not collapsed)."""
     page = sculptor_instance_.page
 
-    _enable_review_all_via_settings(page)
-
     task_page = start_task_and_wait_for_ready(page, prompt=_THREE_FILES_PROMPT, wait_for_agent_to_finish=False)
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
@@ -146,13 +134,14 @@ def test_few_files_start_expanded_in_review_all(sculptor_instance_: SculptorInst
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
+    # Review All opens on the "All" (vs target branch) scope by default, so the
+    # committed files count without any scope click.
+    review_all_panel = task_page.get_review_all_panel()
+    expect(review_all_panel).to_be_visible()
+
     # 5 file section headers should be visible (3 uncommitted + 2 committed
-    # on the testing branch vs main, since Review All defaults to "All" scope).
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
-    file_sections = diff_panel.get_file_sections()
-    expect(file_sections).to_have_count(5)
+    # on the testing branch vs main, since Review All is scoped to "All").
+    expect(review_all_panel.get_file_sections()).to_have_count(5)
 
     # Diff content should be visible (files are expanded)
-    diff_views = diff_panel.get_unified_diff_views()
-    expect(diff_views).to_have_count(5)
+    expect(review_all_panel.get_unified_diff_views()).to_have_count(5)

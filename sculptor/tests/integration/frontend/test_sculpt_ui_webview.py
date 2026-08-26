@@ -5,8 +5,8 @@ which renders the placeholder web-mode shell. These tests therefore focus on
 what *is* observable through the headless harness: CLI exit codes against a
 running backend, and the 404/3 mapping for missing/closed workspaces.
 
-End-to-end coverage of the webview reacting to commands is documented in the
-manual smoke runbook for the demo (see Task 1.4 of the implementation plan).
+End-to-end coverage of the webview reacting to commands is exercised manually
+(it needs the Electron shell, which this harness cannot drive).
 """
 
 import re

@@ -43,6 +43,8 @@ def test_not_configured_shows_configure_cta(
         repos_settings = settings_page.click_on_repositories()
         add_repo_dialog = repos_settings.open_add_repo_dialog()
 
+        # The dialog opens on the Local source; switch to GitHub to reach the
+        # remote form and its not-configured state.
         add_repo_dialog.get_source_github_card().click()
 
         # The not-configured section replaces the combobox in the form.

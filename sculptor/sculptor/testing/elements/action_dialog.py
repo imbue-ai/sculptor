@@ -66,6 +66,14 @@ class PlaywrightActionDialogElement(PlaywrightIntegrationTestElement):
         """Get the group select trigger."""
         return self.get_by_test_id(ElementIDs.ACTION_DIALOG_GROUP_SELECT)
 
+    def get_group_option(self, group_name: str) -> Locator:
+        """Get an option in the (open) group dropdown by its visible name.
+
+        Radix renders select options at the page level, so this queries the page
+        rather than the dialog locator.
+        """
+        return self._page.get_by_role("option", name=group_name)
+
     def get_auto_submit_switch(self) -> Locator:
         """Get the auto-submit switch."""
         return self.get_by_test_id(ElementIDs.ACTION_DIALOG_AUTO_SUBMIT_SWITCH)

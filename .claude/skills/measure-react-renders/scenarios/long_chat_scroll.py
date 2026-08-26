@@ -1,8 +1,8 @@
 """Scenario: Long chat scroll render cascade.
 
 Measures re-renders when the user scrolls through a chat history with many
-messages. Components outside the scroll area (sidebars, DockingLayout,
-panel content, chat input) should not re-render during scroll.
+messages. Components outside the scroll area (the workspace sidebar, the
+section grid, panel content, chat input) should not re-render during scroll.
 
 This scenario requires the agent to have finished generating a response so
 there's a meaningful message list to scroll through.
@@ -12,24 +12,21 @@ import time
 
 DESCRIPTION = "Long chat scroll (scroll through message history)"
 
+# Memo-wrapped exports (e.g. SplittableSection) are recorded under their inner
+# function names ("SplittableSectionComponent").
 TARGET_COMPONENTS = [
     "WorkspacePageContent",
-    "DockingLayout",
-    "LeftSidebar",
-    "LeftSidebarInner",
-    "RightSidebar",
-    "RightSidebarInner",
-    "ZoneContent",
-    "ZoneContentInner",
-    "DiffSplitContainer",
-    "DiffSplitContainerInner",
+    "WorkspaceLayoutShell",
+    "WorkspaceSidebar",
+    "WorkspaceHeaderComponent",
+    "SectionGrid",
+    "SplittableSectionComponent",
+    "PanelSectionComponent",
+    "SectionHeaderComponent",
+    "SectionBodyComponent",
     "AlphaChatInterface",
-    "AlphaChatInterfaceInner",
+    "ChatPanelContent",
     "ChatInput",
-    "WorkspaceBanner",
-    "AgentTabs",
-    "Message",
-    "ToolBlock",
     "MarkdownBlock",
     "ScrollArea",
 ]

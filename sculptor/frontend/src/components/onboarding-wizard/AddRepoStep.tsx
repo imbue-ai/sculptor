@@ -42,7 +42,10 @@ type AddRepoStepProps = {
 export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps): ReactElement => {
   const [path, setPath] = useState("");
   const dangerColor = useThemeDangerColor();
-  const [mode, setMode] = useState<AddRepoSource>("github");
+  // Local is the default source (matching AddRepoDialog): adding a folder
+  // already on disk needs no CLI install or auth, so first-run never opens
+  // on NotConfiguredSection.
+  const [mode, setMode] = useState<AddRepoSource>("local");
   const [remoteState, setRemoteState] = useState<Record<RemoteProvider, PerProviderState>>(INITIAL_REMOTE_STATE);
   // Onboarding runs outside of PageLayout, so the unified stream isn't
   // populating this atom yet — we refresh manually on mount below.

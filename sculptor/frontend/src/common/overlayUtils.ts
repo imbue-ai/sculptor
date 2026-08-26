@@ -5,10 +5,24 @@
  *
  * This relies on DOM attributes set by Radix UI, so new Radix-based overlays
  * are detected automatically without code changes here.
+ *
+ * `ignoreDialog` excludes one dialog element (and its descendants/ancestors)
+ * from the dialog check. An overlay that hosts its own keyboard handler — e.g.
+ * the new-workspace modal, whose form owns Cmd+Enter — passes its host dialog so
+ * it doesn't treat ITSELF as a blocking overlay, while still bailing for any
+ * other overlay stacked above it (a nested dialog, an open Select, a suggestion
+ * list). Popper-based and TipTap overlays portal to the body, so they are
+ * detected regardless of the ignored dialog.
  */
-export const isDismissibleOverlayOpen = (): boolean => {
+export const isDismissibleOverlayOpen = (ignoreDialog?: Element | null): boolean => {
   // Radix Dialog / AlertDialog (fixed-position overlays, not popper-based).
-  if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) {
+  const dialogs = document.querySelectorAll(
+    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+  );
+  for (const dialog of dialogs) {
+    if (ignoreDialog && (dialog === ignoreDialog || dialog.contains(ignoreDialog) || ignoreDialog.contains(dialog))) {
+      continue;
+    }
     return true;
   }
 

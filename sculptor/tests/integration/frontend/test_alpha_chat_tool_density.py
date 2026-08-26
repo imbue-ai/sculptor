@@ -77,7 +77,7 @@ def test_toggle_to_expanded_density_stacks_rows(
     expect(pill_row).to_have_attribute("class", _PILL_ROW_CLASS_RE)
 
     # Move focus out of the chat input so the keyboard shortcut is handled
-    # by the page-level listener (matching test_zen_mode's pattern).
+    # by the page-level listener.
     blur_active_element(page)
     page.keyboard.press(f"{mod}+Shift+E")
 

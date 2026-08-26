@@ -22,8 +22,12 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.diff_panel import get_diff_panel_from_page
-from sculptor.testing.elements.file_browser import get_file_browser_panel
+from sculptor.testing.elements.files_panel import get_files_panel_in
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import request_with_retry
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -78,26 +82,34 @@ def _start_empty_workspace(page: Page) -> str:
 
 
 @contextlib.contextmanager
+def _temp_readable_file(*, suffix: str = ".txt", content: str = "hello\n") -> Generator[str, None, None]:
+    """Yield the absolute path of a tempfile the backend can read via the
+    relaxed read-file gate. Cleans the tempfile up on exit."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    try:
+        yield tmp_path
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+@contextlib.contextmanager
 def _workspace_and_file(
     page: Page, *, suffix: str = ".txt", content: str = "hello\n"
 ) -> Generator[tuple[str, str], None, None]:
     """Yield (workspace_id, absolute_file_path).
 
-    Creates an empty workspace and a tempfile that the backend can read via
-    the relaxed read-file gate. Cleans the tempfile up on exit.
+    Creates an empty workspace and a host-readable tempfile.
     """
     workspace_id = _start_empty_workspace(page)
-    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-    try:
+    with _temp_readable_file(suffix=suffix, content=content) as tmp_path:
         yield workspace_id, tmp_path
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
 
 
 @user_story("agent surfaces a file via sculpt ui open-file --mode file")
-def test_mode_file_opens_file_view_tab(sculptor_instance_: SculptorInstance) -> None:
+def test_mode_file_opens_file_view(sculptor_instance_: SculptorInstance) -> None:
+    """``--mode file`` displays the file as a read-only document in the viewer."""
     page = sculptor_instance_.page
     with _workspace_and_file(page) as (workspace_id, file_path):
         exit_code, _stdout, stderr = _run_sculpt_ui_open_file(
@@ -106,17 +118,12 @@ def test_mode_file_opens_file_view_tab(sculptor_instance_: SculptorInstance) -> 
         assert exit_code == 0, f"Expected exit 0, got {exit_code}; stderr: {stderr}"
 
         diff_panel = get_diff_panel_from_page(page)
-        expect(diff_panel).to_be_visible()
-
-        file_tab = diff_panel.get_tab_by_name(Path(file_path).name)
-        expect(file_tab.first).to_be_visible()
-
-        preview = diff_panel.get_read_only_preview()
-        expect(preview).to_be_visible()
+        diff_panel.expect_shows_file(Path(file_path).name)
 
 
 @user_story("agent surfaces a file with --mode diff")
-def test_mode_diff_opens_single_tab(sculptor_instance_: SculptorInstance) -> None:
+def test_mode_diff_opens_in_viewer(sculptor_instance_: SculptorInstance) -> None:
+    """``--mode diff`` surfaces the file in the single embedded viewer."""
     page = sculptor_instance_.page
     with _workspace_and_file(page) as (workspace_id, file_path):
         exit_code, _stdout, stderr = _run_sculpt_ui_open_file(
@@ -126,13 +133,12 @@ def test_mode_diff_opens_single_tab(sculptor_instance_: SculptorInstance) -> Non
 
         diff_panel = get_diff_panel_from_page(page)
         expect(diff_panel).to_be_visible()
-
-        file_tab = diff_panel.get_tab_by_name(Path(file_path).name)
-        expect(file_tab.first).to_be_visible()
+        expect(diff_panel.get_file_header()).to_contain_text(Path(file_path).name)
 
 
 @user_story("agent surfaces a file with default --mode auto")
-def test_mode_auto_opens_a_tab(sculptor_instance_: SculptorInstance) -> None:
+def test_mode_auto_opens_in_viewer(sculptor_instance_: SculptorInstance) -> None:
+    """Default ``--mode auto`` surfaces the file in the single embedded viewer."""
     page = sculptor_instance_.page
     with _workspace_and_file(page) as (workspace_id, file_path):
         exit_code, _stdout, stderr = _run_sculpt_ui_open_file(
@@ -142,9 +148,7 @@ def test_mode_auto_opens_a_tab(sculptor_instance_: SculptorInstance) -> None:
 
         diff_panel = get_diff_panel_from_page(page)
         expect(diff_panel).to_be_visible()
-
-        file_tab = diff_panel.get_tab_by_name(Path(file_path).name)
-        expect(file_tab.first).to_be_visible()
+        expect(diff_panel.get_file_header()).to_contain_text(Path(file_path).name)
 
 
 @user_story("CLI exits 3 when the workspace is closed")
@@ -192,10 +196,7 @@ def test_out_of_clone_absolute_path_opens(sculptor_instance_: SculptorInstance) 
         assert exit_code == 0, f"Expected exit 0, got {exit_code}; stderr: {stderr}"
 
         diff_panel = get_diff_panel_from_page(page)
-        expect(diff_panel).to_be_visible()
-
-        file_tab = diff_panel.get_tab_by_name(Path(tmp_path).name)
-        expect(file_tab.first).to_be_visible()
+        diff_panel.expect_shows_file(Path(tmp_path).name)
 
 
 @user_story("diff panel auto-opens when an open-file event arrives in a fresh session")
@@ -218,59 +219,50 @@ def test_panel_auto_opens(sculptor_instance_: SculptorInstance) -> None:
         expect(diff_panel).to_be_visible()
 
 
-@user_story("opening the same file twice produces a single tab")
-def test_same_path_same_kind_no_duplicate_tab(sculptor_instance_: SculptorInstance) -> None:
-    page = sculptor_instance_.page
-    with _workspace_and_file(page) as (workspace_id, file_path):
-        for _ in range(2):
-            exit_code, _stdout, stderr = _run_sculpt_ui_open_file(
-                sculptor_instance_, path=file_path, workspace_id=workspace_id, mode="file"
-            )
-            assert exit_code == 0, f"Expected exit 0, got {exit_code}; stderr: {stderr}"
-
-        diff_panel = get_diff_panel_from_page(page)
-        file_tabs = diff_panel.get_tab_by_name(Path(file_path).name)
-        expect(file_tabs).to_have_count(1)
-
-
-@user_story("opening the same path with different modes produces two distinct tabs")
-def test_different_kind_same_path_creates_distinct_tabs(
+@user_story("agent opens a file in another workspace without disturbing the one I'm viewing")
+def test_open_file_for_inactive_workspace_leaves_viewed_workspace_alone(
     sculptor_instance_: SculptorInstance,
 ) -> None:
+    """An open-file event targeting a NON-active workspace must not touch the viewed one.
+
+    Open-file events arrive over the unified stream for EVERY workspace, but the
+    reveal (open/expand the host panel, jump to its section) may only run in the
+    workspace the event targets. Here the event targets workspace A while
+    workspace B is being viewed: B's layout must stay untouched — its default
+    Files viewer stays at the empty placeholder (no file surfaced), including
+    after a round-trip away and back (so no layout change was persisted for B) —
+    while A surfaces the file in its Files viewer on the next visit.
+    """
     page = sculptor_instance_.page
-    with _workspace_and_file(page) as (workspace_id, file_path):
-        exit_code_file, _stdout1, stderr1 = _run_sculpt_ui_open_file(
-            sculptor_instance_, path=file_path, workspace_id=workspace_id, mode="file"
-        )
-        assert exit_code_file == 0, f"Expected exit 0 (file mode), got {exit_code_file}; stderr: {stderr1}"
 
-        exit_code_diff, _stdout2, stderr2 = _run_sculpt_ui_open_file(
-            sculptor_instance_, path=file_path, workspace_id=workspace_id, mode="diff"
-        )
-        assert exit_code_diff == 0, f"Expected exit 0 (diff mode), got {exit_code_diff}; stderr: {stderr2}"
+    # Workspace A (the target): reveal its Files panel so the file the event
+    # records is visible in A's embedded viewer on the next visit.
+    start_task_and_wait_for_ready(page, prompt=_NO_OP_PROMPT, workspace_name="Open File Target WS")
+    target_workspace_id = _extract_workspace_id_from_url(page.url)
+    open_panel(page, "files", sub_section="left")
 
-        diff_panel = get_diff_panel_from_page(page)
-        # The two activations produce two distinct tabs (different kind keys).
-        expect(diff_panel.get_tab_by_name(Path(file_path).name)).to_have_count(2)
+    # Workspace B (the viewed one): keeps its seeded default — left expanded with the
+    # Files explorer, whose embedded viewer sits at the empty placeholder (no file open).
+    start_task_and_wait_for_ready(page, prompt=_NO_OP_PROMPT, workspace_name="Open File Viewer WS")
+    viewer_ws_files = get_files_panel_in(PlaywrightWorkspaceSection(page, "left").get_section(), page)
+    expect(viewer_ws_files.get_diff_viewer().get_empty_body()).to_be_visible()
 
-
-@user_story("opening a file while a combined-review tab is active leaves the combined tab in place")
-def test_combined_tab_remains_when_open_file_arrives(
-    sculptor_instance_: SculptorInstance,
-) -> None:
-    page = sculptor_instance_.page
-    with _workspace_and_file(page) as (workspace_id, file_path):
-        # Open Review All to surface the combined-diff tab if the button is exposed.
-        file_browser = get_file_browser_panel(page)
-        review_all_btn = file_browser.get_review_all_button()
-        if review_all_btn.is_visible():
-            review_all_btn.click()
-
+    with _temp_readable_file(content="hello from the target workspace\n") as file_path:
         exit_code, _stdout, stderr = _run_sculpt_ui_open_file(
-            sculptor_instance_, path=file_path, workspace_id=workspace_id, mode="file"
+            sculptor_instance_, path=file_path, workspace_id=target_workspace_id, mode="file"
         )
         assert exit_code == 0, f"Expected exit 0, got {exit_code}; stderr: {stderr}"
 
-        diff_panel = get_diff_panel_from_page(page)
-        file_tab = diff_panel.get_tab_by_name(Path(file_path).name)
-        expect(file_tab.first).to_be_visible()
+        # Visiting A shows the recorded file in its (already revealed) Files
+        # viewer. Seeing it there also confirms the event has been fully
+        # processed, so the untouched-B assertions below check a settled state
+        # rather than racing the WebSocket delivery.
+        navigate_to_workspace(page, "Open File Target WS")
+        get_diff_panel_from_page(page).expect_shows_file(Path(file_path).name)
+
+        # Back to B: nothing was opened or persisted for it — its Files viewer still
+        # sits at the empty placeholder, confirming the event surfaced no file here.
+        navigate_to_workspace(page, "Open File Viewer WS")
+        expect(PlaywrightTaskPage(page=page).get_chat_panel()).to_be_visible(timeout=60_000)
+        viewer_ws_files = get_files_panel_in(PlaywrightWorkspaceSection(page, "left").get_section(), page)
+        expect(viewer_ws_files.get_diff_viewer().get_empty_body()).to_be_visible()

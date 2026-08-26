@@ -97,14 +97,14 @@ Parallelism matters: one subagent per 1–2 doc files keeps the main context sma
 Sculptor source conventionally lives under `sculptor/`. Start from these anchors; let the code tell you the rest.
 
 - **Frontend UI:** `sculptor/frontend/src/`
-  - Chat: `pages/workspace/components/ChatInput.tsx`, `chat-alpha/TurnFooter.tsx`
-  - Workspace chrome: `components/WorkspaceBanner.tsx`, `components/AgentTabs.tsx`, `components/BottomBar.tsx`, `components/RepoSegment.tsx`
-  - Panels: `panels/workspacePanels.ts`, `panels/ActionsPanel.tsx`, `panels/ActionDialog.tsx`, `panels/TerminalPanel.tsx`, `panels/useTerminal.ts`
+  - Chat: `pages/workspace/components/ChatInput.tsx`, `pages/workspace/components/chat-alpha/TurnFooter.tsx`
+  - Workspace chrome: `pages/workspace/WorkspaceLayoutShell.tsx`, `pages/workspace/WorkspaceHeader.tsx`, `components/nav/WorkspaceSidebar.tsx`
+  - Panels: `components/sections/registry/panelRegistry.ts` (panel names, icons, default sections), the panel components under `pages/workspace/panels/` (`ActionsPanel.tsx`, `ChangesPanel.tsx`, `TerminalPanelView.tsx`, `useTerminal.ts`, …), `components/actions/ActionDialog.tsx`
   - Slash commands (source of truth): `common/builtinSkills.ts`, `common/pseudoSkills.ts` + the matcher in `ChatInput.tsx`
   - Keybindings: `common/keybindings/definitions.ts`
   - Settings: `pages/settings/SettingsPage.tsx` and subsections
-  - Sidebar icons / test IDs: `components/panels/SidebarIcon.tsx`
-- **Backend / paths:** `sculptor/sculptor/utils/build.py` (workspace layout), `sculptor/sculptor/clone_strategy.py`, `sculptor/sculptor/local_terminal_manager.py`, commit API `commit_workspace_changes`
+  - Panel tabs / section chrome test IDs: `components/sections/SectionHeader.tsx`, `components/sections/AddPanelDropdown.tsx`
+- **Backend / paths:** `sculptor/sculptor/utils/build.py` (workspace layout), `sculptor/sculptor/services/workspace_service/environment_manager/environments/clone_strategy.py`, `sculptor/sculptor/services/workspace_service/environment_manager/environments/local_terminal_manager.py`
 - **Electron main:** `main.ts` (container-backend URL regex, window config)
 - **Test IDs:** `sculptor/sculptor/constants.py` — the `ElementIDs` StrEnum
 

@@ -15,8 +15,8 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import navigate_away_and_back
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -80,12 +80,8 @@ def test_enter_plan_mode_does_not_trigger_waiting_status(sculptor_instance_: Scu
     toggle = chat_panel.get_plan_mode_toggle()
     expect(toggle).to_have_attribute("data-active", "true")
 
-    # Navigate away so the workspace tab is hoverable.
-    navigate_to_add_workspace_page(page)
-
-    # Hover the workspace tab to trigger the peek popover.
-    workspace_tab = task_page.get_workspace_tabs().first
-    workspace_tab.hover()
+    # Hover the workspace's sidebar row to trigger the peek popover.
+    get_workspace_sidebar(page).get_workspace_rows().first.hover()
 
     peek = task_page.get_workspace_peek_popover()
     expect(peek).to_be_visible()
@@ -583,7 +579,7 @@ fake_claude:multi_step `{
 @user_story("to open a plan file in the document viewer from the chat panel")
 def test_plan_file_opens_in_document_viewer(sculptor_instance_: SculptorInstance) -> None:
     """Plan-mode write of ``.claude/plans/...`` followed by the file chip's
-    "View full diff" action must open a *file-view tab*, not a diff tab.
+    "View full diff" action must open a read-only *file view*, not a diff.
 
     This locks in the SCU-366 routing: ``AlphaChipDiffPopover`` detects plan
     files (path starts with ``.claude/plans/``) and routes them to
@@ -613,9 +609,9 @@ def test_plan_file_opens_in_document_viewer(sculptor_instance_: SculptorInstance
     expect(popover).to_be_visible()
     chat_panel.get_chip_view_full_diff_button().click()
 
-    # Plan files route to a file-view tab (FILE_VIEW_TAB_MARKER) rendering
-    # READ_ONLY_PREVIEW — not a diff view.
-    task_page.get_diff_panel().expect_shows_file_view("plan.md")
+    # Plan files route to a read-only file view (READ_ONLY_PREVIEW) in the
+    # single embedded viewer — not a diff view.
+    task_page.get_diff_panel().expect_shows_file("plan.md")
 
 
 @user_story("to see the plan file auto-open when the plan approval UI appears")
@@ -638,14 +634,7 @@ def test_plan_file_auto_opens_on_exit_plan_mode(sculptor_instance_: SculptorInst
     expect(auq_panel).to_be_visible()
 
     # The diff panel should automatically open with the plan file — no click needed
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
-
-    plan_tab = diff_panel.get_tab_by_name("plan.md")
-    expect(plan_tab.first).to_be_visible()
-
-    preview = diff_panel.get_read_only_preview()
-    expect(preview).to_be_visible()
+    task_page.get_diff_panel().expect_shows_file("plan.md")
 
 
 @user_story("to open the plan file by clicking the ExitPlanMode block")
@@ -676,14 +665,7 @@ def test_exit_plan_mode_block_click_opens_plan_file(sculptor_instance_: Sculptor
 
     exit_plan_block.click()
 
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
-
-    plan_tab = diff_panel.get_tab_by_name("plan.md")
-    expect(plan_tab.first).to_be_visible()
-
-    preview = diff_panel.get_read_only_preview()
-    expect(preview).to_be_visible()
+    task_page.get_diff_panel().expect_shows_file("plan.md")
 
 
 # Two write+exit cycles inside one fake_claude turn: V1, user approves, V2.

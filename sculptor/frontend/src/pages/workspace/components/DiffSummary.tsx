@@ -1,17 +1,12 @@
 import { Button } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import { ElementIds } from "~/api";
 import { useTimedLatch } from "~/common/Hooks.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
-import {
-  activeFileBrowserTabAtomFamily,
-  activePanelPerZoneAtom,
-  filesZoneAtom,
-  zoneVisibilityAtom,
-} from "~/components/panels/atoms";
+import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
 
 import { changesScopeAtomFamily } from "../panels/fileBrowser/atoms";
 import { parseDiffStats } from "../utils/parseDiffStats";
@@ -28,20 +23,17 @@ type DiffSummaryProps = {
 export const DiffSummary = ({ workspaceId }: DiffSummaryProps): ReactElement | null => {
   const { data: diff, isFetching, isGenerating } = useWorkspaceDiff(workspaceId);
   const isShimmering = useTimedLatch(isFetching || isGenerating, SHIMMER_MIN_HOLD_MS);
-  const filesZone = useAtomValue(filesZoneAtom);
-  const setZoneVisibility = useSetAtom(zoneVisibilityAtom);
-  const setActivePanelPerZone = useSetAtom(activePanelPerZoneAtom);
-  const setActiveTab = useSetAtom(activeFileBrowserTabAtomFamily(workspaceId));
+  const openPanel = useSetAtom(openPanelAtom);
+  const jumpToSection = useSetAtom(jumpToSectionAtom);
   const setChangesScope = useSetAtom(changesScopeAtomFamily(workspaceId));
 
   const stats = useMemo(() => parseDiffStats(diff?.targetBranchDiff), [diff?.targetBranchDiff]);
 
   const handleClick = (): void => {
-    if (filesZone) {
-      setZoneVisibility((prev) => ({ ...prev, [filesZone]: true }));
-      setActivePanelPerZone((prev) => ({ ...prev, [filesZone]: "files" }));
-    }
-    setActiveTab("changes");
+    // Surface the Changes panel in the left section (opening/expanding it) and pulse the
+    // ring, then point it at the target-branch diff.
+    openPanel({ panelId: "changes", in: "left" });
+    jumpToSection({ subSection: "left" });
     setChangesScope("vs-target-branch");
   };
 

@@ -34,16 +34,20 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 from sculptor.primitives.service import Service
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
 from sculptor.services.managed_tools import ManagedTool
+from sculptor.services.managed_tools import PI_VERSION_RANGE
 from sculptor.services.managed_tools import ResolvedDistribution
 from sculptor.services.managed_tools import VersionRange
 from sculptor.services.managed_tools import get_managed_tool
 from sculptor.services.managed_tools import get_managed_tools
-from sculptor.services.pi_version import PI_PINNED_VERSION
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.voice_models import VOICE_MODELS_PIN
+from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
+from sculptor.services.voice_models import find_voice_model_file
 from sculptor.utils.build import get_internal_folder
 from sculptor.web.data_types import AuthResult
 from sculptor.web.data_types import AuthStartResult
 from sculptor.web.data_types import BinaryMode
+from sculptor.web.data_types import BinarySource
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import DependencyInfo
 from sculptor.web.data_types import InstallProgress
@@ -63,16 +67,6 @@ class DependencyCheckResult(FrozenModel):
     path: str | None = None
     version: str | None = None
 
-
-# Pinned-single-version range — Sculptor refuses to talk to a pi outside this pin
-# so the RPC schema stays known. The version string is sourced from the
-# dependency-free ``pi_version`` module so ``fake_pi`` can report it without
-# importing this heavy module.
-PI_VERSION_RANGE = VersionRange(
-    min_version=PI_PINNED_VERSION,
-    max_version=PI_PINNED_VERSION,
-    recommended_version=PI_PINNED_VERSION,
-)
 
 DEPENDENCIES_DIR_NAME = "dependencies"
 _VERSION_DIR_PREFIX = "version-"
@@ -168,6 +162,237 @@ def _version_range_for_tool(tool: Dependency) -> "VersionRange | None":
 
 def _get_tool_dir(tool: Dependency) -> Path:
     return get_internal_folder() / DEPENDENCIES_DIR_NAME / tool.value.lower()
+
+
+def _get_voice_models_dir() -> Path:
+    return get_internal_folder() / DEPENDENCIES_DIR_NAME / VOICE_MODELS_TOOL_NAME.lower()
+
+
+def _get_voice_models_version_dir() -> Path:
+    """The active (pinned-version) directory of the voice-models bundle."""
+    return _get_voice_models_dir() / f"{_VERSION_DIR_PREFIX}{VOICE_MODELS_PIN.version}"
+
+
+class _ManagedDownloadError(Exception):
+    """A managed-artifact download failed: HTTP error, cancellation, or checksum mismatch.
+
+    The message is user-facing; callers surface it via ``InstallResult.error``.
+    """
+
+
+def _report_single_file_progress(
+    progress_callback: Callable[[int, int | None], None] | None,
+    pinned_size: int | None,
+    bytes_downloaded: int,
+    stream_total_bytes: int | None,
+) -> None:
+    """Chunk hook for a single-artifact download: total falls back to the pinned size.
+
+    pi's pin carries no size, so its total stays None until the stream's
+    content-length lands; Claude's manifest size seeds it up front.
+    """
+    if progress_callback:
+        progress_callback(bytes_downloaded, stream_total_bytes or pinned_size)
+
+
+def _report_bundle_file_progress(
+    progress_callback: Callable[[int, int | None], None],
+    completed_bytes: int,
+    bundle_total_bytes: int,
+    file_bytes_downloaded: int,
+    _stream_total_bytes: int | None,
+) -> None:
+    """Chunk hook for one file of a multi-file bundle: cumulative bytes against the pinned bundle total."""
+    progress_callback(completed_bytes + file_bytes_downloaded, bundle_total_bytes)
+
+
+def _is_voice_models_bundle_installed() -> bool:
+    """Whether every pinned file of the pinned bundle version is present on disk."""
+    version_dir = _get_voice_models_version_dir()
+    return all((version_dir / file.serve_path).is_file() for file in VOICE_MODELS_PIN.files)
+
+
+class VoiceModelsInstaller:
+    """Owns the voice-models bundle install lifecycle: state, progress, thread.
+
+    Kept beside (not inside) the per-tool machinery because the bundle is not a
+    ``Dependency``: that enum is the agent-environment tool vocabulary, and
+    voice models must never be provisioned into agent environments. The shared
+    mechanisms — the download core, the install lock serializing all managed
+    downloads, and the notifier/status pipeline — are injected; every piece of
+    state the installer owns is guarded by its own single lock.
+    """
+
+    def __init__(
+        self,
+        download_file: Callable[[str, Path, str, Callable[[int, int | None], None]], None],
+        install_lock: threading.Lock,
+        stop_requested: threading.Event,
+        start_thread: Callable[[Callable[[], None], str], ObservableThread],
+        ensure_progress_notifier: Callable[[], None],
+        notify_observers: Callable[[], None],
+    ) -> None:
+        self._download_file = download_file
+        self._install_lock = install_lock
+        self._stop_requested = stop_requested
+        self._start_thread = start_thread
+        self._ensure_progress_notifier = ensure_progress_notifier
+        self._notify_observers = notify_observers
+        self._lock = threading.Lock()
+        self._installing = False
+        self._progress: InstallProgress | None = None
+        self._error: str | None = None
+        self._thread: ObservableThread | None = None
+
+    @property
+    def is_installing(self) -> bool:
+        with self._lock:
+            return self._installing
+
+    @property
+    def thread(self) -> ObservableThread | None:
+        with self._lock:
+            return self._thread
+
+    def build_info(self) -> DependencyInfo:
+        """Build the status entry for the voice-models bundle.
+
+        Data files rather than a binary, so there is no path, mode, or version
+        probe: installed means every pinned file of the pinned bundle version is
+        on disk.
+        """
+        with self._lock:
+            progress = self._progress
+            error = self._error
+        installed = _is_voice_models_bundle_installed()
+        return DependencyInfo(
+            installed=installed,
+            version=VOICE_MODELS_PIN.version if installed else None,
+            managed_version=VOICE_MODELS_PIN.version if installed else None,
+            install_progress=progress,
+            install_error=error,
+        )
+
+    def install(self) -> InstallResult:
+        """Trigger installation of the voice-models bundle.
+
+        Fire-and-forget like the tool installs: the bundle's contents come from
+        the static in-repo pin (no resolution step), so this only seeds the
+        aggregate progress and spawns the tracked download thread. Progress and
+        errors flow through the same notifier/status pipeline as the tools.
+        """
+        if self._stop_requested.is_set():
+            return InstallResult(success=False, error="Service is shutting down")
+
+        with self._lock:
+            if self._installing:
+                return InstallResult(success=True, in_progress=True)
+            self._installing = True
+            # Starting a fresh attempt clears the error from a prior one.
+            self._error = None
+            self._progress = InstallProgress(
+                tool=VOICE_MODELS_TOOL_NAME,
+                bytes_downloaded=0,
+                total_bytes=VOICE_MODELS_PIN.total_size_bytes,
+            )
+
+        self._ensure_progress_notifier()
+
+        thread = self._start_thread(self._run_install, "dependency-management-voice-models-download")
+        with self._lock:
+            self._thread = thread
+        self._notify_observers()
+
+        return InstallResult(success=True)
+
+    def _run_install(self) -> None:
+        """Background thread: drive the bundle install and own its bookkeeping."""
+        error: str | None = None
+        try:
+            # Serialize with any tool install via the shared install lock.
+            with self._install_lock:
+                result = self._download_verify_stage(self._on_progress)
+            if result.success:
+                logger.info("Background install of voice models bundle {} succeeded", result.version)
+            else:
+                error = result.error or "Installation failed"
+                logger.info("Background install failed: {}", result.error)
+        except Exception as e:
+            error = f"Installation failed: {e}"
+            logger.opt(exception=True).warning("Background install failed")
+        finally:
+            with self._lock:
+                self._installing = False
+                self._progress = None
+                self._error = error
+            # Best-effort push, skipped under shutdown for the same reasons as
+            # _run_managed_install_download.
+            if not self._stop_requested.is_set():
+                try:
+                    self._notify_observers()
+                except InvalidConcurrencyGroupStateError:
+                    logger.debug("Skipping status notify: concurrency group is exiting")
+
+    def _on_progress(self, bytes_downloaded: int, total_bytes: int | None) -> None:
+        """Record the bundle's aggregate install progress (download-thread hot path)."""
+        with self._lock:
+            self._progress = InstallProgress(
+                tool=VOICE_MODELS_TOOL_NAME,
+                bytes_downloaded=bytes_downloaded,
+                total_bytes=total_bytes,
+            )
+
+    def _download_verify_stage(self, progress_callback: Callable[[int, int | None], None]) -> InstallResult:
+        """Download -> verify -> activate flow for the voice-models bundle.
+
+        The multi-file variant of the tool flow: every pinned file is downloaded
+        into one staging dir (at its serve path) and verified against its pinned
+        sha256, then the whole tree is atomic-renamed into the versioned slot.
+        Progress is aggregated across files (cumulative bytes against the pinned
+        bundle total) so the UI gets a single 0-100%. These are data files, not
+        executables, so there is no ``--version`` gate.
+        """
+        bundle_dir = _get_voice_models_dir()
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        staging_dir = bundle_dir / f"{_TEMP_DIR_PREFIX}{uuid.uuid4()}"
+        staging_dir.mkdir()
+        total_bytes = VOICE_MODELS_PIN.total_size_bytes
+
+        try:
+            bytes_downloaded_before_current_file = 0
+            for file in VOICE_MODELS_PIN.files:
+                destination = staging_dir / file.serve_path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                on_chunk = functools.partial(
+                    _report_bundle_file_progress, progress_callback, bytes_downloaded_before_current_file, total_bytes
+                )
+                try:
+                    self._download_file(file.url, destination, file.sha256, on_chunk)
+                except _ManagedDownloadError as e:
+                    return InstallResult(success=False, error=f"{file.serve_path}: {e}")
+                # Advance by the pinned size (not the streamed byte count) so the
+                # aggregate stays consistent with the pinned total; the checksum
+                # already guarantees they match.
+                bytes_downloaded_before_current_file += file.size_bytes
+
+            # Activate via atomic rename of the staged tree into the versioned slot.
+            final_dir = _get_voice_models_version_dir()
+            if final_dir.exists():
+                shutil.rmtree(final_dir)
+            os.rename(str(staging_dir), str(final_dir))
+
+            # Only the pinned bundle version is ever served; stale versions are
+            # tens of megabytes of dead weight, so keep none of them.
+            for entry in bundle_dir.iterdir():
+                if entry.is_dir() and _is_version_dir(entry.name) and entry != final_dir:
+                    shutil.rmtree(entry, ignore_errors=True)
+
+            return InstallResult(success=True, version=VOICE_MODELS_PIN.version, path=str(final_dir))
+
+        finally:
+            # On success the rename consumed staging_dir, so this only fires on
+            # failure paths.
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
 
 def _managed_binary_subpath(tool: Dependency) -> str:
@@ -338,6 +563,9 @@ class DependencyManagementService(Service):
     # Per-tool reference to the in-flight install thread so stop() can wait for
     # each one's finally block to complete before the concurrency group exits.
     _install_thread: dict[Dependency, ObservableThread] = PrivateAttr(default_factory=dict)
+    # The voice-models bundle installer (created on first use); see
+    # VoiceModelsInstaller for why the bundle lives beside the per-tool dicts.
+    _voice_models_installer: VoiceModelsInstaller | None = PrivateAttr(default=None)
 
     def start(self) -> None:
         self._cleanup_stale_state()
@@ -355,6 +583,9 @@ class DependencyManagementService(Service):
         """
         self._stop_requested.set()
         threads = list(self._install_thread.values())
+        installer = self._voice_models_installer
+        if installer is not None and installer.thread is not None:
+            threads.append(installer.thread)
         with self._progress_lock:
             if self._progress_notifier_thread is not None:
                 threads.append(self._progress_notifier_thread)
@@ -382,14 +613,13 @@ class DependencyManagementService(Service):
             logger.warning("Could not acquire auth lock during shutdown; sign-in subprocess may linger")
 
     def _auto_install_if_needed(self) -> None:
-        """Auto-install each managed tool whose pinned binary is missing or out of range.
+        """Auto-install managed tools at startup: bootstrap required ones, refresh optional ones.
 
-        Loops the ManagedTool registry; for every tool with a MANAGED binary mode that
-        is not already installed-and-in-range, it spawns an install. Claude always
-        auto-installs when MANAGED. pi additionally requires the ``enable_pi_agent``
-        experiment to be on, so a Claude-only user (the default) never auto-downloads pi.
-        They can still trigger a manual install from the Pi settings section, which routes
-        through ``install_managed`` and is not gated here.
+        Loops the ManagedTool registry over tools in MANAGED binary mode. A required
+        tool (Claude) installs whenever its pinned binary is missing or out of range.
+        An optional tool (pi) never bootstraps — its first install is an explicit user
+        action — but an already-downloaded managed copy that is out of range or broken
+        is refreshed, which is what MANAGED promises.
         """
         try:
             config = get_user_config_instance()
@@ -404,21 +634,29 @@ class DependencyManagementService(Service):
             if tool == Dependency.CLAUDE:
                 mode, _ = _parse_dependency_config(config.dependency_paths.claude)
             elif tool == Dependency.PI:
-                # pi is dark-launched: only auto-provision it for users who opted into
-                # the pi-agent experiment. Without this gate every Claude-only user
-                # would download the pinned pi build on startup.
-                if not config.enable_pi_agent:
-                    continue
                 mode, _ = _parse_dependency_config(config.dependency_paths.pi)
             else:
                 continue
             if mode == BinaryMode.MANAGED:
                 managed_mode_tools.append(tool)
 
-        # Probe concurrently so one slow binary's --version timeout doesn't serialize startup.
-        checks = self._check_installed_concurrently(managed_mode_tools)
-
+        # A tool that must not bootstrap is considered only when a managed copy is
+        # already on disk; the in-range probe below then decides whether to refresh
+        # it. (With a managed copy present, resolution prefers it, so the probe
+        # exercises the managed binary rather than any PATH fallback.)
+        startup_tools: list[Dependency] = []
         for tool in managed_mode_tools:
+            managed_tool = get_managed_tool(tool)
+            if managed_tool is None:
+                continue
+            if not managed_tool.installs_on_startup_when_missing and self._find_managed_binary(tool) is None:
+                continue
+            startup_tools.append(tool)
+
+        # Probe concurrently so one slow binary's --version timeout doesn't serialize startup.
+        checks = self._check_installed_concurrently(startup_tools)
+
+        for tool in startup_tools:
             check = checks.get(tool)
             if check is None:
                 continue
@@ -508,7 +746,13 @@ class DependencyManagementService(Service):
         mode, custom_path = _parse_dependency_config(config.dependency_paths.pi)
 
         if mode == BinaryMode.MANAGED:
-            return self._find_managed_binary(Dependency.PI)
+            managed_binary = self._find_managed_binary(Dependency.PI)
+            if managed_binary is not None:
+                return managed_binary
+            # pi is optional and its managed copy is only downloaded on explicit
+            # user action, so MANAGED with no downloaded copy falls back to a pi
+            # already on the system PATH rather than reporting nothing.
+            return shutil.which("pi")
 
         # CUSTOM: an absolute path or bare command name, resolved via PATH —
         # unchanged from the pre-managed behaviour (a "CUSTOM" keyword or empty
@@ -831,7 +1075,11 @@ class DependencyManagementService(Service):
         if claude_check.version:
             claude_in_range = self.is_version_in_range(claude_check.version)
 
-        managed_version = self._get_managed_version()
+        claude_managed_version = self._get_managed_version()
+        # Claude has no PATH fallback, so its source follows the configured mode.
+        claude_source = None
+        if claude_check.installed:
+            claude_source = BinarySource.MANAGED if effective_mode == BinaryMode.MANAGED else BinarySource.EXTERNAL
 
         # Snapshot per-tool install state under the lock; each DependencyInfo
         # below carries its own tool's progress/error.
@@ -852,9 +1100,10 @@ class DependencyManagementService(Service):
             path=claude_check.path,
             version=claude_check.version,
             mode=effective_mode,
+            source=claude_source,
             version_range=claude_version_range,
             is_version_in_range=claude_in_range,
-            managed_version=managed_version,
+            managed_version=claude_managed_version,
             is_authenticated=is_authenticated,
             install_progress=progress_by_tool.get(Dependency.CLAUDE),
             install_error=error_by_tool.get(Dependency.CLAUDE),
@@ -869,13 +1118,22 @@ class DependencyManagementService(Service):
         pi_in_range = None
         if pi_check.version:
             pi_in_range = self.is_version_in_range(pi_check.version, Dependency.PI)
+        # pi's MANAGED mode falls back to a PATH binary, so its source is decided by
+        # which binary actually resolved rather than by the configured mode.
+        pi_source = None
+        if pi_check.installed:
+            pi_managed_binary = self._find_managed_binary(Dependency.PI)
+            is_managed_binary_active = pi_managed_binary is not None and pi_check.path == pi_managed_binary
+            pi_source = BinarySource.MANAGED if is_managed_binary_active else BinarySource.EXTERNAL
         pi_info = DependencyInfo(
             installed=pi_check.installed,
             path=pi_check.path,
             version=pi_check.version,
             mode=pi_mode,
+            source=pi_source,
             version_range=pi_version_range,
             is_version_in_range=pi_in_range,
+            managed_version=self._get_managed_version(Dependency.PI),
             install_progress=progress_by_tool.get(Dependency.PI),
             install_error=error_by_tool.get(Dependency.PI),
         )
@@ -887,6 +1145,7 @@ class DependencyManagementService(Service):
             claude=claude_info,
             pi=pi_info,
             gh=gh_info,
+            voice_models=self._get_voice_models_installer().build_info(),
         )
 
     def _get_remote_cli_info(self, tool: Dependency) -> DependencyInfo:
@@ -904,6 +1163,45 @@ class DependencyManagementService(Service):
             version=check.version,
             is_authenticated=is_authenticated,
         )
+
+    def _get_voice_models_installer(self) -> VoiceModelsInstaller:
+        with self._progress_lock:
+            if self._voice_models_installer is None:
+                self._voice_models_installer = VoiceModelsInstaller(
+                    download_file=self._download_file_verified,
+                    install_lock=self._install_lock,
+                    stop_requested=self._stop_requested,
+                    start_thread=self._start_unchecked_thread,
+                    ensure_progress_notifier=self._ensure_progress_notifier_running,
+                    notify_observers=self._notify_observers,
+                )
+            return self._voice_models_installer
+
+    def _is_voice_models_installing(self) -> bool:
+        # A plain attribute read: the notifier calls this while holding
+        # _progress_lock, and the accessor above would re-acquire it.
+        installer = self._voice_models_installer
+        return installer is not None and installer.is_installing
+
+    def _start_unchecked_thread(self, target: Callable[[], None], name: str) -> ObservableThread:
+        return self.concurrency_group.start_new_thread(target=target, name=name, is_checked=False)
+
+    def resolve_voice_model_path(self, serve_path: str) -> Path | None:
+        """Resolve a pinned voice-models file to its on-disk path in the active bundle.
+
+        Returns None when *serve_path* is not in the pinned allowlist, escapes the
+        bundle directory, or is not installed yet.
+        """
+        pinned = find_voice_model_file(serve_path)
+        if pinned is None:
+            return None
+        version_dir = _get_voice_models_version_dir().resolve()
+        file_path = (version_dir / pinned.serve_path).resolve()
+        if not file_path.is_relative_to(version_dir):
+            return None
+        if not file_path.is_file():
+            return None
+        return file_path
 
     def get_status(self) -> DependenciesStatus:
         """Get the status of all dependencies and push to observers if changed."""
@@ -985,7 +1283,7 @@ class DependencyManagementService(Service):
         has_warned_push_failure = False
         while not self._stop_requested.wait(self._PROGRESS_NOTIFY_INTERVAL_SECONDS):
             with self._progress_lock:
-                if not any(self._installing.values()):
+                if not any(self._installing.values()) and not self._is_voice_models_installing():
                     # Cleared in the same lock hold as the exit decision so
                     # _ensure_progress_notifier_running never races a dying notifier.
                     self._progress_notifier_thread = None
@@ -1123,6 +1421,50 @@ class DependencyManagementService(Service):
                 except InvalidConcurrencyGroupStateError:
                     logger.debug("Skipping status notify: concurrency group is exiting")
 
+    def install_voice_models(self) -> InstallResult:
+        """Trigger installation of the voice-models bundle (see VoiceModelsInstaller)."""
+        return self._get_voice_models_installer().install()
+
+    def _download_file_verified(
+        self,
+        url: str,
+        destination: Path,
+        expected_sha256: str,
+        on_chunk: Callable[[int, int | None], None],
+    ) -> None:
+        """Stream a download to *destination* and verify it against a pinned sha256.
+
+        The shared download core for both the single-binary and the voice-models
+        install paths. ``on_chunk(bytes_downloaded, stream_total_bytes)`` fires
+        after each written chunk with this file's cumulative byte count and the
+        response's content-length (None when the server sends none). Raises
+        ``_ManagedDownloadError`` on HTTP failure, checksum mismatch, or
+        cooperative cancellation; any partial file is left at *destination* for
+        the caller's temp-dir cleanup.
+        """
+        sha256 = hashlib.sha256()
+        bytes_downloaded = 0
+        try:
+            # Managed-artifact URLs (GitHub Releases, Hugging Face) 302 to a CDN;
+            # follow the redirect to the asset.
+            with httpx.stream("GET", url, timeout=300.0, follow_redirects=True) as stream:
+                stream.raise_for_status()
+                stream_total_bytes = int(stream.headers.get("content-length", 0)) or None
+                with open(destination, "wb") as f:
+                    for chunk in stream.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_SIZE_BYTES):
+                        if self._stop_requested.is_set():
+                            raise _ManagedDownloadError("Install cancelled during shutdown")
+                        f.write(chunk)
+                        sha256.update(chunk)
+                        bytes_downloaded += len(chunk)
+                        on_chunk(bytes_downloaded, stream_total_bytes)
+        except httpx.HTTPError as e:
+            raise _ManagedDownloadError(f"Download failed: {e}") from e
+
+        actual_checksum = sha256.hexdigest()
+        if actual_checksum != expected_sha256:
+            raise _ManagedDownloadError(f"Checksum mismatch: expected {expected_sha256}, got {actual_checksum}")
+
     def _download_verify_stage(
         self,
         tool: ManagedTool,
@@ -1158,35 +1500,14 @@ class DependencyManagementService(Service):
             asset_name = distribution.url.rsplit("/", 1)[-1] or "download"
             downloaded = download_dir / asset_name
 
-            try:
-                bytes_downloaded = 0
-                # GitHub Releases download URLs 302 to a CDN; follow the redirect to the asset.
-                with httpx.stream("GET", distribution.url, timeout=300.0, follow_redirects=True) as stream:
-                    stream.raise_for_status()
-                    total_bytes = int(stream.headers.get("content-length", 0)) or distribution.size
-                    with open(downloaded, "wb") as f:
-                        for chunk in stream.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_SIZE_BYTES):
-                            if self._stop_requested.is_set():
-                                return InstallResult(success=False, error="Install cancelled during shutdown")
-                            f.write(chunk)
-                            bytes_downloaded += len(chunk)
-                            if progress_callback:
-                                progress_callback(bytes_downloaded, total_bytes)
-            except httpx.HTTPError as e:
-                return InstallResult(success=False, error=f"Download failed: {e}")
+            on_chunk = functools.partial(_report_single_file_progress, progress_callback, distribution.size)
 
-            # Verify against the pinned checksum BEFORE staging — a mismatch aborts with
+            # The pinned checksum is verified BEFORE staging — a mismatch aborts with
             # no activation and (for a tarball) no extraction of untrusted bytes.
-            sha256 = hashlib.sha256()
-            with open(downloaded, "rb") as f:
-                for chunk in iter(lambda: f.read(_DOWNLOAD_CHUNK_SIZE_BYTES), b""):
-                    sha256.update(chunk)
-            actual_checksum = sha256.hexdigest()
-            if actual_checksum != distribution.checksum_sha256:
-                return InstallResult(
-                    success=False,
-                    error=f"Checksum mismatch: expected {distribution.checksum_sha256}, got {actual_checksum}",
-                )
+            try:
+                self._download_file_verified(distribution.url, downloaded, distribution.checksum_sha256, on_chunk)
+            except _ManagedDownloadError as e:
+                return InstallResult(success=False, error=str(e))
 
             if self._stop_requested.is_set():
                 return InstallResult(success=False, error="Install cancelled during shutdown")
@@ -1261,13 +1582,21 @@ class DependencyManagementService(Service):
             shutil.rmtree(dir_path, ignore_errors=True)
 
     def _cleanup_stale_state(self) -> None:
-        """Remove stale temp dirs and old versions from previous runs, per managed tool."""
+        """Remove stale temp dirs and old versions from previous runs, per managed artifact."""
         for tool in get_managed_tools():
             tool_dir = _get_tool_dir(tool)
             if not tool_dir.is_dir():
                 continue
-            for entry in tool_dir.iterdir():
-                if entry.is_dir() and entry.name.startswith(_TEMP_DIR_PREFIX):
-                    logger.info("Cleaning up stale temp dir: {}", entry)
-                    shutil.rmtree(entry, ignore_errors=True)
+            _remove_stale_temp_dirs(tool_dir)
             self.cleanup_old_versions(tool, keep=_retention_keep_for_tool(tool))
+        voice_models_dir = _get_voice_models_dir()
+        if voice_models_dir.is_dir():
+            _remove_stale_temp_dirs(voice_models_dir)
+
+
+def _remove_stale_temp_dirs(artifact_dir: Path) -> None:
+    """Delete leftover ``tmp-*`` staging dirs from an interrupted install."""
+    for entry in artifact_dir.iterdir():
+        if entry.is_dir() and entry.name.startswith(_TEMP_DIR_PREFIX):
+            logger.info("Cleaning up stale temp dir: {}", entry)
+            shutil.rmtree(entry, ignore_errors=True)

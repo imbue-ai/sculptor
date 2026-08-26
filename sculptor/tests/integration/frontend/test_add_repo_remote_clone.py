@@ -69,8 +69,8 @@ def test_add_repo_remote_clone_via_url_fallback(sculptor_instance_: SculptorInst
         expect(add_repo_dialog.get_source_github_card()).to_be_visible()
         expect(add_repo_dialog.get_source_local_card()).to_be_visible()
 
-        # GitHub is the default selection, but click it explicitly to exercise
-        # the new ADD_REPO_SOURCE_GITHUB binding.
+        # The dialog opens on the Local source; select GitHub to drive the
+        # remote flow (this also exercises the ADD_REPO_SOURCE_GITHUB binding).
         add_repo_dialog.get_source_github_card().click()
 
         # Switch to the URL-paste view via the toggle. There are three branches

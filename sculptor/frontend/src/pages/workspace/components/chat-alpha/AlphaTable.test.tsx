@@ -433,7 +433,7 @@ describe("AlphaTable", () => {
 
       // Toggle wrap while the revert timer is pending. In the old code this re-ran
       // the ResizeObserver effect cleanup, clearing the timer so it never fired.
-      const wrapButton = container.querySelector('button[aria-label="Switch to wrap"]')!;
+      const wrapButton = container.querySelector('button[data-testid="ALPHA_CHAT_TABLE_WRAP_TOGGLE"]')!;
       fireEvent.click(wrapButton);
 
       act(() => vi.advanceTimersByTime(1500));
@@ -454,43 +454,43 @@ describe("AlphaTable", () => {
   });
 
   describe("wrap toggle", () => {
-    it("renders the toggle button with 'Switch to wrap' tooltip in scroll mode (default)", () => {
+    it("renders the toggle button with 'Switch to scroll' tooltip in wrap mode (default)", () => {
       const { container } = render(twoColumnTable());
-      const button = container.querySelector('button[aria-label="Switch to wrap"]');
+      const button = container.querySelector('button[aria-label="Switch to scroll"]');
       expect(button).toBeTruthy();
     });
 
-    it("applies the scroll class to the wrapper by default", () => {
+    it("applies the wrap class to the wrapper by default", () => {
       const { container } = render(twoColumnTable());
-      const wrapper = container.querySelector("table")!.parentElement!;
-      expect(wrapper.className).toMatch(/scroll/);
-      expect(wrapper.className).not.toMatch(/wrap/);
-    });
-
-    it("flips to wrap mode when clicked", () => {
-      const { container } = render(twoColumnTable());
-      const button = container.querySelector('button[aria-label="Switch to wrap"]')!;
-
-      fireEvent.click(button);
-
-      expect(container.querySelector('button[aria-label="Switch to scroll"]')).toBeTruthy();
       const wrapper = container.querySelector("table")!.parentElement!;
       expect(wrapper.className).toMatch(/wrap/);
       expect(wrapper.className).not.toMatch(/scroll/);
     });
 
-    it("flips back to scroll mode on a second click", () => {
+    it("flips to scroll mode when clicked", () => {
       const { container } = render(twoColumnTable());
-      const button = container.querySelector('button[aria-label="Switch to wrap"]')!;
+      const button = container.querySelector('button[aria-label="Switch to scroll"]')!;
 
       fireEvent.click(button);
-      const flipped = container.querySelector('button[aria-label="Switch to scroll"]')!;
-      fireEvent.click(flipped);
 
       expect(container.querySelector('button[aria-label="Switch to wrap"]')).toBeTruthy();
       const wrapper = container.querySelector("table")!.parentElement!;
       expect(wrapper.className).toMatch(/scroll/);
       expect(wrapper.className).not.toMatch(/wrap/);
+    });
+
+    it("flips back to wrap mode on a second click", () => {
+      const { container } = render(twoColumnTable());
+      const button = container.querySelector('button[aria-label="Switch to scroll"]')!;
+
+      fireEvent.click(button);
+      const flipped = container.querySelector('button[aria-label="Switch to wrap"]')!;
+      fireEvent.click(flipped);
+
+      expect(container.querySelector('button[aria-label="Switch to scroll"]')).toBeTruthy();
+      const wrapper = container.querySelector("table")!.parentElement!;
+      expect(wrapper.className).toMatch(/wrap/);
+      expect(wrapper.className).not.toMatch(/scroll/);
     });
 
     it("each AlphaTable owns its own wrap state", () => {
@@ -512,14 +512,14 @@ describe("AlphaTable", () => {
           </AlphaTable>
         </>,
       );
-      const toggles = container.querySelectorAll('button[aria-label="Switch to wrap"]');
+      const toggles = container.querySelectorAll('button[aria-label="Switch to scroll"]');
       expect(toggles).toHaveLength(2);
 
       fireEvent.click(toggles[0]);
 
-      // First flipped, second still in default scroll mode.
-      expect(container.querySelectorAll('button[aria-label="Switch to scroll"]')).toHaveLength(1);
+      // First flipped, second still in default wrap mode.
       expect(container.querySelectorAll('button[aria-label="Switch to wrap"]')).toHaveLength(1);
+      expect(container.querySelectorAll('button[aria-label="Switch to scroll"]')).toHaveLength(1);
     });
   });
 });

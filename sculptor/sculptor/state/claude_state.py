@@ -7,6 +7,7 @@ from typing import cast
 
 from loguru import logger
 from pydantic import Field
+from pydantic import ValidationError
 
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.tool_names import AgentToolName
@@ -19,6 +20,9 @@ from sculptor.state.chat_state import ToolInput
 from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolResultBlockSimple
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.workflow_state import WorkflowProgressEntryTypes
+from sculptor.state.workflow_state import WorkflowUsage
+from sculptor.state.workflow_state import parse_workflow_progress_entries
 
 _RE_STRIP_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[mGKHfABCDhls]|\x1b\[[?][0-9;]*[hlHLdcE]|\x1b[=>]")
 
@@ -259,6 +263,10 @@ class ParsedEndResponse(ParsedAgentResponse):
     input_tokens: int | None = Field(default=None, description="Input tokens")
     output_tokens: int | None = Field(default=None, description="Output tokens")
     total_cost_usd: float | None = Field(default=None, description="Total cost of agent session")
+    api_error_status: int | None = Field(
+        default=None,
+        description="HTTP status of the API error that ended the turn (e.g. 429/500/529), or None if the turn did not fail on an API error",
+    )
 
 
 class ParsedCompactionSummaryResponse(ParsedAgentResponse):
@@ -273,9 +281,36 @@ class ParsedTaskStartedResponse(ParsedAgentResponse):
 
     object_type: str = Field(default="ParsedTaskStartedResponse")
     task_id: str = Field(description="Background task ID assigned by Claude Code")
-    tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
+    tool_use_id: str = Field(
+        description="Tool use ID of the tool call that launched the background task. Empty when the CLI omits it (parity with ParsedTaskNotificationResponse — see SCU-1666).",
+    )
     description: str = Field(default="", description="Human-readable description of the background task")
-    task_type: str = Field(default="", description="Type of background task (e.g. local_bash)")
+    task_type: str = Field(default="", description="Type of background task (e.g. local_bash, local_workflow)")
+    workflow_name: str = Field(
+        default="", description="Workflow name from the script's meta block; only set for Workflow tasks"
+    )
+
+
+class ParsedTaskProgressResponse(ParsedAgentResponse):
+    """Emitted by Claude Code while a background task runs.
+
+    For Workflow tasks the payload carries a ``workflow_progress`` delta:
+    only the phase/agent entries whose state changed since the previous
+    payload. The tree is absent on pure token-tick batches, where only
+    ``usage`` advances. Consumers accumulate deltas with
+    ``merge_workflow_progress_entries``.
+    """
+
+    object_type: str = Field(default="ParsedTaskProgressResponse")
+    task_id: str = Field(description="Background task ID matching the task_started event")
+    tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
+    usage: WorkflowUsage | None = Field(default=None, description="Aggregate usage so far")
+    last_tool_name: str | None = Field(default=None, description="Most recent tool used by the task")
+    summary: str = Field(default="", description="Latest progress summary")
+    workflow_progress: tuple[WorkflowProgressEntryTypes, ...] | None = Field(
+        default=None,
+        description="Workflow progress delta, deduplicated per entry; None when this batch carried no tree",
+    )
 
 
 class ParsedTaskNotificationResponse(ParsedAgentResponse):
@@ -283,7 +318,9 @@ class ParsedTaskNotificationResponse(ParsedAgentResponse):
 
     object_type: str = Field(default="ParsedTaskNotificationResponse")
     task_id: str = Field(description="Background task ID matching the task_started event")
-    tool_use_id: str = Field(description="Tool use ID of the tool call that launched the background task")
+    tool_use_id: str = Field(
+        description="Tool use ID of the tool call that launched the background task. Empty when the CLI omits it, e.g. a task orphaned by a process exit and reported as failed on resume (see SCU-1666).",
+    )
     status: str = Field(description="Completion status (e.g. completed)")
     summary: str = Field(default="", description="Human-readable summary of the background task result")
     duration_ms: int | None = Field(
@@ -316,6 +353,7 @@ ParsedAgentResponsePassthrough = (
     | ParsedEndResponse
     | ParsedCompactionSummaryResponse
     | ParsedTaskStartedResponse
+    | ParsedTaskProgressResponse
     | ParsedTaskNotificationResponse
     | ParsedTaskUpdatedResponse
 )
@@ -349,6 +387,8 @@ def get_tool_invocation_string(tool_name: str, tool_input: ToolInput, _tool_resu
         result = tool_input.get("query", "")
     elif tool_name == AgentToolName.TASK:
         result = tool_input.get("description", "")
+    elif tool_name == AgentToolName.WORKFLOW:
+        result = tool_input.get("name") or tool_input.get("scriptPath") or "workflow"
     elif tool_name == AgentToolName.SKILL:
         result = tool_input.get("skill", "")
     else:
@@ -386,11 +426,36 @@ def _handle_init_message(data: dict[str, Any]) -> ParsedInitResponse:
 
 def _handle_task_started_message(data: dict[str, Any]) -> ParsedTaskStartedResponse:
     """Handle system/task_started message type."""
+    # ``tool_use_id`` is read defensively (see _handle_task_notification_message)
+    # to keep a variant payload from crashing the whole agent.
     return ParsedTaskStartedResponse(
         task_id=data["task_id"],
-        tool_use_id=data["tool_use_id"],
+        tool_use_id=data.get("tool_use_id", ""),
         description=data.get("description", ""),
         task_type=data.get("task_type", ""),
+        workflow_name=data.get("workflow_name", ""),
+    )
+
+
+def _handle_task_progress_message(data: dict[str, Any]) -> ParsedTaskProgressResponse:
+    """Handle system/task_progress message type."""
+    raw_usage = data.get("usage")
+    usage: WorkflowUsage | None = None
+    if isinstance(raw_usage, dict):
+        # task_progress is the highest-frequency system message during a
+        # workflow — a malformed usage shape from a newer CLI must degrade to
+        # "no usage", not kill the output loop on every tick.
+        try:
+            usage = WorkflowUsage.model_validate(raw_usage)
+        except ValidationError:
+            logger.debug("Skipping malformed task_progress usage: {}", raw_usage)
+    return ParsedTaskProgressResponse(
+        task_id=data["task_id"],
+        tool_use_id=data["tool_use_id"],
+        usage=usage,
+        last_tool_name=data.get("last_tool_name"),
+        summary=data.get("summary", ""),
+        workflow_progress=parse_workflow_progress_entries(data.get("workflow_progress")),
     )
 
 
@@ -401,9 +466,13 @@ def _handle_task_notification_message(data: dict[str, Any]) -> ParsedTaskNotific
     # unparsed until a caller asks for them.
     usage = data.get("usage") or {}
     raw_duration_ms = usage.get("duration_ms") if isinstance(usage, dict) else None
+    # ``tool_use_id`` is absent when a background task orphaned by a process exit
+    # is reported as failed on resume: the launching tool call's id died with the
+    # previous process (see SCU-1666). Default to "" rather than indexing so the
+    # notification is surfaced instead of a missing key killing the agent.
     return ParsedTaskNotificationResponse(
         task_id=data["task_id"],
-        tool_use_id=data["tool_use_id"],
+        tool_use_id=data.get("tool_use_id", ""),
         status=data.get("status", ""),
         summary=data.get("summary", ""),
         duration_ms=int(raw_duration_ms) if isinstance(raw_duration_ms, (int, float)) else None,
@@ -428,8 +497,19 @@ def _handle_assistant_message(data: dict[str, Any]) -> ParsedAssistantResponse:
     message_data = data["message"]
     message_id = message_data["id"]
 
+    # ``content`` is normally a list of block dicts, but the CLI can emit a bare
+    # string instead. Wrap it as a single text block so we don't iterate over its
+    # characters and crash on ``content["type"]``.
+    raw_content = message_data["content"]
+    if isinstance(raw_content, str):
+        raw_content = [{"type": "text", "text": raw_content}]
+
     content_blocks: list[ContentBlockTypes] = []
-    for content in message_data["content"]:
+    for content in raw_content:
+        # Only dict blocks carry a ``type`` we can dispatch on; tolerate stray
+        # non-dict items (e.g. a bare string mixed into the list) by skipping them.
+        if not isinstance(content, dict):
+            continue
         if content["type"] == "text":
             cleaned_text, img_file_paths = extract_media_tags_from_text(content["text"])
             if cleaned_text:
@@ -456,7 +536,13 @@ def _handle_tool_result_message(
 
     if isinstance(message_content, str):
         return ParsedUserResponse(content_blocks=[TextBlock(text=message_content)])
-    elif message_content[0]["type"] == "text":
+
+    # An empty content list has no block to inspect; skip it rather than indexing
+    # ``[0]`` (the CLI has been seen to emit user messages with empty content).
+    if len(message_content) == 0:
+        return None
+
+    if message_content[0]["type"] == "text":
         if len(message_content) > 1:
             logger.warning("Message content has more than one block: {}", message_content)
         return ParsedUserResponse(content_blocks=[TextBlock(text=message_content[0]["text"])])
@@ -474,7 +560,9 @@ def _handle_tool_result_message(
         tool_use_map.get(tool_use_id, ("unknown", ToolInput())) if tool_use_map else ("unknown", ToolInput())
     )
 
-    tool_result_content = tool_result["content"]
+    # ``content`` is optional on tool_result blocks in the Anthropic format;
+    # tolerate its absence (defaulting to empty) instead of raising KeyError.
+    tool_result_content = tool_result.get("content", "")
     invocation_string = get_tool_invocation_string(tool_name, tool_input, tool_result_content)
     tool_content = SimpleToolContent(
         text=str(tool_result_content), tool_input=tool_input, tool_content=tool_result_content
@@ -520,6 +608,8 @@ def _handle_stream_end_message(data: dict[str, Any]) -> ParsedEndResponse:
         input_tokens=data.get("usage", {}).get("input_tokens", 0),
         output_tokens=data.get("usage", {}).get("output_tokens", 0),
         total_cost_usd=data.get("total_cost_usd", 0),
+        # Present only when the turn failed on an API error; the CLI omits it otherwise.
+        api_error_status=data.get("api_error_status"),
     )
 
 
@@ -550,10 +640,7 @@ def parse_claude_code_json_lines_simple(
     elif message_type == "system" and data.get("subtype") == "task_notification":
         return (message_type, _handle_task_notification_message(data))
     elif message_type == "system" and data.get("subtype") == "task_progress":
-        # TODO: task_progress carries usage stats and last_tool_name for in-flight
-        # background tasks. Silently drop for now; add a ParsedTaskProgressResponse
-        # when we build the "background task running..." UI indicator.
-        return None
+        return (message_type, _handle_task_progress_message(data))
     elif message_type == "system" and data.get("subtype") == "task_updated":
         return (message_type, _handle_task_updated_message(data))
     elif message_type == "assistant":

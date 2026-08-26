@@ -1,64 +1,13 @@
 import { createStore } from "jotai";
-import { Circle } from "lucide-react";
-import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
 import type { UserConfig } from "~/api";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
-import { panelRegistryAtom } from "~/components/panels/atoms.ts";
-import type { PanelDefinition } from "~/components/panels/types.ts";
 
-import { keybindingsAtom, keybindingsMapAtom } from "./atoms.ts";
-
-const TEST_PANEL: PanelDefinition = {
-  id: "files",
-  displayName: "Files",
-  description: "Browse repo files and diffs",
-  icon: Circle,
-  defaultZone: "top-left",
-  defaultShortcut: "",
-  component: () => createElement("div"),
-};
+import { keybindingsMapAtom } from "./atoms.ts";
 
 const makeConfig = (keybindings: Record<string, string | null>): UserConfig =>
   ({ keybindings }) as unknown as UserConfig;
-
-describe("keybindingsAtom panel entries", () => {
-  it("emits a panel_<id> entry for each registered panel", () => {
-    const store = createStore();
-    store.set(panelRegistryAtom, [TEST_PANEL]);
-
-    const bindings = store.get(keybindingsAtom);
-    const entry = bindings.find((b) => b.id === "panel_files");
-    expect(entry).toBeDefined();
-    expect(entry!.category).toBe("panels");
-    expect(entry!.name).toBe("Files");
-    expect(entry!.description).toBe("Browse repo files and diffs");
-    expect(entry!.binding).toBeNull();
-    expect(entry!.defaultBinding).toBeNull();
-    expect(entry!.isDefault).toBe(true);
-  });
-
-  it("applies a userConfig override to the panel binding", () => {
-    const store = createStore();
-    store.set(panelRegistryAtom, [TEST_PANEL]);
-    store.set(userConfigAtom, { keybindings: { panel_files: "Meta+E" } } as unknown as UserConfig);
-
-    const entry = store.get(keybindingsAtom).find((b) => b.id === "panel_files");
-    expect(entry!.binding).toBe("Meta+E");
-    expect(entry!.isDefault).toBe(false);
-  });
-
-  it("treats an explicit null override as not-default", () => {
-    const store = createStore();
-    store.set(panelRegistryAtom, [{ ...TEST_PANEL, defaultShortcut: "Meta+1" }]);
-    store.set(userConfigAtom, { keybindings: { panel_files: null } } as unknown as UserConfig);
-
-    const entry = store.get(keybindingsAtom).find((b) => b.id === "panel_files");
-    expect(entry!.binding).toBeNull();
-    expect(entry!.isDefault).toBe(false);
-  });
-});
 
 describe("keybindings resolution", () => {
   it("falls back to the default binding when no override exists", () => {
@@ -95,5 +44,18 @@ describe("keybindings resolution", () => {
     const map = store.get(keybindingsMapAtom);
     expect(map.command_palette.binding).toBe("Meta+K");
     expect(map.command_palette.isDefault).toBe(true);
+  });
+
+  it("tolerates an override saved for a removed binding id (e.g. close_workspace)", () => {
+    // A user may have persisted an override for a binding that no longer exists
+    // (close_workspace was removed from the definitions). Resolution must ignore
+    // the unknown id — not crash, not surface a phantom binding — while every
+    // still-defined binding (including one with its own override) resolves.
+    const store = createStore();
+    store.set(userConfigAtom, makeConfig({ close_workspace: "Meta+W", delete_workspace: "Meta+D" }));
+    const map = store.get(keybindingsMapAtom);
+    expect("close_workspace" in map).toBe(false);
+    expect(map.delete_workspace.binding).toBe("Meta+D");
+    expect(map.command_palette.binding).toBe("Meta+K");
   });
 });

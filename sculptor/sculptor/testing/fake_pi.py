@@ -71,7 +71,9 @@ Model selection: ``get_available_models`` returns a fixed catalog (``_FAKE_PI_MO
 and ``get_state`` reports a current model, so PiAgent surfaces them onto task state
 and the chat switcher offers pi's own models. ``set_model`` echoes the chosen model
 back and updates the current model, so a switch persists for a following ``get_state``
-— the hook the model-selection integration test asserts on.
+— the hook the model-selection integration test asserts on. The ``fake_pi:report_model``
+directive echoes that current model into the turn text, so a test can assert a switch
+reached pi (the turn ran under it), not just that the switcher's display updated.
 
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
@@ -80,6 +82,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
 import sys
@@ -129,9 +132,38 @@ _FAKE_PI_MODELS: list[dict[str, str]] = [
     {"id": "fake-pi-haiku-4-5", "name": "FakePi Haiku 4.5", "provider": "anthropic"},
 ]
 
-# The model `get_state` reports as current until a `set_model` changes it (pi
-# defaults to its newest model; FakePi mirrors that with the first catalog entry).
-_DEFAULT_FAKE_PI_MODEL: dict[str, str] = _FAKE_PI_MODELS[0]
+# Env var a test sets (via update_environment) to override the reported catalog with
+# a JSON array of {id, name, provider} entries — e.g. to span multiple providers and
+# exercise the authenticated-set filter, or `[]` to model a no-authenticated-providers
+# state (empty catalog + no current model).
+_FAKE_PI_CATALOG_ENV_VAR = "FAKE_PI_CATALOG"
+
+
+def _resolve_fake_pi_models() -> list[dict[str, str]]:
+    """Return the catalog `get_available_models` reports.
+
+    A JSON list in `FAKE_PI_CATALOG` is honored verbatim, including the empty list
+    (which models "no authenticated providers"). Falls back to the fixed
+    `_FAKE_PI_MODELS` when the var is unset or not a JSON list, so existing pi
+    integration tests are unaffected.
+    """
+    raw = os.environ.get(_FAKE_PI_CATALOG_ENV_VAR)
+    if not raw:
+        return _FAKE_PI_MODELS
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return _FAKE_PI_MODELS
+    if not isinstance(parsed, list):
+        return _FAKE_PI_MODELS
+    return parsed
+
+
+def _default_fake_pi_current_model() -> dict[str, str]:
+    """The model `get_state` reports as current (the first catalog entry, mirroring
+    pi defaulting to its newest model); an empty catalog reports no current model."""
+    models = _resolve_fake_pi_models()
+    return dict(models[0]) if models else {}
 
 
 def _skill_invocation_name(prompt_text: str) -> str | None:
@@ -236,7 +268,7 @@ class _SessionState(MutableModel):
     # The model `get_state` reports as current; a `set_model` updates it in place.
     # In-memory only (not persisted): the model-selection test exercises a switch
     # within one process, and PiAgent re-fetches the model at every start.
-    current_model: dict[str, str] = Field(default_factory=lambda: dict(_DEFAULT_FAKE_PI_MODEL))
+    current_model: dict[str, str] = Field(default_factory=_default_fake_pi_current_model)
 
     @classmethod
     def load(cls, session_dir: Path | None, session_id: str) -> "_SessionState":
@@ -320,11 +352,18 @@ def _emit(event: dict) -> None:
 
 
 def _assistant_message(text: str, stop_reason: str = "stop") -> dict:
-    return {
+    # `usage` mirrors real pi's per-assistant-message token report (RPC Types
+    # "AssistantMessage"); PiAgent sums it across a run for the turn footer. Only
+    # a cleanly-stopped message carries it: a streaming partial has no settled
+    # usage yet, and an aborted/errored turn reports no token counts.
+    message: dict = {
         "role": "assistant",
         "content": [{"type": "text", "text": text}],
         "stopReason": stop_reason,
     }
+    if stop_reason == "stop":
+        message["usage"] = {"input": 100, "output": 50, "cacheRead": 0, "cacheWrite": 0}
+    return message
 
 
 def _user_message(text: str) -> dict:
@@ -398,20 +437,6 @@ def _emit_agent_end(text: str) -> None:
             "willRetry": False,
         }
     )
-
-
-def _emit_reaction_turn(ack: str) -> None:
-    """Emit the out-of-band reaction turn pi runs when the extension wakes the agent
-    via `sendUserMessage` after a completion: an assistant acknowledgement bracketed
-    by agent_start/agent_end, so Sculptor consumes it as the auto-resume reaction."""
-    _emit({"type": "agent_start"})
-    _emit(
-        {
-            "type": "message_end",
-            "message": {"role": "assistant", "content": [{"type": "text", "text": ack}], "stopReason": "stop"},
-        }
-    )
-    _emit_agent_end(ack)
 
 
 def _emit_aborted_agent_end(text: str) -> None:
@@ -681,14 +706,12 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
         "notifyType": "info" if status == "completed" else "warning",
         "message": json.dumps({"sculptorSubagentTask": completion}, separators=(",", ":")),
     }
-    # Optionally script the auto-resume reaction turn pi runs when the extension
-    # wakes the agent (sendUserMessage) after the completion notify.
-    reaction = args.get("reaction")
+    # No reaction turn is scripted here: real pi never self-starts a run after a
+    # completion — Sculptor initiates the reaction by sending a wake prompt,
+    # which FakePi answers like any other prompt (SCU-1776).
 
     def _emit_completion() -> None:
         _emit(notify_event)
-        if isinstance(reaction, str) and reaction:
-            _emit_reaction_turn(reaction)
 
     wait_path = args.get("wait_path")
     if wait_path:
@@ -802,14 +825,12 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
         "notifyType": "info" if status == "completed" else "warning",
         "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
     }
-    # Optionally script the auto-resume reaction turn pi runs when the extension
-    # wakes the agent (sendUserMessage) after the completion notify.
-    reaction = args.get("reaction")
+    # No reaction turn is scripted here: real pi never self-starts a run after a
+    # completion — Sculptor initiates the reaction by sending a wake prompt,
+    # which FakePi answers like any other prompt (SCU-1776).
 
     def _emit_completion() -> None:
         _emit(notify_event)
-        if isinstance(reaction, str) and reaction:
-            _emit_reaction_turn(reaction)
 
     wait_path = args.get("wait_path")
     if wait_path:
@@ -860,6 +881,19 @@ def _handle_report_inputs(args: dict, builder: _TurnBuilder, abort_event: Event,
     """
     mime_types = ",".join(str(image.get("mimeType", "")) for image in builder.images)
     summary = f"[FakePi] images={len(builder.images)}; mimeTypes=[{mime_types}]; prompt={builder.prompt_text}"
+    accumulated = builder.full_text + summary
+    _emit_text_delta(summary, accumulated)
+    builder.emit(summary)
+
+
+def _handle_report_model(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Echo the model FakePi is running this turn (its session `current_model`).
+
+    Lets a test assert that a model switch actually reached pi — that the turn ran
+    under the selected model — not merely that the switcher's display updated.
+    """
+    model_id = state.current_model.get("id", "") if state.current_model else ""
+    summary = f"[FakePi] current_model={model_id}"
     accumulated = builder.full_text + summary
     _emit_text_delta(summary, accumulated)
     builder.emit(summary)
@@ -962,6 +996,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
     "report_inputs": _handle_report_inputs,
+    "report_model": _handle_report_model,
     "compaction": _handle_compaction,
     "ui_request": _handle_ui_request,
 }
@@ -1029,7 +1064,7 @@ def _emit_available_models(prompt_id: str | None) -> None:
         "type": "response",
         "command": "get_available_models",
         "success": True,
-        "data": {"models": _FAKE_PI_MODELS},
+        "data": {"models": _resolve_fake_pi_models()},
     }
     if prompt_id:
         payload["id"] = prompt_id
@@ -1043,7 +1078,7 @@ def _emit_set_model(prompt_id: str | None, model: dict[str, str]) -> None:
     model. An unknown model id is rejected with `success:false` (pi's `Model not
     found` shape) so the failure-toast path stays exercisable.
     """
-    known = any(candidate["id"] == model["id"] for candidate in _FAKE_PI_MODELS)
+    known = any(candidate["id"] == model["id"] for candidate in _resolve_fake_pi_models())
     if not known:
         payload = {
             "type": "response",
@@ -1209,7 +1244,7 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
                 "name": str(payload.get("modelId", "")),
                 "provider": str(payload.get("provider", "anthropic")),
             }
-            known = next((m for m in _FAKE_PI_MODELS if m["id"] == requested["id"]), None)
+            known = next((m for m in _resolve_fake_pi_models() if m["id"] == requested["id"]), None)
             if known is not None:
                 state.current_model = dict(known)
             _emit_set_model(command_id, known if known is not None else requested)

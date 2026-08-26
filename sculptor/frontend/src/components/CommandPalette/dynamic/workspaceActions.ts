@@ -19,7 +19,8 @@ const workspaceName = (description: string | undefined): string => (description 
  *      → workspace.actions  (pick an action for the current workspace)
  *
  * The action list comes from `buildWorkspaceActions`, which is the
- * single source of truth shared with `WorkspaceTabs`.
+ * single source of truth shared with the sidebar's workspace-row menu
+ * (`WorkspaceSidebar`).
  */
 export const buildWorkspaceActionsProvider = (
   runtime: CommandRuntime,

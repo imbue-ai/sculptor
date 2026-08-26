@@ -8,7 +8,6 @@
 [offload]
 max_parallel = 200
 test_timeout_secs = 900
-stream_output = true
 sandbox_project_root = "/app/sculptor"
 sandbox_repo_root = "/app"
 # Finalize the cached base image: install deps, write tool stubs, seed
@@ -42,12 +41,7 @@ run_args = "-p no:xdist"
 
 [groups.stable]
 retry_count = 1
-filters = "-m 'not real_claude and not real_pi and not isolated'"
-
-[groups.isolated]
-retry_count = 1
-schedule_individual = true
-filters = "-m 'isolated and not real_claude and not real_pi'"
+filters = "-m 'not real_claude and not real_pi'"
 
 [checkpoint]
 build_inputs = [

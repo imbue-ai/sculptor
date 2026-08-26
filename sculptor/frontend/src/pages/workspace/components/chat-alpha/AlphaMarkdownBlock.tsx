@@ -7,7 +7,6 @@ import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
 
 import { ElementIds } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import type { EntityType } from "~/components/EntityMentionSuggestion";
 import { MentionChip } from "~/components/MentionChip";
 import type { SkillType } from "~/components/skillBadge";
@@ -18,6 +17,7 @@ import { AlphaBlockquote } from "./AlphaBlockquote.tsx";
 import { AlphaCodeBlock } from "./AlphaCodeBlock.tsx";
 import styles from "./AlphaMarkdownBlock.module.scss";
 import { AlphaTable } from "./AlphaTable.tsx";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import { isFilePath, isPathInWorkspace, resolveNavPath, splitFilePathSegments } from "./filePathLinkify.ts";
 import type { HighlightState } from "./highlightTextMatches.tsx";
 import { highlightTextInTree } from "./highlightTextMatches.tsx";
@@ -222,8 +222,8 @@ export const AlphaMarkdownBlock = memo(
     activeOccurrenceIndex = -1,
     showCursor = false,
   }: AlphaMarkdownBlockProps): ReactElement => {
-    const { workspaceID } = useWorkspacePageParams();
-    const workspaceCodePath = useWorkspaceCodePath();
+    const { workspaceId: workspaceID } = useChatTask();
+    const workspaceCodePath = useWorkspaceCodePath(workspaceID);
     const openFileViewTab = useSetAtom(openFileViewTabAtom);
 
     const handlePathClick = useCallback(

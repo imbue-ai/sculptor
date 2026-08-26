@@ -1,0 +1,7 @@
+// The focus-recording wrapper around the chat surface generates no box: the
+// chat interface fills the panel container with height: 100%, so an extra
+// layout box here would break its sizing. Events from descendants still
+// propagate through a display: contents element.
+.focusRecorder {
+  display: contents;
+}

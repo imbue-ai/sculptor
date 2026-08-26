@@ -32,8 +32,10 @@ from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import DiffToolContent
 from sculptor.state.chat_state import GenericToolContent
 from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import UserQuestion
 from sculptor.state.chat_state import make_plan_approval_question
+from sculptor.state.claude_state import ParsedAssistantResponse
 from sculptor.state.claude_state import ParsedToolResultResponse
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
@@ -182,6 +184,88 @@ def test_get_user_instructions_env_var_reminder_block_ordering() -> None:
     assert env_idx < attach_idx < plan_idx < text_idx
 
 
+# A marker that only appears in the auto-rename reminder body.
+_AUTO_RENAME_MARKER = "sculpt workspace rename"
+
+
+def test_get_user_instructions_emits_auto_rename_reminder_when_enabled_and_first_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=True,
+    )
+    assert "<system-reminder>" in result
+    assert _AUTO_RENAME_MARKER in result
+    assert "sculpt agent rename" in result
+    # The reminder references env vars that the agent's shell already exposes, not literal ids.
+    assert "$SCULPT_WORKSPACE_ID" in result
+    assert "$SCULPT_AGENT_ID" in result
+    # Workspace and agent names are distinct: task/goal vs specific action.
+    assert '"<workspace name>"' in result
+    assert '"<agent name>"' in result
+    assert "overall task or goal" in result
+    assert "specific action" in result
+    # Without resolved conventions, the reminder carries no naming-conventions block; the
+    # backend inlines those (see resolve_naming_conventions) rather than pointing the agent at a path.
+    assert "<naming-conventions>" not in result
+    assert "hello" in result
+
+
+def test_get_user_instructions_inlines_naming_conventions_when_provided() -> None:
+    message = ChatInputUserMessage(text="hello")
+    conventions = "### .sculptor/naming.md (this repo's shared conventions)\nPrefix workspaces with the ticket id."
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=True,
+        naming_conventions=conventions,
+    )
+    assert _AUTO_RENAME_MARKER in result
+    # The resolved block is inlined verbatim inside a tagged region, told to override the defaults.
+    assert "<naming-conventions>" in result
+    assert "</naming-conventions>" in result
+    assert conventions in result
+    assert "OVERRIDE" in result
+
+
+def test_get_user_instructions_ignores_naming_conventions_when_auto_rename_disabled() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=False,
+        naming_conventions="### some conventions",
+    )
+    assert _AUTO_RENAME_MARKER not in result
+    assert "<naming-conventions>" not in result
+
+
+def test_get_user_instructions_no_auto_rename_reminder_when_flag_disabled() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=False,
+    )
+    assert _AUTO_RENAME_MARKER not in result
+
+
+def test_get_user_instructions_no_auto_rename_reminder_when_not_first_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=False,
+        enable_auto_rename=True,
+    )
+    assert _AUTO_RENAME_MARKER not in result
+
+
 _SETUP_RUNNING_PREAMBLE = "A workspace setup command is currently running."
 _SETUP_FAILED_PREAMBLE = "The workspace setup command exited non-zero."
 
@@ -255,6 +339,22 @@ def test_get_user_instructions_setup_above_env_vars() -> None:
     setup_idx = result.index(_SETUP_RUNNING_PREAMBLE)
     env_idx = result.index(_ENV_VAR_PREAMBLE)
     assert setup_idx < env_idx
+
+
+def test_get_user_instructions_setup_reminder_stays_above_auto_rename() -> None:
+    message = ChatInputUserMessage(text="hello")
+    setup_state = RunningSetup(command="npm ci", pid=12345, log_path="/abs/setup_log.txt")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        setup_state=setup_state,
+        enable_auto_rename=True,
+    )
+    # The higher-priority setup warning must not be pushed below the auto-rename reminder.
+    setup_idx = result.index(_SETUP_RUNNING_PREAMBLE)
+    rename_idx = result.index(_AUTO_RENAME_MARKER)
+    assert setup_idx < rename_idx
 
 
 def test_get_user_instructions_env_var_reminder_not_emitted_for_resume() -> None:
@@ -669,3 +769,61 @@ def test_create_tool_content_preserves_error_text_for_failed_edit() -> None:
     )
     assert isinstance(content, GenericToolContent)
     assert "File has not been read yet" in content.text
+
+
+# ---------------------------------------------------------------------------
+# Crash-safety for unexpected-but-valid-JSON message shapes.
+#
+# These exercise the full ``parse_claude_code_json_lines`` path (the one the
+# output loop actually calls) rather than the ``_simple`` parser directly, so a
+# regression in either layer is caught. Each shape used to raise out of the
+# parser and kill the agent turn.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_lines_assistant_string_content_does_not_crash() -> None:
+    """A bare-string assistant ``content`` must parse into a single text block."""
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {"id": "msg_str", "content": "plain string content"},
+        }
+    )
+    parsed = parse_claude_code_json_lines(line, tool_use_map=None, diff_tracker=None)
+    assert isinstance(parsed, ParsedAssistantResponse)
+    assert parsed.content_blocks == [TextBlock(text="plain string content")]
+
+
+def test_parse_lines_empty_user_content_list_returns_none() -> None:
+    """A user message with an empty content list must be skipped, not crash."""
+    line = json.dumps(
+        {
+            "type": "user",
+            "message": {"role": "user", "content": []},
+        }
+    )
+    assert parse_claude_code_json_lines(line, tool_use_map=None, diff_tracker=None) is None
+
+
+def test_parse_lines_tool_result_missing_content_does_not_crash() -> None:
+    """A tool_result block with no ``content`` key must parse without raising."""
+    tool_use_id = "toolu_missing_content"
+    line = json.dumps(
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "is_error": False,
+                    }
+                ],
+            },
+        }
+    )
+    parsed = parse_claude_code_json_lines(line, tool_use_map={tool_use_id: ("Bash", {})}, diff_tracker=None)
+    assert isinstance(parsed, ParsedToolResultResponse)
+    (block,) = parsed.content_blocks
+    assert block.tool_use_id == tool_use_id

@@ -1,0 +1,10 @@
+[rule]
+id = "no-noop-queryfn"
+description = "Zero-argument queryFn. For push-fed queries (WS frames / mutation writes feed the cache) use `queryFn: skipToken` — a no-op stub like `queryFn: () => null` fakes a successful fetch, so a cache miss settles as a bogus value indistinguishable from real data, and the stub's resolution races the first real push. For genuine fetches, take `({ signal })` and pass the abort signal to the API call. Push-fed key families must also pin `gcTime: Infinity` via setQueryDefaults in queryClient.ts (a delta stream never re-delivers an evicted quiet entry)."
+severity = "error"
+
+[match]
+pattern = "queryFn: \\(\\)"
+languages = ["typescript"]
+include = ["sculptor/frontend/src/**/*.ts", "sculptor/frontend/src/**/*.tsx"]
+exclude = ["sculptor/frontend/src/**/*.test.ts", "sculptor/frontend/src/**/*.test.tsx"]

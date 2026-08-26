@@ -1,0 +1,71 @@
+// The collapsed-section drop overlays float over the section grid at the window
+// edges; they never participate in layout, so nothing shifts while dragging.
+// pointer-events stays off — dnd-kit resolves drops from measured rects, and the
+// overlay must never intercept the drag's pointer stream.
+.overlay {
+  align-items: center;
+  background: var(--gray-a3);
+  display: flex;
+  justify-content: center;
+  opacity: 0%;
+  outline: 1px dashed var(--gray-a6);
+  outline-offset: -1px;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity var(--duration-fast) var(--ease-default);
+  z-index: var(--z-dropdown);
+}
+
+.visible {
+  opacity: 100%;
+}
+
+// stylelint-disable-next-line sculptor/no-hardcoded-values -- drop-target strip depth; no spacing token this large
+$overlay-size: 84px;
+
+.left {
+  bottom: 0;
+  left: 0;
+  top: 0;
+  width: $overlay-size;
+}
+
+.right {
+  bottom: 0;
+  right: 0;
+  top: 0;
+  width: $overlay-size;
+}
+
+.bottom {
+  bottom: 0;
+  height: $overlay-size;
+  left: 0;
+  right: 0;
+}
+
+.dropActive {
+  background: var(--accent-a4);
+  outline: 1px solid var(--accent-8);
+}
+
+// What a drop will do, centered in the strip: the target section's icon over a
+// short label.
+.hint {
+  align-items: center;
+  color: var(--gray-11);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.dropActive .hint {
+  color: var(--accent-11);
+}
+
+.hintLabel {
+  font-size: var(--font-size-1);
+  max-width: 100%;
+  padding: 0 var(--space-2);
+}

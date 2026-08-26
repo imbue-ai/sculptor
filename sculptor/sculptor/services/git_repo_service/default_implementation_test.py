@@ -388,6 +388,45 @@ class TestIsBranchRef:
         assert repo.is_branch_ref(commit_hash) is False
 
 
+class TestIsValidBranchName:
+    """Tests for the is_valid_branch_name method."""
+
+    def test_accepts_normal_branch_names(self, temp_dir: Path, test_root_concurrency_group: ConcurrencyGroup) -> None:
+        repo_path = temp_dir / "repo"
+        make_test_repo(repo_path)
+        repo = LocalReadOnlyGitRepo(repo_path=repo_path, concurrency_group=test_root_concurrency_group)
+
+        assert repo.is_valid_branch_name("main") is True
+        assert repo.is_valid_branch_name("feature") is True
+        assert repo.is_valid_branch_name("imbue/board-demo-workspace") is True
+        assert repo.is_valid_branch_name("maciek/scu-1636-linear-board") is True
+
+    def test_rejects_illegal_branch_names(self, temp_dir: Path, test_root_concurrency_group: ConcurrencyGroup) -> None:
+        repo_path = temp_dir / "repo"
+        make_test_repo(repo_path)
+        repo = LocalReadOnlyGitRepo(repo_path=repo_path, concurrency_group=test_root_concurrency_group)
+
+        assert repo.is_valid_branch_name("") is False
+        assert repo.is_valid_branch_name("has space") is False
+        assert repo.is_valid_branch_name("with:colon") is False
+        assert repo.is_valid_branch_name("trailing.") is False
+        assert repo.is_valid_branch_name("foo..bar") is False
+        assert repo.is_valid_branch_name("foo~bar") is False
+        assert repo.is_valid_branch_name("-leadingdash") is False
+
+    def test_rejects_branch_name_with_embedded_command(
+        self, temp_dir: Path, test_root_concurrency_group: ConcurrencyGroup
+    ) -> None:
+        """Regression: a workspace-name field accidentally filled with a prompt produced
+        this branch name, and `git worktree add -b` failed deep in async environment setup."""
+        repo_path = temp_dir / "repo"
+        make_test_repo(repo_path)
+        repo = LocalReadOnlyGitRepo(repo_path=repo_path, concurrency_group=test_root_concurrency_group)
+
+        bad_name = "imbue/board-demo-workspaceRun: git checkout -b dev/scu-1634-board-demo  (just create that branch, then stop)."
+        assert repo.is_valid_branch_name(bad_name) is False
+
+
 class TestGetRemoteBranches:
     """Tests for the get_remote_branches method."""
 

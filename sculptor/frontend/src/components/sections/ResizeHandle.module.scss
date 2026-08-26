@@ -1,0 +1,100 @@
+// Visible dividers are 1px but the clickable hit area extends further via a
+// transparent pseudo-element. Position/z-index lifts the pseudo-element above
+// adjacent scrollbars so they don't steal pointer events near the edge.
+//
+// `position: relative` is declared at zero specificity (:where, below) so that a
+// caller module can float the handle over an edge (`position: absolute`) from any
+// single-class rule without a cross-module specificity fight — stylesheet order
+// between modules is a bundler artifact and must never decide the winner.
+.horizontalResizeHandle {
+  background-color: var(--gray-a5);
+  cursor: col-resize;
+  flex-shrink: 0;
+  // Own the touch gesture so a touch drag isn't hijacked into browser panning (which
+  // would fire pointercancel and interrupt the resize).
+  touch-action: none;
+  transition: background-color var(--duration-normal);
+  width: 1px;
+  z-index: 1;
+
+  &::before {
+    content: "";
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- 4px hit-area extension each side
+    inset: 0 -4px;
+    position: absolute;
+  }
+
+  &:hover {
+    background-color: var(--gray-a7);
+  }
+
+  &[data-resize-handle-active] {
+    background-color: var(--accent-9);
+  }
+}
+
+.verticalResizeHandle {
+  background-color: var(--gray-a5);
+  cursor: row-resize;
+  flex-shrink: 0;
+  height: 1px;
+  // Own the touch gesture so a touch drag isn't hijacked into browser panning (which
+  // would fire pointercancel and interrupt the resize).
+  touch-action: none;
+  transition: background-color var(--duration-normal);
+  z-index: 1;
+
+  &::before {
+    content: "";
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- 4px hit-area extension each side
+    inset: -4px 0;
+    position: absolute;
+  }
+
+  &:hover {
+    background-color: var(--gray-a7);
+  }
+
+  &[data-resize-handle-active] {
+    background-color: var(--accent-9);
+  }
+}
+
+// The in-flow default. Zero specificity (see the note on the base class) so any
+// single-class rule — the edge-overlay classes below, or a caller module's own —
+// deterministically overrides it.
+:where(.horizontalResizeHandle, .verticalResizeHandle) {
+  position: relative;
+}
+
+// The edge-overlay variant: the handle floats over one edge of its nearest
+// positioned ancestor instead of sitting in flow between two siblings, spanning
+// that edge's full length. The 1px line and the ::before hit area still come
+// from the base class.
+.edgeOverlayLeft {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  top: 0;
+}
+
+.edgeOverlayRight {
+  bottom: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.edgeOverlayTop {
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.edgeOverlayBottom {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
+}

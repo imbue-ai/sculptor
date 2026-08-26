@@ -67,7 +67,7 @@ Avoid using Python's `assert` statements or manual wait loops unless there's an 
 ### Timeout Management
 
 - **Default `expect()` timeout**: Configured in `sculptor/tests/integration/frontend/conftest.py` via the `configure_expect_timeout` autouse fixture — 30 seconds by default.
-- **Task wait helpers**: Use `wait_for_tasks_to_build()` and `wait_for_tasks_to_finish()` from `sculptor.testing.elements.task_list` instead of writing manual timeout logic. These helpers use `BUILD_TIMEOUT_SECS` and `RUNNING_TIMEOUT_SECS` from `sculptor/sculptor/testing/constants.py` internally.
+- **Task/agent wait helpers**: Use `start_task_and_wait_for_ready()` from `sculptor.testing.playwright_utils` to create a workspace + agent and wait until the chat panel is ready, then `wait_for_completed_message_count()` from `sculptor.testing.elements.chat_panel` to wait for the agent's turn to finish — instead of writing manual timeout logic. `start_task_and_wait_for_ready` uses generous explicit timeouts (60s) for the slow workspace-clone / environment-setup steps; `wait_for_completed_message_count` uses the default 30s `expect()` timeout (overridable per call for long multi-step prompts).
 - Avoid defining custom and hardcoded timeouts unless absolutely necessary.
 
 ### Element Access Hierarchy

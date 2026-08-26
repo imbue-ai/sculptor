@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ChatMessage } from "~/api";
 
-import { mergeChatAndQueuedMessages, omitMessagesAlreadyInChat } from "./alphaMessageUtils.ts";
+import { buildToolResultMap, mergeChatAndQueuedMessages, omitMessagesAlreadyInChat } from "./alphaMessageUtils.ts";
 
 const makeMessage = (id: string): ChatMessage =>
   ({
@@ -61,5 +61,23 @@ describe("omitMessagesAlreadyInChat", () => {
     const filtered = omitMessagesAlreadyInChat([queuedFirst, queuedSecond], [sent]);
 
     expect(filtered.map((message) => message.id)).toEqual(["b", "c"]);
+  });
+});
+
+describe("reference stability and memoization", () => {
+  // The chat view remounts on every agent switch and rebuilds its derived data
+  // from scratch. These behaviors let that rebuild reuse the prior computation
+  // when the underlying message array is unchanged (idle agent, nothing queued).
+  it("mergeChatAndQueuedMessages returns the input reference when nothing is queued", () => {
+    const messages = [makeMessage("a"), makeMessage("b")];
+    // Same reference out — this is what lets the builder caches below hit on remount.
+    expect(mergeChatAndQueuedMessages(messages, [])).toBe(messages);
+  });
+
+  it("buildToolResultMap caches by input-array reference", () => {
+    const messages = [makeMessage("a")];
+    const first = buildToolResultMap(messages);
+    expect(buildToolResultMap(messages)).toBe(first); // same reference -> cached result
+    expect(buildToolResultMap([...messages])).not.toBe(first); // new reference -> recomputed
   });
 });

@@ -1,0 +1,144 @@
+@use "scrollbar" as *;
+
+// The 34px section header: a horizontally scrolling tab strip on the left and the
+// add/maximize controls pinned to the right. No bottom border — the strip's own
+// background plus the layout gaps separate it from the content, so it reads as panel
+// chrome rather than a toolbar.
+.header {
+  background: var(--gray-2);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- tab pill (26px) + scroll padding (8px)
+  height: 34px;
+  overflow: hidden;
+}
+
+.tabs {
+  align-items: center;
+  display: flex;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-x: auto;
+  padding: var(--space-1) var(--space-2);
+
+  @include thin-scrollbar(horizontal, var(--scrollbar-size-thin));
+}
+
+// A pill tab: compact, the active one filled with --gray-4. The close button sits in
+// its own fixed trailing slot so it never overlaps the label (the label truncates
+// before it) and stays in a stable, predictable spot. The tab itself is the dnd-kit
+// drag activator — touch-action:none lets the pointer sensor own the gesture on touch.
+// TabPill.module.scss `.pill`/`.ghost` mirror this footprint (padding, gap, radius,
+// font-size, and the hover/transition) so a dragged copy keeps the same size; keep the
+// two in sync.
+.tab {
+  align-items: center;
+  background: transparent;
+  border-radius: var(--radius-2);
+  color: var(--gray-a10);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  touch-action: none;
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
+  user-select: none;
+
+  &:hover {
+    background-color: var(--gray-a3);
+  }
+}
+
+.tabActive {
+  background-color: var(--gray-4);
+  color: var(--gray-12);
+
+  // Keep the active background on hover so the base :hover rule doesn't flicker a
+  // lighter color over the active state.
+  &:hover {
+    background-color: var(--gray-4);
+  }
+}
+
+// Ghosted placeholder shown in the gap while a tab is dragged into this section (the
+// floating copy is rendered by the ancestor drag overlay). outline (not
+// border) keeps the footprint stable so neighbouring tabs don't shift. Mirrored by
+// TabPill.module.scss `.ghost` (the cross-section drop preview); keep the two in sync.
+.tabGhost {
+  background-color: var(--gray-a2);
+  color: var(--gray-a8);
+  opacity: 70%;
+  outline: 1px dashed var(--gray-a7);
+  outline-offset: -1px;
+}
+
+// The source tab while its floating copy is being dragged: dimmed so the eye follows
+// the overlay and the live ghost placeholder in the prospective drop section.
+.tabDragging {
+  opacity: 40%;
+}
+
+// The agent-status dot slot on agent tabs (running/waiting/error/unread/read). The dot
+// itself is the shared AgentStatusDot svg, whose per-status colors come from
+// StatusDot.module.scss design tokens; this slot only centers it and keeps it from
+// shrinking as the label truncates.
+.dot {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.label {
+  // Mirrored by TabPill.module.scss `.label`; keep the truncation cap in sync.
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- a fixed truncation cap; no spacing token fits
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Always-visible (no hover gating) so the close target stays in a stable spot rather
+// than materialising under the cursor; this keeps the tab width constant and avoids
+// accidental closes from the X appearing over the label while switching tabs.
+.closeButton {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--gray-9);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  height: var(--space-4);
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  width: var(--space-4);
+
+  &:hover {
+    background-color: var(--gray-a4);
+    color: var(--gray-12);
+  }
+}
+
+// Fills the remaining strip width so the maximize control stays pinned to the far right
+// after the tab strip and the add-panel "+". flex-shrink:0 keeps it from squishing when
+// the section narrows — all the shrink pressure lands on .tabs, which then scrolls.
+.controls {
+  flex-grow: 1;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  padding-right: var(--space-2);
+}
+
+// Muted gray matching a non-active tab, so the "+" and maximize controls recede until
+// hovered. Never shrink, so the icons stay a stable size as the section narrows and the
+// tab strip (not the controls) absorbs the shrink and scrolls.
+.headerButton {
+  color: var(--gray-a10);
+  flex-shrink: 0;
+}

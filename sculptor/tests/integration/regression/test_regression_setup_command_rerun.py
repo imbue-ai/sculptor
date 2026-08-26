@@ -10,7 +10,7 @@ button still works.
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.setup_status import PlaywrightSetupStatusElement
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -45,10 +45,9 @@ def test_setup_command_does_not_rerun_after_restart(
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
 
-        layout = PlaywrightProjectLayoutPage(page=page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+        expect(workspace_row).to_be_visible()
+        workspace_row.click()
 
         setup_status = PlaywrightSetupStatusElement(page=page)
         expect(setup_status.get_rerun_button()).to_be_visible()

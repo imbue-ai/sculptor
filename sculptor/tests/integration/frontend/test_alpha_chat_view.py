@@ -1,7 +1,7 @@
 """Integration tests for the new (alpha) chat view.
 
 Tests that the new chat view correctly displays messages, text blocks,
-tool calls, and supports switching to the debug view.
+and tool calls.
 
 Also covers features ported from the classic view: AskUserQuestion rendering,
 ExitPlanMode rendering, tool grouping with multiple tools, skill pills on
@@ -12,8 +12,6 @@ write_file (diff) tool results.
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
-from sculptor.testing.elements.alpha_chat_view import get_debug_chat_view
-from sculptor.testing.elements.alpha_chat_view import switch_to_debug_view
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_block
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -302,27 +300,6 @@ fake_claude:multi_step `{
     file_link.first.click()
     diff_panel = task_page.get_diff_panel()
     expect(diff_panel).to_be_visible()
-
-
-@user_story("to see blocks in the debug chat view")
-def test_debug_view_displays_blocks(sculptor_instance_: SculptorInstance) -> None:
-    """Test that the debug view renders individual content blocks with type labels."""
-    page = sculptor_instance_.page
-
-    task_page = start_task_and_wait_for_ready(
-        sculptor_page=page,
-        prompt='fake_claude:text `{"text": "Debug view test response."}`',
-    )
-    chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
-
-    switch_to_debug_view(page)
-    debug_view = get_debug_chat_view(page)
-    expect(debug_view).to_be_visible()
-
-    blocks = debug_view.get_blocks()
-    expect(blocks.first).to_be_visible()
-    expect(blocks.nth(1)).to_be_attached()
 
 
 @user_story("to stay on the new chat view when the diff panel opens")

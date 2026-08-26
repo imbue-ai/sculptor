@@ -5,6 +5,7 @@ from sculptor.config.settings import SculptorSettings
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.btw_service.api import BtwService
 from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoordinator
+from sculptor.services.pi_login_service import PiLoginService
 from sculptor.services.task_service.data_types import TaskServiceCollection
 from sculptor.services.task_service.service_collection import get_task_service_collection
 from sculptor.web.pr_polling_service import PrPollingService
@@ -14,6 +15,7 @@ class CompleteServiceCollection(TaskServiceCollection):
     pr_polling_service: PrPollingService
     btw_service: BtwService
     ci_babysitter_service: CIBabysitterCoordinator
+    pi_login_service: PiLoginService
 
     @contextmanager
     def run_all(self) -> Generator[None, None, None]:
@@ -29,6 +31,7 @@ class CompleteServiceCollection(TaskServiceCollection):
             self.pr_polling_service.run(should_log_runtimes=True),
             self.ci_babysitter_service.run(should_log_runtimes=True),
             self.btw_service.run(should_log_runtimes=True),
+            self.pi_login_service.run(should_log_runtimes=True),
         ):
             yield
 
@@ -44,6 +47,11 @@ def get_services(
         workspace_service=services.workspace_service,
     )
     btw_service = BtwService(concurrency_group=concurrency_group.make_concurrency_group("btw_service"))
+    pi_login_service = PiLoginService(
+        concurrency_group=concurrency_group.make_concurrency_group("pi_login_service"),
+        data_model_service=services.data_model_service,
+        task_service=services.task_service,
+    )
     ci_babysitter_service = CIBabysitterCoordinator(
         concurrency_group=concurrency_group.make_concurrency_group("ci_babysitter"),
         data_model_service=services.data_model_service,
@@ -62,4 +70,5 @@ def get_services(
         pr_polling_service=pr_polling_service,
         btw_service=btw_service,
         ci_babysitter_service=ci_babysitter_service,
+        pi_login_service=pi_login_service,
     )

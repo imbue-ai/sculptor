@@ -10,22 +10,12 @@ diff onto the (short) target-branch `oldLines`, crashing the diff view.
 The diff initially appears but disappears once decorations are applied.
 """
 
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-
-def _enable_review_all_via_settings(page: Page) -> None:
-    """Enable the Review All experimental setting via the Settings UI."""
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.enable_review_all()
-
 
 # Build a 200-line file.  JSON newlines are represented as \\n.
 _LONG_README = "\\n".join(f"# Line {i}" for i in range(200))
@@ -96,8 +86,6 @@ def test_review_all_diff_stays_visible_with_committed_line_count_changes(
     """
     page = sculptor_instance_.page
 
-    _enable_review_all_via_settings(page)
-
     task_page = start_task_and_wait_for_ready(page, prompt=_PROMPT)
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
@@ -106,12 +94,12 @@ def test_review_all_diff_stays_visible_with_committed_line_count_changes(
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
+    review_all_panel = task_page.get_review_all_panel()
+    expect(review_all_panel).to_be_visible()
 
     # The combined diff should show the file header and diff content.
-    expect(diff_panel).to_contain_text("README.md")
-    expect(diff_panel).to_contain_text("MODIFIED")
+    expect(review_all_panel).to_contain_text("README.md")
+    expect(review_all_panel).to_contain_text("MODIFIED")
 
     # Wait for syntax highlighting decorations to be applied — the bug caused
     # the diff to disappear at this point because decorations referenced
@@ -120,5 +108,5 @@ def test_review_all_diff_stays_visible_with_committed_line_count_changes(
 
     # The diff must still be visible and contain the changed content after
     # decorations have been processed.
-    expect(diff_panel).to_contain_text("README.md")
-    expect(diff_panel).to_contain_text("MODIFIED")
+    expect(review_all_panel).to_contain_text("README.md")
+    expect(review_all_panel).to_contain_text("MODIFIED")

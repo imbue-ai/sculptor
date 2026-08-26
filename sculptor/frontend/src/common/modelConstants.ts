@@ -1,8 +1,22 @@
+import type { ModelCatalogState } from "~/api";
 import { LlmModel, type ModelOption } from "~/api";
 
+/**
+ * "No usable model": a backend-sourced harness (pi) whose catalog has been fetched
+ * and is empty (no authenticated providers). `NOT_FETCHED_YET` is excluded — that is
+ * still loading, not empty. Shared by the model picker's disabled state and the
+ * composer's send-guard so the two cannot disagree.
+ */
+export const hasNoUsableModel = (
+  sourcesBackendModels: boolean,
+  backendModels: ReadonlyArray<ModelOption> | ModelCatalogState,
+): boolean => sourcesBackendModels && Array.isArray(backendModels) && backendModels.length === 0;
+
 const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
-  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (1M)", long: "Claude 4.8 Opus (1M)" },
-  [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus", long: "Claude 4.8 Opus" },
+  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus 5 (1M)", long: "Claude 5 Opus (1M)" },
+  [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus 5", long: "Claude 5 Opus" },
+  [LlmModel.CLAUDE_4_8_OPUS]: { short: "Opus 4.8 (1M)", long: "Claude 4.8 Opus (1M)" },
+  [LlmModel.CLAUDE_4_8_OPUS_200K]: { short: "Opus 4.8", long: "Claude 4.8 Opus" },
   [LlmModel.CLAUDE_4_7_OPUS]: { short: "Opus 4.7 (1M)", long: "Claude 4.7 Opus (1M)" },
   [LlmModel.CLAUDE_4_7_OPUS_200K]: { short: "Opus 4.7", long: "Claude 4.7 Opus" },
   [LlmModel.CLAUDE_4_6_OPUS]: { short: "Opus 4.6 (1M)", long: "Claude 4.6 Opus (1M)" },
@@ -18,10 +32,13 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
 export const getModelShortName = (model: LlmModel): string => modelNames[model]?.short || "Unknown";
 export const getModelLongName = (model: LlmModel): string => modelNames[model]?.long || "Unknown";
 
-const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
+// Models offered in production model pickers (desktop selector + mobile `+` menu).
+export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_FABLE_5,
   LlmModel.CLAUDE_4_OPUS_200K,
   LlmModel.CLAUDE_4_OPUS,
+  LlmModel.CLAUDE_4_8_OPUS_200K,
+  LlmModel.CLAUDE_4_8_OPUS,
   LlmModel.CLAUDE_4_7_OPUS_200K,
   LlmModel.CLAUDE_4_7_OPUS,
   LlmModel.CLAUDE_4_6_OPUS_200K,
@@ -74,6 +91,8 @@ const providerDisplayNames: Record<string, string> = {
   deepseek: "DeepSeek",
   google: "Google",
   openai: "OpenAI",
+  "openai-codex": "ChatGPT Plus/Pro (Codex)",
+  "github-copilot": "GitHub Copilot",
   "amazon-bedrock": "Amazon Bedrock",
 };
 

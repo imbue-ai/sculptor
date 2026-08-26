@@ -76,12 +76,16 @@ type AgentTaskLike = {
   isArchived?: boolean;
 };
 
-// `focusedAgentId` is the agent the user is currently viewing (or null when no
-// agent is focused, e.g. on the home page); it is treated as read — see
-// getAgentDotStatus.
-export function computeWorkspaceDotStatus(
-  tasks: ReadonlyArray<AgentTaskLike>,
-  focusedAgentId: string | null = null,
+// Per-task dot resolution used by the workspace aggregate. Injectable (and
+// generic over the caller's task type) so override-aware callers — the sidebar
+// rows, matching the panel tabs' manual mark-as-unread — can substitute their
+// resolver without this pure leaf module importing override state.
+const resolveBaseDotStatus = (task: AgentTaskLike): AgentDotStatus =>
+  getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt);
+
+export function computeWorkspaceDotStatus<T extends AgentTaskLike>(
+  tasks: ReadonlyArray<T>,
+  resolveDotStatus: (task: T) => AgentDotStatus = resolveBaseDotStatus,
 ): WorkspaceDotStatus {
   const activeTasks = tasks.filter((task) => !task.isDeleted && !task.isArchived);
 
@@ -89,16 +93,73 @@ export function computeWorkspaceDotStatus(
     return EMPTY_WORKSPACE_DOT_STATUS;
   }
 
-  const dotStatuses = activeTasks.map((task) =>
-    getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt, task.id === focusedAgentId),
-  );
-  const hasError = dotStatuses.some((dotStatus) => dotStatus === "error");
+  const hasError = activeTasks.some((task) => resolveDotStatus(task) === "error");
   const hasWaiting = activeTasks.some((task) => task.status === TaskStatus.WAITING);
   const hasRunning = activeTasks.some(
     (task) => task.status === TaskStatus.RUNNING || task.status === TaskStatus.BUILDING,
   );
-  const isAllError = dotStatuses.every((dotStatus) => dotStatus === "error");
-  const hasUnread = dotStatuses.some((dotStatus) => dotStatus === "unread");
+  const isAllError = activeTasks.every((task) => resolveDotStatus(task) === "error");
+  const hasUnread = activeTasks.some((task) => resolveDotStatus(task) === "unread");
 
   return { hasError, hasWaiting, hasRunning, isAllError, hasUnread };
+}
+
+/**
+ * Sort priority for a workspace in attention-first ordering (LOWER = higher
+ * up the list). Derived from the same per-task status semantics as the status
+ * dot, so the ordering and the dot never disagree about what "needs
+ * attention" means.
+ *
+ * Tiers (a workspace takes the highest-priority tier any of its tasks earns):
+ *   0  WAITING       — a task is waiting for the user's input
+ *   1  UNACKED_ERROR — a task errored and the user hasn't viewed it since
+ *   2  UNREAD        — a task has an unread reply
+ *   3  RUNNING       — a task is running / building
+ *   4  IDLE          — everything else, INCLUDING an already-viewed error
+ *
+ * An acked (already-viewed) error deliberately drops to IDLE: once you've
+ * looked at a broken workspace it stops jumping the queue. Recency ordering
+ * within the tier keeps it reachable.
+ */
+export const WORKSPACE_ATTENTION_TIER = {
+  WAITING: 0,
+  UNACKED_ERROR: 1,
+  UNREAD: 2,
+  RUNNING: 3,
+  IDLE: 4,
+} as const;
+
+export type WorkspaceAttentionTier = (typeof WORKSPACE_ATTENTION_TIER)[keyof typeof WORKSPACE_ATTENTION_TIER];
+
+const isErrorStatus = (status: TaskStatus): boolean =>
+  status === TaskStatus.ERROR || status === TaskStatus.REQUEST_ERROR;
+
+export function getWorkspaceAttentionRank<T extends AgentTaskLike>(tasks: ReadonlyArray<T>): WorkspaceAttentionTier {
+  const activeTasks = tasks.filter((task) => !task.isDeleted && !task.isArchived);
+  if (activeTasks.length === 0) {
+    return WORKSPACE_ATTENTION_TIER.IDLE;
+  }
+
+  // Checked in priority order — the first match wins, so a workspace with both
+  // a waiting task and an errored one sorts as WAITING.
+  if (activeTasks.some((task) => task.status === TaskStatus.WAITING)) {
+    return WORKSPACE_ATTENTION_TIER.WAITING;
+  }
+
+  // Un-acked error: errored AND not yet viewed since the failing update. A
+  // read REQUEST_ERROR has already resolved away from "error" (see
+  // getAgentDotStatus); a read full ERROR stays red but is no longer urgent,
+  // so it falls through to IDLE below.
+  if (activeTasks.some((task) => isErrorStatus(task.status) && hasUnreadUpdate(task.lastReadAt, task.updatedAt))) {
+    return WORKSPACE_ATTENTION_TIER.UNACKED_ERROR;
+  }
+
+  if (activeTasks.some((task) => getAgentDotStatus(task.status, task.lastReadAt, task.updatedAt) === "unread")) {
+    return WORKSPACE_ATTENTION_TIER.UNREAD;
+  }
+
+  if (activeTasks.some((task) => task.status === TaskStatus.RUNNING || task.status === TaskStatus.BUILDING)) {
+    return WORKSPACE_ATTENTION_TIER.RUNNING;
+  }
+  return WORKSPACE_ATTENTION_TIER.IDLE;
 }

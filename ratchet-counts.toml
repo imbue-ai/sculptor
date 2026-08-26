@@ -6,10 +6,10 @@
 "." = 0
 
 [classmethod-builder-naming]
-"." = 5
+"." = 4
 
 [match-must-assert-never]
-"." = 7
+"." = 4
 
 [no-asyncio-run]
 "." = 8
@@ -29,29 +29,36 @@
 [no-eval-usage]
 "." = 0
 
+# Frozen at the 2026-07 state-ownership baseline. Every site is classified in
+# docs/development/state-ownership-burndown.md (handled catches — rollback or
+# toast inside — or pure fire-and-forget with no optimistic local write).
+# Reduce only; bumps need a written justification.
+[no-fire-and-forget-api-catch]
+"." = 6
+
 [no-implicit-string-concat]
-"." = 25
+"." = 0
 
 [no-inline-functions]
-"." = 33
+"." = 34
 
 [no-inline-imports]
-"." = 63
+"." = 66
 
 [no-integration-css-locators]
 "." = 0
 
 [no-integration-non-testid-queries]
-"." = 1
+"." = 0
 
 [no-integration-page-evaluate]
-"." = 22
+"." = 19
 
 [no-integration-page-goto]
 "." = 0
 
 [no-integration-page-reload]
-"." = 4
+"." = 2
 
 [no-integration-time-sleep]
 "." = 9
@@ -60,10 +67,10 @@
 "." = 0
 
 [no-logger-exception]
-"." = 1
+"." = 0
 
 [no-logger-warning]
-"." = 57
+"." = 51
 
 [no-make-composite-seed]
 "." = 0
@@ -77,11 +84,14 @@
 [no-namedtuple-usage]
 "." = 0
 
+[no-noop-queryfn]
+"." = 0
+
 [no-numpy-default-rng]
 "." = 0
 
 [no-os-path-join]
-"." = 4
+"." = 0
 
 [no-pydantic-model-copy-update]
 "." = 0
@@ -93,7 +103,7 @@
 "." = 0
 
 [no-pyrefly-ignore]
-"." = 75
+"." = 71
 
 [no-pyrefly-ignore-errors]
 "." = 0
@@ -108,16 +118,28 @@
 "." = 0
 
 [no-raw-html-button]
-"." = 21
+# +13 for the mobile Workspace shell's custom chrome: the agent-switcher pill and
+# the full-bleed left-aligned drawer / agent-sheet / changes-pill rows, whose
+# pill/row geometry fights Radix Button/IconButton's enforced sizing. The
+# icon-only mobile buttons (header, overlays, chat input) DO use Radix IconButton.
+# +1 for the Layouts tidy confirmation's "Edit layout to turn off tidying" link: it
+# triggers an action, not navigation, so a text-styled <button> is more correct than a
+# Radix Link (an <a> without href) and doesn't fit Radix Button's solid/soft chrome.
+"." = 38
 
 [no-relative-imports]
+"." = 0
+
+# Zero is the floor: all cache writes live in queryClient.ts (WS bridge) and
+# src/common/state/mutations/. See docs/development/state-ownership-burndown.md.
+[no-scattered-setquerydata]
 "." = 0
 
 [no-sculptor-copytree]
 "." = 1
 
 [no-sculptor-subprocess]
-"." = 2
+"." = 1
 
 [no-ssh-subprocess]
 "." = 0
@@ -129,22 +151,22 @@
 "." = 0
 
 [no-type-ignore]
-"." = 41
+"." = 28
 
 [no-typing-builtin-imports]
-"." = 2
+"." = 0
 
 [no-typing-cast]
-"." = 49
+"." = 47
 
 [no-underscore-imports]
-"." = 6
+"." = 2
 
 [no-unlabeled-pyrefly-ignore]
 "." = 0
 
 [no-unlabeled-type-ignore]
-"." = 18
+"." = 0
 
 [no-unnumbered-pyre-fixme]
 "." = 0
@@ -153,7 +175,7 @@
 "." = 0
 
 [no-untyped-args-kwargs]
-"." = 33
+"." = 32
 
 [no-walrus-operator]
 "." = 0

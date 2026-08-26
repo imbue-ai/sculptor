@@ -2,7 +2,7 @@ import { useSetAtom } from "jotai";
 import { useCallback, useReducer } from "react";
 
 import { cloneRemoteRepo, createInitialCommit, initializeGitRepository, initializeProject, listProjects } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
+import { getErrorMessage, HTTPException } from "~/common/Errors.ts";
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import type { ToastContent } from "~/components/Toast.tsx";
@@ -138,17 +138,6 @@ type UseAddRepoResult = {
   handleBackToForm: () => void;
   handleBrowse: () => Promise<string | undefined>;
   canBrowse: boolean;
-};
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof HTTPException) {
-    return error.detail;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return fallback;
 };
 
 export const useAddRepo = ({

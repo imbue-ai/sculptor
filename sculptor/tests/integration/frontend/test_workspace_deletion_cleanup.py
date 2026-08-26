@@ -32,10 +32,11 @@ from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
+from sculptor.testing.backend_url import resolve_backend_api_url
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import request_with_retry
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -130,7 +131,7 @@ def _wait_for_dead(page: Page, pid: int, timeout: float = 15.0) -> bool:
 
 def _assert_workspace_gone_from_backend(page: Page, workspace_id: str) -> None:
     """Assert the workspace now 404s — proves the soft-delete (and cascade) committed."""
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     response = request_with_retry(page.request.get, f"{base_url}/api/v1/workspaces/{workspace_id}")
     assert response.status == 404, f"expected workspace {workspace_id} to be gone, got {response.status}"
 
@@ -161,15 +162,15 @@ def test_delete_workspace_with_open_terminal_kills_pty_and_removes_worktree(
     assert shell_pid > 0
     os.kill(shell_pid, 0)  # sanity: the shell is reachable on the host
 
-    layout = PlaywrightProjectLayoutPage(page=page)
-    workspace_tabs = layout.get_workspace_tabs()
-    expect(workspace_tabs).to_have_count(1)
+    sidebar = get_workspace_sidebar(page)
+    workspace_rows = sidebar.get_workspace_rows()
+    expect(workspace_rows).to_have_count(1)
 
-    layout.delete_workspace_via_context_menu(workspace_tab_index=0)
+    sidebar.delete_workspace_via_context_menu(workspace_rows.first)
 
-    # UI: the tab is removed (optimistically, before the backend confirms).
-    expect(layout.get_delete_confirmation_dialog()).to_be_hidden()
-    expect(workspace_tabs).to_have_count(0)
+    # UI: the row is removed (optimistically, before the backend confirms).
+    expect(sidebar.get_delete_confirmation_dialog()).to_be_hidden()
+    expect(workspace_rows).to_have_count(0)
 
     # Backend teardown: the PTY shell process is killed, not just disconnected.
     assert _wait_for_dead(page, shell_pid), (
@@ -214,15 +215,15 @@ def test_delete_workspace_with_running_agent_finalizes_and_removes_worktree(
     chat_panel = task_page.get_chat_panel()
     expect(chat_panel.get_stop_button()).to_be_visible(timeout=30_000)
 
-    layout = PlaywrightProjectLayoutPage(page=page)
-    workspace_tabs = layout.get_workspace_tabs()
-    expect(workspace_tabs).to_have_count(1)
+    sidebar = get_workspace_sidebar(page)
+    workspace_rows = sidebar.get_workspace_rows()
+    expect(workspace_rows).to_have_count(1)
 
-    layout.delete_workspace_via_context_menu(workspace_tab_index=0)
+    sidebar.delete_workspace_via_context_menu(workspace_rows.first)
 
-    # UI: the tab is removed even though the agent was running.
-    expect(layout.get_delete_confirmation_dialog()).to_be_hidden()
-    expect(workspace_tabs).to_have_count(0)
+    # UI: the row is removed even though the agent was running.
+    expect(sidebar.get_delete_confirmation_dialog()).to_be_hidden()
+    expect(workspace_rows).to_have_count(0)
 
     # Backend teardown completes despite the running agent: the worktree is
     # removed (which only happens after the soft-delete commits), and the

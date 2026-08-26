@@ -16,14 +16,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const GithubSelected: Story = {
-  args: { value: "github" },
-};
-
+// Local is the picker's default source, so it leads here too.
 export const LocalSelected: Story = {
   args: { value: "local" },
 };
 
+export const GithubSelected: Story = {
+  args: { value: "github" },
+};
+
 export const AllDisabled: Story = {
-  args: { value: "github", disabled: true },
+  args: { value: "local", disabled: true },
 };

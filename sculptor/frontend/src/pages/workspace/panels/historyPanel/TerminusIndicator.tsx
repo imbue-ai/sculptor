@@ -4,9 +4,8 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 
+import { SHORT_HASH_LENGTH } from "./commitGraph";
 import styles from "./HistoryPanel.module.scss";
-
-const SHORT_HASH_LENGTH = 11;
 
 type TerminusIndicatorProps = {
   forkPoint: string | null;

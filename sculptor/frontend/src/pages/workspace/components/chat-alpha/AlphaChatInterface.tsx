@@ -3,7 +3,7 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import {
@@ -15,12 +15,13 @@ import {
   sendWorkspaceAgentMessages,
   TaskStatus,
 } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { AgentLightboxProvider } from "~/components/AgentLightboxContext.tsx";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
+import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
 import { isModifierPressed } from "~/electron/utils.ts";
 import { buildSubagentMetadataMap, buildSubagentTree } from "~/pages/workspace/utils/subagentTree.ts";
 
@@ -35,14 +36,15 @@ import { AlphaChatIntro } from "./AlphaChatIntro.tsx";
 import { AlphaMessageNode } from "./AlphaChatView.tsx";
 import {
   buildToolResultMap,
-  hasOnlySubagentResults,
-  hasOnlyToolResults,
+  filterRenderableNodes,
   mergeChatAndQueuedMessages,
   omitMessagesAlreadyInChat,
 } from "./alphaMessageUtils.ts";
 import { AlphaPromptNavigator } from "./AlphaPromptNavigator.tsx";
 import { AlphaSearchBar } from "./AlphaSearchBar.tsx";
 import { chatToolDensityAtom } from "./atoms.ts";
+import { ChatContextMenu } from "./ChatContextMenu.tsx";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import { useAlphaActivePromptIndex } from "./hooks/useAlphaActivePromptIndex.ts";
 import { useAlphaAutoScroll } from "./hooks/useAlphaAutoScroll.ts";
 import { useAlphaPromptNav } from "./hooks/useAlphaPromptNav.ts";
@@ -51,8 +53,8 @@ import { useAlphaSearch } from "./hooks/useAlphaSearch.ts";
 import { useAlphaVirtualizer } from "./hooks/useAlphaVirtualizer.ts";
 import { ChatScrollProvider } from "./hooks/useChatScroll.tsx";
 import { useJumpToBottom } from "./hooks/useJumpToBottom.ts";
-import { useViewportStability } from "./hooks/useViewportStability.ts";
 import { JumpToBottomButton } from "./JumpToBottomButton.tsx";
+import { useScrollStateMachine } from "./scroll/useScrollStateMachine.ts";
 import { StatusPill } from "./StatusPill.tsx";
 
 type AlphaChatInterfaceProps = ChatData & {
@@ -77,7 +79,8 @@ export const AlphaChatInterface = ({
   pendingBackgroundTaskCount,
   bottomSentinelRef,
 }: AlphaChatInterfaceProps): ReactElement => {
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  // The PANEL's agent identity, seeded by ChatPanelContent — never the route's.
+  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
   const [toast, setToast] = useState<ToastContent | null>(null);
   // Stable callback so the memoized <Toast> below bails out instead of
   // re-rendering on every unrelated parent render. (SCU-1455)
@@ -85,6 +88,8 @@ export const AlphaChatInterface = ({
     if (!open) setToast(null);
   }, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Links the scroll container to the overlay scrollbar's `aria-controls`.
+  const scrollContainerId = useId();
 
   // Queued message promotion logic. The agent holds queued messages whenever
   // it is mid-turn — either actively running, or paused on an AskUserQuestion /
@@ -98,6 +103,7 @@ export const AlphaChatInterface = ({
   // `pendingUserQuestion` is null (see below), so the value it sees is unchanged.
   const isAgentBusy =
     (taskStatus === TaskStatus.RUNNING && workingUserMessageId !== null) || pendingUserQuestion !== null;
+  const isMobile = useIsMobile();
   const effectiveQueuedMessages = useMemo(
     () => (isAgentBusy ? omitMessagesAlreadyInChat(queuedChatMessages, chatMessages) : []),
     [chatMessages, isAgentBusy, queuedChatMessages],
@@ -119,10 +125,7 @@ export const AlphaChatInterface = ({
     [effectiveChatMessages],
   );
 
-  const filteredNodes = useMemo(
-    () => messageTree.filter((node) => !hasOnlyToolResults(node.message) && !hasOnlySubagentResults(node.message)),
-    [messageTree],
-  );
+  const filteredNodes = useMemo(() => filterRenderableNodes(messageTree), [messageTree]);
 
   // Build a map from filtered index to the previous filtered node (for isNewCycle detection)
   const prevNodeMap = useMemo(() => {
@@ -171,16 +174,25 @@ export const AlphaChatInterface = ({
 
   // Set true before any programmatic scroll of the chat container so
   // ChatScrollProvider doesn't dismiss popovers on it. Cleared by
-  // useAlphaAutoScroll.handleScroll after it consumes the scroll event.
+  // useAlphaAutoScroll.handleScroll in a microtask after the flagged scroll
+  // event, so every listener of that event (including the persistence save
+  // handler) sees the classification.
   const isProgrammaticScrollRef = useRef(false);
+
+  // Single owner of scroll state (authority + layout settle + suppression).
+  // Declared before the scroll hooks so its attach layout effect runs first and
+  // so they can dispatch into / read from it.
+  const scrollMachine = useScrollStateMachine(scrollContainerRef);
 
   const virtualizer = useAlphaVirtualizer(
     scrollContainerRef,
     filteredNodes.length,
     lastMessageRole,
-    taskID ?? "",
+    taskID,
+    scrollMachine,
     introHeight,
     isProgrammaticScrollRef,
+    isStreaming,
   );
 
   const density = useAtomValue(chatToolDensityAtom);
@@ -195,16 +207,21 @@ export const AlphaChatInterface = ({
     virtualizer,
     lastMessageRole,
     lastUserMessageIndex,
-    taskID ?? "",
+    taskID,
+    scrollMachine,
     isProgrammaticScrollRef,
   );
 
-  // Viewport stability: compensate scrollTop when items above viewport change height
-  useViewportStability(scrollContainerRef, virtualizer, isProgrammaticScrollRef);
-
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID ?? "", filteredMessageRefs);
+  useAlphaScrollPersistence(
+    scrollContainerRef,
+    virtualizer,
+    taskID,
+    filteredMessageRefs,
+    scrollMachine,
+    isProgrammaticScrollRef,
+  );
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);
@@ -226,19 +243,15 @@ export const AlphaChatInterface = ({
     [filteredNodes],
   );
 
-  // Shared ref: useAlphaPromptNav writes to it synchronously when entering/
-  // exiting nav, and useAlphaActivePromptIndex reads it to freeze the cursor
-  // during keyboard nav so the scroll spy and stick-to-bottom logic don't
-  // fight the explicit user intent.
-  const isNavigatingRef = useRef(false);
-
-  // Active dot index (scroll-spy) — shared with keyboard nav as the single cursor.
+  // Active dot index (scroll-spy) — shared with keyboard nav as the single
+  // cursor. Reads the `navigating` phase off the shared scroll machine so the
+  // scroll spy and stick-to-bottom logic don't fight the explicit user intent.
   const activePromptIndex = useAlphaActivePromptIndex(
     userPromptIndices,
     virtualizer,
     scrollContainerRef,
     isAtBottom,
-    isNavigatingRef,
+    scrollMachine,
   );
 
   // ─── Anchor the active user message during chat tool density flips ──────────
@@ -325,7 +338,7 @@ export const AlphaChatInterface = ({
     scrollToBottom,
     setIsSuppressed,
     activePromptIndex,
-    isNavigatingRef,
+    scrollMachine,
   );
 
   const handlePromptNavigate = useCallback(
@@ -379,13 +392,17 @@ export const AlphaChatInterface = ({
   // search navigation. Exit prompt navigation when search opens (it has its own
   // suppression that we supersede here).
   useEffect(() => {
+    // The machine's top-level suppression guard drops auto-scroll initiation
+    // events while search is open, so a search session never starts pinning or
+    // anchoring.
+    scrollMachine.setSuppressed(isSearchVisible);
     if (isSearchVisible) {
       exitNavigation();
       setIsSuppressed(true);
     } else {
       setIsSuppressed(false);
     }
-  }, [isSearchVisible, exitNavigation, setIsSuppressed]);
+  }, [isSearchVisible, exitNavigation, setIsSuppressed, scrollMachine]);
 
   // Jump-to-bottom button
   const { isVisible: isJumpVisible, label: jumpLabel } = useJumpToBottom(
@@ -511,7 +528,7 @@ export const AlphaChatInterface = ({
   }, [submitAnswersToBackend, pendingUserQuestion, taskID, workspaceID]);
 
   return (
-    <AgentLightboxProvider taskId={taskID ?? ""}>
+    <AgentLightboxProvider taskId={taskID}>
       <ChatScrollProvider scrollContainerRef={scrollContainerRef} isUserScrollingRef={isUserScrollingRef}>
         <Flex
           direction="column"
@@ -528,105 +545,120 @@ export const AlphaChatInterface = ({
               navigateToMatch={navigateToMatch}
             />
           )}
-          <div className={styles.scrollArea}>
-            <div
-              ref={scrollContainerRef}
-              className={styles.scrollContainer}
-              data-testid={ElementIds.ALPHA_CHAT_VIEW}
-              role="log"
-              aria-label="Chat messages"
-              tabIndex={0}
-            >
-              <div className={styles.virtualContent} style={{ height: virtualizer.getTotalSize() }}>
-                <div ref={introRef}>
-                  <AlphaChatIntro />
-                </div>
-                {virtualizer.getVirtualItems().map((virtualItem) => {
-                  const node = filteredNodes[virtualItem.index];
-                  const prevNode = prevNodeMap.get(virtualItem.index);
-                  const isLastMessage = virtualItem.index === filteredNodes.length - 1;
-                  const isAssistant = node.message.role === ChatMessageRole.ASSISTANT;
-                  return (
-                    <div
-                      key={node.message.id}
-                      ref={virtualizer.measureElement}
-                      data-index={virtualItem.index}
-                      aria-setsize={filteredNodes.length}
-                      aria-posinset={virtualItem.index + 1}
-                      aria-live={isLastMessage && isAssistant ? "polite" : undefined}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                    >
-                      <AlphaMessageNode
-                        node={node}
-                        prevNode={prevNode}
-                        inProgressMessageId={inProgressMessageId}
-                        toolResultMap={toolResultMap}
-                        subagentMetadataMap={subagentMetadataMap}
-                        searchQuery={effectiveSearchQuery}
-                        activeSearchBlockIndex={activeMatchMessageId === node.message.id ? activeBlockIndex : -1}
-                        activeSearchOccurrence={activeMatchMessageId === node.message.id ? activeOccurrenceInBlock : -1}
-                        isLastMessage={virtualItem.index === filteredNodes.length - 1}
-                        isStreaming={isStreaming && isLastMessage && isAssistant}
-                        taskStatus={taskStatus ?? TaskStatus.RUNNING}
-                        onRetryRequest={handleRetryLastUserMessage}
-                        onOpenDiffFile={handleOpenDiffFile}
-                        messageIndex={virtualItem.index}
-                      />
-                    </div>
-                  );
-                })}
-                {/* Bottom sentinel for the smooth-streaming viewport observer.
+          <ChatContextMenu>
+            <div className={styles.scrollArea}>
+              <div
+                ref={scrollContainerRef}
+                id={scrollContainerId}
+                className={styles.scrollContainer}
+                data-testid={ElementIds.ALPHA_CHAT_VIEW}
+                role="log"
+                aria-label="Chat messages"
+                tabIndex={0}
+              >
+                <div className={styles.virtualContent} style={{ height: virtualizer.getTotalSize() }}>
+                  <div ref={introRef}>
+                    <AlphaChatIntro />
+                  </div>
+                  {virtualizer.getVirtualItems().map((virtualItem) => {
+                    const node = filteredNodes[virtualItem.index];
+                    const prevNode = prevNodeMap.get(virtualItem.index);
+                    const isLastMessage = virtualItem.index === filteredNodes.length - 1;
+                    const isAssistant = node.message.role === ChatMessageRole.ASSISTANT;
+                    return (
+                      <div
+                        key={node.message.id}
+                        ref={virtualizer.measureElement}
+                        data-index={virtualItem.index}
+                        aria-setsize={filteredNodes.length}
+                        aria-posinset={virtualItem.index + 1}
+                        aria-live={isLastMessage && isAssistant ? "polite" : undefined}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${virtualItem.start}px)`,
+                        }}
+                      >
+                        <AlphaMessageNode
+                          node={node}
+                          prevNode={prevNode}
+                          inProgressMessageId={inProgressMessageId}
+                          toolResultMap={toolResultMap}
+                          subagentMetadataMap={subagentMetadataMap}
+                          searchQuery={effectiveSearchQuery}
+                          activeSearchBlockIndex={activeMatchMessageId === node.message.id ? activeBlockIndex : -1}
+                          activeSearchOccurrence={
+                            activeMatchMessageId === node.message.id ? activeOccurrenceInBlock : -1
+                          }
+                          isLastMessage={virtualItem.index === filteredNodes.length - 1}
+                          isStreaming={isStreaming && isLastMessage && isAssistant}
+                          taskStatus={taskStatus ?? TaskStatus.RUNNING}
+                          onRetryRequest={handleRetryLastUserMessage}
+                          onOpenDiffFile={handleOpenDiffFile}
+                          messageIndex={virtualItem.index}
+                        />
+                      </div>
+                    );
+                  })}
+                  {/* Bottom sentinel for the smooth-streaming viewport observer.
                     useSmoothStreamingViewportObserver watches this element with
                     an IntersectionObserver and disables smooth streaming when
                     it scrolls off-screen. It is pinned to the bottom of the
                     virtual content so it leaves the viewport exactly when the
                     message tail does. */}
-                <div
-                  ref={bottomSentinelRef}
-                  data-testid={ElementIds.ALPHA_CHAT_BOTTOM_SENTINEL}
-                  aria-hidden="true"
-                  className={styles.bottomSentinel}
+                  <div
+                    ref={bottomSentinelRef}
+                    data-testid={ElementIds.ALPHA_CHAT_BOTTOM_SENTINEL}
+                    aria-hidden="true"
+                    className={styles.bottomSentinel}
+                  />
+                </div>
+              </div>
+              <div className={styles.bottomBar}>
+                <JumpToBottomButton
+                  isVisible={isJumpVisible}
+                  label={jumpLabel}
+                  onClick={(): void => {
+                    exitNavigation();
+                    scrollToBottom();
+                  }}
+                  scrollContainerRef={scrollContainerRef}
+                />
+                <StatusPill
+                  taskStatus={taskStatus ?? null}
+                  isAutoCompacting={isAutoCompacting}
+                  isStreaming={isStreaming}
+                  inProgressChatMessage={smoothInProgressChatMessage}
+                  workingUserMessageId={workingUserMessageId}
+                  pendingBackgroundTaskCount={pendingBackgroundTaskCount}
                 />
               </div>
-            </div>
-            <div className={styles.bottomBar}>
-              <JumpToBottomButton
-                isVisible={isJumpVisible}
-                label={jumpLabel}
-                onClick={(): void => {
-                  exitNavigation();
-                  scrollToBottom();
-                }}
-                scrollContainerRef={scrollContainerRef}
-              />
-              <StatusPill
-                taskStatus={taskStatus ?? null}
-                isAutoCompacting={isAutoCompacting}
-                isStreaming={isStreaming}
-                inProgressChatMessage={smoothInProgressChatMessage}
-                workingUserMessageId={workingUserMessageId}
-                pendingBackgroundTaskCount={pendingBackgroundTaskCount}
+              <VerticalOverlayScrollbar
+                scrollRef={scrollContainerRef}
+                scrollContainerId={scrollContainerId}
+                thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
               />
             </div>
-          </div>
-          <AlphaPromptNavigator
-            userMessages={userMessages}
-            scrollContainerRef={scrollContainerRef}
-            activePromptIndex={activePromptIndex.index}
-            onNavigate={handlePromptNavigate}
-          />
+          </ChatContextMenu>
+          {/* The prompt-navigator rail is a desktop-only companion to the input
+              (↑↓ keyboard nav); mobile has no hardware arrows, so it's hidden
+              there. The queued-messages strip shows on both. */}
+          {!isMobile && (
+            <AlphaPromptNavigator
+              userMessages={userMessages}
+              scrollContainerRef={scrollContainerRef}
+              activePromptIndex={activePromptIndex.index}
+              onNavigate={handlePromptNavigate}
+            />
+          )}
           <QueuedMessages messages={effectiveQueuedMessages} />
           {taskStatus !== TaskStatus.ERROR &&
             (pendingUserQuestion ? (
               <AskUserQuestion
                 key={pendingUserQuestion.toolUseId}
-                taskId={taskID ?? ""}
+                taskId={taskID}
                 questionData={pendingUserQuestion}
                 onSubmit={handleSubmitAnswers}
                 onDismiss={handleDismissQuestion}
@@ -639,10 +671,12 @@ export const AlphaChatInterface = ({
                 appendTextRef={appendTextRef}
                 insertSkillRef={insertSkillRef}
                 editorRef={editorRef}
-                showPromptNavHint
+                taskId={taskID}
+                workspaceId={workspaceID}
+                showPromptNavHint={!isMobile}
               />
             ))}
-          {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID ?? ""} />}
+          {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID} />}
         </Flex>
       </ChatScrollProvider>
       <Toast open={!!toast} onOpenChange={handleToastOpenChange} title={toast?.title} type={toast?.type} />

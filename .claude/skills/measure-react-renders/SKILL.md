@@ -26,8 +26,8 @@ If the user provides one, use it. Otherwise write a Python file exporting:
 - `setup(page, base_url, workspace_id, task_id)` — navigate + wait
 - `action(page)` — perform the action to measure
 
-Component names must be **unminified** source names (e.g. `AlphaChatInterfaceInner`
-if the export is memo-wrapped, `AlphaChatInterface` if not).
+Component names must be **unminified** source names (e.g. `SplittableSectionComponent`
+for the memo-wrapped `SplittableSection` export, `AlphaChatInterface` if not wrapped).
 
 See `scenarios/panel_resize.py` for an example.
 
@@ -59,8 +59,8 @@ git worktree remove /tmp/sculptor_baseline
 ```python
 import time
 
-DESCRIPTION = "Panel resize render cascade"
-TARGET_COMPONENTS = ["AlphaChatInterface", "DiffSplitContainer", "ZoneContent"]
+DESCRIPTION = "Section resize render cascade"
+TARGET_COMPONENTS = ["AlphaChatInterface", "SectionGrid", "SplittableSectionComponent"]
 
 def setup(page, base_url, workspace_id, task_id):
     page.goto(f"{base_url}/#/ws/{workspace_id}/agent/{task_id}")

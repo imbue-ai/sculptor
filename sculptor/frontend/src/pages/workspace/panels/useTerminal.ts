@@ -12,6 +12,7 @@ import { baseUrl } from "~/apiClient.ts";
 import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "~/common/Auth.ts";
 import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
 import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
+import type { TerminalConnectionStatus } from "~/common/state/atoms/terminalTabs.ts";
 import { useThemeAccentColor, useThemeGrayColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { getColorScale, resolveGrayColor } from "~/common/theme/radixColorHexMap.ts";
 import { useResolvedTheme } from "~/common/Utils.ts";
@@ -315,15 +316,7 @@ export const shouldClearActiveTerminal = (
   return container != null && container.contains(document.activeElement);
 };
 
-/** The live state of a terminal's WebSocket connection.
- *
- * - `connecting`: opening the initial connection, nothing shown yet.
- * - `connected`: the socket is open and the terminal is interactive.
- * - `reconnecting`: the socket dropped from a recoverable close and a retry is
- *   pending/in flight — the terminal is temporarily frozen but will self-heal.
- * - `disconnected`: the socket closed in a way we don't retry (a normal close,
- *   or a rejected session token), so the terminal won't recover on its own. */
-export type TerminalConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
+export type { TerminalConnectionStatus };
 
 type UseTerminalArgs = {
   /** The backend WebSocket path for this terminal's PTY, e.g.

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { isElectron } from "~/electron/utils";
 
 import { browserPanelStateAtomFamily } from "./browser/atoms";
@@ -90,12 +91,20 @@ const BrowserPanelElectron = (): ReactElement => {
   const addressInput = editedUrl ?? liveUrl;
 
   const urlInputRef = useRef<HTMLInputElement>(null);
-  // Focus the URL input every time the panel mounts (i.e. every time it
-  // opens), regardless of whether the workspace already has a persisted
-  // URL. The empty dependency array keeps this from re-firing on rerenders
-  // triggered by in-page navigation events.
+  // Focus the URL input when the panel mounts (i.e. when it opens), unless an
+  // editable element already holds focus. The panel remounts on every workspace
+  // switch (it is keyed by workspace id), and grabbing focus then would yank the
+  // caret out of whatever the user is typing — e.g. the chat composer — into the
+  // address bar. The empty dependency array keeps this from re-firing on
+  // rerenders triggered by in-page navigation events.
   useEffect(() => {
-    urlInputRef.current?.focus();
+    const active = document.activeElement;
+    const isEditableActive =
+      active instanceof HTMLElement &&
+      (active.isContentEditable || active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+    if (!isEditableActive) {
+      urlInputRef.current?.focus();
+    }
   }, []);
 
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -145,8 +154,20 @@ const BrowserPanelElectron = (): ReactElement => {
     void window.sculptor?.captureBrowserPanelToClipboard(status.webContentsId);
   }, [status.webContentsId]);
 
+  // Surface the active workspace's webview status (from the per-workspace status
+  // atom, fed by the guest's did-attach / did-navigate events) onto the panel so
+  // integration tests gate on committed production state rather than
+  // focus-coupled or guest-evaluated proxies: data-webview-content-id is present
+  // only once the guest has attached, data-webview-current-url is the committed
+  // URL.
   return (
-    <div className={styles.panel} data-testid={ElementIds.BROWSER_PANEL} data-workspace-id={workspaceID}>
+    <div
+      className={styles.panel}
+      data-testid={ElementIds.BROWSER_PANEL}
+      data-workspace-id={workspaceID}
+      data-webview-content-id={status.webContentsId ?? undefined}
+      data-webview-current-url={status.currentUrl}
+    >
       <Flex align="center" gap="2" className={styles.toolbar}>
         <Tooltip content="Back">
           <IconButton
@@ -218,4 +239,17 @@ const BrowserPanelElectron = (): ReactElement => {
       <div ref={placeholderRef} className={styles.webviewContainer} />
     </div>
   );
+};
+
+// The single-instance Browser panel for the section/panel shell: a thin, no-prop
+// wrapper that gates on the active workspace and renders the existing browser
+// surface. There is no opt-in/enable concept — it is just a registered panel; the
+// webview's isolation and in-page-state persistence are owned by BrowserViewHost and
+// the browser registry, which survive panel mount/unmount.
+export const BrowserPanelForShell = (): ReactElement | null => {
+  const workspaceId = useAtomValue(activeWorkspaceIdAtom);
+  if (workspaceId === null) {
+    return null;
+  }
+  return <BrowserPanel key={workspaceId} />;
 };

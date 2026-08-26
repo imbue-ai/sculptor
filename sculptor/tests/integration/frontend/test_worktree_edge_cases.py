@@ -21,8 +21,8 @@ from sculptor.testing.elements.setup_status import PlaywrightSetupStatusElement
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.user_config import enable_in_place_workspaces
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -35,7 +35,7 @@ def test_clone_mode_hidden_when_flag_off(sculptor_instance_: SculptorInstance) -
     # With clone disabled but in-place enabled, the mode selector is visible
     # (since one opt-in flag is on) and lists Worktree + In-place but NOT
     # Clone.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws = PlaywrightAddWorkspacePage(page=page)
     add_ws.get_mode_selector().click()
 
@@ -47,7 +47,7 @@ def test_clone_mode_hidden_when_flag_off(sculptor_instance_: SculptorInstance) -
 
     # Flip on the clone flag — Clone option appears in the selector.
     enable_clone_workspaces(page)
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws.get_mode_selector().click()
     expect(add_ws.get_mode_option_clone()).to_be_visible()
 
@@ -65,7 +65,7 @@ def test_setup_command_runs_in_worktree_workspace(sculptor_instance_: SculptorIn
     page.wait_for_timeout(500)
 
     # Worktree is the default; no mode selector interaction needed.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws = PlaywrightAddWorkspacePage(page=page)
     add_ws.get_workspace_name_input().fill("setup-in-worktree")
     branch_input = add_ws.get_branch_name_input()
@@ -98,7 +98,7 @@ def test_missing_local_repo_surfaces_error(sculptor_instance_: SculptorInstance)
     page = sculptor_instance_.page
 
     # Worktree is the default; no mode selector interaction needed.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_form(page)
     add_ws = PlaywrightAddWorkspacePage(page=page)
     add_ws.get_workspace_name_input().fill("missing-repo")
 

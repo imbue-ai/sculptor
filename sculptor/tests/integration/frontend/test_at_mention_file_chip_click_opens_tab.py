@@ -1,9 +1,9 @@
-"""Tests that clicking a rendered file @-mention chip opens a file-view tab.
+"""Tests that clicking a rendered file @-mention chip opens the file in the viewer.
 
 When a user sends a message with a file mention and later clicks the rendered
-chip, the diff panel must open with a file-view tab showing that file's path.
+chip, the single embedded diff viewer must open showing that file's content.
 This exercises the full pipeline: MentionChip click → openFileViewTabAtom →
-diffPanelStateAtom.openTabs → DiffPanel + DiffTabBar DOM.
+diffPanelStateAtom.activeTabPath → the host panel's embedded DiffViewer.
 
 Counterpart to ``test_folder_chip_click_reveals_folder_in_file_browser`` in
 ``test_alpha_chat_chip_rendering.py`` (folder chips reveal in the file
@@ -29,7 +29,7 @@ def _navigate_to_task_chat(sculptor_instance: SculptorInstance) -> PlaywrightTas
 
 
 @user_story("to open a file in the diff panel by clicking its @-mention chip")
-def test_file_chip_click_opens_file_view_tab(sculptor_instance_: SculptorInstance) -> None:
+def test_file_chip_click_opens_file_view(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
     task_page = _navigate_to_task_chat(sculptor_instance_)
     chat_panel = task_page.get_chat_panel()
@@ -68,26 +68,21 @@ def test_file_chip_click_opens_file_view_tab(sculptor_instance_: SculptorInstanc
     expect(rendered_chip).to_contain_text("stuff")
 
     # Clicking the rendered file chip in history must open the diff panel
-    # with a file-view tab for stuff.txt.
+    # showing stuff.txt in the single embedded viewer.
     rendered_chip.click()
 
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
-
-    # The file-view tab is labelled with the basename.  Scope the search to
-    # the diff panel so we don't accidentally match a workspace tab or a
-    # mention chip that also contains "stuff".
-    stuff_tab = diff_panel.get_tab_by_name("stuff.txt")
-    expect(stuff_tab).to_be_visible()
+    # The viewer header shows the basename and the read-only preview renders
+    # the file content.
+    task_page.get_diff_panel().expect_shows_file("stuff.txt")
 
 
 @user_story("to open the correct file even when the chip is inside a nested folder path")
-def test_nested_file_chip_click_opens_correct_tab(sculptor_instance_: SculptorInstance) -> None:
-    """A deeply-nested file chip opens a tab labeled with just the basename.
+def test_nested_file_chip_click_opens_correct_file(sculptor_instance_: SculptorInstance) -> None:
+    """A deeply-nested file chip opens the viewer on just the basename.
 
     ``src/app.py`` is a file nested one level down in the test fixture.  The
-    chip shows ``app.py`` (the basename), and the diff tab label also uses
-    just the basename — but both must refer to the same path.
+    chip shows ``app.py`` (the basename), and the viewer header breadcrumb
+    also shows ``app.py`` — both refer to the same path.
     """
     page = sculptor_instance_.page
     task_page = _navigate_to_task_chat(sculptor_instance_)
@@ -122,7 +117,4 @@ def test_nested_file_chip_click_opens_correct_tab(sculptor_instance_: SculptorIn
     expect(rendered_chip).to_be_visible()
     rendered_chip.click()
 
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
-    app_tab = diff_panel.get_tab_by_name("app.py")
-    expect(app_tab).to_be_visible()
+    task_page.get_diff_panel().expect_shows_file("app.py")

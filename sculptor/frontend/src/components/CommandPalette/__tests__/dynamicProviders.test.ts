@@ -1,24 +1,42 @@
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CodingAgentTaskView, Workspace } from "../../../api";
+import type { CodingAgentTaskView, Project, UserConfig, Workspace } from "../../../api";
+import { TaskStatus } from "../../../api";
+import { encodeRegisteredAgentType } from "../../../common/state/atoms/agentTabs.ts";
+import { projectAtomFamily, projectIdsAtom } from "../../../common/state/atoms/projects.ts";
 import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
+import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
-import { panelRegistryAtom } from "../../panels/atoms.ts";
-import type { PanelDefinition } from "../../panels/types.ts";
+import { applyLayoutAtom } from "../../sections/layoutActions.ts";
+import type { CapturedLayout, SavedLayout } from "../../sections/persistence/types.ts";
+import {
+  DEFAULT_SECTION_SIZES,
+  EMPTY_WORKSPACE_LAYOUT,
+  SAVED_LAYOUT_VERSION,
+} from "../../sections/persistence/types.ts";
+import type { PanelDefinition } from "../../sections/registry/panelRegistry.ts";
+import { panelRegistryAtom } from "../../sections/registry/panelRegistry.ts";
+import { appliedLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "../../sections/savedLayoutAtoms.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../../sections/sectionAtoms.ts";
+import type { PanelId, SubSectionId } from "../../sections/sectionTypes.ts";
+import { SYSTEM_LAYOUTS } from "../../sections/systemDefaultLayout.ts";
+import { addPanelTargetSubSectionAtom } from "../contextActions/atoms.ts";
+import { buildAddPanelProvider } from "../dynamic/addPanel.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";
+import { buildLayoutsProvider } from "../dynamic/layouts.ts";
 import { buildPanelTogglesProvider } from "../dynamic/panels.ts";
 import { buildWorkspaceProvider } from "../dynamic/workspaceCommands.tsx";
 import type { CommandRuntime } from "../runtime.ts";
 import type { PaletteContext } from "../types.ts";
 
 const ROOT_CTX: PaletteContext = {
-  route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
   activeWorkspaceId: null,
   activeAgentId: null,
   hasChatPanel: false,
   hasTerminalPanel: false,
-  isZenMode: false,
+  isSectionMaximized: false,
   page: null,
 };
 
@@ -31,19 +49,20 @@ const makeRuntime = (): CommandRuntime => {
     navigate: {
       toHome: noop,
       toSettings: noop,
-      toAddWorkspace: noop,
       toWorkspace: vi.fn(),
       toAgent: vi.fn(),
     },
+    openNewWorkspaceModal: noop,
+    openLayoutsModal: noop,
+    openSaveLayoutModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
-      toggleZenMode: noop,
-      toggleFocusMode: noop,
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
-      togglePanel: noop,
+      toggleSidebar: noop,
+      toggleMaximizeSection: noop,
       setTheme: noop,
       focusChatInput: noop,
       showChatSearch: noop,
@@ -68,8 +87,55 @@ const seedWorkspace = (id: string, description: string): void => {
   store.set(workspaceAtomFamily(id), { objectId: id, description, isOpen: true } as unknown as Workspace);
 };
 
+// Variant of seedWorkspace that also stamps projectId + createdAt, for the
+// cross-project / recency ordering tests.
+const seedWorkspaceIn = (id: string, description: string, projectId: string, createdAt?: string): void => {
+  getDefaultStore().set(workspaceAtomFamily(id), {
+    objectId: id,
+    description,
+    isOpen: true,
+    projectId,
+    createdAt,
+  } as unknown as Workspace);
+};
+
 const setWorkspaceIds = (ids: Array<string>): void => {
   getDefaultStore().set(workspaceIdsAtom, ids);
+};
+
+const seedProjects = (projects: Array<{ id: string; name: string }>): void => {
+  const store = getDefaultStore();
+  for (const p of projects) {
+    // The provider only reads objectId/name; projectsArrayAtom's URL-dedupe
+    // keeps entries with no userGitRepoUrl, so a bare partial is enough.
+    store.set(projectAtomFamily(p.id), { objectId: p.id, name: p.name } as unknown as Project);
+  }
+  store.set(
+    projectIdsAtom,
+    projects.map((p) => p.id),
+  );
+};
+
+// Seed tasks carrying the status/read fields the attention ranking reads
+// (setTasks above only carries the title/prompt fields the agent tests need).
+const seedAttentionTasks = (
+  tasks: Array<{ id: string; workspaceId: string; status: TaskStatus; updatedAt: string; lastReadAt: string | null }>,
+): void => {
+  const store = getDefaultStore();
+  for (const t of tasks) {
+    store.set(taskAtomFamily(t.id), {
+      id: t.id,
+      workspaceId: t.workspaceId,
+      status: t.status,
+      updatedAt: t.updatedAt,
+      lastReadAt: t.lastReadAt,
+      isDeleted: false,
+    } as unknown as CodingAgentTaskView);
+  }
+  store.set(
+    taskIdsAtom,
+    tasks.map((t) => t.id),
+  );
 };
 
 const setTasks = (
@@ -101,6 +167,7 @@ const setTasks = (
 beforeEach(() => {
   setWorkspaceIds([]);
   setTasks([]);
+  seedProjects([]);
 });
 
 afterEach(() => {
@@ -182,6 +249,98 @@ describe("buildWorkspaceProvider", () => {
     setWorkspaceIds(["ws1", "ws2"]);
     const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
     expect(cmds.find((c) => c.id.startsWith("workspaces.go."))).toBeUndefined();
+  });
+
+  const OLDER = "2024-01-01T00:00:00.000Z";
+  const NEWER = "2024-01-02T00:00:00.000Z";
+  const orderOf = (cmds: ReturnType<ReturnType<typeof buildWorkspaceProvider>["produce"]>, id: string): number =>
+    cmds.find((c) => c.id === `workspaces.page.${id}`)?.order ?? Number.POSITIVE_INFINITY;
+
+  it("sorts attention-needing workspaces above idle ones via `order`", () => {
+    seedWorkspaceIn("idle", "Idle", "pA");
+    seedWorkspaceIn("waiting", "Waiting", "pA");
+    setWorkspaceIds(["idle", "waiting"]);
+    seedAttentionTasks([
+      { id: "t-idle", workspaceId: "idle", status: TaskStatus.READY, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-wait", workspaceId: "waiting", status: TaskStatus.WAITING, updatedAt: OLDER, lastReadAt: OLDER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "waiting")).toBeLessThan(orderOf(cmds, "idle"));
+  });
+
+  it("breaks ties within a tier by recency (newest activity first)", () => {
+    seedWorkspaceIn("stale", "Stale", "pA");
+    seedWorkspaceIn("fresh", "Fresh", "pA");
+    setWorkspaceIds(["stale", "fresh"]);
+    seedAttentionTasks([
+      { id: "t-stale", workspaceId: "stale", status: TaskStatus.READY, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-fresh", workspaceId: "fresh", status: TaskStatus.READY, updatedAt: NEWER, lastReadAt: NEWER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "fresh")).toBeLessThan(orderOf(cmds, "stale"));
+  });
+
+  it("keeps an already-viewed error out of the top tier (acked error → idle)", () => {
+    seedWorkspaceIn("ackedError", "Seen error", "pA");
+    seedWorkspaceIn("unread", "Fresh reply", "pA");
+    setWorkspaceIds(["ackedError", "unread"]);
+    seedAttentionTasks([
+      // Errored but viewed after it broke → drops below the unread reply.
+      { id: "t-err", workspaceId: "ackedError", status: TaskStatus.ERROR, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-unread", workspaceId: "unread", status: TaskStatus.READY, updatedAt: NEWER, lastReadAt: OLDER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "unread")).toBeLessThan(orderOf(cmds, "ackedError"));
+  });
+
+  it("tags every row with its project when the list spans projects and there is no current one", () => {
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pB");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([
+      { id: "pA", name: "Alpha" },
+      { id: "pB", name: "Beta" },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBe("Alpha");
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBe("Beta");
+  });
+
+  it("only tags rows from a different project than the current one", () => {
+    seedWorkspaceIn("cur", "Current", "pA");
+    seedWorkspaceIn("same", "Same project", "pA");
+    seedWorkspaceIn("other", "Other project", "pB");
+    setWorkspaceIds(["cur", "same", "other"]);
+    seedProjects([
+      { id: "pA", name: "Alpha" },
+      { id: "pB", name: "Beta" },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce({ ...ROOT_CTX, activeWorkspaceId: "cur" });
+    expect(cmds.find((c) => c.id === "workspaces.page.cur")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.same")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.other")?.trailingBadge).toBe("Beta");
+  });
+
+  it("shows no project badges when every workspace shares one project", () => {
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pA");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([{ id: "pA", name: "Alpha" }]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBeUndefined();
+  });
+
+  it("omits the badge for a row whose project record hasn't loaded", () => {
+    // Two distinct projects (so badges are in play), but only pA's record is
+    // loaded — the pB row has no resolvable name, so it must not be tagged.
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pB");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([{ id: "pA", name: "Alpha" }]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBe("Alpha");
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBeUndefined();
   });
 });
 
@@ -331,19 +490,32 @@ describe("buildPanelTogglesProvider", () => {
   // on lucide-react's full forwardRef shape.
   const TestIcon = (): null => null;
 
-  const seedRegistry = (panels: Array<Pick<PanelDefinition, "id" | "displayName">>): void => {
+  // Seed the registry AND, by default, mark every panel as actively placed in a
+  // section — the toggles provider only surfaces panels currently in the layout.
+  // A panel with `placed: false` is registered but left out of the layout, so
+  // the filter can be exercised.
+  const seedRegistry = (panels: Array<Pick<PanelDefinition, "id" | "displayName"> & { placed?: boolean }>): void => {
     const full = panels.map(
       (p) =>
         ({
           id: p.id,
           displayName: p.displayName,
           icon: TestIcon as unknown,
-          defaultZone: "top-left",
-          defaultShortcut: "",
+          kind: "static",
+          defaultSection: "left",
           component: (() => null) as unknown,
         }) as unknown as PanelDefinition,
     );
-    getDefaultStore().set(panelRegistryAtom, full);
+    const store = getDefaultStore();
+    store.set(panelRegistryAtom, full);
+    const placement = Object.fromEntries(
+      panels.filter((p) => p.placed !== false).map((p) => [p.id as PanelId, "left"]),
+    );
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: placement as Partial<Record<PanelId, SubSectionId>>,
+    });
   };
 
   beforeEach(() => {
@@ -359,7 +531,7 @@ describe("buildPanelTogglesProvider", () => {
     expect(cmds).toHaveLength(0);
   });
 
-  it("emits one command per registered panel on a workspace route", () => {
+  it("emits one command per actively-placed panel on a workspace route", () => {
     seedRegistry([
       { id: "files", displayName: "File browser" },
       { id: "terminal", displayName: "Terminal" },
@@ -375,18 +547,28 @@ describe("buildPanelTogglesProvider", () => {
         "view.toggle_panel.todo-list",
       ].sort(),
     );
-    expect(cmds.find((c) => c.id === "view.toggle_panel.files")?.title).toBe("Toggle File browser");
-    expect(cmds.find((c) => c.id === "view.toggle_panel.todo-list")?.title).toBe("Toggle Agent tasks");
+    expect(cmds.find((c) => c.id === "view.toggle_panel.files")?.title).toBe("Show File browser");
+    expect(cmds.find((c) => c.id === "view.toggle_panel.todo-list")?.title).toBe("Show Agent tasks");
   });
 
-  it("places every panel toggle in the View group and closes the palette after firing", () => {
+  it("only surfaces panels actively placed in a section, not every registered panel", () => {
+    // 'files' is registered but NOT placed; 'terminal' is registered and placed.
+    seedRegistry([
+      { id: "terminal", displayName: "Terminal", placed: true },
+      { id: "files", displayName: "File browser", placed: false },
+    ]);
+    const cmds = buildPanelTogglesProvider(makeRuntime()).produce(WORKSPACE_CTX);
+    expect(cmds.map((c) => c.id)).toEqual(["view.toggle_panel.terminal"]);
+  });
+
+  it("places every panel toggle in the Panels & Sections group and closes the palette after firing", () => {
     // We previously kept the palette open after a panel toggle so users
     // could flip several in a row; that made heavier panels (file
     // browser) feel laggy because the palette and the panel re-rendered
     // concurrently. Closing first lets the panel mount alone.
     seedRegistry([{ id: "files", displayName: "File browser" }]);
     const cmd = buildPanelTogglesProvider(makeRuntime()).produce(WORKSPACE_CTX)[0]!;
-    expect(cmd.group).toBe("view");
+    expect(cmd.group).toBe("panels");
     expect(cmd.keepOpen).not.toBe(true);
   });
 
@@ -439,13 +621,40 @@ describe("buildPanelTogglesProvider", () => {
     }
   });
 
-  it("perform calls runtime.ui.togglePanel with the panel id", () => {
+  it("perform reveals the panel in place — activate, expand its section, jump there", () => {
+    // seedRegistry places 'terminal' in the (collapsed) left section.
     seedRegistry([{ id: "terminal", displayName: "Terminal" }]);
     const runtime = makeRuntime();
-    runtime.ui.togglePanel = vi.fn();
     const cmd = buildPanelTogglesProvider(runtime).produce(WORKSPACE_CTX)[0]!;
+
     cmd.perform({ ctx: WORKSPACE_CTX, keepOpen: true, pushPage: vi.fn() });
-    expect(runtime.ui.togglePanel).toHaveBeenCalledWith("terminal");
+
+    const layout = runtime.store.get(workspaceLayoutAtom);
+    expect(layout.placement["terminal" as PanelId]).toBe("left");
+    expect(layout.expanded.left).toBe(true);
+    expect(layout.activePanel.left).toBe("terminal");
+    expect(layout.activeSubSection).toBe("left");
+  });
+
+  it("perform is jump-only: an open, active panel in an expanded section is never closed", () => {
+    // The toggle semantics used to close such a panel; "Show X" must instead
+    // remain a reveal (re-running it is just a jump to the panel's section).
+    seedRegistry([{ id: "terminal", displayName: "Terminal" }]);
+    const runtime = makeRuntime();
+    const cmd = buildPanelTogglesProvider(runtime).produce(WORKSPACE_CTX)[0]!;
+
+    // First run leaves the panel open + active in an expanded left section.
+    cmd.perform({ ctx: WORKSPACE_CTX, keepOpen: true, pushPage: vi.fn() });
+    // Second run must keep it open (the old toggle would close it here).
+    cmd.perform({ ctx: WORKSPACE_CTX, keepOpen: true, pushPage: vi.fn() });
+
+    const layout = runtime.store.get(workspaceLayoutAtom);
+    expect(layout.placement["terminal" as PanelId]).toBe("left");
+    expect(layout.activePanel.left).toBe("terminal");
+    // The reveal must leave the host section expanded and focused — a perform
+    // that kept the panel placed but collapsed its section would still hide it.
+    expect(layout.expanded.left).toBe(true);
+    expect(layout.activeSubSection).toBe("left");
   });
 
   it("picks up panels added to the registry without re-creating the provider", () => {
@@ -466,5 +675,189 @@ describe("buildPanelTogglesProvider", () => {
         .map((c) => c.id)
         .sort(),
     ).toEqual(["view.toggle_panel.files", "view.toggle_panel.notes"].sort());
+  });
+});
+
+describe("buildAddPanelProvider", () => {
+  const WORKSPACE_CTX: PaletteContext = {
+    ...ROOT_CTX,
+    route: { ...ROOT_CTX.route, isHome: false, isWorkspace: true },
+  };
+
+  const TestIcon = (): null => null;
+
+  // Seed an active workspace with one un-placed static panel in the registry, so the
+  // panel page has a re-add row to list. EMPTY_WORKSPACE_LAYOUT collapses every
+  // non-center section without splitting any, so listAvailableLocations yields exactly
+  // Left / Center / Right / Bottom in section order.
+  const seedLayout = (): void => {
+    const store = getDefaultStore();
+    store.set(activeWorkspaceIdAtom, "ws-test");
+    store.set(panelRegistryAtom, [
+      {
+        id: "files",
+        displayName: "File browser",
+        icon: TestIcon as unknown,
+        kind: "static",
+        defaultSection: "left",
+        component: (() => null) as unknown,
+      } as unknown as PanelDefinition,
+    ]);
+    store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT, placement: {} });
+  };
+
+  beforeEach(() => {
+    const store = getDefaultStore();
+    store.set(addPanelTargetSubSectionAtom, null);
+    store.set(userConfigAtom, null);
+    store.set(panelRegistryAtom, []);
+  });
+
+  it("emits no commands off a workspace route", () => {
+    seedLayout();
+    expect(buildAddPanelProvider(makeRuntime()).produce(ROOT_CTX)).toHaveLength(0);
+  });
+
+  it("emits the root entry-point plus one row per available location, and no panel rows, until a location is chosen", () => {
+    seedLayout();
+    const cmds = buildAddPanelProvider(makeRuntime()).produce(WORKSPACE_CTX);
+    expect(cmds.find((c) => c.id === "addpanel.open")?.pageId).toBe("addpanel.location");
+    // Location rows mirror availableLocationsAtom (section order), stamped with an
+    // ascending `order` so groupCommands preserves that spatial sequence.
+    const locationRows = cmds.filter((c) => c.id.startsWith("addpanel.location."));
+    expect(locationRows.map((c) => c.id)).toEqual([
+      "addpanel.location.left",
+      "addpanel.location.center",
+      "addpanel.location.right",
+      "addpanel.location.bottom",
+    ]);
+    expect(locationRows.map((c) => c.order)).toEqual([0, 1, 2, 3]);
+    // The panel page stays empty until the user picks a destination.
+    expect(cmds.filter((c) => c.id.startsWith("addpanel.panels."))).toHaveLength(0);
+  });
+
+  it("emits the agent / terminal / static-panel rows once a location is chosen", () => {
+    seedLayout();
+    getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
+    const cmds = buildAddPanelProvider(makeRuntime()).produce(WORKSPACE_CTX);
+    expect(cmds.find((c) => c.id === "addpanel.panels.new_agent")?.onPage).toBe("addpanel.panels");
+    expect(cmds.find((c) => c.id === "addpanel.panels.new_terminal")).toBeDefined();
+    expect(cmds.find((c) => c.id === "addpanel.panels.files")?.title).toBe("File browser");
+  });
+
+  it('titles the new-agent row "New Claude" by default', () => {
+    seedLayout();
+    getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
+    const cmd = buildAddPanelProvider(makeRuntime())
+      .produce(WORKSPACE_CTX)
+      .find((c) => c.id === "addpanel.panels.new_agent");
+    expect(cmd?.title).toBe("New Claude");
+  });
+
+  it('shows a generic "New agent" when the recent type is a registered terminal agent', () => {
+    // The provider runs outside React and can't resolve a registered program's
+    // display name, so the row falls back to a generic "New agent" rather than a
+    // nameless row.
+    seedLayout();
+    getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
+    getDefaultStore().set(userConfigAtom, {
+      lastUsedAgentType: encodeRegisteredAgentType("codex-1"),
+    } as unknown as UserConfig);
+    const cmd = buildAddPanelProvider(makeRuntime())
+      .produce(WORKSPACE_CTX)
+      .find((c) => c.id === "addpanel.panels.new_agent");
+    expect(cmd?.title).toBe("New agent");
+  });
+
+  it("root row perform clears a stale chosen location", () => {
+    seedLayout();
+    const runtime = makeRuntime();
+    runtime.store.set(addPanelTargetSubSectionAtom, "left");
+    const root = buildAddPanelProvider(runtime)
+      .produce(WORKSPACE_CTX)
+      .find((c) => c.id === "addpanel.open")!;
+    root.perform({ ctx: WORKSPACE_CTX, keepOpen: false, pushPage: vi.fn() });
+    expect(runtime.store.get(addPanelTargetSubSectionAtom)).toBeNull();
+  });
+});
+
+describe("buildLayoutsProvider", () => {
+  const CAPTURED: CapturedLayout = {
+    placement: {},
+    order: {},
+    activePanel: {},
+    expanded: {},
+    splits: {},
+    sectionSizes: DEFAULT_SECTION_SIZES,
+    maximizedSection: null,
+    activeSubSection: null,
+  };
+  const layout = (id: string, name: string): SavedLayout => ({
+    id,
+    name,
+    captured: CAPTURED,
+    version: SAVED_LAYOUT_VERSION,
+  });
+  // Command ids for the built-in layouts (System Default + presets), in switcher order.
+  const systemLayoutCommandIds = SYSTEM_LAYOUTS.map((entry) => `layouts.switch.${entry.id}`);
+  const WS_CTX: PaletteContext = {
+    ...ROOT_CTX,
+    route: { isHome: false, isWorkspace: true, isSettings: false, isAgent: false },
+    activeWorkspaceId: "ws1",
+  };
+
+  beforeEach(() => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, []);
+    store.set(layoutMruAtom, []);
+    store.set(appliedLayoutIdAtom, undefined);
+  });
+
+  it("emits nothing off a workspace route", () => {
+    expect(buildLayoutsProvider(makeRuntime()).produce(ROOT_CTX)).toHaveLength(0);
+  });
+
+  it("emits a 'Switch to <layout>' command per resolved layout in the layouts group", () => {
+    getDefaultStore().set(savedLayoutsAtom, [layout("a", "Focused"), layout("b", "Wide")]);
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    expect(commands.map((command) => command.id)).toEqual([
+      ...systemLayoutCommandIds,
+      "layouts.switch.a",
+      "layouts.switch.b",
+    ]);
+    expect(commands.every((command) => command.group === "layouts")).toBe(true);
+    expect(commands.find((command) => command.id === "layouts.switch.a")?.title).toBe("Switch to Focused");
+  });
+
+  it("marks the workspace's applied layout with a 'Current layout' subtitle", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused")]);
+    store.set(appliedLayoutIdAtom, "a");
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    expect(commands.find((command) => command.id === "layouts.switch.a")?.subtitle).toBe("Current layout");
+  });
+
+  it("orders the rows most-recently-applied first", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused"), layout("b", "Wide")]);
+    store.set(layoutMruAtom, ["b", "a"]);
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    // b, a first (most-recently-applied), then the built-ins in their default order.
+    expect(commands.map((command) => command.id)).toEqual([
+      "layouts.switch.b",
+      "layouts.switch.a",
+      ...systemLayoutCommandIds,
+    ]);
+  });
+
+  it("perform applies the re-resolved layout via applyLayoutAtom", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused")]);
+    const command = buildLayoutsProvider(makeRuntime())
+      .produce(WS_CTX)
+      .find((entry) => entry.id === "layouts.switch.a");
+    const setSpy = vi.spyOn(store, "set");
+    command?.perform({ ctx: WS_CTX, keepOpen: false, pushPage: vi.fn() });
+    expect(setSpy).toHaveBeenCalledWith(applyLayoutAtom, expect.objectContaining({ id: "a" }));
   });
 });

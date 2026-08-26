@@ -2,6 +2,7 @@ import asyncio
 import base64
 import contextlib
 import datetime
+import gc
 import json
 import logging
 import mimetypes
@@ -9,11 +10,13 @@ import os
 import platform
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
 import time
 import traceback
+import tracemalloc
 import urllib.parse
 from asyncio import CancelledError
 from importlib import resources
@@ -52,6 +55,13 @@ from sculptor import version
 from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
+from sculptor.agents.pi_agent.authenticated_providers import PiAuthJsonError
+from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
+from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
+from sculptor.agents.pi_agent.authenticated_providers import write_auth_json_entry
+from sculptor.agents.pi_agent.catalog_probe import probe_catalog_on_host
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
+from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.user_config import UserConfig
@@ -86,7 +96,6 @@ from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessa
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
-from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
@@ -115,6 +124,9 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.pi_login_service import PiLoginMode
+from sculptor.services.pi_login_service import broadcast_pi_models_refresh
+from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.task_service.errors import InvalidTaskOperation
@@ -124,12 +136,13 @@ from sculptor.services.terminal_agent_registry.registry import get_registration
 from sculptor.services.terminal_agent_registry.registry import load_registrations
 from sculptor.services.user_config.telemetry_info import get_onboarding_telemetry_info
 from sculptor.services.user_config.telemetry_info import get_telemetry_info as get_telemetry_info_impl
-from sculptor.services.user_config.user_config import get_config_path
 from sculptor.services.user_config.user_config import get_privacy_settings_for_telemetry
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import get_user_config_instance_if_set
-from sculptor.services.user_config.user_config import save_config
-from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.services.user_config.user_config import merge_config
+from sculptor.services.user_config.user_config import replace_config
+from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
+from sculptor.services.voice_models import find_voice_model_file
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -158,6 +171,7 @@ from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ModelOption
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.telemetry import telemetry
@@ -166,6 +180,7 @@ from sculptor.utils.build import get_install_path
 from sculptor.utils.build import get_sculptor_folder
 from sculptor.utils.build import is_packaged
 from sculptor.utils.errors import is_irrecoverable_exception
+from sculptor.utils.migration import get_extensions_directory
 from sculptor.utils.timeout import log_runtime
 from sculptor.utils.tracing import DEFAULT_ADHOC_TRACER_ENTRIES
 from sculptor.utils.tracing import DEFAULT_TRACER_ENTRIES
@@ -187,8 +202,9 @@ from sculptor.web.data_types import AnswerQuestionRequest
 from sculptor.web.data_types import ArtifactDataResponse
 from sculptor.web.data_types import AuthResult
 from sculptor.web.data_types import AuthStartResult
+from sculptor.web.data_types import AuthenticatedProviderEntry
+from sculptor.web.data_types import AuthenticatedProvidersResponse
 from sculptor.web.data_types import BatchUpdateOpenStateRequest
-from sculptor.web.data_types import BranchExistsResponse
 from sculptor.web.data_types import BtwRequest
 from sculptor.web.data_types import CommitDiffResponse
 from sculptor.web.data_types import CommitFileInfo
@@ -204,16 +220,28 @@ from sculptor.web.data_types import DirectoryEntry
 from sculptor.web.data_types import DiscardFileRequest
 from sculptor.web.data_types import EmailConfigRequest
 from sculptor.web.data_types import EnvVarNamesResponse
+from sculptor.web.data_types import ExtensionCommandRequest
+from sculptor.web.data_types import ExtensionCommandResponse
+from sculptor.web.data_types import ExtensionCommandResult
+from sculptor.web.data_types import ExtensionCommandUiAction
 from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
+from sculptor.web.data_types import InstallExtensionRequest
+from sculptor.web.data_types import InstallExtensionResponse
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingPatternRequest
+from sculptor.web.data_types import NewBranchNameValidationResponse
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.data_types import OpenFileUiRequest
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
+from sculptor.web.data_types import PasteKeyRequest
+from sculptor.web.data_types import PiLoginRequest
+from sculptor.web.data_types import PiLoginResponse
+from sculptor.web.data_types import PiLoginStatusResponse
+from sculptor.web.data_types import PiModelsResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -250,6 +278,9 @@ from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import TaskInterface
 from sculptor.web.derived import TaskViewTypes
 from sculptor.web.derived import create_initial_task_view
+from sculptor.web.extension_command_bus import close_correlation
+from sculptor.web.extension_command_bus import open_correlation
+from sculptor.web.extension_command_bus import submit_result
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 from sculptor.web.middleware import App
 from sculptor.web.middleware import DecoratedAPIRouter
@@ -275,6 +306,7 @@ from sculptor.web.terminal_input import TerminalDeliveryResult
 from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
 from sculptor.web.ui_actions import next_webview_seq
 from sculptor.web.ui_actions import publish_ui_action
+from sculptor.web.ui_actions import subscriber_count
 from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload_diagnostics
 
 UpdateT = TypeVar("UpdateT", bound=StreamingUpdate)
@@ -327,7 +359,45 @@ def validate_workspace_id(workspace_id: str) -> WorkspaceID:
         ) from e
 
 
-def _workspace_to_response(workspace: Workspace, workspace_setup_command: str | None = None) -> WorkspaceResponse:
+def _project_path_from_git_repo_url(user_git_repo_url: str | None) -> str | None:
+    """Convert a project's file:// repo URL to a local filesystem path.
+
+    Mirrors ``Project.get_local_user_path`` for callers that only have the raw
+    URL (e.g. denormalized listing rows), but returns None instead of asserting
+    when the URL is missing or not file://-schemed.
+    """
+    if user_git_repo_url is None or not user_git_repo_url.startswith("file://"):
+        return None
+    return str(Path(user_git_repo_url.removeprefix("file://")))
+
+
+def _workspace_working_directory(
+    strategy: WorkspaceInitializationStrategy,
+    environment_id: str | None,
+    project_path: str | None,
+) -> str | None:
+    """Resolve the directory holding a workspace's checkout.
+
+    Mirrors ``LocalEnvironment.get_working_directory`` without resuming the
+    environment (resume has side effects and is too heavy for list endpoints):
+    clone/worktree checkouts live at ``<environment_id>/code`` (environment_id
+    is the absolute workspace directory path), while in-place workspaces work
+    directly in the project's local repo. None when the environment hasn't been
+    initialized yet.
+    """
+    if strategy == WorkspaceInitializationStrategy.IN_PLACE:
+        return project_path
+    if environment_id is None:
+        return None
+    return str(Path(environment_id) / "code")
+
+
+def _workspace_to_response(
+    workspace: Workspace,
+    workspace_setup_command: str | None = None,
+    project_path: str | None = None,
+    current_branch: str | None = None,
+) -> WorkspaceResponse:
     """Convert a Workspace model to a WorkspaceResponse."""
     setup_snapshot = _build_setup_snapshot(workspace)
     return WorkspaceResponse(
@@ -344,6 +414,10 @@ def _workspace_to_response(workspace: Workspace, workspace_setup_command: str | 
         created_at=workspace.created_at,
         workspace_setup_command=workspace_setup_command,
         setup=setup_snapshot,
+        working_directory=_workspace_working_directory(
+            workspace.initialization_strategy, workspace.environment_id, project_path
+        ),
+        current_branch=current_branch,
     )
 
 
@@ -487,6 +561,70 @@ def set_session_token_cookie(
     )
 
 
+def _validate_prompt_model_selection(
+    agent_type: AgentTypeName,
+    model: LLMModel | None,
+    backend_model: ModelOption | None,
+) -> None:
+    """Enforce the create-time model contract for a prompt-ful create.
+
+    A create names its model on exactly one harness's terms: `model` for
+    Claude's static list, `backend_model` for a backend-sourced catalog (pi).
+    A pi prompt requires a `backend_model` whose provider is authenticated at
+    create time — an instant host-side read sharing
+    `compute_authenticated_provider_ids` with the catalog probe — so a queued
+    first prompt can never name a model that cannot run.
+    """
+    if model is not None and backend_model is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["body", "backend_model"],
+                    "msg": "model and backend_model are mutually exclusive",
+                    "type": "value_error",
+                }
+            ],
+        )
+    if agent_type == AgentTypeName.PI:
+        if backend_model is None:
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": "A pi prompt requires a backend_model selected from pi's catalog",
+                        "type": "value_error.missing",
+                    }
+                ],
+            )
+        if backend_model.provider not in compute_authenticated_provider_ids():
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": (
+                            f"pi provider '{backend_model.provider}' is not authenticated — "
+                            + "connect it under Settings → Pi → Providers and retry"
+                        ),
+                        "type": "value_error",
+                    }
+                ],
+            )
+    elif model is None:
+        raise HTTPException(
+            status_code=422,
+            detail=[
+                {
+                    "loc": ["body", "model"],
+                    "msg": "Model is required when providing a prompt",
+                    "type": "value_error.missing",
+                }
+            ],
+        )
+
+
 @router.post("/api/v1/projects/{project_id}/tasks")
 def start_task(
     project_id: ProjectID,
@@ -569,6 +707,7 @@ def start_task(
             if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
                 raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
             resolved_agent_type, _ = _resolve_requested_agent_type(task_request.agent_type, None, has_prompt=True)
+            _validate_prompt_model_selection(resolved_agent_type, model, task_request.backend_model)
             agent_config = _agent_config_for_request(resolved_agent_type, None)
             if task_request.agent_type is not None:
                 _record_most_recently_used_agent_type(resolved_agent_type, None)
@@ -585,10 +724,13 @@ def start_task(
 
         max_seconds = None
 
-        # Create initial task state with workspace_id
+        # Create initial task state with workspace_id. A validated backend-model
+        # selection (pi) is the task's current model from birth, so the wrapper's
+        # start-time adoption runs the queued prompt under it.
         initial_task_state = AgentTaskStateV2(
             title=task_name,
             workspace_id=workspace.object_id,
+            current_model=task_request.backend_model,
         )
 
         task = Task(
@@ -712,6 +854,12 @@ def create_workspace_v2(
 
         if branch_name:
             with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
+                if not repo.is_valid_branch_name(branch_name):
+                    # Reject illegal ref names here so the user gets an actionable
+                    # error at creation, rather than an opaque WorktreeError raised
+                    # later when `git worktree add -b` runs during async environment
+                    # setup (and is surfaced only in the agent panel).
+                    raise HTTPException(status_code=400, detail=f"'{branch_name}' is not a valid git branch name")
                 if repo.is_branch_ref(branch_name):
                     raise HTTPException(status_code=409, detail=f"Branch '{branch_name}' already exists")
 
@@ -732,7 +880,12 @@ def create_workspace_v2(
             in (WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE)
             else None
         )
-        return _workspace_to_response(workspace, workspace_setup_command=setup_command)
+        return _workspace_to_response(
+            workspace,
+            workspace_setup_command=setup_command,
+            project_path=_project_path_from_git_repo_url(project.user_git_repo_url),
+            current_branch=services.workspace_service.get_cached_current_branch(workspace.object_id),
+        )
 
 
 _PREVIEW_BRANCH_NAME_GIT_TIMEOUT = 5.0
@@ -907,6 +1060,12 @@ def list_recent_workspaces(
             agent_count=row.agent_count,
             is_open=row.is_open,
             last_activity_at=row.last_activity_at,
+            working_directory=_workspace_working_directory(
+                row.initialization_strategy,
+                row.environment_id,
+                _project_path_from_git_repo_url(row.project_git_repo_url),
+            ),
+            current_branch=services.workspace_service.get_cached_current_branch(row.object_id),
         )
         for row in workspace_rows
     ]
@@ -937,13 +1096,18 @@ def update_workspace(
         except WorkspaceNotFoundError as e:
             raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found") from e
         logger.info("Updated workspace {}", workspace_id)
+        project = transaction.get_project(updated_workspace.project_id)
 
     # Refresh diffs after the transaction commits so the frontend picks up the
     # new target-branch diff via the diffUpdatedAt reactivity.
     if update_request.target_branch is not None:
         services.workspace_service.refresh_workspace_diff(validated_workspace_id, include_target_branch_diff=True)
 
-    return _workspace_to_response(updated_workspace)
+    return _workspace_to_response(
+        updated_workspace,
+        project_path=_project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None,
+        current_branch=services.workspace_service.get_cached_current_branch(updated_workspace.object_id),
+    )
 
 
 @router.post("/api/v1/workspaces/batch-update-open-state")
@@ -983,7 +1147,12 @@ def get_workspace(
         workspace = transaction.get_workspace(validated_workspace_id)
         if workspace is None or workspace.is_deleted:
             raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
-        return _workspace_to_response(workspace)
+        project = transaction.get_project(workspace.project_id)
+        return _workspace_to_response(
+            workspace,
+            project_path=_project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None,
+            current_branch=services.workspace_service.get_cached_current_branch(workspace.object_id),
+        )
 
 
 @router.get("/api/v1/projects/{project_id}/workspaces")
@@ -998,7 +1167,16 @@ def list_workspaces(
 
     with user_session.open_transaction(services) as transaction:
         workspaces = transaction.get_workspaces(project_id=validated_project_id)
-        return [_workspace_to_response(w) for w in workspaces]
+        project = transaction.get_project(validated_project_id)
+        project_path = _project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None
+        return [
+            _workspace_to_response(
+                w,
+                project_path=project_path,
+                current_branch=services.workspace_service.get_cached_current_branch(w.object_id),
+            )
+            for w in workspaces
+        ]
 
 
 @router.delete("/api/v1/workspaces/{workspace_id}")
@@ -1541,75 +1719,279 @@ def workspace_read_file_at_ref(
     return ReadFileAtRefResponse(content=result.content, encoding=result.encoding)
 
 
-class LocalPluginInfo(SerializableModel):
-    """A frontend plugin discovered in the Sculptor plugins directory.
+# Subdirectories of the extensions folder reserved for Sculptor's own use, never
+# reported as drop-in extensions. ``dev`` holds agent-loaded dev installs, nested as
+# ``dev/<workspace_id>/<extension_id>/`` so they're visibly temporary and can't
+# collide across workspaces (see the `sculpt extension` command endpoints below).
+_RESERVED_EXTENSION_DIR_NAMES = frozenset({"dev"})
 
-    That directory is the backend data folder's ``plugins/`` subdirectory (e.g.
-    ``~/.sculptor/plugins``; it varies by build and environment — see
+
+class LocalExtensionInfo(SerializableModel):
+    """A frontend extension discovered in the Sculptor extensions directory.
+
+    That directory is the backend data folder's ``extensions/`` subdirectory (e.g.
+    ``~/.sculptor/extensions``; it varies by build and environment — see
     ``get_sculptor_folder``).
 
-    ``manifest_url`` is the origin-relative path to the plugin's manifest; the
+    ``manifest_url`` is the origin-relative path to the extension's manifest; the
     frontend resolves it against the backend origin, registers it as a read-only
-    "local" plugin source, and loads it through the normal plugin loader (the
-    files are served by the ``/plugins/local`` static mount).
+    "local" extension source, and loads it through the normal extension loader (the
+    files are served by the ``/extensions/local`` static mount).
     """
 
     id: str
     manifest_url: str
 
 
-@router.get("/api/v1/plugins/local")
-def get_local_plugins() -> list[LocalPluginInfo]:
-    """List frontend plugins the user has dropped into the Sculptor plugins directory.
+@router.get("/api/v1/extensions/local")
+def get_local_extensions() -> list[LocalExtensionInfo]:
+    """List frontend extensions the user has dropped into the Sculptor extensions directory.
 
-    The directory is the backend data folder's ``plugins/`` subdirectory (e.g.
-    ``~/.sculptor/plugins``; varies by build/environment).
+    The directory is the backend data folder's ``extensions/`` subdirectory (e.g.
+    ``~/.sculptor/extensions``; varies by build/environment).
     Each immediate subdirectory that contains a ``manifest.json`` is reported as
     a loadable source, sorted by directory name for a stable order. Returns an
     empty list when the directory is absent. This only enumerates; the manifest
-    and bundle bytes are served by the ``/plugins/local`` static mount (see
-    ``sculptor.web.middleware.mount_plugin_files``).
+    and bundle bytes are served by the ``/extensions/local`` static mount (see
+    ``sculptor.web.middleware.mount_extension_files``).
     """
-    plugins_dir = get_sculptor_folder() / "plugins"
-    if not plugins_dir.is_dir():
+    extensions_dir = get_extensions_directory()
+    if not extensions_dir.is_dir():
         return []
     try:
-        entries = sorted(plugins_dir.iterdir())
+        entries = sorted(extensions_dir.iterdir())
     except OSError as e:
-        log_exception(e, "Failed to list local plugins directory")
+        log_exception(e, "Failed to list local extensions directory")
         return []
-    plugins: list[LocalPluginInfo] = []
+    extensions: list[LocalExtensionInfo] = []
     for entry in entries:
+        if entry.name in _RESERVED_EXTENSION_DIR_NAMES:
+            continue
         if entry.is_dir() and (entry / "manifest.json").is_file():
             # Percent-encode the directory name: a name with URL-special chars
             # (#, ?, space) would otherwise corrupt the manifest URL the frontend
             # fetches. `safe=""` encodes everything but unreserved chars.
             encoded_name = urllib.parse.quote(entry.name, safe="")
-            plugins.append(LocalPluginInfo(id=entry.name, manifest_url=f"/plugins/local/{encoded_name}/manifest.json"))
-    return plugins
+            extensions.append(
+                LocalExtensionInfo(id=entry.name, manifest_url=f"/extensions/local/{encoded_name}/manifest.json")
+            )
+    return extensions
 
 
-class LocalPluginsDirectory(SerializableModel):
-    """The on-disk directory Sculptor scans for drop-in frontend plugins.
+class LocalExtensionsDirectory(SerializableModel):
+    """The on-disk directory Sculptor scans for drop-in frontend extensions.
 
     ``path`` is formatted for display — the user's home directory is collapsed to
     ``~`` (see ``_display_path``), so the settings UI can show e.g.
-    ``~/.sculptor/plugins`` rather than an absolute path that embeds the username.
+    ``~/.sculptor/extensions`` rather than an absolute path that embeds the username.
     A from-source checkout outside ``$HOME`` shows its full path instead.
     """
 
     path: str
 
 
-@router.get("/api/v1/plugins/dir")
-def get_local_plugins_directory() -> LocalPluginsDirectory:
-    """Report where drop-in frontend plugins are loaded from, formatted for display.
+@router.get("/api/v1/extensions/dir")
+def get_local_extensions_directory() -> LocalExtensionsDirectory:
+    """Report where drop-in frontend extensions are loaded from, formatted for display.
 
-    The directory is the backend data folder's ``plugins/`` subdirectory; it need
+    The directory is the backend data folder's ``extensions/`` subdirectory; it need
     not exist yet (the settings copy tells the user where to create it). This only
-    reports the path — enumerating the plugins inside it is ``get_local_plugins``.
+    reports the path — enumerating the extensions inside it is ``get_local_extensions``.
     """
-    return LocalPluginsDirectory(path=_display_path(get_sculptor_folder() / "plugins"))
+    return LocalExtensionsDirectory(path=_display_path(get_extensions_directory()))
+
+
+# How long the command endpoint waits for renderer replies before returning what
+# it has. Connected renderers usually answer in well under a second; this is the
+# ceiling for the "no window responded" case (and for a renderer that has the
+# extension feature disabled and so never replies).
+_EXTENSION_COMMAND_TIMEOUT_SECONDS = 8.0
+# Ops that mutate the running UI (install/run frontend code) and so require the
+# agent-loading switch. ``inspect``/``list`` are read-only and stay ungated so an
+# agent can always check state.
+_EXTENSION_COMMAND_GATED_OPS = frozenset({"load", "reload", "unload"})
+
+
+def _require_agent_extension_loading() -> None:
+    """Enforce the agent-loading switch; raise a clear 403 when it is closed."""
+    config = get_user_config_instance()
+    if config is None or not config.allow_agent_extension_loading:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "agent_extension_loading_disabled",
+                "message": "Agent extension loading is disabled. Enable it in Settings -> Extensions.",
+            },
+        )
+
+
+def _validate_extension_id(extension_id: str) -> str:
+    """Reject ids that aren't a single safe path segment (the extension's dir name)."""
+    if (
+        not extension_id
+        or "/" in extension_id
+        or "\\" in extension_id
+        or extension_id in {".", ".."}
+        or extension_id in _RESERVED_EXTENSION_DIR_NAMES
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_extension_id", "message": f"invalid extension id: {extension_id!r}"},
+        )
+    return extension_id
+
+
+def _resolve_extension_file_dest(extension_dir: Path, relative_path: str) -> Path:
+    """Resolve a packaged file's destination, refusing paths that escape the dir."""
+    extension_dir_resolved = extension_dir.resolve()
+    candidate = (extension_dir_resolved / relative_path).resolve()
+    if candidate != extension_dir_resolved and not candidate.is_relative_to(extension_dir_resolved):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "unsafe_extension_path",
+                "message": f"extension file path escapes the extension directory: {relative_path!r}",
+            },
+        )
+    return candidate
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/extensions/command")
+def post_extension_command(workspace_id: str, command: ExtensionCommandRequest) -> ExtensionCommandResponse:
+    """Broadcast an extension command to connected renderers and collect their replies.
+
+    Publishes an ``ExtensionCommandUiAction`` over the per-user WebSocket fan-out, then
+    blocks (in the sync threadpool) draining per-renderer replies from the
+    correlation bus until every connected renderer has answered or the timeout
+    elapses. The reply list is keyed by renderer in the CLI; an empty list means no
+    window responded. Write ops require the agent-loading switch; ``inspect`` and
+    ``list`` are read-only and ungated.
+    """
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    if command.op in _EXTENSION_COMMAND_GATED_OPS:
+        _require_agent_extension_loading()
+
+    correlation_id = str(uuid4())
+    result_queue = open_correlation(correlation_id)
+    try:
+        expected = subscriber_count()
+        publish_ui_action(
+            ExtensionCommandUiAction(
+                workspace_id=validated_workspace_id,
+                correlation_id=correlation_id,
+                op=command.op,
+                extension_id=command.extension_id,
+                source=command.source,
+                cache_bust=command.cache_bust,
+            )
+        )
+        results: list[ExtensionCommandResult] = []
+        # With no connected renderer, the broadcast reaches no one and nothing can
+        # reply — return immediately instead of blocking for the whole timeout.
+        if expected > 0:
+            deadline = time.monotonic() + _EXTENSION_COMMAND_TIMEOUT_SECONDS
+            while len(results) < expected:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    results.append(result_queue.get(timeout=remaining))
+                except queue.Empty:
+                    break
+        return ExtensionCommandResponse(correlation_id=correlation_id, results=results)
+    finally:
+        close_correlation(correlation_id)
+
+
+@router.post("/api/v1/extensions/command/{correlation_id}/result")
+def post_extension_command_result(correlation_id: str, result: ExtensionCommandResult) -> Response:
+    """Renderer-facing endpoint: deliver one window's reply to a waiting command.
+
+    Quietly succeeds even if nobody is waiting (the originating request may have
+    already timed out), so a slow renderer never sees an error for a late reply.
+    """
+    # The reply is routed to the waiter by the path id; reject a body whose own
+    # correlation_id disagrees so a buggy client can't feed a mismatched result
+    # into the wrong command.
+    if result.correlation_id != correlation_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "correlation_id_mismatch",
+                "message": "result.correlation_id does not match the path correlation_id",
+            },
+        )
+    submit_result(correlation_id, result)
+    return Response(status_code=204)
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/extensions/install")
+def post_extension_install(workspace_id: str, install: InstallExtensionRequest) -> InstallExtensionResponse:
+    """Write a packaged extension to the data folder so the static mount can serve it.
+
+    ``persist=False`` (dev) writes to the reserved
+    ``extensions/dev/<workspace_id>/<extension_id>/`` tree; ``persist=True`` writes a
+    permanent install at the top-level ``extensions/<extension_id>/``. Either way the
+    target is wiped and rewritten so reloads pick up edits. Returns the
+    origin-relative manifest URL the caller then loads via the command endpoint.
+    """
+    _require_agent_extension_loading()
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    extension_id = _validate_extension_id(install.extension_id)
+    if not any(extension_file.path == "manifest.json" for extension_file in install.files):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "missing_manifest",
+                "message": "packaged extension must include a top-level manifest.json",
+            },
+        )
+
+    extensions_root = get_extensions_directory()
+    encoded_extension_id = urllib.parse.quote(extension_id, safe="")
+    if install.persist:
+        extension_dir = extensions_root / extension_id
+        manifest_url = f"/extensions/local/{encoded_extension_id}/manifest.json"
+    else:
+        workspace_segment = str(validated_workspace_id)
+        extension_dir = extensions_root / "dev" / workspace_segment / extension_id
+        encoded_workspace = urllib.parse.quote(workspace_segment, safe="")
+        manifest_url = f"/extensions/local/dev/{encoded_workspace}/{encoded_extension_id}/manifest.json"
+
+    if extension_dir.exists():
+        shutil.rmtree(extension_dir)
+    extension_dir.mkdir(parents=True, exist_ok=True)
+    for extension_file in install.files:
+        dest = _resolve_extension_file_dest(extension_dir, extension_file.path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.write_bytes(base64.b64decode(extension_file.content_base64, validate=True))
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "invalid_file_encoding",
+                    "message": f"file {extension_file.path!r} is not valid base64",
+                },
+            ) from e
+
+    return InstallExtensionResponse(manifest_url=manifest_url, extension_dir=_display_path(extension_dir))
+
+
+@router.post("/api/v1/workspaces/{workspace_id}/extensions/{extension_id}/remove")
+def post_extension_remove(workspace_id: str, extension_id: str) -> Response:
+    """Delete a dev install's files (the cleanup step of the dev lifecycle).
+
+    Only touches the workspace-scoped ``dev/`` tree; permanent top-level installs
+    are left alone. Idempotent — removing an absent dev install still succeeds.
+    """
+    _require_agent_extension_loading()
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    extension_id = _validate_extension_id(extension_id)
+    extension_dir = get_extensions_directory() / "dev" / str(validated_workspace_id) / extension_id
+    if extension_dir.exists():
+        shutil.rmtree(extension_dir)
+    return Response(status_code=204)
 
 
 @router.get("/api/v1/skills")
@@ -1722,9 +2104,9 @@ def _resolve_most_recently_used_agent_type(*, has_prompt: bool) -> tuple[AgentTy
 
     Mirrors the app's "+" button default: decode ``UserConfig.last_used_agent_type``
     and apply the same fallbacks so the app and the sculpt CLI agree — a stored
-    Pi is unusable once the pi agent is disabled, a stored registered agent may
-    have been unregistered, and a prompt-ful create is always a chat agent (so a
-    terminal harness falls back to Claude). Defaults to Claude when unset.
+    registered agent may have been unregistered, and a prompt-ful create is always
+    a chat agent (so a terminal harness falls back to Claude). Defaults to Claude
+    when unset.
     """
     config = get_user_config_instance()
     stored = config.last_used_agent_type
@@ -1732,8 +2114,6 @@ def _resolve_most_recently_used_agent_type(*, has_prompt: bool) -> tuple[AgentTy
     if decoded is None:
         return AgentTypeName.CLAUDE, None
     agent_type, registration_id = decoded
-    if agent_type == AgentTypeName.PI and not config.enable_pi_agent:
-        return AgentTypeName.CLAUDE, None
     if agent_type == AgentTypeName.REGISTERED and (
         registration_id is None or get_registration(registration_id) is None
     ):
@@ -1769,9 +2149,7 @@ def _record_most_recently_used_agent_type(agent_type: AgentTypeName, registratio
     encoded = _encode_stored_agent_type(agent_type, registration_id)
     if config.last_used_agent_type == encoded:
         return
-    updated = config.model_copy(update={"last_used_agent_type": encoded})
-    save_config(updated, get_config_path())
-    set_user_config_instance(updated)
+    merge_config({"lastUsedAgentType": encoded})
 
 
 def _agent_config_for_request(
@@ -1907,24 +2285,14 @@ def create_workspace_agent(
         if agent_request.prompt:
             if agent_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
                 raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
-            # Delegate to existing start_task logic
-            model = agent_request.model
-            if model is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail=[
-                        {
-                            "loc": ["body", "model"],
-                            "msg": "Model is required when providing a prompt",
-                            "type": "value_error.missing",
-                        }
-                    ],
-                )
-
+            # Delegate to existing start_task logic, which validates the
+            # model/backend_model pair against the resolved harness
+            # (`_validate_prompt_model_selection`).
             task_request = StartTaskRequest(
                 prompt=agent_request.prompt,
                 interface=agent_request.interface,
-                model=model,
+                model=agent_request.model,
+                backend_model=agent_request.backend_model,
                 files=agent_request.files,
                 name=agent_request.name,
                 workspace_id=validated_workspace_id,
@@ -1942,7 +2310,20 @@ def create_workspace_agent(
                 settings=settings,
             )
 
-        # No prompt — create agent in waiting state
+        # No prompt — create agent in waiting state. There is no turn to run a
+        # backend-model selection under (post-start selection owns that case),
+        # so reject one rather than silently dropping it.
+        if agent_request.backend_model is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "backend_model"],
+                        "msg": "backend_model requires a prompt — a promptless create selects pi's model after start",
+                        "type": "value_error",
+                    }
+                ],
+            )
         _prevent_action_if_out_of_free_space(services)
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
@@ -1959,20 +2340,6 @@ def create_workspace_agent(
             workspace_tasks, _default_agent_name_prefix(agent_config)
         )
         task_id = TaskID()
-
-        # Check if this is the user's very first agent ever (including deleted ones).
-        # get_all_tasks() includes deleted tasks, so this stays False once any agent
-        # has ever been created — even if all workspaces were later deleted.
-        # Skip during integration tests to avoid injecting unexpected messages.
-        # Terminal agents (resolved config, so registered ones too) have no chat
-        # stream — an intro message would sit in their queue forever, so skip it.
-        is_first_agent = (
-            not settings.TESTING.INTEGRATION_ENABLED
-            and not is_terminal_agent_config(agent_config)
-            and len(workspace_tasks) == 0
-            # pyrefly: ignore [missing-attribute]
-            and len(transaction.get_all_tasks()) == 0
-        )
 
         with services.git_repo_service.open_local_user_git_repo_for_read(project) as repo:
             initial_commit_hash = repo.get_current_commit_hash()
@@ -1999,30 +2366,14 @@ def create_workspace_agent(
         )
 
     root_concurrency_group = get_root_concurrency_group(request)
-    intro_message = None
     with (
         root_concurrency_group.make_concurrency_group(name="create_agent") as _concurrency_group,
         user_session.open_transaction(services) as transaction,
     ):
         inserted_task = services.task_service.create_task(task, transaction)
 
-        # Auto-send intro help message for first-time users
-        if is_first_agent:
-            intro_message = ChatInputUserMessage(
-                text="/sculptor:help I just set up Sculptor for the first time. What should I know to get started?",
-                message_id=AgentMessageID(),
-                model_name=agent_request.model or LLMModel.CLAUDE_4_OPUS,
-            )
-            services.task_service.create_message(
-                message=intro_message,
-                task_id=inserted_task.object_id,
-                transaction=transaction,
-            )
-
     task_view = create_initial_task_view(inserted_task, settings)
     assert isinstance(task_view, CodingAgentTaskView)
-    if intro_message is not None:
-        task_view.add_message(intro_message)
     return task_view
 
 
@@ -2520,9 +2871,11 @@ def set_workspace_agent_model(
     """Switch a running agent's model (the pi out-of-band `set_model` path).
 
     Used by harnesses with a backend model list (pi); Claude's model rides each
-    turn instead. The request blocks until the agent resolves the switch and
-    returns 400 with the agent's error message when the switch is rejected (e.g.
-    pi reports "Model not found"), so the frontend can toast it.
+    turn instead. Rejects (400) a harness that cannot switch models or a model not
+    in the agent's catalog; otherwise records the selection — written onto task
+    state so the server-driven switcher reflects it at once (even before a pi
+    process exists) and enqueued for the agent, which applies it to pi when it next
+    runs and rolls the switcher back if pi rejects it.
     """
     services = get_services_from_request_or_websocket(request)
 
@@ -2544,35 +2897,52 @@ def set_workspace_agent_model(
                 detail="model selection requires a harness that supports it",
             )
         # supports_model_selection also covers per-turn switching (Claude); the
-        # out-of-band set_model RPC is only honored by a harness that sources a
+        # out-of-band set_model path is only honored by a harness that sources a
         # backend model list (pi). A harness without a catalog has no
-        # SetModelUserMessage handler, so reject it rather than block the request
-        # forever on a message nothing resolves.
+        # SetModelUserMessage handler.
         model_state = task.current_state if isinstance(task.current_state, AgentTaskStateV2) else None
-        if not harness.get_available_models(model_state):
+        available_models = harness.get_available_models(model_state)
+        if not available_models:
             raise HTTPException(
                 status_code=400,
                 detail="this agent does not support switching models",
             )
-
-    message_id = AgentMessageID()
-    with await_request_outcome(message_id, task.object_id, services) as outcome:
-        with user_session.open_transaction(services) as transaction:
-            services.task_service.create_message(
-                message=SetModelUserMessage(
-                    message_id=message_id,
-                    provider=set_model_request.provider,
-                    model_id=set_model_request.model_id,
-                ),
-                task_id=task.object_id,
-                transaction=transaction,
+        # The switcher only offers models from this catalog, so a request for anything
+        # else cannot be honored — reject it rather than record a selection the agent
+        # would never apply (with no live agent, that would be a silent no-op).
+        selected_model = next(
+            (
+                option
+                for option in available_models
+                if option.provider == set_model_request.provider and option.model_id == set_model_request.model_id
+            ),
+            None,
+        )
+        if selected_model is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"model {set_model_request.provider}/{set_model_request.model_id} is not available for this agent",
             )
-    # The adapter resolves a rejected switch (e.g. pi "Model not found") as a
-    # RequestFailure; surface it to the caller so the frontend toasts it.
-    terminal = outcome[0] if outcome else None
-    if isinstance(terminal, RequestFailureAgentMessage):
-        detail = str(terminal.error.args[0]) if terminal.error.args else "Failed to set model"
-        raise HTTPException(status_code=400, detail=detail)
+
+    # Record the selection in one write: reflect it on the server-driven switcher now
+    # (optimistically, so it updates even with no live agent to acknowledge it), and
+    # enqueue the switch for the agent to apply to pi — adopted at start, or on the
+    # queued message — rolling the switcher back if pi rejects it.
+    with user_session.open_transaction(services) as transaction:
+        services.task_service.update_available_models(
+            task_id=task.object_id,
+            available_models=available_models,
+            current_model=selected_model,
+            transaction=transaction,
+        )
+        services.task_service.create_message(
+            message=SetModelUserMessage(
+                provider=set_model_request.provider,
+                model_id=set_model_request.model_id,
+            ),
+            task_id=task.object_id,
+            transaction=transaction,
+        )
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/btw")
@@ -2698,35 +3068,6 @@ def await_message_response(
                         break
 
 
-@contextlib.contextmanager
-def await_request_outcome(
-    message_id: AgentMessageID,
-    task_id: TaskID,
-    services: CompleteServiceCollection,
-) -> Generator[list[PersistentRequestCompleteAgentMessage], None, None]:
-    """Like `await_message_response`, but captures the terminal request message.
-
-    Yields a one-element list the caller reads after the block to inspect the
-    outcome (e.g. distinguish RequestSuccess from RequestFailure and surface the
-    failure to the HTTP caller). The list is empty only if the subscription is
-    torn down before the request resolves.
-    """
-    outcome: list[PersistentRequestCompleteAgentMessage] = []
-    with services.task_service.subscribe_to_task(task_id) as updates_queue:
-        yield outcome
-        logger.debug("Waiting for outcome of message {} in task {}", message_id, task_id)
-        while True:
-            try:
-                update = updates_queue.get(timeout=1.0)
-            except queue.Empty:
-                pass
-            else:
-                if isinstance(update, PersistentRequestCompleteAgentMessage):
-                    if update.request_id == message_id:
-                        outcome.append(update)
-                        break
-
-
 def _prevent_action_if_out_of_free_space(services: CompleteServiceCollection) -> None:
     user_config = get_user_config_instance()
     free_gb = (_get_disk_bytes_free(services.settings) or 1_000_000_000_000) / (1024 * 1024 * 1024)
@@ -2829,8 +3170,7 @@ def save_user_email(
         email_config_request.full_name is not None,
         email_config_request.did_opt_in_to_marketing,
     )
-    save_config(user_config, get_config_path())
-    set_user_config_instance(user_config)
+    replace_config(user_config)
 
     return get_logged_in_or_anonymous_telemetry_info()
 
@@ -2859,8 +3199,7 @@ def skip_account_setup(
         },
     )
 
-    save_config(user_config, get_config_path())
-    set_user_config_instance(user_config)
+    replace_config(user_config)
 
     return get_logged_in_or_anonymous_telemetry_info()
 
@@ -2883,13 +3222,17 @@ def install_dependency(
     tool: str = "CLAUDE",
     user_session: UserSession = Depends(get_user_session),
 ) -> InstallResult:
-    """Trigger installation of a managed dependency binary."""
+    """Trigger installation of a managed dependency binary or artifact bundle."""
+    services = get_services_from_request_or_websocket(request)
+    # The voice-models bundle is a managed artifact, not a ``Dependency`` (it is
+    # never provisioned into agent environments), so it dispatches by name.
+    if tool == VOICE_MODELS_TOOL_NAME:
+        return services.dependency_management_service.install_voice_models()
     try:
         dependency = Dependency(tool)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}") from e
 
-    services = get_services_from_request_or_websocket(request)
     return services.dependency_management_service.install_managed(dependency)
 
 
@@ -2953,8 +3296,7 @@ def complete_onboarding(request: Request, user_session: UserSession = Depends(ge
         updates.update(get_privacy_settings_for_telemetry(True).model_dump())
     if updates:
         user_config = model_update(user_config, updates)
-        save_config(user_config, get_config_path())
-        set_user_config_instance(user_config)
+        replace_config(user_config)
 
     logger.info("Onboarding completed successfully")
 
@@ -2989,6 +3331,11 @@ def update_user_config(
     """
     old_user_config = get_user_config_instance()
 
+    # Reject telemetry-flag changes — they go through POST /api/v1/config/telemetry.
+    # This read is safe without the lock (GIL-atomic reference read). A
+    # stale read is harmless: if someone else changed telemetry between this
+    # read and ``merge_config`` below, ``merge_config`` does not touch
+    # telemetry flags (the PUT body excludes them), so the result is correct.
     for flag in _TELEMETRY_FLAGS:
         for key in (flag, to_camel(flag)):
             if key not in update_config_request.user_config:
@@ -3000,18 +3347,12 @@ def update_user_config(
                     detail="Use POST /api/v1/config/telemetry to change telemetry consent.",
                 )
 
-    merged = old_user_config.model_dump(by_alias=True) if old_user_config else {}
-    merged.update(update_config_request.user_config)
-    new_user_config = UserConfig.model_validate(merged)
+    # Atomic read-merge-write — lock scope is the module's problem, not ours.
+    new_user_config = merge_config(update_config_request.user_config)
 
-    save_config(new_user_config, get_config_path())
-    set_user_config_instance(new_user_config)
-
-    # Push updated dependencies status when dependency paths change so the
-    # frontend atom reflects the new mode immediately.
-    new_dep = new_user_config.dependency_paths
+    # Dependency-status push is a side effect after the transaction.
     old_dep = old_user_config.dependency_paths if old_user_config else None
-    if new_dep != old_dep:
+    if new_user_config.dependency_paths != old_dep:
         services = get_services_from_request_or_websocket(request)
         services.dependency_management_service.get_status()
 
@@ -3029,14 +3370,7 @@ def set_telemetry(
     This is the only endpoint allowed to change the underlying telemetry
     flags; PUT /api/v1/config rejects requests that would change them.
     """
-    old_user_config = get_user_config_instance()
-    new_user_config = model_update(
-        old_user_config,
-        get_privacy_settings_for_telemetry(set_telemetry_request.enabled).model_dump(),
-    )
-    save_config(new_user_config, get_config_path())
-    set_user_config_instance(new_user_config)
-    return new_user_config
+    return merge_config(get_privacy_settings_for_telemetry(set_telemetry_request.enabled).model_dump(by_alias=True))
 
 
 @router.get("/api/v1/filesystem/list")
@@ -3241,14 +3575,13 @@ def _get_remote_branches(repo_path: Path, remote_filter: str | None = "origin") 
             Pass ``None`` to include branches from all remotes.
     """
     try:
-        result = subprocess.run(
+        result = run_blocking(
             ["git", "branch", "-r", "--format=%(refname:short)"],
             cwd=repo_path,
-            capture_output=True,
-            text=True,
             timeout=_GIT_INFO_TIMEOUT_SECONDS,
+            is_checked=False,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 or result.is_timed_out:
             return []
         branches = []
         for line in result.stdout.strip().splitlines():
@@ -3262,7 +3595,7 @@ def _get_remote_branches(repo_path: Path, remote_filter: str | None = "origin") 
                 continue
             branches.append(branch)
         return branches
-    except (subprocess.TimeoutExpired, OSError):
+    except ProcessSetupError:
         return []
 
 
@@ -3316,33 +3649,44 @@ def get_current_branch(
         raise HTTPException(status_code=404, detail=str(e)) from e
 
 
-@router.get("/api/v1/projects/{project_id}/branch-exists")
-def branch_exists(
+@router.get("/api/v1/projects/{project_id}/validate-new-branch-name")
+def validate_new_branch_name(
     project_id: str,
     name: str,
     request: Request,
     user_session: UserSession = Depends(get_user_session),
-) -> BranchExistsResponse:
-    """Return whether `name` already exists as a local branch in the project's repo."""
+) -> NewBranchNameValidationResponse:
+    """Validate a prospective new workspace branch name in the project's repo.
+
+    Reports whether `name` is a legal git ref (`is_valid`) and whether it
+    collides with an existing local branch (`already_exists`). Backs the Add
+    Workspace form's inline error; `create_workspace_v2` re-checks both as the
+    authoritative gate. When the name is illegal, the collision check is skipped
+    (git can't resolve an invalid ref anyway).
+    """
     validated_project_id = validate_project_id(project_id)
     services = get_services_from_request_or_websocket(request)
 
     trimmed = name.strip()
     if not trimmed:
-        return BranchExistsResponse(exists=False)
+        return NewBranchNameValidationResponse(is_valid=False, already_exists=False)
 
     with user_session.open_transaction(services) as transaction:
         project = transaction.get_project(validated_project_id)
         if project is None:
             raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+        # When the repo isn't reachable we can't check; don't surface a spurious
+        # error — let the create-time backstop catch any real problem.
         if not project.is_path_accessible:
-            return BranchExistsResponse(exists=False)
+            return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
 
     try:
         with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
-            return BranchExistsResponse(exists=repo.is_branch_ref(trimmed))
+            is_valid = repo.is_valid_branch_name(trimmed)
+            already_exists = is_valid and repo.is_branch_ref(trimmed)
+            return NewBranchNameValidationResponse(is_valid=is_valid, already_exists=already_exists)
     except GitRepoNotFoundError:
-        return BranchExistsResponse(exists=False)
+        return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
 
 
 @router.get("/api/v1/projects/{project_id}/repo_info")
@@ -4239,6 +4583,157 @@ def get_env_var_names(
     )
 
 
+@router.get("/api/v1/pi/providers/authenticated")
+def get_pi_authenticated_providers(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> AuthenticatedProvidersResponse:
+    """Return the full pi provider catalog crossed with current authentication status.
+
+    Global (no workspace/agent): Settings reads process-level auth.json + env. The
+    underlying readers are best-effort, so a missing/garbled auth.json yields all
+    in_auth_json=False rather than an error.
+    """
+    return AuthenticatedProvidersResponse(
+        providers=tuple(
+            AuthenticatedProviderEntry(
+                provider_id=status.provider_id,
+                display_name=status.display_name,
+                group=status.group,
+                in_auth_json=status.in_auth_json,
+                env_detected=status.env_detected,
+                env_var_names=status.env_var_names,
+                supports_subscription=status.supports_subscription,
+            )
+            for status in get_provider_auth_statuses()
+        )
+    )
+
+
+@router.get("/api/v1/pi/models")
+def get_pi_models(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiModelsResponse:
+    """Return pi's curated, authenticated-only model catalog, probed on the host.
+
+    Global (no workspace/agent): pre-create surfaces — the New Workspace modal's
+    pi model picker — read this before any execution environment exists. The
+    probe is best-effort like its in-task twin, so a missing binary, version
+    mismatch, or unauthenticated user yields an empty catalog, never an error.
+    """
+    services = get_services_from_request_or_websocket(request)
+    binary = services.dependency_management_service.resolve_binary_path(Dependency.PI)
+    if binary is None:
+        return PiModelsResponse(available_models=(), default_model=None)
+    available_models, default_model = probe_catalog_on_host(binary)
+    return PiModelsResponse(available_models=tuple(available_models), default_model=default_model)
+
+
+@router.post("/api/v1/pi/login")
+def start_pi_login(
+    request: Request,
+    pi_login_request: PiLoginRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginResponse:
+    """Spawn an interactive pi /login (or /logout) PTY and return its login-session id.
+
+    Global (no workspace/agent): the PTY drives pi's own interactive flow against the
+    user's real ~/.pi/agent. The frontend attaches at GET /api/v1/pi/login/{id}/ws.
+    """
+    services = get_services_from_request_or_websocket(request)
+    pi_binary_path = services.dependency_management_service.resolve_binary_path(Dependency.PI)
+    if pi_binary_path is None:
+        raise HTTPException(status_code=400, detail="pi is not installed — configure it in Settings → Pi")
+    login_id = services.pi_login_service.spawn(
+        PiLoginMode(pi_login_request.mode),
+        pi_binary_path,
+        pi_login_request.provider_id,
+    )
+    return PiLoginResponse(login_id=login_id)
+
+
+@router.post("/api/v1/pi/login/{login_id}/done")
+def finish_pi_login(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Tear down a login PTY (Done button) and broadcast a model refresh. Idempotent."""
+    services = get_services_from_request_or_websocket(request)
+    services.pi_login_service.teardown(login_id)
+    return Response(status_code=204)
+
+
+@router.get("/api/v1/pi/login/{login_id}/status")
+def get_pi_login_status(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginStatusResponse:
+    """Report whether a login session's credential change has landed in auth.json.
+
+    The login modal polls this to auto-close once pi finishes the /login or /logout,
+    replacing the manual Done click.
+    """
+    services = get_services_from_request_or_websocket(request)
+    return PiLoginStatusResponse(completed=services.pi_login_service.is_completed(login_id))
+
+
+@router.post("/api/v1/pi/providers/paste-key")
+def write_pi_provider_key(
+    request: Request,
+    paste_key_request: PasteKeyRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Merge a single-key provider's api key into auth.json and refresh running pi agents.
+
+    Not exposed in the UI (the login modal is interactive /login only); kept for tests —
+    an integration test writes a credential through it to fire the models-refresh
+    broadcast, and app-level tests cover the route directly. The value is written verbatim
+    (literal / $ENV / !command); session-only and unknown providers are rejected (their
+    config is not expressible as a single auth.json key).
+    """
+    entry = get_provider_entry(paste_key_request.provider_id)
+    if entry is None or entry.group is not ProviderGroup.SINGLE_KEY:
+        raise HTTPException(status_code=400, detail="paste-key is only supported for single-key providers")
+    if not paste_key_request.key_value.strip():
+        raise HTTPException(status_code=400, detail="a key value is required")
+    try:
+        write_auth_json_entry(paste_key_request.provider_id, paste_key_request.key_value)
+    except PiAuthJsonError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        broadcast_pi_models_refresh(services.task_service, transaction)
+    return Response(status_code=204)
+
+
+@APP.websocket("/api/v1/pi/login/{login_id}/ws")
+async def pi_login_websocket(
+    websocket: WebSocket,
+    login_id: str,
+) -> None:
+    """Attach a WebSocket to a pi login PTY, reaping it (and refreshing models) on close.
+
+    Unlike agent terminals (which persist across disconnect), a login PTY is
+    ephemeral: when the socket closes the session is torn down and a model-catalog
+    refresh is broadcast, since credentials may have changed.
+    """
+    services = get_services_from_request_or_websocket(websocket)
+    if not services.pi_login_service.is_active(login_id):
+        # Accept before closing so the client receives a proper 4404 close frame
+        # (see agent_terminal_websocket for the full explanation).
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"pi login session {login_id} not found")
+        return
+    try:
+        await _connect_terminal_websocket(websocket, pi_login_terminal_id(login_id))
+    finally:
+        services.pi_login_service.teardown(login_id)
+
+
 @router.post("/api/v1/projects/init-git")
 def initialize_git_repository(
     request: Request,
@@ -4366,6 +4861,55 @@ def get_uploaded_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(file_path)
+
+
+# Bundle files are immutable per pin (the ETag is the pinned sha256), so the
+# renderer may cache them; the short max-age keeps a stale cache self-healing
+# after a pin bump without conditional-request storms during a session.
+_VOICE_MODELS_CACHE_CONTROL = "public, max-age=3600"
+
+
+def _matches_if_none_match(header_value: str, etag: str) -> bool:
+    """Whether an ``If-None-Match`` header matches a single known strong ETag.
+
+    Weak comparison per RFC 9110: a ``W/`` prefix on a candidate is ignored, and
+    ``*`` matches any representation.
+    """
+    if header_value.strip() == "*":
+        return True
+    candidates = {candidate.strip().removeprefix("W/") for candidate in header_value.split(",")}
+    return etag in candidates
+
+
+@router.get("/api/v1/voice-models/{path:path}", response_class=FileResponse)
+def get_voice_model_file(
+    path: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Serve one pinned file of the installed voice-models bundle.
+
+    The renderer's on-device speech-to-text loads its model files from here so
+    they never ship inside the app bundle. Only the exact serve paths listed in
+    the pin are allowed; everything else is rejected.
+    """
+    pinned = find_voice_model_file(path)
+    if pinned is None:
+        raise HTTPException(status_code=404, detail="Not a voice-models bundle file")
+
+    services = get_services_from_request_or_websocket(request)
+    file_path = services.dependency_management_service.resolve_voice_model_path(path)
+    if file_path is None:
+        raise HTTPException(status_code=404, detail="Voice models are not installed")
+
+    etag = f'"{pinned.sha256}"'
+    headers = {"ETag": etag, "Cache-Control": _VOICE_MODELS_CACHE_CONTROL}
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match is not None and _matches_if_none_match(if_none_match, etag):
+        return Response(status_code=304, headers=headers)
+
+    media_type = "application/json" if path.endswith(".json") else "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type, headers=headers)
 
 
 @router.post("/api/v1/upload-diagnostics")
@@ -4553,6 +5097,141 @@ def get_debug_threads() -> PlainTextResponse:
         # join them with "" — using "\n".join here would double every newline.
         chunks.extend(traceback.format_stack(frame))
         chunks.append("\n")
+    return PlainTextResponse("".join(chunks))
+
+
+@router.get("/api/v1/debug/heap", response_class=PlainTextResponse, include_in_schema=False)
+def get_debug_heap(
+    collect: bool = False,
+    limit: int = 5_000_000,
+    top: int = 30,
+    start_trace: int = 0,
+    stop_trace: bool = False,
+) -> PlainTextResponse:
+    """Heap census for diagnosing backend RSS growth, as plain text.
+
+    Inert until called — there is no always-on tracking. On demand it runs a
+    one-shot ``gc``-based object census (top types by count and aggregate shallow
+    size) plus GC stats, and with ``?collect=true`` forces a full
+    ``gc.collect()`` and reports RSS before vs after. That delta is the decisive
+    probe: a large drop means cyclic garbage was accumulating (a GC-cadence
+    issue, e.g. the incremental collector), while little change means the bytes
+    are live retention, not garbage.
+
+    Allocation-site attribution (the only way to see where ``str``/``bytes``
+    payloads come from) needs tracemalloc. Because the packaged backend is a
+    PyInstaller bundle that ignores ``PYTHONTRACEMALLOC``, start it at runtime
+    instead: ``?start_trace=N`` calls ``tracemalloc.start(N)`` (capturing
+    allocations from that point on); reproduce the growth, then a plain call
+    appends the top allocation sites; ``?stop_trace=true`` turns it back off.
+
+    The census walks ``gc.get_objects()`` in Python and briefly holds the GIL, so
+    ``limit`` caps how many objects are sized to bound that pause (``limit=0`` =
+    full but slower). Note ``gc`` tracks containers (lists/dicts/model instances),
+    not atomic ``str``/``bytes``; their payload bytes show up in RSS and via
+    tracemalloc, not the shallow-size column. Requires the session token.
+    Development only."""
+    # Clamp to non-negative: a negative `top` would slice almost the whole list
+    # (Python's [:n] semantics) and dump a runaway report, and a negative `limit`
+    # would quietly disable the census cap.
+    top = max(0, top)
+    limit = max(0, limit)
+    start_trace = max(0, start_trace)
+
+    process = psutil.Process()
+    started_at = time.monotonic()
+
+    chunks: list[str] = [
+        f"Heap report at {datetime.datetime.now().isoformat()}\n",
+        "=" * 72 + "\n",
+        f"RSS: {process.memory_info().rss / 1024 / 1024:.1f} MiB\n",
+        f"gc.enabled={gc.isenabled()}  gc.get_count()={gc.get_count()}  gc.get_threshold()={gc.get_threshold()}\n",
+    ]
+
+    if collect:
+        rss_before = process.memory_info().rss / 1024 / 1024
+        unreachable = gc.collect()
+        rss_after = process.memory_info().rss / 1024 / 1024
+        chunks.append(
+            f"\ngc.collect(): {unreachable} unreachable objects collected; "
+            + f"RSS {rss_before:.1f} -> {rss_after:.1f} MiB (delta {rss_after - rss_before:+.1f} MiB)\n"
+            + "  Big drop => cyclic garbage was accumulating (GC cadence). "
+            + "Little change => live retention, not collectable garbage.\n"
+        )
+
+    objects = gc.get_objects()
+    total_objects = len(objects)
+    counts: dict[str, int] = {}
+    sizes: dict[str, int] = {}
+    getsizeof = sys.getsizeof
+    scanned = 0
+    for obj in objects:
+        if limit > 0 and scanned >= limit:
+            break
+        scanned += 1
+        obj_type = type(obj)
+        name = f"{obj_type.__module__}.{obj_type.__qualname__}"
+        counts[name] = counts.get(name, 0) + 1
+        try:
+            sizes[name] = sizes.get(name, 0) + getsizeof(obj)
+        except TypeError:
+            # getsizeof raises TypeError when an object's __sizeof__ returns a
+            # non-int; skip that one object rather than aborting the census.
+            pass
+    # Drop our strong reference to the full object list before formatting.
+    del objects
+
+    truncated = 0 < limit < total_objects
+    chunks.append(
+        f"\nTracked objects: {total_objects:,} (sized {scanned:,}"
+        + ("; TRUNCATED — pass ?limit=0 for a full, slower census" if truncated else "")
+        + f"). Census took {time.monotonic() - started_at:.1f}s.\n"
+    )
+
+    chunks.append(f"\nTop {top} types by aggregate shallow size:\n")
+    for name, size in sorted(sizes.items(), key=lambda kv: kv[1], reverse=True)[:top]:
+        chunks.append(f"  {size / 1024 / 1024:10.1f} MiB  n={counts[name]:>12,}  {name}\n")
+
+    chunks.append(f"\nTop {top} types by object count:\n")
+    for name, count in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:top]:
+        chunks.append(f"  {count:>12,}  {sizes.get(name, 0) / 1024 / 1024:8.1f} MiB  {name}\n")
+
+    if stop_trace and tracemalloc.is_tracing():
+        tracemalloc.stop()
+        chunks.append("\ntracemalloc: stopped.\n")
+    elif start_trace > 0 and not tracemalloc.is_tracing():
+        tracemalloc.start(start_trace)
+        chunks.append(
+            f"\ntracemalloc: STARTED (nframe={start_trace}) — capturing allocations from now on.\n"
+            + "Reproduce the growth, then re-run `sculpt debug heap` to see the top allocation sites.\n"
+        )
+    elif tracemalloc.is_tracing():
+        snapshot = tracemalloc.take_snapshot()
+        traced, peak = tracemalloc.get_traced_memory()
+        chunks.append(
+            f"\ntracemalloc tracing (traced={traced / 1024 / 1024:.1f} MiB, peak={peak / 1024 / 1024:.1f} MiB)."
+            + f" Top {top} allocation sites (file:line):\n"
+        )
+        for stat in snapshot.statistics("lineno")[:top]:
+            chunks.append(f"  {stat.size / 1024 / 1024:10.1f} MiB  count={stat.count:>12,}  {stat.traceback}\n")
+        # Group by full traceback so the leaf line's CALLER chain is visible —
+        # the only way to attribute, e.g., a sys.modules.copy() inside
+        # inspect._signature_fromstr to the code that actually calls
+        # inspect.signature() and retains the result. Capped (and full stacks
+        # are multi-line) so the report stays readable; start_trace's nframe
+        # bounds the depth.
+        traceback_top = min(top, 8)
+        chunks.append(f"\ntracemalloc top {traceback_top} by full traceback (caller chains):\n")
+        for i, stat in enumerate(snapshot.statistics("traceback")[:traceback_top], 1):
+            chunks.append(f"\n#{i}  {stat.size / 1024 / 1024:.1f} MiB  count={stat.count:,}\n")
+            for line in stat.traceback.format():
+                chunks.append(f"    {line}\n")
+    else:
+        chunks.append(
+            "\ntracemalloc: not tracing — pass ?start_trace=N (sculpt debug heap --start-trace) "
+            + "to capture allocation sites at runtime.\n"
+        )
+
     return PlainTextResponse("".join(chunks))
 
 

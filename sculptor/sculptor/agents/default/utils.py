@@ -90,6 +90,7 @@ def serialize_agent_wrapper_error(
     e: Exception,
     message: UserMessageUnion | ResumeAgentResponseRunnerMessage,
     is_stopping: bool,
+    stopped_by_user: bool = False,
 ) -> RequestStoppedAgentMessage | RequestFailureAgentMessage:
     serialized_exception = SerializedException.build(e)
     request_id = get_turn_request_id(message)
@@ -98,6 +99,7 @@ def serialize_agent_wrapper_error(
             message_id=AgentMessageID(),
             request_id=request_id,
             error=serialized_exception,
+            stopped_by_user=stopped_by_user,
         )
     return RequestFailureAgentMessage(
         message_id=AgentMessageID(),

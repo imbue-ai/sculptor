@@ -25,6 +25,7 @@ import { DeleteActionDialog } from "~/components/actions/DeleteActionDialog";
 import { DeleteGroupDialog } from "~/components/actions/DeleteGroupDialog";
 import { GroupContextMenu } from "~/components/actions/GroupContextMenu";
 import { PanelHeader } from "~/components/panels/PanelHeader";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 
 import styles from "./ActionsPanel.module.scss";
 import { useWorkspacePanelData } from "./useWorkspacePanelData";
@@ -401,7 +402,7 @@ export const ActionsPanel = (): ReactElement => {
     }
   };
 
-  // --- DnD handlers (DockingLayout pattern) ---
+  // --- DnD handlers ---
 
   const resolveChipGroupId = (chipEl: Element): string | null => {
     const groupSection = chipEl.closest("[data-action-group]");
@@ -710,4 +711,15 @@ export const ActionsPanel = (): ReactElement => {
       />
     </>
   );
+};
+
+// The single-instance Actions panel for the section/panel shell: a thin, no-prop
+// wrapper that gates on the active workspace and renders the existing actions
+// content. Keyed on the workspace id so switching workspaces resets local state.
+export const ActionsPanelForShell = (): ReactElement | null => {
+  const workspaceId = useAtomValue(activeWorkspaceIdAtom);
+  if (workspaceId === null) {
+    return null;
+  }
+  return <ActionsPanel key={workspaceId} />;
 };

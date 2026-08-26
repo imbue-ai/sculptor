@@ -1,9 +1,18 @@
 import type { ChatMessage, ToolResultBlock } from "~/api";
 import { ChatMessageRole } from "~/api";
 import { isToolResultBlock } from "~/common/Guards";
-import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/utils/subagentTree.ts";
+import { SUBAGENT_TOOL_NAMES, type SubagentTreeNode } from "~/pages/workspace/utils/subagentTree.ts";
+
+// Memoize by input-array reference. On an agent switch the chat view remounts
+// and rebuilds this from scratch; when the message array keeps its reference
+// (idle agent, no queued messages — see mergeChatAndQueuedMessages), the
+// remount reuses the prior map instead of re-scanning O(history). WeakMap
+// entries are GC'd with their input array, so nothing leaks.
+const toolResultMapCache = new WeakMap<ReadonlyArray<ChatMessage>, Map<string, ToolResultBlock>>();
 
 export const buildToolResultMap = (messages: ReadonlyArray<ChatMessage>): Map<string, ToolResultBlock> => {
+  const cached = toolResultMapCache.get(messages);
+  if (cached) return cached;
   const map = new Map<string, ToolResultBlock>();
   for (const message of messages) {
     for (const block of message.content) {
@@ -12,6 +21,7 @@ export const buildToolResultMap = (messages: ReadonlyArray<ChatMessage>): Map<st
       }
     }
   }
+  toolResultMapCache.set(messages, map);
   return map;
 };
 
@@ -39,6 +49,19 @@ export const hasOnlySubagentResults = (message: ChatMessage): boolean =>
     return SUBAGENT_TOOL_NAMES.has(block.toolName);
   });
 
+// Drop tool-result-only / subagent-result-only nodes so they don't occupy a
+// virtualizer slot. Memoized by the tree reference: when buildSubagentTree
+// returns its cached tree on a remount, the filtered list is reused too.
+const filteredNodesCache = new WeakMap<Array<SubagentTreeNode>, Array<SubagentTreeNode>>();
+
+export const filterRenderableNodes = (nodes: Array<SubagentTreeNode>): Array<SubagentTreeNode> => {
+  const cached = filteredNodesCache.get(nodes);
+  if (cached) return cached;
+  const result = nodes.filter((node) => !hasOnlyToolResults(node.message) && !hasOnlySubagentResults(node.message));
+  filteredNodesCache.set(nodes, result);
+  return result;
+};
+
 // Merge the completed chat messages with the queued messages for rendering,
 // keeping each id at most once (first occurrence wins, so a completed/sent
 // message takes precedence over a queued copy of the same id).
@@ -53,6 +76,15 @@ export const mergeChatAndQueuedMessages = (
   chatMessages: ReadonlyArray<ChatMessage>,
   queuedChatMessages: ReadonlyArray<ChatMessage>,
 ): Array<ChatMessage> => {
+  // Fast path: nothing queued (the common case). Return the input as-is so its
+  // reference stays stable across renders/remounts — completedChatMessages is
+  // already deduped upstream, so there is nothing to merge. A stable reference
+  // is what lets the reference-keyed builder caches (tree / tool-result map /
+  // metadata / filtered nodes) hit on remount instead of recomputing O(history).
+  if (queuedChatMessages.length === 0) {
+    return chatMessages as Array<ChatMessage>;
+  }
+
   const seenIds = new Set<string>();
   const merged: Array<ChatMessage> = [];
   for (const message of [...chatMessages, ...queuedChatMessages]) {

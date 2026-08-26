@@ -31,7 +31,7 @@ class FrozenDict(dict[T, TV], FrozenMapping[T, TV]):
     def _hash(self) -> int:
         return hash(self._key())
 
-    def __hash__(self) -> int:  # type: ignore
+    def __hash__(self) -> int:
         return self._hash
 
     def _mutation_error(self, method: str) -> RuntimeError:

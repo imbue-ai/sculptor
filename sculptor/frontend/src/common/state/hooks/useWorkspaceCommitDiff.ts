@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { getWorkspaceCommitDiff } from "../../../api";
 import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
 
 /**
  * Single-commit diffs are immutable — `(workspaceId, commitHash)` permanently
@@ -16,6 +16,18 @@ const workspaceCommitDiffQueryKey = (workspaceId: string | null, commitHash: str
   key: [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "commitDiff", commitHash] as const,
   isValid: workspaceId !== null && commitHash !== null,
 });
+
+/**
+ * Invalidate the cached diff for a single commit so an active observer refetches.
+ * Commit diffs are keyed OUTSIDE the `"git"` subtree, so the workspace git-query
+ * invalidation cascade never reaches them; a manual refresh has to target this
+ * key directly. Useful when the original fetch failed (e.g. the workspace was
+ * still initializing) and the viewer needs a way to retry.
+ */
+export const invalidateWorkspaceCommitDiff = (workspaceId: string, commitHash: string): void => {
+  const { key } = workspaceCommitDiffQueryKey(workspaceId, commitHash);
+  void queryClient.invalidateQueries({ queryKey: key });
+};
 
 const fetchCommitDiff = async (workspaceId: string, commitHash: string, signal: AbortSignal): Promise<string> => {
   const { data } = await getWorkspaceCommitDiff({

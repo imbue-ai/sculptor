@@ -319,6 +319,75 @@ def test_fresh_pi_agent_switcher_shows_pi_models_without_a_message(sculptor_inst
     page.keyboard.press("Escape")
 
 
+@user_story("to switch a fresh pi agent's model before sending any message and see the switcher update")
+def test_pi_model_switch_before_first_message_updates_switcher(sculptor_instance_: SculptorInstance) -> None:
+    """Switching a fresh pi agent's model BEFORE the first message updates the switcher
+    right away, instead of staying stuck on the old model until a turn runs (SCU-1605).
+
+    No message is sent, so no pi process is live to echo the switch; the selection is
+    persisted onto task state optimistically, and the server-driven switcher reflects
+    it. The switch is applied to pi (and reconciled) only when the agent later runs."""
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        workspace_name="Pi Pre-Message Switch",
+        model_name=None,
+        agent_type="pi",
+    )
+    chat_panel = task_page.get_chat_panel()
+    default_model_name = _FAKE_PI_MODELS[0]["name"]
+    other_model_name = _FAKE_PI_MODELS[2]["name"]
+
+    # The fresh switcher shows pi's default model before any message.
+    expect(chat_panel.get_model_selector()).to_contain_text(default_model_name, timeout=30000)
+
+    # Switch to a different model with no message sent (no live agent to echo it).
+    select_model_by_name(chat_panel=chat_panel, model_name=other_model_name)
+
+    # The switcher reflects the new selection immediately, with no failure surfaced.
+    expect(chat_panel.get_model_selector()).to_contain_text(other_model_name)
+    expect(page.get_by_test_id(ElementIDs.TOAST).filter(has_text="Failed to switch")).to_have_count(0)
+
+
+@user_story("to switch a fresh pi agent's model before the first message and have that model run the turn")
+def test_pi_pre_message_switch_is_applied_to_the_first_turn(sculptor_instance_: SculptorInstance) -> None:
+    """After switching a fresh pi agent's model BEFORE the first message, the first turn
+    runs under the selected model and the switcher stays on it — the pre-message selection
+    is reconciled onto pi at start rather than reverting to pi's default (SCU-1605).
+
+    `fake_pi:report_model` echoes the model pi ran the turn under, so this asserts the
+    switch actually reached pi, not merely that the switcher's display updated."""
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        workspace_name="Pi Pre-Message Switch Applied",
+        model_name=None,
+        agent_type="pi",
+    )
+    chat_panel = task_page.get_chat_panel()
+    default_model_name = _FAKE_PI_MODELS[0]["name"]
+    other_model_name = _FAKE_PI_MODELS[2]["name"]
+    other_model_id = _FAKE_PI_MODELS[2]["id"]
+
+    # Switch to a non-default model before sending any message.
+    expect(chat_panel.get_model_selector()).to_contain_text(default_model_name, timeout=30000)
+    select_model_by_name(chat_panel=chat_panel, model_name=other_model_name)
+    # The switch has visibly landed (its optimistic write persisted) before the first
+    # message starts the agent, so the turn below cannot race ahead of the selection.
+    expect(chat_panel.get_model_selector()).to_contain_text(other_model_name)
+
+    # Send the first message; fake_pi echoes the model it actually runs the turn under.
+    send_chat_message(chat_panel=chat_panel, message="fake_pi:report_model")
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=30000)
+
+    # The turn ran under the model chosen pre-message (not pi's default), and the switcher
+    # stays on it through first-turn startup — no revert or flicker.
+    expect(chat_panel.get_assistant_messages().last).to_contain_text(other_model_id)
+    expect(chat_panel.get_model_selector()).to_contain_text(other_model_name)
+
+
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
 @user_story("to attach files in a pi workspace and have images and paths reach the agent")
 def test_uploads_usable_and_deliver_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:

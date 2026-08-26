@@ -40,6 +40,7 @@ import pytest
 from playwright.sync_api import Page
 
 from sculptor.testing.playwright_utils import full_spa_reload
+from sculptor.testing.playwright_utils import settle_first_run_offer
 from sculptor.testing.sculptor_instance import SculptorInstance
 
 # JavaScript injected via ``add_init_script`` — runs before any page scripts.
@@ -188,6 +189,14 @@ class MockSculptorElectronAPI:
             + " && window.sculptor._initialStatusHydrated === true"
         )
         self._page.wait_for_function(ready_predicate, timeout=_READY_PREDICATE_TIMEOUT_MS)
+
+        # The reload boots onto Home with zero workspaces (this fixture runs
+        # right after per-test cleanup), and that boot-empty snapshot
+        # auto-opens the first-run new-workspace dialog. Settle it
+        # before handing the page to the test — its modal overlay would
+        # otherwise swallow the test's first click (e.g. the VERSION trigger)
+        # at an unpredictable moment.
+        settle_first_run_offer(self._page)
 
     def uninstall(self) -> None:
         """Remove the mock and reload so subsequent tests get a clean page.

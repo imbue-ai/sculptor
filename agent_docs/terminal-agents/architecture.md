@@ -187,7 +187,7 @@ applies only to which **menu entries** are offered, not to the config union.
 
 Add a `TerminalHarness` (and register it in `harness_registry.py` for the
 two new configs) whose `capabilities()` returns the **all-false** chat
-capability set — mirroring how `PiHarness` declares its degraded surface.
+capability set — mirroring how `PiHarness` declares its capabilities.
 With every chat capability false, the existing `CapabilityGate` /
 `useTaskSupports*` hooks already hide the per-affordance chat controls
 (interruption, skills, fast mode, context reset, attachments, …) with no new

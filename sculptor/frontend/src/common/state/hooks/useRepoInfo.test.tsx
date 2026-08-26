@@ -116,6 +116,33 @@ describe("useRepoInfo", () => {
     vi.useRealTimers();
   });
 
+  it("does not fetch or retry when projectId is null", async () => {
+    vi.useFakeTimers();
+
+    const { result } = renderHook(() => useRepoInfo(null), { wrapper });
+
+    // No fetch fires and repoInfo stays null with no project selected.
+    expect(result.current.repoInfo).toBeNull();
+    expect(mockGetRepoInfo).not.toHaveBeenCalled();
+
+    // The retry loop must stay dormant rather than hammering a doomed request:
+    // advance well past MAX_RETRIES * RETRY_INTERVAL_MS (10 * 3s).
+    await act(async () => {
+      vi.advanceTimersByTime(40_000);
+    });
+    expect(mockGetRepoInfo).not.toHaveBeenCalled();
+
+    // The imperative fetchers are no-ops too.
+    await act(async () => {
+      await result.current.fetchRepoInfo();
+      await result.current.fetchCurrentBranch();
+    });
+    expect(mockGetRepoInfo).not.toHaveBeenCalled();
+    expect(mockGetCurrentBranch).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
   it("keeps retrying when consecutive failures leave the atom null", async () => {
     // Regression: previously the retry useEffect only fired once because the
     // catch block's store.set(null) was a no-op when the atom was already null,

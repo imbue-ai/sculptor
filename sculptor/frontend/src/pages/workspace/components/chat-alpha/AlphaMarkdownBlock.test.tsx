@@ -6,20 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ElementIds } from "~/api";
 
 import { AlphaMarkdownBlock } from "./AlphaMarkdownBlock.tsx";
+import { ChatTaskProvider } from "./ChatTaskContext.tsx";
 
-const ThemeWrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
+const ThemeWrapper = ({ children }: { children: ReactNode }): ReactElement => (
+  <ChatTaskProvider workspaceId="test-ws" taskId="agent-1">
+    <Theme>{children}</Theme>
+  </ChatTaskProvider>
+);
 const render = (
   ui: ReactElement,
   options?: Omit<Parameters<typeof rtlRender>[1], "wrapper">,
 ): ReturnType<typeof rtlRender> => rtlRender(ui, { wrapper: ThemeWrapper, ...options });
 
-// Mock workspace hooks and Jotai atoms that AlphaMarkdownBlock now depends on
+// Mock workspace hooks and Jotai atoms that AlphaMarkdownBlock depends on
 
 const mockOpenFileViewTab = vi.fn();
-
-vi.mock("~/common/NavigateUtils.ts", () => ({
-  useWorkspacePageParams: (): { workspaceID: string } => ({ workspaceID: "test-ws" }),
-}));
 
 vi.mock("~/pages/workspace/hooks/useWorkspaceCodePath.ts", () => ({
   useWorkspaceCodePath: (): string => "/mock/workspace/code",

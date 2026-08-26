@@ -1,4 +1,4 @@
-import { ExternalLink, GitCommitVertical, GitPullRequestArrow, Pencil, Trash2, X, XCircle } from "lucide-react";
+import { ExternalLink, GitCommitVertical, GitPullRequestArrow, Pencil, Trash2 } from "lucide-react";
 
 import { ElementIds } from "../../../api";
 import type { WorkspaceAction, WorkspaceActionRuntime } from "./types.ts";
@@ -10,10 +10,10 @@ import type { WorkspaceAction, WorkspaceActionRuntime } from "./types.ts";
  * this list. Adding a new entry here surfaces it in both places.
  *
  * Order grouping (top → bottom): git/repo work (most-frequent) → naming
- * → tab navigation (palette only) → close/destroy. The right-click menu
- * renders descriptors in array order; the palette sub-page sorts by the
- * `paletteOrder` number on each descriptor (with non-descriptor rows like
- * "Open in..." interleaved at their own order — see dynamic/workspaceActions).
+ * → destroy. The right-click menu renders descriptors in array order; the
+ * palette sub-page sorts by the `paletteOrder` number on each descriptor
+ * (with non-descriptor rows like "Open in..." interleaved at their own
+ * order — see dynamic/workspaceActions).
  */
 export const buildWorkspaceActions = (runtime: WorkspaceActionRuntime): ReadonlyArray<WorkspaceAction> => [
   {
@@ -61,37 +61,6 @@ export const buildWorkspaceActions = (runtime: WorkspaceActionRuntime): Readonly
     paletteOrder: 50,
     paletteTitleSuffix: "name",
     perform: (ws): void => runtime.beginRename(ws),
-  },
-  {
-    id: "close",
-    title: "Close workspace",
-    icon: X,
-    separatorBefore: true,
-    testId: ElementIds.TAB_CONTEXT_MENU_CLOSE,
-    paletteSubtitle: "Close this workspace tab",
-    paletteOrder: 80,
-    paletteKeywords: ["current", "tab"],
-    paletteShortcut: "close_workspace",
-    perform: (ws): void => runtime.closeWorkspace(ws),
-  },
-  {
-    id: "close_others",
-    title: "Close other workspaces",
-    icon: XCircle,
-    visible: (): boolean => runtime.canCloseOthers(),
-    testId: ElementIds.TAB_CONTEXT_MENU_CLOSE_OTHERS,
-    paletteSubtitle: "Close all workspace tabs except this one",
-    paletteOrder: 90,
-    perform: (ws): void => runtime.closeOtherWorkspaces(ws),
-  },
-  {
-    id: "close_all",
-    title: "Close all workspaces",
-    icon: XCircle,
-    testId: ElementIds.TAB_CONTEXT_MENU_CLOSE_ALL,
-    paletteSubtitle: "Close every workspace tab",
-    paletteOrder: 100,
-    perform: (): void => runtime.closeAllWorkspaces(),
   },
   {
     id: "delete",

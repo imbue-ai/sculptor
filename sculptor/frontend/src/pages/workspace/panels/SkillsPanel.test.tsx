@@ -2,11 +2,12 @@ import { Theme } from "@radix-ui/themes";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { panelDragStateAtom } from "~/components/sections/transientAtoms.ts";
 
 import { SkillsPanel } from "./SkillsPanel";
 
@@ -60,6 +61,9 @@ const renderSkillsPanel = (
   mockUseSkills.mockReturnValue({ skills, isLoading, error });
 
   const store = createStore();
+  // The panel resolves its workspace from the section shell's active
+  // workspace rather than the route.
+  store.set(activeWorkspaceIdAtom, "test-workspace-id");
   store.set(chatActionsAtom, {
     appendText: vi.fn(),
     insertSkill,
@@ -69,13 +73,7 @@ const renderSkillsPanel = (
 
   const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>
-      <Theme>
-        <MemoryRouter initialEntries={["/ws/test-workspace-id"]}>
-          <Routes>
-            <Route path="/ws/:workspaceID" element={children} />
-          </Routes>
-        </MemoryRouter>
-      </Theme>
+      <Theme>{children}</Theme>
     </Provider>
   );
 
@@ -402,6 +400,97 @@ describe("SkillsPanel — popover dismiss-on-filter regression", () => {
 
       expect(screen.queryByText("fix-bug")).not.toBeInTheDocument();
       // Popover has been dismissed; its content must not still be in the DOM.
+      expect(screen.queryByText("POPOVER_DESCRIPTION_PROBE")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("SkillsPanel — popover collision-aware side", () => {
+  // Regression: the hover popover was hardcoded to sit to the LEFT of the
+  // chip column. In a narrow left-docked panel there is no room on the left,
+  // so it slid off-screen. The popover must flip to the side with space.
+  const advancePopoverOpen = (): void => {
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+  };
+
+  // Stub a chip's layout box so the side computation has a real `left` to
+  // reason about (jsdom returns an all-zero rect otherwise).
+  const stubChipRect = (chip: HTMLElement, left: number): void => {
+    chip.getBoundingClientRect = (): DOMRect =>
+      ({ left, right: left + 100, top: 100, bottom: 130, width: 100, height: 30, x: left, y: 100 }) as DOMRect;
+  };
+
+  const popoverSide = (): string | null => {
+    const hitArea = document.querySelector<HTMLElement>("[data-skill-popover]");
+    return hitArea?.getAttribute("data-side") ?? null;
+  };
+
+  it("flips the popover to the right when the chip hugs the left edge (no room on the left)", () => {
+    vi.useFakeTimers();
+    try {
+      renderSkillsPanel({
+        skills: [customSkill({ name: "fix-bug", description: "POPOVER_DESCRIPTION_PROBE" })],
+      });
+      const chip = screen.getByText("fix-bug").closest('[data-testid="SKILL_CHIP"]') as HTMLElement;
+      // Chip's left edge is only 20px from the viewport edge — a ~300px
+      // popover cannot fit on the left, so it must flip to the right.
+      stubChipRect(chip, 20);
+      fireEvent.mouseEnter(chip);
+      advancePopoverOpen();
+      expect(screen.getByText("POPOVER_DESCRIPTION_PROBE")).toBeInTheDocument();
+      expect(popoverSide()).toBe("right");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the popover on the left when the chip has room to its left", () => {
+    vi.useFakeTimers();
+    try {
+      renderSkillsPanel({
+        skills: [customSkill({ name: "fix-bug", description: "POPOVER_DESCRIPTION_PROBE" })],
+      });
+      const chip = screen.getByText("fix-bug").closest('[data-testid="SKILL_CHIP"]') as HTMLElement;
+      // Chip sits far from the left edge (600px), leaving plenty of room for
+      // the popover on the left — the default side is preserved.
+      stubChipRect(chip, 600);
+      fireEvent.mouseEnter(chip);
+      advancePopoverOpen();
+      expect(screen.getByText("POPOVER_DESCRIPTION_PROBE")).toBeInTheDocument();
+      expect(popoverSide()).toBe("left");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("SkillsPanel — popover drag suppression", () => {
+  // A panel drag passing over the skills list fires chip mouseenter events; the
+  // hover handler gates on the active drag so a card can't pop mid-drag.
+  const advancePopoverOpen = (): void => {
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+  };
+
+  it("does not open the popover while a panel drag is in progress", () => {
+    vi.useFakeTimers();
+    try {
+      const { store } = renderSkillsPanel({
+        skills: [customSkill({ name: "fix-bug", description: "POPOVER_DESCRIPTION_PROBE" })],
+      });
+      // A live drag drives draggedPanelIdAtom non-null, gating the chip hover.
+      act(() => {
+        store.set(panelDragStateAtom, { panelId: "skills", from: "right", to: "left", index: 0 });
+      });
+      const chip = screen.getByText("fix-bug");
+      fireEvent.mouseEnter(chip);
+      advancePopoverOpen();
+      // The popover never mounts, so its description text stays out of the DOM.
       expect(screen.queryByText("POPOVER_DESCRIPTION_PROBE")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();

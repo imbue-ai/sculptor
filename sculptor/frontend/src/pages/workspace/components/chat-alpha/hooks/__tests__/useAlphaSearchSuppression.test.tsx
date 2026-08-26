@@ -39,6 +39,7 @@ const createMockScrollContainer = (scrollTop: number, scrollHeight: number, clie
 const createMockVirtualizer = (): Virtualizer<HTMLDivElement, Element> =>
   ({
     scrollToIndex: vi.fn(),
+    options: { paddingEnd: 0 },
   }) as unknown as Virtualizer<HTMLDivElement, Element>;
 
 const makeMessage = (id: string, text: string): ChatMessage =>

@@ -16,6 +16,8 @@ type BranchSelectorProps = {
   setUserSelectedBranch: (branch: string) => void;
   disabled?: boolean;
   triggerVariant?: "soft" | "ghost";
+  /** Extra class merged onto the trigger (e.g. the modal's breadcrumb-chip style). */
+  className?: string;
 };
 
 const BranchSelectorComponent = ({
@@ -25,6 +27,7 @@ const BranchSelectorComponent = ({
   setUserSelectedBranch,
   disabled = false,
   triggerVariant = "soft",
+  className,
 }: BranchSelectorProps): ReactElement => {
   const [isFetchingBranches, setIsFetchingBranches] = useState(false);
   // Drop refresh requests that arrive while one is already in flight, so they
@@ -88,7 +91,7 @@ const BranchSelectorComponent = ({
       }
       triggerVariant={triggerVariant}
       testId={ElementIds.BRANCH_SELECTOR}
-      className={styles.dropdownButton}
+      className={className ? `${styles.dropdownButton} ${className}` : styles.dropdownButton}
       onOpenChange={(open) => {
         if (open) triggerFetch();
       }}

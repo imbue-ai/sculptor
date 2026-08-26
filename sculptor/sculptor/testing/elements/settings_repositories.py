@@ -23,7 +23,9 @@ class PlaywrightRepositoriesSettingsElement(PlaywrightIntegrationTestElement):
         dialog = self._page.get_by_test_id(ElementIDs.ADD_REPO_DIALOG)
         expect(dialog).to_be_visible()
 
-        # Dialog defaults to GitHub; switch to Local so the path input is visible.
+        # Local is the dialog's default source; select it explicitly anyway
+        # (an idempotent radio click) so the path input's visibility doesn't
+        # silently depend on the default.
         self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_LOCAL).click()
 
         path_input = self._page.get_by_test_id(ElementIDs.ADD_REPO_PATH_INPUT)

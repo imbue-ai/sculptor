@@ -8,6 +8,8 @@ here and adding one `case` branch to each function below.
 
 from __future__ import annotations
 
+from typing import assert_never
+
 from sculptor.agents.default.claude_code_sdk.agent_wrapper import ClaudeCodeSDKAgent
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.hello_agent.agent_wrapper import HelloAgent
@@ -48,8 +50,8 @@ def get_harness_for_config(config: AgentConfigTypes) -> Harness:
             return PI_HARNESS
         case TerminalAgentConfig() | RegisteredTerminalAgentConfig():
             return TERMINAL_HARNESS
-        case _:
-            raise UnknownAgentConfigError(f"Unknown agent config: {config}")
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def create_agent_for_run(context: AgentRunContext) -> Agent:
@@ -94,6 +96,7 @@ def create_agent_for_run(context: AgentRunContext) -> Agent:
                 system_prompt=context.task_data.system_prompt or "",
                 on_diff_needed=context.on_diff_needed,
                 harness=PI_HARNESS,
+                preselected_model=context.task_state.current_model,
             )
         # Terminal configs (TerminalAgentConfig / RegisteredTerminalAgentConfig)
         # never reach this function: they are dispatched to

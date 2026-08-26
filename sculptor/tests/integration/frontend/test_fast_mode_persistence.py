@@ -12,10 +12,12 @@ Verifies that:
 
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_2_MODEL_NAME
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_default_fast_mode
@@ -50,7 +52,7 @@ def test_fast_mode_persists_after_sending_message_and_switching_agents(
     # Create first agent in a workspace
     task_page = start_task_and_wait_for_ready(page, prompt="First agent", workspace_name="Fast Mode WS")
     chat_panel = task_page.get_chat_panel()
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # Enable fast mode
@@ -63,18 +65,18 @@ def test_fast_mode_persists_after_sending_message_and_switching_agents(
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
     # Add a second agent to the workspace
-    agent_tab_bar.get_add_agent_button().click()
+    create_agent_panel(page, section="center")
 
     # Wait for second agent tab to appear
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     # We're now on the second agent — fast mode should be off by default
     expect(chat_panel.get_chat_input()).to_be_visible()
     expect(chat_panel.get_fast_mode_toggle()).to_have_attribute("data-active", "false")
 
     # Navigate back to the first agent
-    agent_tabs.first.click()
+    tabs.first.click()
 
     # Fast mode should still be active on the first agent
     _expect_fast_mode_active(chat_panel)
@@ -93,7 +95,7 @@ def test_fast_mode_persists_without_sending_message(
     # Create first agent in a workspace
     task_page = start_task_and_wait_for_ready(page, prompt="First agent", workspace_name="FM No Send WS")
     chat_panel = task_page.get_chat_panel()
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # Enable fast mode — do NOT send a message
@@ -102,18 +104,18 @@ def test_fast_mode_persists_without_sending_message(
     _expect_fast_mode_active(chat_panel)
 
     # Add a second agent to the workspace
-    agent_tab_bar.get_add_agent_button().click()
+    create_agent_panel(page, section="center")
 
     # Wait for second agent tab to appear
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     # We're now on the second agent — fast mode should be off by default
     expect(chat_panel.get_chat_input()).to_be_visible()
     expect(chat_panel.get_fast_mode_toggle()).to_have_attribute("data-active", "false")
 
     # Navigate back to the first agent
-    agent_tabs.first.click()
+    tabs.first.click()
 
     # Fast mode should still be active on the first agent
     _expect_fast_mode_active(chat_panel)
@@ -132,7 +134,7 @@ def test_fast_mode_disable_persists_without_sending_message(
     # Create first agent in a workspace
     task_page = start_task_and_wait_for_ready(page, prompt="First agent", workspace_name="FM Disable WS")
     chat_panel = task_page.get_chat_panel()
-    agent_tab_bar = task_page.get_agent_tab_bar()
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # Enable fast mode and send a message to persist it
@@ -148,14 +150,14 @@ def test_fast_mode_disable_persists_without_sending_message(
     _expect_fast_mode_inactive(chat_panel)
 
     # Add a second agent to the workspace
-    agent_tab_bar.get_add_agent_button().click()
+    create_agent_panel(page, section="center")
 
     # Wait for second agent tab to appear
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(2)
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(2)
 
     # Navigate back to the first agent
-    agent_tabs.first.click()
+    tabs.first.click()
 
     # Fast mode should still be OFF — the unsent toggle-off must persist
     _expect_fast_mode_inactive(chat_panel)

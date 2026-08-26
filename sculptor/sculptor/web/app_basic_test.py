@@ -8,6 +8,7 @@ NOTE: Endpoints are not currently tested for cross-user authorization (preventin
 
 from pathlib import Path
 from typing import Generator
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -45,13 +46,16 @@ from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.web.app import _agent_config_for_request
+from sculptor.web.app import _workspace_working_directory
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import UserSession
 from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import CreateAgentRequest
+from sculptor.web.data_types import CreateWorkspaceRequestV2
 from sculptor.web.data_types import SendMessageRequest
 from sculptor.web.data_types import SetModelRequest
 from sculptor.web.data_types import StartTaskRequest
@@ -220,6 +224,103 @@ def test_create_task_creates_task(
     response = client.get(f"/api/v1/workspaces/{workspace_id}/agents")
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+def _post_create_worktree_workspace(client: TestClient, project: Project, branch_name: str) -> httpx.Response:
+    return client.post(
+        "/api/v1/workspaces",
+        json=model_dump(
+            CreateWorkspaceRequestV2(
+                project_id=str(project.object_id),
+                initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+                source_branch="main",
+                requested_branch_name=branch_name,
+            ),
+            is_camel_case=True,
+        ),
+    )
+
+
+def test_create_worktree_workspace_rejects_invalid_branch_name(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """An illegal git ref name must be rejected with 400 at creation, not surface
+    later as an opaque WorktreeError from `git worktree add -b` during async setup."""
+    # The exact shape that broke the manual test harness: a workspace-name field
+    # accidentally filled with a prompt, slugified into an illegal ref name.
+    bad_name = (
+        "imbue/board-demo-workspaceRun: git checkout -b dev/scu-1634-board-demo  (just create that branch, then stop)."
+    )
+    response = _post_create_worktree_workspace(client, test_project, bad_name)
+    assert response.status_code == 400, response.text
+    assert "not a valid git branch name" in response.json()["detail"]
+
+
+def test_create_worktree_workspace_accepts_valid_branch_name(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    response = _post_create_worktree_workspace(client, test_project, "imbue/board-demo-workspace")
+    assert response.status_code == 200, response.text
+
+
+def test_workspace_working_directory_resolves_per_strategy() -> None:
+    # Clone and worktree checkouts live at <environment_id>/code.
+    assert _workspace_working_directory(WorkspaceInitializationStrategy.CLONE, "/tmp/ws1", "/repo") == "/tmp/ws1/code"
+    assert (
+        _workspace_working_directory(WorkspaceInitializationStrategy.WORKTREE, "/tmp/ws2", "/repo") == "/tmp/ws2/code"
+    )
+    # In-place workspaces work directly in the project's local repo.
+    assert _workspace_working_directory(WorkspaceInitializationStrategy.IN_PLACE, None, "/repo") == "/repo"
+    # No environment yet for an isolated checkout: unknown.
+    assert _workspace_working_directory(WorkspaceInitializationStrategy.CLONE, None, "/repo") is None
+
+
+def test_workspace_endpoints_report_working_directory_and_current_branch(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = client.get("/api/v1/workspaces/recent")
+    assert response.status_code == 200, response.text
+    rows_by_id = {row["objectId"]: row for row in response.json()["workspaces"]}
+    row = rows_by_id[str(workspace.object_id)]
+    # IN_PLACE workspaces work directly in the project's local repo.
+    assert row["workingDirectory"] == str(test_project.get_local_user_path())
+    # The branch scan cache may not have run yet, so only presence is guaranteed.
+    assert "currentBranch" in row
+
+    response = client.get(f"/api/v1/workspaces/{workspace.object_id}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["workingDirectory"] == str(test_project.get_local_user_path())
+    assert "currentBranch" in body
+
+
+def _validate_new_branch_name(client: TestClient, project: Project, name: str) -> dict:
+    response = client.get(
+        f"/api/v1/projects/{project.object_id}/validate-new-branch-name",
+        params={"name": name},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_validate_new_branch_name_reports_validity_and_collision(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    # A fresh, legal name is valid and available.
+    available = _validate_new_branch_name(client, test_project, "imbue/brand-new")
+    assert available == {"isValid": True, "alreadyExists": False}
+
+    # An illegal git ref is flagged invalid (and collision is not reported for it).
+    invalid = _validate_new_branch_name(client, test_project, "has space:and (parens)")
+    assert invalid == {"isValid": False, "alreadyExists": False}
+
+    # An existing branch (the fixture repo's default) is legal but collides.
+    existing = _validate_new_branch_name(client, test_project, "main")
+    assert existing == {"isValid": True, "alreadyExists": True}
 
 
 def test_terminal_agent_does_not_carry_a_model(
@@ -611,6 +712,89 @@ def test_set_model_rejects_claude_harness_without_a_backend_catalog(
     assert response.status_code == 400, response.text
 
 
+_PI_CATALOG = [
+    ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"),
+    ModelOption(provider="anthropic", model_id="claude-haiku-4-5", display_name="Claude Haiku 4.5"),
+]
+
+
+def _create_pi_task_with_catalog(
+    transaction: DataModelTransaction,
+    user_session: UserSession,
+    project: Project,
+    services: CompleteServiceCollection,
+    workspace: Workspace,
+    current_model: ModelOption,
+) -> Task:
+    """A pi task whose state already carries pi's catalog (as the pre-message probe
+    leaves it) but with no live agent — the pre-first-message situation."""
+    task = Task(
+        object_id=TaskID(),
+        user_reference=user_session.user_reference,
+        organization_reference=user_session.organization_reference,
+        project_id=project.object_id,
+        input_data=AgentTaskInputsV2(agent_config=PiAgentConfig(), git_hash="doesn't matter", system_prompt=None),
+        current_state=AgentTaskStateV2(
+            workspace_id=workspace.object_id,
+            available_models=list(_PI_CATALOG),
+            current_model=current_model,
+        ),
+    )
+    services.task_service.create_task(task, transaction)
+    return task
+
+
+def test_set_model_before_first_message_persists_selection_without_a_live_agent(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """A pi model switch made before the first message (no live agent to acknowledge it)
+    optimistically persists the selection onto task state, so the server-driven switcher
+    updates at once, and the request returns rather than hanging (SCU-1605)."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        task = _create_pi_task_with_catalog(
+            transaction, user_session, test_project, test_services, workspace, current_model=_PI_CATALOG[0]
+        )
+    # No agent runs to resolve the switch; the endpoint records the selection and returns.
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
+        json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-haiku-4-5"), is_camel_case=True),
+    )
+    assert response.status_code == 200, response.text
+    with user_session.open_transaction(test_services) as transaction:
+        updated = test_services.task_service.get_task(task.object_id, transaction)
+    assert updated is not None
+    state = AgentTaskStateV2.model_validate(updated.current_state)
+    assert state.current_model is not None
+    assert state.current_model.model_id == "claude-haiku-4-5"
+
+
+def test_set_model_rejects_a_model_not_in_the_catalog(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """A model the agent's catalog does not offer is rejected at the boundary (400)
+    rather than recorded as a selection the agent would never apply."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        task = _create_pi_task_with_catalog(
+            transaction, user_session, test_project, test_services, workspace, current_model=_PI_CATALOG[0]
+        )
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
+        json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-not-a-real-model"), is_camel_case=True),
+    )
+    assert response.status_code == 400, response.text
+    # The rejected request leaves the current model untouched.
+    with user_session.open_transaction(test_services) as transaction:
+        updated = test_services.task_service.get_task(task.object_id, transaction)
+    assert updated is not None
+    state = AgentTaskStateV2.model_validate(updated.current_state)
+    assert state.current_model is not None
+    assert state.current_model.model_id == _PI_CATALOG[0].model_id
+
+
 def test_update_naming_pattern_performs_update(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
@@ -843,39 +1027,19 @@ def test_mark_unread_returns_404_if_agent_does_not_exist(
     assert response.status_code == 404
 
 
-def test_create_agent_sends_intro_message_for_first_agent(
+def test_create_agent_sends_no_messages_the_user_did_not_write(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
-    """First-time users (no existing workspaces/agents) should get an auto-sent /sculptor:help message."""
+    """A promptless agent create starts with an empty message log.
+
+    The user's chat history must contain only messages they actually wrote —
+    onboarding content is offered client-side (the first-run dialog's prompt
+    prefill), where it is visible and editable before it is sent.
+    """
     user_session = authenticate_anonymous(test_services, RequestID())
 
     with user_session.open_transaction(test_services) as transaction:
         workspace = _create_workspace(transaction, test_services, test_project)
-
-    response = client.post(
-        f"/api/v1/workspaces/{workspace.object_id}/agents",
-        json=model_dump(CreateAgentRequest(model=LLMModel.CLAUDE_4_SONNET), is_camel_case=True),
-    )
-    assert response.status_code == 200
-    agent_id = response.json()["id"]
-
-    with user_session.open_transaction(test_services) as transaction:
-        saved_messages = test_services.task_service.get_saved_messages_for_task(TaskID(agent_id), transaction)
-    assert len(saved_messages) == 1
-    intro_msg = saved_messages[0]
-    assert isinstance(intro_msg, ChatInputUserMessage)
-    assert "/sculptor:help" in intro_msg.text
-
-
-def test_create_agent_does_not_send_intro_message_when_agents_exist(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    """Users with existing agents should not get an auto-sent intro message."""
-    user_session = authenticate_anonymous(test_services, RequestID())
-
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-        _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
 
     response = client.post(
         f"/api/v1/workspaces/{workspace.object_id}/agents",
@@ -1038,17 +1202,20 @@ def test_start_task_resolves_agent_type(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
     """Prompt-ful creation honors a chat agent_type and rejects terminal types."""
-    response = client.post(
-        f"/api/v1/projects/{test_project.object_id}/tasks",
-        json=model_dump(
-            StartTaskRequest(
-                prompt="hello pi",
-                model=LLMModel.CLAUDE_4_SONNET,
-                agent_type=AgentTypeName.PI,
+    with patch("sculptor.web.app.compute_authenticated_provider_ids", return_value={"anthropic"}):
+        response = client.post(
+            f"/api/v1/projects/{test_project.object_id}/tasks",
+            json=model_dump(
+                StartTaskRequest(
+                    prompt="hello pi",
+                    backend_model=ModelOption(
+                        provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"
+                    ),
+                    agent_type=AgentTypeName.PI,
+                ),
+                is_camel_case=True,
             ),
-            is_camel_case=True,
-        ),
-    )
+        )
     assert response.status_code == 200, response.text
     task_id = TaskID(response.json()["id"])
     user_session = authenticate_anonymous(test_services, RequestID())
@@ -1188,21 +1355,21 @@ def test_create_agent_without_type_defaults_to_claude_when_mru_unset(
     assert isinstance(_agent_config_for_created(response, test_services), ClaudeCodeSDKAgentConfig)
 
 
-def test_create_agent_pi_mru_falls_back_to_claude_when_pi_disabled(
+def test_create_agent_pi_mru_resolves_pi(
     client: TestClient,
     test_services: CompleteServiceCollection,
     test_project: Project,
     isolated_user_config: None,
 ) -> None:
-    """A stored Pi harness is unusable once the pi agent is disabled."""
-    _set_user_config_with(last_used_agent_type="pi", enable_pi_agent=False)
+    """A stored Pi harness resolves to Pi: it is always an available agent type."""
+    _set_user_config_with(last_used_agent_type="pi")
     user_session = authenticate_anonymous(test_services, RequestID())
     with user_session.open_transaction(test_services) as transaction:
         workspace = _create_workspace(transaction, test_services, test_project)
 
     response = _post_agent(client, workspace, {})
     assert response.status_code == 200, response.text
-    assert isinstance(_agent_config_for_created(response, test_services), ClaudeCodeSDKAgentConfig)
+    assert isinstance(_agent_config_for_created(response, test_services), PiAgentConfig)
 
 
 def test_start_task_terminal_mru_falls_back_to_claude_for_prompt(
@@ -1235,38 +1402,6 @@ def test_create_terminal_agent_with_prompt_is_rejected(
     assert response.status_code == 422
     response = _post_agent(client, workspace, {"agentType": "registered", "prompt": "hi"})
     assert response.status_code == 422
-
-
-def test_first_terminal_agent_gets_no_intro_message(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    user_session = authenticate_anonymous(test_services, RequestID())
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-
-    response = _post_agent(client, workspace, {"agentType": "terminal"})
-    assert response.status_code == 200, response.text
-    task_id = TaskID(response.json()["id"])
-
-    with user_session.open_transaction(test_services) as transaction:
-        messages = test_services.task_service.get_saved_messages_for_task(task_id, transaction)
-    assert not any(isinstance(m, ChatInputUserMessage) for m in messages)
-
-
-def test_first_claude_agent_still_gets_intro_message(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    user_session = authenticate_anonymous(test_services, RequestID())
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-
-    response = _post_agent(client, workspace, {})
-    assert response.status_code == 200, response.text
-    task_id = TaskID(response.json()["id"])
-
-    with user_session.open_transaction(test_services) as transaction:
-        messages = test_services.task_service.get_saved_messages_for_task(task_id, transaction)
-    assert any(isinstance(m, ChatInputUserMessage) for m in messages)
 
 
 # Terminal-agent registrations.

@@ -6,12 +6,13 @@ import type { ReactElement } from "react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { useImbueParams, useWorkspacePageParams } from "~/common/NavigateUtils";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
 import { useSkills } from "~/common/state/hooks/useSkills";
 import { useTaskSupportsSkills } from "~/common/state/hooks/useTaskHelpers";
 import { PanelHeader } from "~/components/panels/PanelHeader";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { draggedPanelIdAtom } from "~/components/sections/transientAtoms.ts";
 import type { SkillType } from "~/components/skillBadge";
 import { SkillChip } from "~/components/skills/SkillChip";
 import { SkillHoverContent } from "~/components/skills/SkillHoverContent";
@@ -20,6 +21,7 @@ import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atom
 
 import styles from "./SkillsPanel.module.scss";
 import { SkillsSearch } from "./SkillsSearch";
+import { activeChatAgentIdAtomFamily } from "./workspaceAgentActions.ts";
 
 const SKILL_TYPE_LABELS: Record<SkillType, string> = {
   builtin: "Built-in",
@@ -49,14 +51,43 @@ const SCROLL_END_DELAY_MS = 150;
 // Minimum gap between the popover and the viewport top/bottom edges. Chips
 // near the edge get clamped so the popover doesn't slide off-screen.
 const VIEWPORT_EDGE_MARGIN_PX = 8;
+// The popover's rendered width can't be known until it mounts, so the
+// collision check uses this estimate (mirrors the `.popover` max-width) to
+// decide, at hover time, whether it would fit to the left of the chip.
+const ESTIMATED_POPOVER_WIDTH_PX = 300;
 
-type PopoverPosition = { x: number; y: number };
+// Which side of the chip the popover sits on. Defaults to "left" (the panel
+// is usually docked on the right), flipping to "right" when a left-docked or
+// narrow layout leaves no room on the left.
+type PopoverSide = "left" | "right";
+
+// Where the popover is anchored: its x/y translate and which side of the chip it
+// sits on. Bundled so the position and its matching side can never desync (a move
+// landing without its flip).
+type PopoverAnchor = { x: number; y: number; side: PopoverSide };
+
+// Anchor the popover to the side of the chip with room for it. `left` anchors
+// at the chip's left edge and the popover extends leftward; `right` anchors at
+// the chip's right edge and it extends rightward. When the chip hugs the
+// viewport's left edge (a narrow/left-docked panel) there's no room on the
+// left, so flip to the right.
+const computePopoverAnchor = (rect: DOMRect): { x: number; side: PopoverSide } => {
+  const hasRoomOnLeft = rect.left - ESTIMATED_POPOVER_WIDTH_PX - VIEWPORT_EDGE_MARGIN_PX >= 0;
+  if (hasRoomOnLeft) {
+    return { x: rect.left, side: "left" };
+  }
+  return { x: rect.right, side: "right" };
+};
 
 export const SkillsPanel = (): ReactElement => {
   const { skills: rawSkills, isLoading, error } = useSkills();
   const chatActions = useAtomValue(chatActionsAtom);
-  const { workspaceID } = useWorkspacePageParams();
-  const { taskID } = useImbueParams();
+  // Identity comes from the section shell, not the route: the capability gate
+  // must reflect the workspace's current chat agent (the one skill inserts
+  // land in), and the route's agent id goes stale when a different center
+  // tab is activated.
+  const workspaceID = useAtomValue(activeWorkspaceIdAtom) ?? "";
+  const taskID = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   // A harness that doesn't support skills collapses the panel to an empty
   // state so the user sees a clear signal instead of stale skill content.
@@ -83,9 +114,18 @@ export const SkillsPanel = (): ReactElement => {
   // hovering schedules an open after OPEN_DELAY_MS (or instantly if a sibling
   // popover closed within the grace period).
   const [popoverSkill, setPopoverSkill] = useState<SkillEntry | null>(null);
-  const [popoverPosition, setPopoverPosition] = useState<PopoverPosition>({ x: 0, y: 0 });
+  const [popoverAnchor, setPopoverAnchor] = useState<PopoverAnchor>({ x: 0, y: 0, side: "left" });
   const [isPopoverVisible, setIsPopoverVisible] = useState(false);
   const [hasAnimated, setHasAnimated] = useState(false);
+
+  // A panel drag passing over the skills list would trip chip mouse-enter and pop a
+  // skill card mid-drag. Track the active drag in a ref so the (stable) chip handler
+  // can suppress the popover without re-subscribing.
+  const isPanelDragging = useAtomValue(draggedPanelIdAtom) !== null;
+  const isPanelDraggingRef = useRef(isPanelDragging);
+  useEffect(() => {
+    isPanelDraggingRef.current = isPanelDragging;
+  }, [isPanelDragging]);
 
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,6 +207,10 @@ export const SkillsPanel = (): ReactElement => {
 
   const handleChipMouseEnter = useCallback(
     (skill: SkillEntry, chipElement: HTMLElement): void => {
+      // Ignore hover triggered by a panel drag passing over the list.
+      if (isPanelDraggingRef.current) {
+        return;
+      }
       isOverChipRef.current = true;
       clearCloseTimer();
 
@@ -182,20 +226,21 @@ export const SkillsPanel = (): ReactElement => {
 
       activeChipElementRef.current = chipElement;
       const rect = chipElement.getBoundingClientRect();
-      const nextPosition = { x: rect.left, y: rect.top + rect.height / 2 };
+      const { x, side } = computePopoverAnchor(rect);
+      const nextAnchor = { x, y: rect.top + rect.height / 2, side };
 
       if (isPopoverVisibleRef.current && activeSkillRef.current?.name !== skill.name) {
         // Already visible — instantly switch content, animate position to the new chip.
         activeSkillRef.current = skill;
         setPopoverSkill(skill);
-        setPopoverPosition(nextPosition);
+        setPopoverAnchor(nextAnchor);
       } else if (!isPopoverVisibleRef.current) {
         // Retarget the pending open to this chip. If a timer is already running
         // from a previous chip, let it finish — it reads activeSkillRef when it
         // fires, so cumulative hover across rows opens for whichever chip the
         // mouse is on at that moment.
         activeSkillRef.current = skill;
-        setPopoverPosition(nextPosition);
+        setPopoverAnchor(nextAnchor);
         scheduleOpenForActiveChip();
       }
     },
@@ -215,7 +260,8 @@ export const SkillsPanel = (): ReactElement => {
       if (chipRect.bottom < areaRect.top || chipRect.top > areaRect.bottom) {
         dismissPopover();
       } else {
-        setPopoverPosition({ x: chipRect.left, y: chipRect.top + chipRect.height / 2 });
+        const { x, side } = computePopoverAnchor(chipRect);
+        setPopoverAnchor({ x, y: chipRect.top + chipRect.height / 2, side });
       }
     }
 
@@ -241,7 +287,8 @@ export const SkillsPanel = (): ReactElement => {
       const el = activeChipElementRef.current;
       if (el !== null) {
         const r = el.getBoundingClientRect();
-        setPopoverPosition({ x: r.left, y: r.top + r.height / 2 });
+        const { x, side } = computePopoverAnchor(r);
+        setPopoverAnchor({ x, y: r.top + r.height / 2, side });
       }
 
       if (isPopoverVisibleRef.current) {
@@ -435,13 +482,13 @@ export const SkillsPanel = (): ReactElement => {
   // that the right reference frame.
   const clampedPopoverY =
     popoverHeight === 0
-      ? popoverPosition.y
+      ? popoverAnchor.y
       : ((): number => {
           const half = popoverHeight / 2;
           const minY = VIEWPORT_EDGE_MARGIN_PX + half;
           const maxY = window.innerHeight - VIEWPORT_EDGE_MARGIN_PX - half;
           if (minY > maxY) return minY;
-          return Math.max(minY, Math.min(popoverPosition.y, maxY));
+          return Math.max(minY, Math.min(popoverAnchor.y, maxY));
         })();
 
   const isDisabled = chatActions.isDisabled;
@@ -588,8 +635,13 @@ export const SkillsPanel = (): ReactElement => {
 
       {isPopoverVisible && popoverSkill !== null && (
         <div
-          className={classnames(styles.popoverHitArea, { [styles.popoverAnimated]: hasAnimated })}
-          style={{ transform: `translate(${popoverPosition.x}px, ${clampedPopoverY}px)` }}
+          className={classnames(styles.popoverHitArea, {
+            [styles.popoverAnimated]: hasAnimated,
+            [styles.popoverRight]: popoverAnchor.side === "right",
+          })}
+          data-skill-popover=""
+          data-side={popoverAnchor.side}
+          style={{ transform: `translate(${popoverAnchor.x}px, ${clampedPopoverY}px)` }}
           onMouseEnter={handlePopoverMouseEnter}
           onMouseLeave={handlePopoverMouseLeave}
         >
@@ -604,4 +656,16 @@ export const SkillsPanel = (): ReactElement => {
       )}
     </Flex>
   );
+};
+
+// The single-instance Skills panel for the section/panel shell: a thin, no-prop
+// wrapper that gates on the active workspace and renders the existing skills
+// content. Keyed on the workspace id so switching workspaces resets the panel's
+// local search/filter state.
+export const SkillsPanelForShell = (): ReactElement | null => {
+  const workspaceId = useAtomValue(activeWorkspaceIdAtom);
+  if (workspaceId === null) {
+    return null;
+  }
+  return <SkillsPanel key={workspaceId} />;
 };

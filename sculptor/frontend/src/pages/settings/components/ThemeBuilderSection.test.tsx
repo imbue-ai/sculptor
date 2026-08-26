@@ -2,7 +2,6 @@ import { Theme } from "@radix-ui/themes";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ElementIds } from "~/api";
@@ -15,11 +14,9 @@ type Store = ReturnType<typeof createStore>;
 const createWrapper =
   (store: Store) =>
   ({ children }: { children: ReactNode }): ReactElement => (
-    <MemoryRouter>
-      <Provider store={store}>
-        <Theme>{children}</Theme>
-      </Provider>
-    </MemoryRouter>
+    <Provider store={store}>
+      <Theme>{children}</Theme>
+    </Provider>
   );
 
 beforeEach(() => localStorage.clear());
@@ -55,14 +52,6 @@ describe("ThemeBuilderSection", () => {
 
       expect(screen.getByTestId(ElementIds.SETTINGS_THEME_BUILDER_RESET)).toBeInTheDocument();
       expect(screen.getByText("Reset to defaults")).toBeInTheDocument();
-    });
-
-    it("renders the component gallery button", () => {
-      const store = createStore();
-      render(<ThemeBuilderSection />, { wrapper: createWrapper(store) });
-
-      expect(screen.getByTestId(ElementIds.SETTINGS_THEME_BUILDER_COMPONENT_GALLERY)).toBeInTheDocument();
-      expect(screen.getByText("Component gallery")).toBeInTheDocument();
     });
 
     it("renders all setting controls with test IDs", () => {

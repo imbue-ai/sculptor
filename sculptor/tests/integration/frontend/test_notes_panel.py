@@ -1,58 +1,33 @@
 """Integration tests for the Notes panel.
 
-The Notes panel is registered in the workspace registry but ships
-disabled by default (`defaultEnabled: false`). Users opt in via
-Settings → Panels. These tests cover that opt-in flow and that notes
-content is scoped per-workspace.
+The Notes panel is a registered single-instance panel, opened on demand from the
+section add-panel dropdown (the old Settings → Panels enable model is gone).
+These tests cover opening it and that notes content is scoped per-workspace.
 """
 
-from collections.abc import Iterator
-
-import pytest
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.notes_panel import get_notes_panel
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
-def _set_notes_panel_enabled(page: Page, enabled: bool) -> None:
-    """Toggle the Notes panel via Settings → Panels (idempotent)."""
-    settings_page = navigate_to_settings_page(page=page)
-    panels = settings_page.click_on_panels()
-    panels.set_panel_enabled("notes", enabled)
-
-
-@pytest.fixture(autouse=True)
-def _reset_notes_panel(sculptor_instance_: SculptorInstance) -> Iterator[None]:
-    """Disable the Notes panel after each test.
-
-    The enabled state lives in localStorage and is shared across tests in
-    the same instance, so a leaked `notes: true` would change the default
-    behaviour for the next test.
-    """
-    yield
-    _set_notes_panel_enabled(sculptor_instance_.page, enabled=False)
-
-
-@user_story("to enable the Notes panel from the Panels settings page and see it in the workspace sidebar")
-def test_enable_notes_panel_reveals_icon_and_renders_editor(sculptor_instance_: SculptorInstance) -> None:
-    """Enabling Notes from Settings → Panels should reveal the sidebar icon
-    and let the user open the editor."""
+@user_story("to open the Notes panel and write in its editor")
+def test_open_notes_panel_renders_editor(sculptor_instance_: SculptorInstance) -> None:
+    """Opening Notes from the add-panel dropdown renders its editor."""
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello")
 
-    _set_notes_panel_enabled(page, enabled=True)
-    page.go_back()
-
     notes = get_notes_panel(page)
     notes.open()
     expect(notes).to_be_visible()
+    editor = notes.get_editor()
+    expect(editor).to_be_visible()
+    type_into_tiptap(page, editor, "a quick note")
+    expect(editor).to_contain_text("a quick note")
 
 
 @user_story("to jot notes in one workspace and have them stay scoped to that workspace")
@@ -61,9 +36,6 @@ def test_notes_content_is_scoped_per_workspace(sculptor_instance_: SculptorInsta
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello", workspace_name="Notes-A")
-
-    _set_notes_panel_enabled(page, enabled=True)
-    page.go_back()
 
     notes = get_notes_panel(page)
     notes.open()

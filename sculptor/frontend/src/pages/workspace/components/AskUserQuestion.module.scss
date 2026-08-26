@@ -15,7 +15,71 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  // Cap a tall question so the chat above stays readable and the footer stays
+  // reachable; the body scrolls inside. The drag handle overrides this with an
+  // inline max-height, and mobile bumps the cap below.
+  max-height: 55dvh; // stylelint-disable-line sculptor/no-hardcoded-values
+  min-height: 0;
   padding: var(--space-4) var(--space-5);
+}
+
+// Composed onto the shared, accessible ResizeHandle (components/sections): the
+// base class owns the line, hit area, and hover/active states; this adds a
+// centered grip pill for discoverability plus a keyboard-focus ring on it.
+.resizeHandle {
+  &::after {
+    background: var(--gray-8);
+    border-radius: var(--radius-2);
+    content: "";
+    height: 4px; // stylelint-disable-line sculptor/no-hardcoded-values
+    left: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px; // stylelint-disable-line sculptor/no-hardcoded-values
+  }
+
+  &:focus-visible {
+    outline: none;
+  }
+
+  &:hover::after {
+    background: var(--gray-10);
+  }
+
+  &[data-resize-handle-active]::after {
+    background: var(--accent-9);
+  }
+
+  &:focus-visible::after {
+    background: var(--accent-9);
+    outline: 2px solid var(--accent-a8); // stylelint-disable-line sculptor/no-hardcoded-values
+    outline-offset: 2px; // stylelint-disable-line sculptor/no-hardcoded-values
+  }
+}
+
+.header {
+  flex: 0 0 auto;
+}
+
+.scrollBody {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: var(--gray-7) transparent;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 8px; // stylelint-disable-line sculptor/no-hardcoded-values
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--gray-7);
+    border-radius: var(--radius-3);
+  }
 }
 
 .headerChip {
@@ -137,8 +201,19 @@
 .footer {
   align-items: center;
   display: flex;
+  flex: 0 0 auto;
   justify-content: space-between;
   padding-top: var(--space-1);
+  position: relative;
+}
+
+// Scroll cue shown when options run below the fold. Radix `Button` styles the
+// pill; JS positions it (left/top): centered in the panel, deflecting left to
+// clear the footer buttons, top-aligned with them.
+.morePill {
+  border-radius: var(--radius-6);
+  position: absolute;
+  white-space: nowrap;
 }
 
 .navigation {
@@ -204,5 +279,20 @@
   &:disabled { // stylelint-disable-line no-descending-specificity
     background: var(--accent-5);
     cursor: not-allowed;
+  }
+}
+
+// The card caps and scrolls its body on every viewport (see `.card`). A short
+// phone screen needs a taller cap to fit a usable number of options, and touch
+// has no precise drag affordance, so mobile bumps the cap and drops the resize
+// handle. Gated on html.mobileUx (the app's single mobile/desktop verdict,
+// never set in the Electron renderer — see index.css / useLayoutMode.ts).
+:global(html.mobileUx) {
+  .card {
+    max-height: 70dvh; // stylelint-disable-line sculptor/no-hardcoded-values
+  }
+
+  .resizeHandle {
+    display: none;
   }
 }

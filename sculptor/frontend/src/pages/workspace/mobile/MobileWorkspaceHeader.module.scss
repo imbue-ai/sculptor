@@ -1,0 +1,60 @@
+/* MobileWorkspaceHeader (H1-H4). Background matches the status-bar region for a
+   seamless top (H4); border separates it from the content. Owns the top
+   safe-area inset (zeroes off iOS). */
+.header {
+  align-items: center;
+
+  /* Matches the chat body (--gray-2) so the header reads as part of the same
+     continuous surface (unified with .shell / .pager). */
+  background: var(--mobile-surface-2);
+  border-bottom: 1px solid var(--mobile-line);
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  padding-top: calc(var(--space-1) + env(safe-area-inset-top));
+  position: relative;
+  z-index: var(--z-dropdown);
+}
+
+.iconButton {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-3);
+  color: var(--mobile-ink);
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.iconButton:hover {
+  background: var(--mobile-press);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--space-1);
+  text-align: center;
+}
+
+.name {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuMeta {
+  color: var(--mobile-ink-3);
+  font-size: var(--font-size-1);
+  margin-left: auto;
+  padding-left: var(--space-3);
+}

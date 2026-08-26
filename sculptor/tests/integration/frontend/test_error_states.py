@@ -12,7 +12,10 @@ Covers:
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.playwright_utils import navigate_to_home_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -142,12 +145,10 @@ def test_api_error_shows_error_in_workspace_peek_and_clears_on_return(
     )
 
     # Step 2: Navigate away before the error fires.
-    navigate_to_add_workspace_page(page)
+    navigate_to_home_page(page)
 
-    # Step 3: Hover the workspace tab to open the peek popover.  Use a
-    # timeout that accounts for the delay — the error hasn't fired yet.
-    workspace_tab = task_page.get_workspace_tabs().first
-    workspace_tab.hover()
+    # Step 3: Hover the sidebar workspace row to open the peek popover.
+    get_workspace_sidebar(page).get_workspace_rows().first.hover()
 
     workspace_peek = task_page.get_workspace_peek_popover()
     expect(workspace_peek).to_be_visible()
@@ -156,14 +157,14 @@ def test_api_error_shows_error_in_workspace_peek_and_clears_on_return(
     banner = workspace_peek.get_banner()
     expect(banner).to_contain_text("error")
 
-    # Step 4: Navigate back to the workspace by clicking the tab.
+    # Step 4: Navigate back to the workspace by clicking the sidebar row.
     page.mouse.move(0, 0)  # Dismiss the popover first.
-    workspace_tab.click()
+    navigate_to_workspace(page)
 
     # The agent tab dot should revert to read (gray) — the error is
     # acknowledged by viewing the workspace.
-    agent_tab = task_page.get_agent_tab_bar().get_agent_tabs().first
-    expect(agent_tab).to_have_attribute("data-dot-status", "read")
+    first_tab = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first
+    expect(first_tab).to_have_attribute("data-dot-status", "read")
 
 
 # ---------------------------------------------------------------------------
@@ -191,11 +192,10 @@ def test_crash_shows_error_in_workspace_peek_and_persists_on_return(
     )
 
     # Step 2: Navigate away before the crash fires.
-    navigate_to_add_workspace_page(page)
+    navigate_to_home_page(page)
 
-    # Step 3: Hover the workspace tab to open the peek popover.
-    workspace_tab = task_page.get_workspace_tabs().first
-    workspace_tab.hover()
+    # Step 3: Hover the sidebar workspace row to open the peek popover.
+    get_workspace_sidebar(page).get_workspace_rows().first.hover()
 
     workspace_peek = task_page.get_workspace_peek_popover()
     expect(workspace_peek).to_be_visible()
@@ -204,11 +204,11 @@ def test_crash_shows_error_in_workspace_peek_and_persists_on_return(
     banner = workspace_peek.get_banner()
     expect(banner).to_contain_text("error")
 
-    # Step 4: Navigate back to the workspace by clicking the tab.
+    # Step 4: Navigate back to the workspace by clicking the sidebar row.
     page.mouse.move(0, 0)  # Dismiss the popover first.
-    workspace_tab.click()
+    navigate_to_workspace(page)
 
     # The agent tab dot should STILL be red — the crash requires an explicit
     # restore, not just viewing the workspace.
-    agent_tab = task_page.get_agent_tab_bar().get_agent_tabs().first
-    expect(agent_tab).to_have_attribute("data-dot-status", "error")
+    first_tab = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs().first
+    expect(first_tab).to_have_attribute("data-dot-status", "error")

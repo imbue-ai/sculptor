@@ -41,6 +41,17 @@
 }
 
 /* =============================================================================
+   WINDOW CHROME
+   ============================================================================= */
+
+:root {
+  /* Height of the draggable window-titlebar strip and of the chrome rows that
+     align with it: the sidebar's window-controls row and the floating
+     collapsed-sidebar toggle. Sized to clear the macOS traffic-light buttons. */
+  --titlebar-height: 40px;
+}
+
+/* =============================================================================
    Z-INDEX SCALE
    Defined stacking contexts to prevent z-index conflicts.
    ============================================================================= */

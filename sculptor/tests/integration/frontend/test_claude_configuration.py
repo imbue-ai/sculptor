@@ -13,6 +13,7 @@ from sculptor.testing.elements.chat_panel import expect_message_to_have_role
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -142,11 +143,10 @@ def test_claude_configuration_changes_are_picked_up_after_restart(
     slash_command_filename.parent.mkdir(parents=True, exist_ok=True)
     slash_command_filename.write_text("What is the current day of the week?")
     with sculptor_instance_factory_.spawn_instance() as instance:
-        task_page = PlaywrightTaskPage(page=instance.page)
-        # Navigate to workspace tab to access the existing task
-        workspace_tab = task_page.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        page = instance.page
+        task_page = PlaywrightTaskPage(page=page)
+        # Navigate to the workspace row to access the existing task
+        navigate_to_workspace(page)
         chat_panel = task_page.get_chat_panel()
         expect(chat_panel).to_be_visible()
         send_chat_message(

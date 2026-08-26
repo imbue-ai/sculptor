@@ -23,8 +23,9 @@ from typing import Any
 import playwright.sync_api
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.pages.home_page import PlaywrightHomePage
@@ -270,10 +271,12 @@ def _assert_subset(expected: dict[str, Any], actual: dict[str, Any]) -> None:
 
 WORKSPACE_CREATE_KEYS = {"id", "repo_id", "description", "strategy", "source_branch"}
 
-WORKSPACE_LIST_ALL_KEYS = {
+WORKSPACE_SHOW_KEYS = {
     "id",
     "repo_id",
     "repo_path",
+    "working_directory",
+    "current_branch",
     "description",
     "strategy",
     "source_branch",
@@ -283,11 +286,13 @@ WORKSPACE_LIST_ALL_KEYS = {
     "last_activity_at",
 }
 
+WORKSPACE_LIST_ALL_KEYS = WORKSPACE_SHOW_KEYS | {"is_self"}
+
 REPO_KEYS = {"id", "name", "path", "accessible", "created_at"}
 
 AGENT_CREATE_KEYS = {"id", "title", "status", "model", "workspace_id", "created_at"}
 
-AGENT_LIST_KEYS = {"id", "title", "status", "model", "workspace_id", "created_at"}
+AGENT_LIST_KEYS = {"id", "title", "status", "model", "workspace_id", "created_at", "is_self"}
 
 AGENT_SHOW_KEYS = {
     "id",
@@ -307,6 +312,7 @@ AGENT_SHOW_KEYS = {
     "task_total",
     "current_task_subject",
     "waiting_detail",
+    "waiting_options",
     "error_detail",
 }
 
@@ -317,6 +323,7 @@ AGENT_STATUS_KEYS = {
     "current_activity",
     "last_activity",
     "waiting_detail",
+    "waiting_options",
     "error_detail",
     "task_completed",
     "task_total",
@@ -377,7 +384,7 @@ def test_workspace_show_via_cli(sculptor_instance_: SculptorInstance) -> None:
     assert exit_code == 0, f"workspace show failed: {output}"
     detail = json.loads(output)
 
-    assert set(detail.keys()) == WORKSPACE_LIST_ALL_KEYS
+    assert set(detail.keys()) == WORKSPACE_SHOW_KEYS
     _assert_subset(
         {
             "id": ws_id,
@@ -810,7 +817,7 @@ def test_agent_delete_via_cli(sculptor_instance_: SculptorInstance) -> None:
     assert exit_code == 0
     agent_id = json.loads(output)["id"]
 
-    exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "delete", agent_id, "--workspace", ws_id])
+    exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "delete", agent_id, "--workspace", ws_id, "--yes"])
     assert exit_code == 0, f"agent delete failed: {output}"
     deleted = json.loads(output)
     assert deleted == {"deleted": True, "id": agent_id}
@@ -1128,6 +1135,7 @@ def _expected_status_event(agent_id: str) -> dict[str, Any]:
             "current_activity": ANY_STR_OR_NONE,
             "last_activity": ANY_STR_OR_NONE,
             "waiting_detail": None,
+            "waiting_options": None,
             "error_detail": None,
             "task_completed": 0,
             "task_total": 0,
@@ -1380,14 +1388,17 @@ def test_sculpt_agent_send_types_into_registered_terminal_agent_pty(
         f'display_name = "Fake Prompts"\nlaunch_command = "{_FAKE_PROMPTS_COMMAND}"\naccepts_automated_prompts = true\n'
     )
     try:
-        # Launch the registered terminal agent and wait until it is at its prompt.
-        agent_tab_bar = PlaywrightAgentTabBarElement(page)
-        agent_tab_bar.open_agent_type_menu()
-        registered_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-prompts")
+        # Launch the registered terminal agent via the section `+` add-panel
+        # dropdown and wait until it is at its prompt.
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        registered_item = dropdown.get_agent_type_item_registered("fake-prompts")
         expect(registered_item).to_be_visible()
         registered_item.click()
 
-        prompts_tab = agent_tab_bar.get_agent_tab_by_name("Fake Prompts 1").first
+        prompts_tab = panel_tabs.get_panel_tab_by_name("Fake Prompts 1").first
         expect(prompts_tab).to_be_visible()
         expect(get_agent_terminal_panel(page)).to_be_visible()
         wait_for_xterm_substring(page, "FAKE-PROMPTS-BANNER")

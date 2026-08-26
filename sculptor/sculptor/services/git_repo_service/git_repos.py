@@ -40,6 +40,11 @@ class ReadOnlyGitRepo(MutableModel, ABC):
     @abstractmethod
     def is_branch_ref(self, branch: str) -> bool: ...
 
+    @abstractmethod
+    def is_valid_branch_name(self, branch: str) -> bool:
+        """Whether `branch` is a legal git branch name (per `git check-ref-format`)."""
+        ...
+
 
 class WritableGitRepo(ReadOnlyGitRepo, ABC):
     """

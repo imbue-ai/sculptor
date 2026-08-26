@@ -1,11 +1,9 @@
 import { getDefaultStore } from "jotai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import type { UserConfig } from "~/api";
-import { SETTINGS_SECTIONS, SettingsSection } from "~/pages/settings/sections.ts";
+import { SETTINGS_SECTIONS } from "~/pages/settings/sections.ts";
 
 import { DEFAULT_THEME_BUILDER_SETTINGS, themeBuilderSettingsAtom } from "../../../common/state/atoms/themeBuilder.ts";
-import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { buildSettingsCommands } from "../builtinCommands/settings.ts";
 import type { CommandRuntime } from "../runtime.ts";
 
@@ -20,16 +18,16 @@ const noop = (): void => {};
 const makeRuntime = (): CommandRuntime =>
   ({
     store: getDefaultStore(),
-    navigate: { toHome: noop, toSettings: vi.fn(), toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    navigate: { toHome: noop, toSettings: vi.fn(), toWorkspace: vi.fn(), toAgent: vi.fn() },
+    openNewWorkspaceModal: noop,
+    openLayoutsModal: noop,
+    openSaveLayoutModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
-      toggleZenMode: noop,
-      toggleFocusMode: noop,
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
-      togglePanel: noop,
       setTheme: noop,
       focusChatInput: noop,
       showChatSearch: noop,
@@ -45,12 +43,6 @@ const makeRuntime = (): CommandRuntime =>
   }) as unknown as CommandRuntime;
 
 describe("Settings section drift", () => {
-  // The Plugins section is gated on the experimental frontend-plugins flag
-  // at both consumers; turn it on so the parity checks cover every section.
-  beforeEach(() => {
-    getDefaultStore().set(userConfigAtom, { enableFrontendPlugins: true } as unknown as UserConfig);
-  });
-
   it("every section in SETTINGS_SECTIONS has a corresponding palette command", () => {
     getDefaultStore().set(themeBuilderSettingsAtom, { ...DEFAULT_THEME_BUILDER_SETTINGS });
     const cmds = buildSettingsCommands(makeRuntime());
@@ -77,12 +69,6 @@ describe("Settings section drift", () => {
     }
   });
 
-  it("excludes the Plugins section when the frontend-plugins flag is off", () => {
-    getDefaultStore().set(userConfigAtom, null);
-    const cmds = buildSettingsCommands(makeRuntime());
-    expect(cmds.some((c) => c.id === `settings.page.${SettingsSection.PLUGINS.toLowerCase()}`)).toBe(false);
-  });
-
   it("palette command performs runtime.navigate.toSettings with the section id", () => {
     const runtime = makeRuntime();
     for (const section of SETTINGS_SECTIONS) {
@@ -90,12 +76,12 @@ describe("Settings section drift", () => {
       expect(cmd).toBeDefined();
       cmd!.perform({
         ctx: {
-          route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+          route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
           activeWorkspaceId: null,
           activeAgentId: null,
           hasChatPanel: false,
           hasTerminalPanel: false,
-          isZenMode: false,
+          isSectionMaximized: false,
           page: null,
         },
         keepOpen: false,

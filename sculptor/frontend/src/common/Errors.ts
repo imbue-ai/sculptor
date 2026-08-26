@@ -40,3 +40,17 @@ export class HTTPException extends Error {
     this.detail = detail;
   }
 }
+
+/**
+ * Extract a human-readable message from an unknown error, falling back to a default.
+ */
+export const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof HTTPException) {
+    return error.detail;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+};

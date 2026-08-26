@@ -24,6 +24,7 @@ import httpx
 
 from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.services.pi_version import PI_PINNED_VERSION
 
 
 class BlockedVersionRange(FrozenModel):
@@ -50,9 +51,9 @@ class PlatformPin(FrozenModel):
 class PiPin(FrozenModel):
     """The static, in-repo source of truth for the managed pi distribution.
 
-    pi publishes no checksums, so Sculptor computes them per version
-    (``scripts/compute_pi_pin.py``) and bakes them here; the install path verifies
-    downloads against these pinned values.
+    Sculptor computes pi's digests itself per version (``just bump-pi``, which
+    cross-checks upstream's published ``SHA256SUMS``) and bakes them here; the
+    install path verifies downloads against these pinned values only.
     """
 
     version: str
@@ -62,23 +63,20 @@ class PiPin(FrozenModel):
     plugin_set_revision: str = "bundled"
 
 
-# ``version`` is a literal, not an import of ``PI_VERSION_RANGE``: the dependency
-# service imports this module, so importing it back would be a cycle. A unit test
-# asserts the two stay equal.
 PI_PIN = PiPin(
-    version="0.78.0",
+    version=PI_PINNED_VERSION,
     platforms={
         "darwin-arm64": PlatformPin(
             asset="pi-darwin-arm64.tar.gz",
-            sha256="68ebbe4f56a136a1c7bace3393eca4ad0aa1fd9f253b797fd370058bd39fe070",
+            sha256="4406ed227c486f2e3c16cf14f793dc3ad46b5d01bf69135a2424cffa58a9a34b",
         ),
         "darwin-x64": PlatformPin(
             asset="pi-darwin-x64.tar.gz",
-            sha256="66074b271260068199f47738a172397f1e0b5a3334697dd2acea35bbd3470b1c",
+            sha256="892b3f385ae6779299c07a25d9280183897fcf755f7226f6b36c70d268f321be",
         ),
         "linux-x64": PlatformPin(
             asset="pi-linux-x64.tar.gz",
-            sha256="8ac03343d1e1228106e8172157f32d6b882829e46b34feaf577f171a5f1387cc",
+            sha256="ab6604f6c3f3d050783e7abbbdd1f79b775b20f3969833ce9721740685d01e13",
         ),
     },
 )
@@ -115,6 +113,11 @@ class ManagedTool(ABC):
     # known per tool, so the offline binary-resolution read path can find a staged
     # binary without resolving a (possibly network-bound) distribution.
     binary_subpath: str
+    # Whether startup auto-install may download this tool when no managed copy exists
+    # yet. A required tool (Claude) bootstraps itself on first run; an optional one
+    # (pi) is first installed only by explicit user action, and startup merely
+    # refreshes an already-downloaded copy that has fallen out of the pinned range.
+    installs_on_startup_when_missing: bool
 
     @abstractmethod
     def resolve_distribution(self) -> ResolvedDistribution:
@@ -166,12 +169,13 @@ _PI_PLATFORM_MAP: dict[tuple[str, str], str] = {
 
 _PI_RELEASE_BASE_URL = "https://github.com/earendil-works/pi/releases/download"
 
-# Built from the pin rather than imported from the service's ``PI_VERSION_RANGE`` (that
-# reverse import would cycle); a unit test asserts the two stay equal.
-_PI_VERSION_RANGE = VersionRange(
-    min_version=PI_PIN.version,
-    max_version=PI_PIN.version,
-    recommended_version=PI_PIN.version,
+# Defined here, not in the dependency service, so ``PiManagedTool`` can reference it
+# without importing the service (which imports this module — a cycle). The service
+# re-exports it.
+PI_VERSION_RANGE = VersionRange(
+    min_version=PI_PINNED_VERSION,
+    max_version=PI_PINNED_VERSION,
+    recommended_version=PI_PINNED_VERSION,
 )
 
 
@@ -183,17 +187,20 @@ def _current_pi_platform_key() -> str:
 class PiManagedTool(ManagedTool):
     """Managed-install conformer for pi.
 
-    pi publishes per-platform tarballs and no checksums of its own, so the
-    distribution descriptor is built entirely from the static ``PI_PIN`` (no network
-    to resolve it) and verified against the baked sha256 at download time.
+    pi publishes per-platform tarballs; the distribution descriptor is built
+    entirely from the static ``PI_PIN`` (no network to resolve it) and verified
+    against the baked sha256 at download time.
     """
 
     tool = Dependency.PI
-    version_range = _PI_VERSION_RANGE
+    version_range = PI_VERSION_RANGE
     platform_keys = frozenset({"darwin-arm64", "darwin-x64", "linux-x64"})
     retention_keep = 1
     # pi keeps its whole extracted tree and runs from ``pi/pi``.
     binary_subpath = "pi/pi"
+    # pi is an optional harness: its managed copy is downloaded only when the user
+    # asks for it (onboarding or Settings), never by startup.
+    installs_on_startup_when_missing = False
 
     def resolve_distribution(self) -> ResolvedDistribution:
         platform_key = _current_pi_platform_key()
@@ -233,9 +240,18 @@ _CLAUDE_MANIFEST_FETCH_TIMEOUT_SECONDS = 30.0
 # the existing service -> managed_tools edge, which would be an import cycle. The
 # service re-imports this constant for its status / version-range logic.
 CLAUDE_VERSION_RANGE = VersionRange(
-    min_version="2.1.170",
+    # Floor is 2.1.202: earlier releases mishandle a session resume that carries
+    # `stopped` background-task notifications (left over from tasks killed by a
+    # prior interrupt). The CLI can deliver such a notification so that the user
+    # turn being awaited never emits its own terminating `result`, which wedges
+    # the chat in a perpetual "streaming" state. The resume-of-background-tasks
+    # path was reworked in 2.1.198; 2.1.202 is the earliest release validated
+    # against this failure. Do not lower this without re-validating that case.
+    min_version="2.1.202",
     max_version="2.99.99",
-    recommended_version="2.1.170",
+    # Recommended is the latest validated release; bumped to pull in Claude
+    # Opus 5 support (SCU-1841).
+    recommended_version="2.1.222",
     # Blocked versions create background tool invocations that are missing events
     # describing them.
     blocked_versions=(BlockedVersionRange(min_version="2.1.101", max_version="2.1.101"),),
@@ -293,6 +309,8 @@ class ClaudeManagedTool(ManagedTool):
     retention_keep = 2
     # Claude's single binary sits directly at ``claude`` in the version dir.
     binary_subpath = "claude"
+    # Claude is required, so a missing MANAGED binary is installed on startup.
+    installs_on_startup_when_missing = True
 
     def resolve_distribution(self) -> ResolvedDistribution:
         platform_key = _current_claude_platform_key()

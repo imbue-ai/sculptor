@@ -1,7 +1,7 @@
 import { Flex, Select, Text } from "@radix-ui/themes";
 import { useSetAtom } from "jotai";
 import { FolderOpenIcon, PlusIcon } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useCallback, useState } from "react";
 
 import type { Project } from "../api";
@@ -34,6 +34,17 @@ type RepoSelectorProps = {
   selectedProjectId: string | null;
   onProjectChange: (projectId: string) => void;
   className?: string;
+  /**
+   * Overrides the trigger's default `📁 repo <name>` content. Used by the
+   * new-workspace modal to render a breadcrumb-style avatar crumb instead.
+   */
+  triggerContent?: ReactNode;
+  /**
+   * Hide the inline "repo" label in the DEFAULT trigger, showing just the icon
+   * + repo name. The mobile landing's subtle `repo · origin/main` meta line
+   * omits the label to match its mock. Ignored when `triggerContent` is set.
+   */
+  hideLabel?: boolean;
 };
 
 export const RepoSelector = ({
@@ -41,6 +52,8 @@ export const RepoSelector = ({
   selectedProjectId,
   onProjectChange,
   className,
+  triggerContent,
+  hideLabel = false,
 }: RepoSelectorProps): ReactElement => {
   const [toast, setToast] = useState<ToastContent | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -97,13 +110,15 @@ export const RepoSelector = ({
         disabled={projects.length === 0}
       >
         <Select.Trigger variant="ghost" className={className} data-testid={ElementIds.PROJECT_SELECTOR}>
-          <Flex align="center" gap="1">
-            <FolderOpenIcon size={12} />
-            <Text className={styles.selectorLabel}>repo</Text>
-            <Text truncate size="1">
-              {displayName}
-            </Text>
-          </Flex>
+          {triggerContent ?? (
+            <Flex align="center" gap="1">
+              <FolderOpenIcon size={12} />
+              {!hideLabel && <Text className={styles.selectorLabel}>repo</Text>}
+              <Text truncate size="1">
+                {displayName}
+              </Text>
+            </Flex>
+          )}
         </Select.Trigger>
         <Select.Content position="popper" side="bottom" sideOffset={5} className={styles.selectContent}>
           {projects.map((project) => {

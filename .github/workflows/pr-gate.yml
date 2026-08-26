@@ -9,6 +9,13 @@ name: PR Gate
 # Uses pull_request_target so it can comment/close on PRs from forks. It does NOT
 # check out or run any PR code, so untrusted code never executes here. Keep it
 # that way — see README.md in this directory (rule 1) before adding a checkout.
+#
+# Fails OPEN: closing a PR is disruptive and looks like a rejection, so the gate
+# only closes when it can POSITIVELY confirm the author is an uncleared external
+# contributor. If an API call fails for any reason other than a definitive 404
+# (transient 5xx, network blip, rate limit), the job leaves the PR untouched
+# rather than risk closing a maintainer's PR. github-script retries handle the
+# usual transient blips before they ever reach that fail-open path.
 
 on:
   pull_request_target:
@@ -24,6 +31,9 @@ jobs:
       - name: Check PR author
         uses: actions/github-script@v7
         with:
+          # Retry transient failures (5xx/network) so they don't reach the
+          # fail-open catch below and leave the gate silently not-enforcing.
+          retries: 3
           script: |
             const APPROVED_FILE = '.github/APPROVED_CONTRIBUTORS';
             const prAuthor = context.payload.pull_request.user.login;
@@ -35,6 +45,9 @@ jobs:
               return;
             }
 
+            // Returns the author's permission string, or null only when GitHub
+            // definitively reports the user is not a collaborator (404). Any
+            // other error propagates so the caller can fail open.
             async function getPermission(username) {
               try {
                 const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
@@ -43,8 +56,9 @@ jobs:
                   username,
                 });
                 return data.permission;
-              } catch {
-                return null;
+              } catch (e) {
+                if (e.status === 404) return null;
+                throw e;
               }
             }
 
@@ -58,14 +72,25 @@ jobs:
               return users;
             }
 
-            // Maintainers are always exempt.
-            const permission = await getPermission(prAuthor);
+            // Maintainers are always exempt. Fail open: if we can't determine
+            // the author's permission (anything other than a definitive 404),
+            // leave the PR alone rather than risk closing a maintainer's PR.
+            let permission;
+            try {
+              permission = await getPermission(prAuthor);
+            } catch (e) {
+              console.log(`Could not determine ${prAuthor}'s permission (status ${e.status}); leaving PR open`);
+              return;
+            }
             if (['admin', 'maintain', 'write'].includes(permission)) {
               console.log(`${prAuthor} is a collaborator (${permission})`);
               return;
             }
 
-            // Cleared external contributors are exempt.
+            // Cleared external contributors are exempt. A missing file (404)
+            // legitimately means "no one cleared yet"; any other read error is
+            // ambiguous, so fail open rather than treat the list as empty and
+            // close someone who is actually on it.
             let approvedContent = '';
             try {
               const { data } = await github.rest.repos.getContent({
@@ -75,7 +100,11 @@ jobs:
                 ref: defaultBranch,
               });
               approvedContent = Buffer.from(data.content, 'base64').toString('utf8');
-            } catch {
+            } catch (e) {
+              if (e.status !== 404) {
+                console.log(`Could not read ${APPROVED_FILE} (status ${e.status}); leaving PR open`);
+                return;
+              }
               console.log(`No ${APPROVED_FILE} found; treating as empty`);
             }
             if (parseApprovedUsers(approvedContent).has(prAuthor.toLowerCase())) {

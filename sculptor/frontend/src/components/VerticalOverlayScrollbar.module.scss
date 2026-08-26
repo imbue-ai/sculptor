@@ -1,0 +1,37 @@
+.track {
+  // The strip is inert: a pointer-down off the thumb falls through to the resize
+  // handle behind it, so the splitter still owns the rest of the panel edge.
+  pointer-events: none;
+  // Positioned in viewport coordinates (top/left/width/height set inline from the
+  // host's bounding rect); `fixed` so no ancestor `overflow` clips the overlay.
+  position: fixed;
+  z-index: var(--z-sticky);
+}
+
+.thumb {
+  background-color: var(--scrollbar-thumb-color);
+  border-radius: var(--scrollbar-thumb-radius);
+  cursor: grab;
+  // The only interactive part: hovering or dragging the thumb owns the pointer
+  // over the panel edge, blocking the resize handle there.
+  pointer-events: auto;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transition:
+    width var(--duration-fast),
+    background-color var(--duration-fast);
+  width: var(--scrollbar-size);
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+// Widen the whole column (thumb included) once the thumb is hovered or dragged:
+// a larger drag target that, while expanded, blocks the panel resize.
+.active .thumb {
+  background-color: var(--scrollbar-thumb-color-hover);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- expanded thumb width; no token for the wide state
+  width: 12px;
+}

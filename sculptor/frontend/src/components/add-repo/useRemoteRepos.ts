@@ -26,7 +26,7 @@ export const REMOTE_REPOS_INITIAL_LIMIT = 5;
 export const normalizeQuery = (q: string): string => q.trim().toLowerCase();
 
 // Keys live under the host's reserved `SCULPTOR_QUERY_KEY_PREFIX` namespace so
-// runtime-loaded plugins keyed on the same root can't collide with this cache.
+// runtime-loaded extensions keyed on the same root can't collide with this cache.
 export const remoteReposQueryKey = (
   provider: RemoteProvider,
   q: string,
@@ -82,8 +82,9 @@ export const prefetchInitialRemoteRepos = (provider: RemoteProvider): Promise<vo
       staleTime: REMOTE_REPOS_STALE_TIME_MS,
       gcTime: REMOTE_REPOS_GC_TIME_MS,
     })
-    .catch(() => {
-      // Swallow — the hook will retry/handle on mount.
+    .catch((error) => {
+      // Best-effort warm-up: the hook will retry and surface errors on mount.
+      console.warn("Failed to prefetch remote repos; the combobox will retry on mount.", error);
     });
 
 export const useRemoteRepos = (

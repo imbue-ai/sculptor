@@ -1,0 +1,10 @@
+[rule]
+id = "no-fire-and-forget-api-catch"
+description = "Swallowed API rejection (`.catch(() => {`). If an optimistic local write (query cache or atom) preceded this call, a swallowed failure leaves that value on screen forever — the WS delta stream only re-sends an entity when it changes server-side, so it never heals a *failed* mutation. Use a useMutation hook from src/common/state/mutations/ (snapshot in onMutate, version-checked rollback in onError). Pure fire-and-forget with no local write (telemetry, reply-POSTs) is exempt: keep it within the frozen count in ratchet-counts.toml, bumping only with justification."
+severity = "warning"
+
+[match]
+pattern = "\\.catch\\(\\(\\) => \\{"
+languages = ["typescript"]
+include = ["sculptor/frontend/src/**/*.ts", "sculptor/frontend/src/**/*.tsx"]
+exclude = ["sculptor/frontend/src/**/*.test.ts", "sculptor/frontend/src/**/*.test.tsx"]

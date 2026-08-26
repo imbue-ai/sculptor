@@ -33,6 +33,14 @@ from pydantic import ValidationError
 from sculptor.foundation.pydantic_serialization import SerializableModel
 
 
+# Per-assistant-message token usage pi reports (RPC Types "AssistantMessage").
+# The wire field is `usage.{input,output,...}`; only input/output are consumed
+# for the turn footer, and `extra="allow"` retains the cost/cache sub-fields.
+class AgentMessageUsage(SerializableModel):
+    input: int | None = None
+    output: int | None = None
+
+
 # `content` is untyped dicts: pi interleaves text and toolCall blocks, and only
 # the text blocks are consumed here.
 class AgentMessage(SerializableModel):
@@ -42,6 +50,9 @@ class AgentMessage(SerializableModel):
     # The model id pi reports as having produced this message (assistant
     # messages); absent on other roles.
     model: str | None = None
+    # Per-message token usage (assistant messages); absent on other roles. Summed
+    # across a run's assistant messages for the turn footer (see `sum_message_usage`).
+    usage: AgentMessageUsage | None = None
     # The failure reason pi records when a turn ends in error — carried on an
     # otherwise-empty assistant message with `stopReason:"error"` (e.g. a
     # provider-auth failure). The only place the real reason lives for a turn
@@ -52,6 +63,31 @@ class AgentMessage(SerializableModel):
 def extract_assistant_text(message: AgentMessage) -> str:
     """Concatenate every `{type:"text"}` block on an assistant message."""
     return "".join(block.get("text", "") for block in message.content if block.get("type") == "text")
+
+
+def sum_message_usage(messages: list[AgentMessage]) -> tuple[int | None, int | None]:
+    """Sum input/output token usage across an agent run's assistant messages.
+
+    pi reports usage per assistant message, and a single agent run can produce
+    several (tool loops), so the turn total is their sum. Returns `(None, None)`
+    when no assistant message carried usage (e.g. an interrupted turn), which the
+    caller treats as "no token counts for this turn" (mirrors Claude).
+    """
+    input_total = 0
+    output_total = 0
+    saw_usage = False
+    for message in messages:
+        if message.role != "assistant" or message.usage is None:
+            continue
+        if message.usage.input is not None:
+            input_total += message.usage.input
+            saw_usage = True
+        if message.usage.output is not None:
+            output_total += message.usage.output
+            saw_usage = True
+    if not saw_usage:
+        return None, None
+    return input_total, output_total
 
 
 # Substrings (matched case-insensitively) in pi's failure reason that mark a

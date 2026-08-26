@@ -11,7 +11,6 @@ import { SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 type OpenSettings = {
   (section?: string): void;
   (section: "REPOSITORIES", focusRepoId: string): void;
-  (section: "PANELS", focusPanelId: string): void;
 };
 
 /**
@@ -21,23 +20,20 @@ type OpenSettings = {
  * rather than navigating to `/settings` directly (see SCU-1581).
  */
 export const useOpenSettings = (): OpenSettings => {
-  const { navigateToGlobalSettings, navigateToRepoSetupCommand, navigateToPanelSettings } = useImbueNavigate();
+  const { navigateToGlobalSettings, navigateToRepoSetupCommand } = useImbueNavigate();
   const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
 
   return useMemo<OpenSettings>(() => {
     function openSettings(section?: string): void;
     function openSettings(section: "REPOSITORIES", focusRepoId: string): void;
-    function openSettings(section: "PANELS", focusPanelId: string): void;
     function openSettings(section?: string, focusId?: string): void {
       ensurePseudoTab(SETTINGS_TAB_ID);
       if (focusId !== undefined && section === "REPOSITORIES") {
         navigateToRepoSetupCommand(focusId);
-      } else if (focusId !== undefined && section === "PANELS") {
-        navigateToPanelSettings(focusId);
       } else {
         navigateToGlobalSettings(section);
       }
     }
     return openSettings;
-  }, [ensurePseudoTab, navigateToGlobalSettings, navigateToRepoSetupCommand, navigateToPanelSettings]);
+  }, [ensurePseudoTab, navigateToGlobalSettings, navigateToRepoSetupCommand]);
 };

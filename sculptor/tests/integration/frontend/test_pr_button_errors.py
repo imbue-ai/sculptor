@@ -24,7 +24,7 @@ from sculptor.testing.dependency_stubs import create_cli_stub
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import delete_all_workspaces_via_ui
 from sculptor.testing.playwright_utils import full_spa_reload
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -89,17 +89,17 @@ def _set_path_without_cli(factory: SculptorInstanceFactory, tmp_path: Path) -> N
 
 
 def _cleanup_workspaces(instance: SculptorInstance) -> None:
-    """Delete all workspaces and navigate to the add-workspace page for the next scenario.
+    """Delete all workspaces, then land on the add-workspace page for the next scenario.
 
-    `delete_all_workspaces_via_ui` ends on /home (where Phase 2 finds the
-    closed-workspace rows). With sculptor-tabs MRU restoration, leaving the
-    user on /home means the next `_set_remote` full reload's rootLoader
-    sees __home__ as the active tab and redirects there — and the test
-    expects to land on /ws/new instead. Explicitly navigate to the
-    add-workspace page to set the active tab before any subsequent reload.
+    `delete_all_workspaces_via_ui` clears the sidebar rows in place without forcing
+    a route, so the resulting active tab is indeterminate. With sculptor-tabs MRU
+    restoration, the next `_set_remote` full reload's rootLoader restores whatever
+    tab was last active — and the test expects to land on /ws/new instead.
+    Explicitly open the add-workspace form to pin the active tab before any
+    subsequent reload.
     """
     delete_all_workspaces_via_ui(instance.page)
-    navigate_to_add_workspace_page(instance.page)
+    open_new_workspace_form(instance.page)
 
 
 def _assert_error_button_with_popover(

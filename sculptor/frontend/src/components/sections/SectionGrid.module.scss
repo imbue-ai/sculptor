@@ -1,0 +1,54 @@
+.outer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  // Anchors the absolutely positioned collapsed-section drop overlays.
+  position: relative;
+  width: 100%;
+}
+
+.topRow {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: row;
+  min-height: 0;
+  width: 100%;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+// The center's min-width comes from CENTER_MIN_WIDTH_PX (sectionGeometry.ts),
+// applied inline by SectionGrid so the geometry math and the CSS floor cannot drift.
+.center {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+// A maximized section fills the entire content area, with the header-hide
+// and OS-window-control padding handled alongside the maximize behavior.
+.maximized {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}

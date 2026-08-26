@@ -6,6 +6,7 @@ import { type CSSProperties, type ReactElement, useCallback, useEffect, useMemo,
 import type { CodingAgentTaskView, PrStatusInfo } from "~/api";
 import { ElementIds, WorkspacePeekAgentStatus } from "~/api";
 import { useTimedLatch } from "~/common/Hooks.ts";
+import { reusableTabTarget } from "~/common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks";
 import { useProject, useProjects } from "~/common/state/hooks/useProjects";
@@ -13,12 +14,7 @@ import { useThemeDangerColor, useThemeSuccessColor, useThemeWarningColor } from 
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
-import {
-  activeFileBrowserTabAtomFamily,
-  activePanelPerZoneAtom,
-  zoneAssignmentsAtom,
-  zoneVisibilityAtom,
-} from "~/components/panels/atoms";
+import { revealPanelInWorkspaceAtom } from "~/components/sections/sectionActions.ts";
 
 import { changesScopeAtomFamily } from "../panels/fileBrowser/atoms";
 import { parseDiffStats } from "../utils/parseDiffStats";
@@ -243,8 +239,7 @@ const PeekHeader = ({
         <a
           className={styles.mrPill}
           href={prStatus.prWebUrl ?? "#"}
-          target="_blank"
-          rel="noopener noreferrer"
+          target={reusableTabTarget(prStatus.prWebUrl ?? "#")}
           onClick={(e) => e.stopPropagation()}
         >
           PR #{prStatus.prIid}
@@ -347,10 +342,7 @@ export const WorkspacePeekPopover = ({
   const { data: diff, isFetching } = useWorkspaceDiff(workspaceId);
   const isShimmering = useTimedLatch(isFetching, SHIMMER_MIN_HOLD_MS);
   const diffStats = useMemo(() => parseDiffStats(diff?.targetBranchDiff), [diff?.targetBranchDiff]);
-  const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
-  const setZoneVisibility = useSetAtom(zoneVisibilityAtom);
-  const setActivePanelPerZone = useSetAtom(activePanelPerZoneAtom);
-  const setActiveTab = useSetAtom(activeFileBrowserTabAtomFamily(workspaceId));
+  const revealPanelInWorkspace = useSetAtom(revealPanelInWorkspaceAtom);
   const setChangesScope = useSetAtom(changesScopeAtomFamily(workspaceId));
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
@@ -448,24 +440,15 @@ export const WorkspacePeekPopover = ({
 
   const handleDiffClick = useCallback(() => {
     onNavigate(workspaceId);
-    const zone = zoneAssignments["files"];
-    if (zone) {
-      setZoneVisibility((prev) => ({ ...prev, [zone]: true }));
-      setActivePanelPerZone((prev) => ({ ...prev, [zone]: "files" }));
-    }
-    setActiveTab("changes");
+    // Surface the Changes panel in the left section and point it at the
+    // target-branch diff, matching DiffSummary's reveal. The reveal names the
+    // destination workspace explicitly: the peeked workspace is often not the
+    // active layout scope yet, and a write through the active-scope layout proxy
+    // would land in the workspace being left.
+    revealPanelInWorkspace({ workspaceId, panelId: "changes", in: "left" });
     setChangesScope("vs-target-branch");
     onDismiss?.();
-  }, [
-    onNavigate,
-    workspaceId,
-    zoneAssignments,
-    setZoneVisibility,
-    setActivePanelPerZone,
-    setActiveTab,
-    setChangesScope,
-    onDismiss,
-  ]);
+  }, [onNavigate, workspaceId, revealPanelInWorkspace, setChangesScope, onDismiss]);
 
   const hiddenCount = sortedAgents.length - VISIBLE_AGENT_COUNT;
   const canCollapse = hiddenCount >= MIN_HIDDEN_AGENTS_TO_COLLAPSE;

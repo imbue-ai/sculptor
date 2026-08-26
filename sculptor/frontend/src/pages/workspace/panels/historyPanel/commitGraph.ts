@@ -1,5 +1,8 @@
 import type { CommitInfo } from "~/api";
 
+/** Number of leading characters shown for a commit hash in a graph label. */
+export const SHORT_HASH_LENGTH = 11;
+
 /**
  * Result of splitting a flat commit list into a main line and side branches.
  *

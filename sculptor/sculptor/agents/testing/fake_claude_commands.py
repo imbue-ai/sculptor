@@ -5,6 +5,7 @@ between the init and end messages.
 """
 
 import glob as glob_module
+import html
 import inspect
 import json
 import os
@@ -17,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
+from sculptor.agents.testing.fake_claude_jsonl import append_transcript_entry
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
 from sculptor.agents.testing.fake_claude_jsonl import get_last_session_id
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
@@ -26,14 +28,20 @@ from sculptor.agents.testing.fake_claude_jsonl import make_compact_summary_user_
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.agents.testing.fake_claude_jsonl import make_hook_callback_control_request
 from sculptor.agents.testing.fake_claude_jsonl import make_init_message
+from sculptor.agents.testing.fake_claude_jsonl import make_queued_command_attachment_entry
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_interleaved_events
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_text_events
 from sculptor.agents.testing.fake_claude_jsonl import make_streaming_tool_events
 from sculptor.agents.testing.fake_claude_jsonl import make_task_notification_message
+from sculptor.agents.testing.fake_claude_jsonl import make_task_progress_message
 from sculptor.agents.testing.fake_claude_jsonl import make_task_started_message
+from sculptor.agents.testing.fake_claude_jsonl import make_task_updated_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
+from sculptor.agents.testing.fake_claude_jsonl import make_user_frame_echo
+from sculptor.agents.testing.fake_claude_jsonl import make_workflow_agent_entry
+from sculptor.agents.testing.fake_claude_jsonl import make_workflow_phase_entry
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
 
 SCULPTOR_MCP_SERVER_NAME = CLAUDE_CODE_HARNESS.mcp_server_name
@@ -82,6 +90,36 @@ def _make_tool_assistant_message(
     return messages
 
 
+def _emit_mcp_tool_call(tool_fqn: str, arguments: dict, rpc_id: int = 1) -> str:
+    """Send a `tools/call` MCP control_request on stdout and return its
+    envelope ``request_id`` (used to match the eventual control_response)."""
+    if tool_fqn == SCULPTOR_MCP_ASK_TOOL_FQN:
+        short_name = SCULPTOR_MCP_ASK_TOOL_NAME
+    elif tool_fqn == SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_FQN:
+        short_name = SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_NAME
+    else:
+        raise ValueError(f"Unknown Sculptor MCP tool fqn: {tool_fqn}")
+
+    request_id = generate_id("mcp_req")
+    control_request = {
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {
+            "subtype": "mcp_message",
+            "server_name": SCULPTOR_MCP_SERVER_NAME,
+            "message": {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "method": "tools/call",
+                "params": {"name": short_name, "arguments": arguments},
+            },
+        },
+    }
+    sys.stdout.write(json.dumps(control_request) + "\n")
+    sys.stdout.flush()
+    return request_id
+
+
 def _emit_mcp_tool_call_and_wait_for_response(
     tool_use_id: str,
     tool_fqn: str,
@@ -100,53 +138,89 @@ def _emit_mcp_tool_call_and_wait_for_response(
     Raises ``RuntimeError`` if the response does not arrive within
     ``timeout_seconds``.
     """
-    if tool_fqn == SCULPTOR_MCP_ASK_TOOL_FQN:
-        short_name = SCULPTOR_MCP_ASK_TOOL_NAME
-    elif tool_fqn == SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_FQN:
-        short_name = SCULPTOR_MCP_EXIT_PLAN_MODE_TOOL_NAME
-    else:
-        raise ValueError(f"Unknown Sculptor MCP tool fqn: {tool_fqn}")
-
-    request_id = generate_id("mcp_req")
-    control_request = {
-        "type": "control_request",
-        "request_id": request_id,
-        "request": {
-            "subtype": "mcp_message",
-            "server_name": SCULPTOR_MCP_SERVER_NAME,
-            "message": {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": short_name, "arguments": arguments},
-            },
-        },
-    }
-    sys.stdout.write(json.dumps(control_request) + "\n")
-    sys.stdout.flush()
+    request_id = _emit_mcp_tool_call(tool_fqn=tool_fqn, arguments=arguments)
     return _read_mcp_control_response_text(request_id, tool_use_id, timeout_seconds, expect_error=expect_error)
 
 
-def _read_mcp_control_response_text(
-    expected_request_id: str, tool_use_id: str, timeout_seconds: float, expect_error: bool = False
-) -> str:
-    """Block reading stdin until a matching MCP ``control_response`` arrives.
+# Unified stdin router.
+#
+# Every stdin read in FakeClaude funnels through one router so a frame that
+# arrives while a cycle is held open is classified exactly once and never
+# silently dropped. It reads the raw fd (via ``sys.stdin.fileno()``) into a
+# single buffer: mixing ``sys.stdin``'s BufferedReader with raw ``os.read``
+# splits complete lines across two invisible buffers, the flake behind SCU-783
+# (a matching control_response stranded in Python's buffer where ``select`` on
+# the fd can't see it). With one buffer, whatever a reader pulls off stdin but
+# doesn't itself consume stays available: unparsed bytes remain in the buffer,
+# and a parsed control_response destined for a different reader is stashed for
+# it (see ``stash_control_response``) rather than discarded.
+#
+# Classification is uniform, mirroring the real CLI:
+#   * an ``interrupt`` control_request exits the process (SIGTERM code);
+#   * a ``control_response`` goes to whichever reader is waiting on its id,
+#     stashed until that reader asks for it;
+#   * a ``user`` frame arriving mid-cycle is *absorbed* — recorded as a
+#     ``queued_command`` attachment and, under ``--replay-user-messages``,
+#     echoed on stdout (the real CLI's mid-turn steering);
+#   * anything else (a ``get_context_usage`` request, injected chrome events)
+#     is ignored.
+# A ``user`` frame read *between* cycles is turn-starting instead, so the
+# between-cycle reader classifies it itself rather than absorbing it.
 
-    Reads from stdin's raw file descriptor rather than ``sys.stdin.readline``
-    to avoid a flake (SCU-783) where Sculptor writes a non-matching control
-    request (e.g. ``get_context_usage``) and the matching control_response
-    back-to-back: ``readline``'s underlying ``read1`` then pulls BOTH lines
-    into Python's ``BufferedReader`` buffer in a single syscall, returns only
-    the first, and leaves the response in the buffer where the next
-    ``select.select`` on stdin's fd cannot see it — the helper would spin
-    until its 180s timeout while the agent's status pill stayed visible.
-    """
-    fd = sys.stdin.fileno()
-    pending = b""
-    deadline = time.monotonic() + timeout_seconds
-    while True:
-        while b"\n" in pending:
-            raw_line, _, pending = pending.partition(b"\n")
+# Launch-time flags governing absorption, set by ``configure_stdin_router``.
+_REPLAY_USER_MESSAGES: bool = False
+_PERSIST_SESSION: bool = True
+
+# Contents of frames absorbed mid-cycle in the current turn, in arrival order.
+# ``handle_reference_absorbed`` reads this so a scripted cycle can prove it saw
+# the steered content; ``clear_absorbed_frames`` resets it per cycle.
+_ABSORBED_FRAMES: list[str] = []
+
+# Sentinels returned by ``_StdinRouter.next_frame`` when no frame is available.
+_STDIN_TIMEOUT = object()
+_STDIN_EOF = object()
+
+
+class _StdinRouter:
+    """Sole owner of FakeClaude's stdin fd (see the module comment above)."""
+
+    def __init__(self) -> None:
+        self._buffer: bytes = b""
+        self._eof: bool = False
+        # control_responses read by a reader that wasn't waiting on them, kept
+        # for whichever reader is (keyed by request id). FakeClaude waits for
+        # each response synchronously, so this is usually empty; it exists so a
+        # response is never dropped when one reader pulls another's off stdin.
+        self._stashed_control_responses: dict[str, dict] = {}
+
+    def reset(self) -> None:
+        """Drop buffered bytes, stashed responses, and EOF (tests reuse one process)."""
+        self._buffer = b""
+        self._eof = False
+        self._stashed_control_responses = {}
+
+    def stash_control_response(self, request_id: str, envelope: dict) -> None:
+        """Hold a control_response envelope for the reader awaiting ``request_id``."""
+        self._stashed_control_responses[request_id] = envelope
+
+    def pop_stashed_response(self, request_id: str) -> dict | None:
+        """Return and remove a previously stashed response for ``request_id``, if any."""
+        return self._stashed_control_responses.pop(request_id, None)
+
+    def _pop_frame(self, flush_partial: bool = False) -> dict | None:
+        """Return the next complete, parseable JSON object already buffered.
+
+        Blank and unparseable lines (and non-object JSON) are skipped; a
+        partial trailing line normally stays buffered for the next read. Pass
+        ``flush_partial`` at EOF to also consume a final line that arrived
+        without a trailing newline, so a last frame isn't dropped (the old
+        ``for line in sys.stdin`` iterator yielded it).
+        """
+        while b"\n" in self._buffer or (flush_partial and self._buffer):
+            if b"\n" in self._buffer:
+                raw_line, _, self._buffer = self._buffer.partition(b"\n")
+            else:
+                raw_line, self._buffer = self._buffer, b""
             line = raw_line.decode("utf-8", errors="replace").strip()
             if not line:
                 continue
@@ -154,38 +228,281 @@ def _read_mcp_control_response_text(
                 data = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if not isinstance(data, dict) or data.get("type") != "control_response":
-                continue
-            response = data.get("response", {})
-            if response.get("request_id") != expected_request_id:
-                continue
-            mcp_response = response.get("response", {}).get("mcp_response", {})
-            if "error" in mcp_response:
-                if expect_error:
-                    err = mcp_response["error"]
-                    return f"MCP error {err.get('code')}: {err.get('message', '')}"
-                raise RuntimeError(f"MCP error response for tool_use_id={tool_use_id}: {mcp_response['error']}")
-            if expect_error:
-                raise RuntimeError(
-                    f"Expected MCP error response for tool_use_id={tool_use_id} but got success: {mcp_response}"
-                )
-            result = mcp_response.get("result", {})
-            content = result.get("content", [])
-            if not content:
-                return ""
-            return content[0].get("text", "")
+            if isinstance(data, dict):
+                return data
+        return None
 
+    def _fill(self, timeout: float) -> None:
+        """Block up to ``timeout`` seconds for more stdin bytes into the buffer."""
+        if self._eof:
+            return
+        try:
+            fd = sys.stdin.fileno()
+        except (ValueError, OSError):
+            # No real fd (closed stream / non-fd stdin) — treat as end of input.
+            self._eof = True
+            return
+        ready, _, _ = select.select([fd], [], [], timeout)
+        if not ready:
+            return
+        chunk = os.read(fd, 8192)
+        if not chunk:
+            self._eof = True
+            return
+        self._buffer += chunk
+
+    def next_frame(self, timeout: float) -> dict | object:
+        """Return the next parsed JSON frame, else ``_STDIN_TIMEOUT`` (nothing
+        arrived within ``timeout``) or ``_STDIN_EOF`` (stdin closed)."""
+        frame = self._pop_frame()
+        if frame is not None:
+            return frame
+        if not self._eof:
+            self._fill(timeout)
+        # At EOF, flush a final newline-less line so a last frame isn't dropped.
+        frame = self._pop_frame(flush_partial=self._eof)
+        if frame is not None:
+            return frame
+        return _STDIN_EOF if self._eof else _STDIN_TIMEOUT
+
+
+_STDIN_ROUTER = _StdinRouter()
+
+
+def configure_stdin_router(replay_user_messages: bool, persist_session: bool) -> None:
+    """Apply launch-time flags and start each invocation from a clean slate."""
+    global _REPLAY_USER_MESSAGES, _PERSIST_SESSION
+    _REPLAY_USER_MESSAGES = replay_user_messages
+    _PERSIST_SESSION = persist_session
+    _STDIN_ROUTER.reset()
+    _ABSORBED_FRAMES.clear()
+
+
+def clear_absorbed_frames() -> None:
+    """Reset the absorbed-frame record at the start of a cycle so each turn's
+    ``reference_absorbed`` sees only the frames absorbed during that turn."""
+    _ABSORBED_FRAMES.clear()
+
+
+def _user_frame_content(frame: dict) -> str:
+    """Extract a user frame's message content, HTML-unescaped and stripped
+    (the same normalization the between-cycle reader applies to a prompt)."""
+    content = frame.get("message", {}).get("content", "")
+    return html.unescape(content).strip() if isinstance(content, str) else ""
+
+
+def _exit_if_interrupt(frame: dict) -> None:
+    """Exit with the SIGTERM code if ``frame`` is an interrupt control_request.
+
+    Mirrors real Claude's event loop: a Stop-button click arrives as an
+    ``interrupt`` control_request and tears the turn down promptly.
+    """
+    if (
+        frame.get("type") == "control_request"
+        and isinstance(frame.get("request"), dict)
+        and frame["request"].get("subtype") == "interrupt"
+    ):
+        sys.exit(AGENT_EXIT_CODE_FROM_SIGTERM)
+
+
+def _absorb_user_frame(frame: dict) -> None:
+    """Record a mid-cycle user frame the way the real CLI absorbs steering.
+
+    Appends a ``queued_command`` attachment to the session transcript (so the
+    on-disk shape distinguishes an absorbed frame from a turn-starting plain
+    user message) and, under ``--replay-user-messages``, echoes the frame on
+    stdout — emitted here, inside the open turn before its ``result``, which is
+    the steered replay position the spike pinned (as opposed to a turn-starting
+    frame's echo, which lands just after a fresh ``init``).
+    """
+    content = _user_frame_content(frame)
+    _ABSORBED_FRAMES.append(content)
+    session_id = get_last_session_id()
+    if _PERSIST_SESSION and session_id is not None:
+        append_transcript_entry(session_id, make_queued_command_attachment_entry(session_id, content))
+    if _REPLAY_USER_MESSAGES:
+        _emit_event(make_user_frame_echo(content))
+
+
+def _route_mid_cycle_frame(frame: dict) -> None:
+    """Apply the universal side effects for a frame a mid-cycle reader is not
+    itself consuming: an interrupt exits, a user frame is absorbed, a
+    control_response meant for a different reader is stashed for that reader,
+    and anything else (a ``get_context_usage`` request, chrome events) is
+    ignored."""
+    _exit_if_interrupt(frame)
+    frame_type = frame.get("type")
+    if frame_type == "user":
+        _absorb_user_frame(frame)
+    elif frame_type == "control_response":
+        envelope = frame.get("response", {})
+        request_id = envelope.get("request_id")
+        if request_id is not None:
+            _STDIN_ROUTER.stash_control_response(request_id, envelope)
+
+
+def read_next_user_prompt() -> str | None:
+    """Block *between* cycles for the next turn-starting user frame.
+
+    Returns the frame's (HTML-unescaped, stripped) content, or ``None`` when
+    stdin closes first (EOF) so the caller exits instead of running a turn the
+    user never sent. An ``interrupt`` control_request seen while idle exits with
+    the SIGTERM code. A user frame here is turn-starting — it is NOT absorbed
+    (absorption applies only to frames that land while a cycle is held open);
+    control responses and other non-user frames are ignored while scanning.
+    """
+    while True:
+        frame = _STDIN_ROUTER.next_frame(timeout=3600.0)
+        if frame is _STDIN_TIMEOUT:
+            continue
+        if frame is _STDIN_EOF:
+            return None
+        assert isinstance(frame, dict)
+        _exit_if_interrupt(frame)
+        if frame.get("type") == "user":
+            return _user_frame_content(frame)
+
+
+def _read_mcp_control_responses(expected_request_ids: set[str], timeout_seconds: float) -> dict[str, dict]:
+    """Block until an MCP ``control_response`` has arrived for every id in
+    ``expected_request_ids``. Returns ``{request_id: mcp_response}``.
+
+    Runs on the unified router, so a user frame that lands while the handler
+    waits for its answer is absorbed rather than discarded, and a
+    control_response meant for a different waiter (batched into the same read,
+    or already seen by an earlier reader) is stashed for that waiter instead of
+    being lost — the SCU-783 guarantee, extended from raw bytes to parsed frames.
+    """
+    remaining_ids = set(expected_request_ids)
+    results: dict[str, dict] = {}
+    # A response for one of our ids may already be waiting from an earlier read.
+    for request_id in list(remaining_ids):
+        stashed = _STDIN_ROUTER.pop_stashed_response(request_id)
+        if stashed is not None:
+            results[request_id] = stashed.get("response", {}).get("mcp_response", {})
+            remaining_ids.discard(request_id)
+    deadline = time.monotonic() + timeout_seconds
+    while remaining_ids:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        ready, _, _ = select.select([fd], [], [], min(remaining, 0.1))
-        if not ready:
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, 0.1))
+        if frame is _STDIN_TIMEOUT:
             continue
-        chunk = os.read(fd, 8192)
-        if not chunk:
-            break
-        pending += chunk
-    raise RuntimeError(f"Timed out waiting for MCP control_response for tool_use_id={tool_use_id}")
+        if frame is _STDIN_EOF:
+            raise RuntimeError(f"stdin closed before MCP control_response(s) for request_ids={sorted(remaining_ids)}")
+        assert isinstance(frame, dict)
+        if frame.get("type") == "control_response":
+            response = frame.get("response", {})
+            request_id = response.get("request_id")
+            if request_id in remaining_ids:
+                results[request_id] = response.get("response", {}).get("mcp_response", {})
+                remaining_ids.discard(request_id)
+                continue
+        # Not one of ours (a user frame, an interrupt, or another waiter's
+        # response) — route it so it is absorbed / stashed, never dropped.
+        _route_mid_cycle_frame(frame)
+    if remaining_ids:
+        raise RuntimeError(f"Timed out waiting for MCP control_response(s) for request_ids={sorted(remaining_ids)}")
+    return results
+
+
+def _emit_context_usage_response(request_id: str) -> None:
+    """Answer a Sculptor ``get_context_usage`` control request with a fixed
+    context snapshot, in the envelope shape the output processor expects
+    (``_is_context_usage_response`` / ``_handle_context_usage_response``)."""
+    response = {
+        "type": "control_response",
+        "response": {
+            "request_id": request_id,
+            "response": {
+                "totalTokens": 120000,
+                "maxTokens": 200000,
+                "percentage": 60.0,
+                "autoCompactThreshold": 160000,
+            },
+        },
+    }
+    sys.stdout.write(json.dumps(response) + "\n")
+    sys.stdout.flush()
+
+
+def _answer_context_usage_and_wait_for_sentinel(sentinel: Path, timeout_seconds: float) -> None:
+    """Block until ``sentinel`` exists, answering the ``get_context_usage``
+    control request Sculptor sends after a turn-end while we wait.
+
+    Real Claude answers that request during a background-task wait, which makes
+    the output processor flush the turn's (otherwise-stashed) TurnMetrics
+    mid-hold — so ``TurnMetricsAgentMessage`` is pending in message_conversion
+    while the request is still open. FakeClaude's default background hold never
+    answers it (``_route_mid_cycle_frame`` ignores get_context_usage), so that
+    pending-metrics state — and the bugs it exposes — can't be reproduced
+    end-to-end; this reproduces it.
+
+    Reads stdin through the unified router, so a user frame that lands during
+    the wait is absorbed and an interrupt still exits promptly.
+    """
+    answered = False
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if sentinel.exists():
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(f"background_subagent pause timed out waiting for {sentinel}")
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, 0.05))
+        if frame is _STDIN_TIMEOUT:
+            continue
+        if frame is _STDIN_EOF:
+            # stdin closed (e.g. -p mode) — keep polling the sentinel only.
+            time.sleep(min(remaining, 0.05))
+            continue
+        assert isinstance(frame, dict)
+        request = frame.get("request")
+        if (
+            not answered
+            and frame.get("type") == "control_request"
+            and isinstance(request, dict)
+            and request.get("subtype") == "get_context_usage"
+        ):
+            request_id = frame.get("request_id")
+            if isinstance(request_id, str):
+                _emit_context_usage_response(request_id)
+                answered = True
+                continue
+        # Interrupt exit, user-frame absorption, cross-waiter stashing, etc.
+        _route_mid_cycle_frame(frame)
+
+
+def _extract_mcp_response_text(mcp_response: dict) -> str:
+    content = mcp_response.get("result", {}).get("content", [])
+    if not content:
+        return ""
+    return content[0].get("text", "")
+
+
+def _read_mcp_control_response_text(
+    expected_request_id: str, tool_use_id: str, timeout_seconds: float, expect_error: bool = False
+) -> str:
+    """Block reading stdin until a matching MCP ``control_response`` arrives.
+
+    See ``_read_mcp_control_responses`` for the raw-fd reading rationale.
+    """
+    try:
+        responses = _read_mcp_control_responses({expected_request_id}, timeout_seconds)
+    except RuntimeError:
+        raise RuntimeError(f"Timed out waiting for MCP control_response for tool_use_id={tool_use_id}")
+    mcp_response = responses[expected_request_id]
+    if "error" in mcp_response:
+        if expect_error:
+            err = mcp_response["error"]
+            return f"MCP error {err.get('code')}: {err.get('message', '')}"
+        raise RuntimeError(f"MCP error response for tool_use_id={tool_use_id}: {mcp_response['error']}")
+    if expect_error:
+        raise RuntimeError(
+            f"Expected MCP error response for tool_use_id={tool_use_id} but got success: {mcp_response}"
+        )
+    return _extract_mcp_response_text(mcp_response)
 
 
 def handle_default(emit_streaming: bool) -> list[dict]:
@@ -453,11 +770,13 @@ def _wait_until(
 ) -> bool:
     """Wait until ``done()`` returns true or ``timeout_seconds`` elapses.
 
-    Polls stdin throughout: a Stop-button click arrives as an interrupt
-    ``control_request`` and exits the process with the SIGTERM exit code,
-    mirroring real Claude's event loop and keeping interrupt tests fast.
-    SIGTERM itself still terminates via the signal handler installed in
-    ``main()`` — including on ``-p``-mode callers whose stdin is closed.
+    Polls stdin throughout via the unified router: a Stop-button click arrives
+    as an ``interrupt`` control_request and exits with the SIGTERM code
+    (mirroring real Claude's event loop and keeping interrupt tests fast),
+    while a user frame that lands during the wait is absorbed as steering
+    rather than dropped. SIGTERM itself still terminates via the signal handler
+    installed in ``main()`` — including on ``-p``-mode callers whose stdin is
+    closed.
 
     With ``done`` omitted, simply waits out the full timeout. Returns whether
     ``done()`` fired before the timeout.
@@ -467,25 +786,15 @@ def _wait_until(
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return False
-        ready, _, _ = select.select([sys.stdin], [], [], min(remaining, poll_interval))
-        if not ready:
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, poll_interval))
+        if frame is _STDIN_TIMEOUT:
             continue
-        line = sys.stdin.readline()
-        if not line:
-            # stdin closed (e.g. -p mode) — keep waiting without it.
-            time.sleep(poll_interval)
+        if frame is _STDIN_EOF:
+            # stdin closed (e.g. -p mode) — keep polling done()/timeout without it.
+            time.sleep(min(remaining, poll_interval))
             continue
-        try:
-            data = json.loads(line.strip())
-        except json.JSONDecodeError:
-            continue
-        if (
-            isinstance(data, dict)
-            and data.get("type") == "control_request"
-            and isinstance(data.get("request"), dict)
-            and data["request"].get("subtype") == "interrupt"
-        ):
-            sys.exit(AGENT_EXIT_CODE_FROM_SIGTERM)
+        assert isinstance(frame, dict)
+        _route_mid_cycle_frame(frame)
     return True
 
 
@@ -515,6 +824,30 @@ def handle_wait_for_file(args: dict, emit_streaming: bool) -> list[dict]:
     if not _wait_until(timeout_seconds=timeout_seconds, poll_interval=0.05, done=sentinel.exists):
         raise RuntimeError(f"fake_claude:wait_for_file timed out after {timeout_seconds}s waiting for {sentinel}")
     return []
+
+
+def handle_reference_absorbed(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit assistant text referencing the frames absorbed so far this cycle.
+
+    A scripted way to prove the held cycle actually saw the steered content
+    (scenario 1's "a scripted directive controls whether/how the fake assistant
+    references the absorbed content in its remaining output"): pair it after a
+    held handler in a ``multi_step`` so absorption happens during the hold and
+    this step quotes it. ``prefix`` / ``separator`` shape the text; with nothing
+    absorbed the body is ``empty`` (default ``"(none)"``).
+    """
+    prefix: str = args.get("prefix", "Absorbed: ")
+    separator: str = args.get("separator", " | ")
+    empty: str = args.get("empty", "(none)")
+    body = separator.join(_ABSORBED_FRAMES) if _ABSORBED_FRAMES else empty
+    text = prefix + body
+
+    message_id = generate_id("msg")
+    messages: list[dict] = []
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=message_id, text=text))
+    messages.append(make_assistant_message(message_id=message_id, content_blocks=[make_text_block(text)]))
+    return messages
 
 
 _TASK_DEFAULTS: dict = {
@@ -1010,37 +1343,34 @@ def handle_auto_compact(args: dict, plugin_dir: str | None, emit_streaming: bool
 
 
 def _read_control_response_from_stdin(expected_request_id: str, timeout_seconds: float = 5.0) -> None:
-    """Read stdin until we get a ``control_response`` for the given request ID.
+    """Read stdin until a ``control_response`` for ``expected_request_id`` arrives.
 
-    Falls back silently after ``timeout_seconds`` so FakeClaude doesn't hang
-    if the output processor doesn't respond (e.g. during unit tests that mock
+    Runs on the unified router (so a mid-wait user frame is absorbed, an
+    interrupt exits, and a control_response for a *different* waiter is stashed
+    for it rather than dropped), but falls back silently after
+    ``timeout_seconds`` — unlike the MCP reader — so FakeClaude doesn't hang if
+    the output processor never acks the hook (e.g. during unit tests that mock
     stdin).
     """
+    if _STDIN_ROUTER.pop_stashed_response(expected_request_id) is not None:
+        return
     deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
+    while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            break
-        # Use select to avoid blocking indefinitely on stdin
-        ready, _, _ = select.select([sys.stdin], [], [], min(remaining, 0.1))
-        if not ready:
+            return
+        frame = _STDIN_ROUTER.next_frame(timeout=min(remaining, 0.1))
+        if frame is _STDIN_TIMEOUT:
             continue
-        line = sys.stdin.readline()
-        if not line:
-            break
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+        if frame is _STDIN_EOF:
+            return
+        assert isinstance(frame, dict)
         if (
-            isinstance(data, dict)
-            and data.get("type") == "control_response"
-            and data.get("response", {}).get("request_id") == expected_request_id
+            frame.get("type") == "control_response"
+            and frame.get("response", {}).get("request_id") == expected_request_id
         ):
             return
+        _route_mid_cycle_frame(frame)
 
 
 def handle_auto_compact_no_summary(args: dict, plugin_dir: str | None, emit_streaming: bool) -> list[dict]:
@@ -1183,6 +1513,9 @@ def handle_emit_task_notification(args: dict, emit_streaming: bool) -> list[dict
 
     Args:
         args: Must contain "task_id". Optional: "tool_use_id", "status", "summary".
+            Pass "tool_use_id": null to omit the field, reproducing the orphaned-
+            task-on-restart notification the real CLI emits (see SCU-1666). When
+            "tool_use_id" is absent a placeholder id is generated instead.
     """
     return [
         make_task_notification_message(
@@ -1190,6 +1523,40 @@ def handle_emit_task_notification(args: dict, emit_streaming: bool) -> list[dict
             tool_use_id=args.get("tool_use_id", generate_id("toolu")),
             status=args.get("status", "completed"),
             summary=args.get("summary", "Background task completed"),
+        )
+    ]
+
+
+def handle_emit_result(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit ONLY a result/success message (no assistant/init/notification).
+
+    Use this inside ``multi_step`` to close a turn at a controlled point — e.g.
+    to end a background task's follow-up turn so a subsequent background task's
+    ``task_updated`` cleanup is evaluated at that turn boundary.
+
+    Args:
+        args: Optional "session_id".
+    """
+    return [make_end_message(session_id=args.get("session_id"))]
+
+
+def handle_emit_task_updated(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit ONLY a system/task_updated message (no surrounding result/init/response).
+
+    Use this inside ``multi_step`` to simulate a background task reporting a
+    terminal state via task_updated WITHOUT a following task_notification — the
+    real CLI does this when a task finishes while it is busy emitting another
+    turn. For a subagent (task_type ``local_agent``) the CLI still has a
+    follow-up notification/turn to deliver afterwards, so the harness must not
+    treat this task_updated as the end of the session.
+
+    Args:
+        args: Must contain "task_id". Optional: "status" (default "completed").
+    """
+    return [
+        make_task_updated_message(
+            task_id=args["task_id"],
+            status=args.get("status", "completed"),
         )
     ]
 
@@ -1244,6 +1611,84 @@ def handle_background_task_notification(args: dict, emit_streaming: bool) -> lis
             content_blocks=[make_text_block(response_text)],
         )
     )
+
+    return messages
+
+
+def handle_notification_turn_then_response(args: dict, emit_streaming: bool) -> list[dict]:
+    """Emit a task-notification turn *followed by* the user's own message turn.
+
+    Reproduces SCU-1660: a Monitor background task completes just as a new user
+    prompt is dispatched, so the CLI delivers the pending ``<task-notification>``
+    as its own turn (init -> assistant -> result) BEFORE processing the user's
+    message. Everything below sits inside a single FakeClaude invocation (one
+    CLI process), between the process's own opening ``init`` and the closing
+    ``end`` that ``fake_claude.main()`` appends — that closing ``end`` is the
+    user turn's result.
+
+    Frame order returned by this handler:
+      1. system/task_notification (the Monitor completion, delivered first)
+      2. notification turn: init -> assistant(ack) -> result
+      3. user turn: init -> assistant(text) -> assistant(Bash tool_use) ->
+         tool_result -> assistant(continuation)
+
+    The notification turn's ``result`` is the trap: if the output processor
+    treats it as terminal, the loop exits and the CLI is torn down before the
+    user turn's frames are processed, silently abandoning the request after its
+    first tool result.
+
+    Args:
+        args: Optional "task_id", "tool_use_id", "summary", "ack_text",
+              "user_pre_text", "user_tool_command", "user_post_text".
+    """
+    task_id = args.get("task_id", "task_monitor_1")
+    tool_use_id = args.get("tool_use_id", generate_id("toolu"))
+    summary = args.get("summary", "Background task completed")
+    ack_text = args.get("ack_text", "This is just the stale Monitor task being cleaned up.")
+    user_pre_text = args.get("user_pre_text", "I'll fetch the latest state of that branch.")
+    user_tool_command = args.get("user_tool_command", "git fetch origin")
+    user_post_text = args.get("user_post_text", "Done — merged and repushed.")
+
+    session_id = generate_id("session")
+    user_tool_id = generate_id("toolu")
+    messages: list[dict] = []
+
+    # 1. The completed Monitor task's notification, delivered ahead of the user turn.
+    messages.append(
+        make_task_notification_message(
+            task_id=task_id,
+            tool_use_id=tool_use_id,
+            status="completed",
+            summary=summary,
+        )
+    )
+
+    # 2. Notification turn: init -> assistant(ack) -> result.
+    messages.append(make_init_message(session_id=session_id))
+    ack_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=ack_msg_id, text=ack_text))
+    messages.append(make_assistant_message(message_id=ack_msg_id, content_blocks=[make_text_block(ack_text)]))
+    messages.append(make_end_message(session_id=session_id))
+
+    # 3. User turn: init -> text -> Bash tool_use -> tool_result -> continuation.
+    messages.append(make_init_message(session_id=session_id))
+    pre_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=pre_msg_id, text=user_pre_text))
+    messages.append(make_assistant_message(message_id=pre_msg_id, content_blocks=[make_text_block(user_pre_text)]))
+
+    tool_block = make_tool_use_block(tool_id=user_tool_id, tool_name="Bash", tool_input={"command": user_tool_command})
+    tool_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_tool_events(message_id=tool_msg_id, tool_blocks=[tool_block]))
+    messages.append(make_assistant_message(message_id=tool_msg_id, content_blocks=[tool_block]))
+    messages.append(make_tool_result_message(tool_use_id=user_tool_id, content="Fetched new commits."))
+
+    post_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=post_msg_id, text=user_post_text))
+    messages.append(make_assistant_message(message_id=post_msg_id, content_blocks=[make_text_block(user_post_text)]))
 
     return messages
 
@@ -1328,6 +1773,220 @@ def handle_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     return messages
 
 
+def _emit_subagent_launch_and_inverted_ask(
+    questions: list[dict],
+    description: str,
+    emit_streaming: bool,
+) -> tuple[str, str, str]:
+    """Launch an Agent tool call whose subagent asks a question via MCP,
+    replaying the real CLI's SUBAGENT event ordering.
+
+    For main-agent MCP calls the CLI emits the assistant message (carrying the
+    tool_use block) BEFORE the ``tools/call`` control_request. For subagent
+    calls the order is INVERTED: the control_request reaches stdout first and
+    the sidechain assistant line follows (observed on Claude Code 2.1.170).
+    Sculptor must pair the two regardless of order.
+
+    Emits (in order): the main-agent assistant message with the Agent
+    tool_use; the MCP ``tools/call`` control_request; the sidechain assistant
+    message with the AUQ tool_use. Subagent output reaches the parent stream
+    as full non-streamed assistant lines, so the sidechain message carries no
+    streaming events.
+
+    Returns ``(agent_tool_id, ask_tool_id, mcp_request_id)`` — the caller
+    blocks on the response and emits the post-answer messages.
+    """
+    main_msg_id = generate_id("msg")
+    agent_tool_id = generate_id("toolu")
+    ask_tool_id = generate_id("toolu")
+    subagent_msg_id = generate_id("msg")
+
+    # 1. Main agent: text + Agent tool_use
+    agent_tool_block = make_tool_use_block(
+        tool_id=agent_tool_id,
+        tool_name="Agent",
+        tool_input={"prompt": "Ask the user and report their answer", "description": description},
+    )
+    _emit_messages_to_stdout(
+        _make_tool_assistant_message(
+            message_id=main_msg_id,
+            tool_blocks=[agent_tool_block],
+            emit_streaming=emit_streaming,
+            text_prefix="I'll use a subagent to help with this.",
+        )
+    )
+
+    # 2. The subagent's MCP tools/call — BEFORE the sidechain assistant line.
+    mcp_request_id = _emit_mcp_tool_call(
+        tool_fqn=SCULPTOR_MCP_ASK_TOOL_FQN,
+        arguments={"questions": questions},
+    )
+
+    # 3. The sidechain assistant line carrying the AUQ tool_use block.
+    ask_tool_block = make_tool_use_block(
+        tool_id=ask_tool_id,
+        tool_name=SCULPTOR_MCP_ASK_TOOL_FQN,
+        tool_input={"questions": questions},
+    )
+    _emit_messages_to_stdout(
+        [
+            make_assistant_message(
+                message_id=subagent_msg_id,
+                content_blocks=[ask_tool_block],
+                parent_tool_use_id=agent_tool_id,
+            )
+        ]
+    )
+    return agent_tool_id, ask_tool_id, mcp_request_id
+
+
+def _make_subagent_answer_messages(
+    agent_tool_id: str,
+    ask_tool_id: str,
+    answer_text: str,
+    subagent_label: str,
+) -> list[dict]:
+    """Build the post-answer message tail for a subagent AUQ: the sidechain
+    tool_result, and the Agent tool_result echoing which answer the subagent
+    received (tests assert on the echo to verify answer routing)."""
+    subagent_reply = f"[FakeClaude {subagent_label}] Received answer: {answer_text}"
+    return [
+        make_tool_result_message(tool_use_id=ask_tool_id, content=answer_text, parent_tool_use_id=agent_tool_id),
+        make_tool_result_message(tool_use_id=agent_tool_id, content=str([{"type": "text", "text": subagent_reply}])),
+    ]
+
+
+def handle_subagent_ask_user_question(args: dict, emit_streaming: bool) -> list[dict]:
+    """Simulate a subagent (Agent tool) asking the user a question via MCP.
+
+    Replays the inverted subagent event ordering (see
+    ``_emit_subagent_launch_and_inverted_ask``), blocks until Sculptor's MCP
+    server delivers the user's answer, then emits the tool results and a main
+    agent summary echoing the received answer.
+
+    Args:
+        args: Must contain "questions" (AUQ questions list). Optional:
+              "description".
+    """
+    questions = args["questions"]
+    description = args.get("description", "Ask the user a question")
+
+    agent_tool_id, ask_tool_id, mcp_request_id = _emit_subagent_launch_and_inverted_ask(
+        questions=questions, description=description, emit_streaming=emit_streaming
+    )
+
+    answer_text = _read_mcp_control_response_text(mcp_request_id, ask_tool_id, timeout_seconds=180.0)
+
+    messages = _make_subagent_answer_messages(
+        agent_tool_id=agent_tool_id,
+        ask_tool_id=ask_tool_id,
+        answer_text=answer_text,
+        subagent_label="subagent",
+    )
+    summary_text = f"[FakeClaude] Subagent finished. Received answer: {answer_text}"
+    summary_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
+    messages.append(make_assistant_message(message_id=summary_msg_id, content_blocks=[make_text_block(summary_text)]))
+    return messages
+
+
+def handle_ask_user_question_then_subagent_ask(args: dict, emit_streaming: bool) -> list[dict]:
+    """A main-agent AUQ (normal ordering, answered first) followed by a
+    subagent AUQ with the inverted subagent event ordering — all in one turn.
+
+    Guards against the MCP server's answered-question replay cache serving the
+    already-delivered FIRST answer to the subagent's DIFFERENT second
+    question. The final summary echoes both answers so the test can assert the
+    subagent received the answer to ITS question, not the cached one.
+
+    Args:
+        args: Must contain "first_questions" and "second_questions".
+    """
+    first_questions = args["first_questions"]
+    second_questions = args["second_questions"]
+
+    # Main-agent AUQ with the normal (assistant line first) ordering.
+    first_msg_id = generate_id("msg")
+    first_tool_id = generate_id("toolu")
+    first_block = make_tool_use_block(
+        tool_id=first_tool_id,
+        tool_name=SCULPTOR_MCP_ASK_TOOL_FQN,
+        tool_input={"questions": first_questions},
+    )
+    _emit_messages_to_stdout(
+        _make_tool_assistant_message(message_id=first_msg_id, tool_blocks=[first_block], emit_streaming=emit_streaming)
+    )
+    first_answer = _emit_mcp_tool_call_and_wait_for_response(
+        tool_use_id=first_tool_id,
+        tool_fqn=SCULPTOR_MCP_ASK_TOOL_FQN,
+        arguments={"questions": first_questions},
+    )
+    _emit_messages_to_stdout([make_tool_result_message(tool_use_id=first_tool_id, content=first_answer)])
+
+    # Subagent AUQ with the inverted ordering.
+    agent_tool_id, ask_tool_id, mcp_request_id = _emit_subagent_launch_and_inverted_ask(
+        questions=second_questions, description="Ask a follow-up question", emit_streaming=emit_streaming
+    )
+    second_answer = _read_mcp_control_response_text(mcp_request_id, ask_tool_id, timeout_seconds=180.0)
+
+    messages = _make_subagent_answer_messages(
+        agent_tool_id=agent_tool_id,
+        ask_tool_id=ask_tool_id,
+        answer_text=second_answer,
+        subagent_label="subagent",
+    )
+    summary_text = f"[FakeClaude] Subagent finished. Subagent received answer: {second_answer}"
+    summary_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
+    messages.append(make_assistant_message(message_id=summary_msg_id, content_blocks=[make_text_block(summary_text)]))
+    return messages
+
+
+def handle_two_subagents_ask_user_question(args: dict, emit_streaming: bool) -> list[dict]:
+    """Two concurrent subagents each asking a DIFFERENT question via MCP, with
+    the inverted subagent event ordering, interleaved as observed in the real
+    freeze trace: tools/call A, sidechain line A, tools/call B, sidechain
+    line B.
+
+    Blocks until BOTH answers arrive, then emits per-subagent echoes so the
+    test can assert each subagent received the answer to its own question
+    (a single-slot pairing would cross the wires).
+
+    Args:
+        args: Must contain "first_questions" and "second_questions".
+    """
+    first_questions = args["first_questions"]
+    second_questions = args["second_questions"]
+
+    agent_a_id, ask_a_id, request_a_id = _emit_subagent_launch_and_inverted_ask(
+        questions=first_questions, description="Subagent A question", emit_streaming=emit_streaming
+    )
+    agent_b_id, ask_b_id, request_b_id = _emit_subagent_launch_and_inverted_ask(
+        questions=second_questions, description="Subagent B question", emit_streaming=emit_streaming
+    )
+
+    responses = _read_mcp_control_responses({request_a_id, request_b_id}, timeout_seconds=180.0)
+    answer_a = _extract_mcp_response_text(responses[request_a_id])
+    answer_b = _extract_mcp_response_text(responses[request_b_id])
+
+    messages = _make_subagent_answer_messages(
+        agent_tool_id=agent_a_id, ask_tool_id=ask_a_id, answer_text=answer_a, subagent_label="subagent A"
+    )
+    messages.extend(
+        _make_subagent_answer_messages(
+            agent_tool_id=agent_b_id, ask_tool_id=ask_b_id, answer_text=answer_b, subagent_label="subagent B"
+        )
+    )
+    summary_text = f"[FakeClaude] Subagent A received answer: {answer_a} | Subagent B received answer: {answer_b}"
+    summary_msg_id = generate_id("msg")
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
+    messages.append(make_assistant_message(message_id=summary_msg_id, content_blocks=[make_text_block(summary_text)]))
+    return messages
+
+
 def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     """Simulate a background subagent (Agent tool with run_in_background=true).
 
@@ -1360,10 +2019,15 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
 
     Args:
         args: Optional: "description", "prompt", "summary_text", "launched_text",
-              "notification_summary", "pause_path".  ("subagent_result" is
-              accepted for backward compatibility with older tests but no
-              longer emitted — real Claude does not stream the subagent's
-              reply to the parent.)
+              "notification_summary", "pause_path", "answer_context_usage".
+              ("subagent_result" is accepted for backward compatibility with
+              older tests but no longer emitted — real Claude does not stream
+              the subagent's reply to the parent.)
+
+              "answer_context_usage" (bool, default False): while paused, answer
+              Sculptor's get_context_usage control request so the turn's metrics
+              flush mid-hold (TurnMetricsAgentMessage pending while the request
+              stays open) — the state needed to reproduce SCU-1820 end-to-end.
     """
     description = args.get("description", "Explore the codebase")
     prompt = args.get("prompt", "Find relevant files")
@@ -1371,6 +2035,11 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     launched_text = args.get("launched_text", "Background subagent launched. Let me continue while it runs.")
     notification_summary = args.get("notification_summary", f'Agent "{description}" completed')
     pause_path: str | None = args.get("pause_path")
+    # When set, answer Sculptor's get_context_usage control request during the
+    # pause so the turn's metrics are flushed (TurnMetricsAgentMessage becomes
+    # pending) while the request is still open — matching real Claude. Off by
+    # default so existing pause-based tests keep their old message stream.
+    answer_context_usage: bool = args.get("answer_context_usage", False)
 
     # IDs
     main_msg_id = generate_id("msg")
@@ -1443,7 +2112,9 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
         _emit_messages_to_stdout(messages)
         messages = []
         sentinel = Path(pause_path)
-        if not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
+        if answer_context_usage:
+            _answer_context_usage_and_wait_for_sentinel(sentinel, timeout_seconds=120)
+        elif not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
             raise RuntimeError(f"background_subagent pause timed out waiting for {sentinel}")
 
     # 5. task_notification — carries only metadata; no subagent content.
@@ -1457,6 +2128,226 @@ def handle_background_subagent(args: dict, emit_streaming: bool) -> list[dict]:
     )
 
     # 6. New request cycle: init + main agent summary
+    messages.append(make_init_message(session_id=session_id))
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
+    messages.append(
+        make_assistant_message(
+            message_id=summary_msg_id,
+            content_blocks=[make_text_block(summary_text)],
+        )
+    )
+
+    return messages
+
+
+def handle_workflow_run(args: dict, emit_streaming: bool) -> list[dict]:
+    """Simulate the Workflow tool's full background-task lifecycle.
+
+    Models the real CLI flow (verified against stream-json captured from
+    Claude Code 2.1.198 workflow sessions): the Workflow tool_result returns
+    immediately ("launched in background"), the run streams
+    system/task_progress events whose ``workflow_progress`` payloads are
+    DELTAS — the first carries the phase plus the initial agent entries,
+    later ones carry only the entries whose state changed — and completion
+    arrives via task_notification followed by a fresh request cycle where
+    the agent summarizes the result.
+
+    Produces the JSONL sequence:
+    1. Main agent assistant message with text + Workflow tool_use
+    2. Workflow tool_result (immediate "launched in background" response)
+    3. task_started event (task_type=local_workflow, workflow_name)
+    4. task_progress with the initial tree (one agent in progress, one queued)
+    5. Main agent "launched" text and turn end (result/success)
+    6. task_progress deltas completing each agent, one payload per agent
+    7. task_notification
+    8. New request cycle (init + summary text)
+
+    When ``pause_path`` is set, messages through step 5 are flushed to stdout
+    and the handler blocks until the sentinel file appears before emitting
+    steps 6-8, so tests can observe the running pill/popover deterministically.
+    Use ``FakeClaudePause`` for the sentinel and call ``release()`` to unblock.
+
+    Args:
+        args: Optional: "workflow_name", "launched_text", "summary_text",
+              "notification_summary", "pause_path".
+    """
+    workflow_name = args.get("workflow_name", "review-changes")
+    launched_text = args.get("launched_text", "Workflow launched. I'll report back when it completes.")
+    summary_text = args.get("summary_text", "[FakeClaude] Workflow finished. Here is the summary.")
+    notification_summary = args.get("notification_summary", f'Workflow "{workflow_name}" completed')
+    pause_path: str | None = args.get("pause_path")
+
+    main_msg_id = generate_id("msg")
+    workflow_tool_id = generate_id("toolu")
+    launched_msg_id = generate_id("msg")
+    summary_msg_id = generate_id("msg")
+    task_id = generate_id("task")
+    session_id = generate_id("session")
+
+    phase_entry = make_workflow_phase_entry(index=0, title="Review")
+    initial_tree = [
+        phase_entry,
+        make_workflow_agent_entry(
+            index=0,
+            label="review:bugs",
+            phase_index=0,
+            phase_title="Review",
+            state="progress",
+            tokens=3100,
+            tool_calls=4,
+            last_tool_summary="Grep: TODO in src/",
+            prompt_preview="Review the diff for bugs",
+        ),
+        make_workflow_agent_entry(
+            index=1,
+            label="review:perf",
+            phase_index=0,
+            phase_title="Review",
+            state="start",
+            prompt_preview="Review the diff for perf issues",
+        ),
+    ]
+    # Completion deltas: one payload per agent, carrying ONLY that agent's
+    # entry — mirroring how the real CLI streams state changes.
+    bugs_done_delta = [
+        make_workflow_agent_entry(
+            index=0,
+            label="review:bugs",
+            phase_index=0,
+            phase_title="Review",
+            state="done",
+            tokens=9800,
+            tool_calls=11,
+            duration_ms=61200,
+            result_preview="Found 2 bugs",
+            prompt_preview="Review the diff for bugs",
+        ),
+    ]
+    perf_done_delta = [
+        make_workflow_agent_entry(
+            index=1,
+            label="review:perf",
+            phase_index=0,
+            phase_title="Review",
+            state="done",
+            tokens=7200,
+            tool_calls=6,
+            duration_ms=48000,
+            result_preview="No perf issues",
+            prompt_preview="Review the diff for perf issues",
+        ),
+    ]
+
+    # 1. Main agent: text + Workflow tool_use
+    workflow_tool_block = make_tool_use_block(
+        tool_id=workflow_tool_id,
+        tool_name="Workflow",
+        tool_input={"script": f"export const meta = {{name: '{workflow_name}'}}"},
+    )
+    messages: list[dict] = []
+    if emit_streaming:
+        messages.extend(
+            make_streaming_tool_events(
+                message_id=main_msg_id,
+                tool_blocks=[workflow_tool_block],
+                text_prefix="I'll run a workflow for this.",
+            )
+        )
+    messages.append(
+        make_assistant_message(
+            message_id=main_msg_id,
+            content_blocks=[make_text_block("I'll run a workflow for this."), workflow_tool_block],
+        )
+    )
+
+    # 2. Workflow tool_result (immediate "launched" response)
+    raw_result = f"Workflow launched in background. Task ID: {task_id}\nYou will be notified when it completes."
+    messages.append(make_tool_result_message(tool_use_id=workflow_tool_id, content=raw_result))
+
+    # 3. task_started event
+    messages.append(
+        make_task_started_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            description=workflow_name,
+            task_type="local_workflow",
+            workflow_name=workflow_name,
+        )
+    )
+
+    # 4. Mid-turn task_progress with the initial tree.
+    messages.append(
+        make_task_progress_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            description="Review: review:bugs",
+            total_tokens=3100,
+            tool_uses=4,
+            duration_ms=12000,
+            last_tool_name="Grep",
+            workflow_progress=initial_tree,
+        )
+    )
+
+    # 5. Main agent "launched" text and turn end. The workflow keeps running
+    # in the background, so the output loop stays open for the notification.
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=launched_msg_id, text=launched_text))
+    messages.append(
+        make_assistant_message(
+            message_id=launched_msg_id,
+            content_blocks=[make_text_block(launched_text)],
+        )
+    )
+    messages.append(make_end_message(session_id=session_id))
+
+    # Optional pause so tests can observe the running pill/popover before the
+    # workflow completes. Signaled (not wall-clock) so the wait survives
+    # arbitrary CI load between the test's "go" and "release" steps.
+    if pause_path is not None:
+        _emit_messages_to_stdout(messages)
+        messages = []
+        sentinel = Path(pause_path)
+        if not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
+            raise RuntimeError(f"workflow_run pause timed out waiting for {sentinel}")
+
+    # 6. Completion deltas — one payload per agent, like the real CLI.
+    messages.append(
+        make_task_progress_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            description="Review: review:bugs done",
+            total_tokens=12900,
+            tool_uses=11,
+            duration_ms=61200,
+            workflow_progress=bugs_done_delta,
+        )
+    )
+    messages.append(
+        make_task_progress_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            description="Review: done",
+            total_tokens=17000,
+            tool_uses=17,
+            duration_ms=63210,
+            workflow_progress=perf_done_delta,
+        )
+    )
+
+    # 7. task_notification
+    messages.append(
+        make_task_notification_message(
+            task_id=task_id,
+            tool_use_id=workflow_tool_id,
+            status="completed",
+            summary=notification_summary,
+            duration_ms=63210,
+        )
+    )
+
+    # 8. New request cycle: init + main agent summary
     messages.append(make_init_message(session_id=session_id))
     if emit_streaming:
         messages.extend(make_streaming_text_events(message_id=summary_msg_id, text=summary_text))
@@ -2008,42 +2899,45 @@ def handle_usage_limit(args: dict, emit_streaming: bool) -> list[dict]:
 def handle_crash(args: dict, emit_streaming: bool) -> list[dict]:
     """Simulate an unrecoverable agent crash that puts the task into ERROR state.
 
-    Emits an init message followed by a structurally invalid assistant message
-    (valid JSON but ``content`` is a string instead of a list).  When the output
-    processor parses the assistant message it encounters a ``TypeError`` which is
-    **not** an ``AgentClientError``.  This propagates through the agent wrapper's
-    generic ``except Exception`` handler which re-raises, killing the processing
-    thread and ultimately putting the task into ERROR state.
+    Emits an init message followed by a ``tool_result`` (user) message with no
+    assistant turn in flight.  ``_parse_tool_result_response`` asserts a turn is
+    active (``current_turn_id is not None``), so this raises ``AssertionError``,
+    which is **not** an ``AgentClientError``.  The agent wrapper re-raises
+    anything that isn't an ``AgentClientError``, so the exception propagates out
+    of the turn and puts the task into ERROR state — unlike a recoverable API
+    error, which surfaces an error block and leaves the agent running.
+
+    (This deliberately does not rely on a malformed message shape: the output
+    processor now normalizes those and contains any parser exception as a
+    warning, so a bad message alone no longer crashes the turn.)
 
     Args:
-        delay_seconds: Optional delay before emitting the crash.  Useful in
-            integration tests that need to navigate away from the workspace
-            before the crash fires.
+        pause_path: Optional sentinel path (see ``FakeClaudePause``).  When set,
+            the crash blocks until the test touches the file, so the test can
+            navigate away first and then release it — the crash fires while the
+            workspace is unfocused, with no wall-clock race.  Preferred over
+            ``delay_seconds`` for that "crash while backgrounded" pattern.
+        delay_seconds: Optional wall-clock delay before emitting the crash.
     """
-    delay_seconds: float = args.get("delay_seconds", 0)
-    if delay_seconds > 0:
-        time.sleep(delay_seconds)
+    pause_path: str | None = args.get("pause_path")
+    if pause_path is not None:
+        sentinel = Path(pause_path)
+        if not _wait_until(timeout_seconds=120, poll_interval=0.05, done=sentinel.exists):
+            raise RuntimeError(f"fake_claude:crash timed out after 120s waiting for {sentinel}")
+    else:
+        delay_seconds: float = args.get("delay_seconds", 0)
+        if delay_seconds > 0:
+            time.sleep(delay_seconds)
 
     session_id = generate_id("session")
 
     _emit_event(make_init_message(session_id))
 
-    # Emit a malformed assistant message: valid JSON, but "content" is a string
-    # instead of a list.  The parser iterates over the string character by
-    # character, then ``content_char["type"]`` fails with TypeError because
-    # string indices must be integers.
-    _emit_event(
-        {
-            "type": "assistant",
-            "message": {
-                "id": generate_id("msg"),
-                "content": "not_a_list",
-                "role": "assistant",
-                "model": "fake",
-                "type": "message",
-            },
-        }
-    )
+    # A tool_result arriving with no assistant turn in flight violates the output
+    # processor's ``current_turn_id is not None`` invariant and raises
+    # AssertionError — a non-AgentClientError the wrapper treats as an
+    # unrecoverable crash.
+    _emit_event(make_tool_result_message(tool_use_id=generate_id("toolu"), content="crash"))
 
     sys.exit(1)
 
@@ -2229,6 +3123,7 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "text_and_bash": handle_text_and_bash,
     "sleep": handle_sleep,
     "wait_for_file": handle_wait_for_file,
+    "reference_absorbed": handle_reference_absorbed,
     "task_create": handle_task_create,
     "task_update": handle_task_update,
     "task_list": handle_task_list,
@@ -2247,6 +3142,9 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "background_task_started": handle_background_task_started,
     "background_task_notification": handle_background_task_notification,
     "emit_task_notification": handle_emit_task_notification,
+    "emit_task_updated": handle_emit_task_updated,
+    "emit_result": handle_emit_result,
+    "notification_turn_then_response": handle_notification_turn_then_response,
     "auto_bg_bash": handle_auto_bg_bash,
     "multi_step": handle_multi_step,
     "parallel_tools": handle_parallel_tools,
@@ -2262,7 +3160,11 @@ COMMAND_REGISTRY: dict[str, Callable[..., list[dict]]] = {
     "spawn_subprocess_and_hang": handle_spawn_subprocess_and_hang,
     "spawn_sigterm_immune_subprocess_and_hang": handle_spawn_sigterm_immune_subprocess_and_hang,
     "subagent": handle_subagent,
+    "subagent_ask_user_question": handle_subagent_ask_user_question,
+    "ask_user_question_then_subagent_ask": handle_ask_user_question_then_subagent_ask,
+    "two_subagents_ask_user_question": handle_two_subagents_ask_user_question,
     "background_subagent": handle_background_subagent,
+    "workflow_run": handle_workflow_run,
     "read_file": handle_read_file,
     "glob": handle_glob,
 }

@@ -11,6 +11,8 @@ import { STATUS_COLOR_STYLES, truncateMiddlePath } from "./utils.ts";
 type FlatListRowProps = {
   entry: FlatFileEntry;
   isFocused: boolean;
+  /** True when this row is the file selected in an embedding panel's viewer. */
+  isSelected?: boolean;
   addedLines?: number;
   removedLines?: number;
   onFileClick: (path: string) => void;
@@ -20,6 +22,7 @@ type FlatListRowProps = {
 export const FlatListRow = memo(function FlatListRow({
   entry,
   isFocused,
+  isSelected,
   addedLines,
   removedLines,
   onFileClick,
@@ -33,7 +36,7 @@ export const FlatListRow = memo(function FlatListRow({
 
   return (
     <div
-      className={`${styles.flatListRow} ${isDeleted ? styles.deleted : ""} ${isFocused ? styles.focused : ""}`}
+      className={`${styles.flatListRow} ${isDeleted ? styles.deleted : ""} ${isFocused ? styles.focused : ""} ${isSelected ? styles.activeFile : ""}`}
       onClick={handleClick}
     >
       <span className={styles.flatListName}>{entry.name}</span>

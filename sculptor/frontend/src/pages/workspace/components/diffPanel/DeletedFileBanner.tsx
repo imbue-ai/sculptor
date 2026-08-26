@@ -1,28 +1,20 @@
 import { Button, Flex, Text } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
 import { AlertTriangle } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback } from "react";
 
-import { fileBrowserTabCloseBehaviorAtom } from "~/common/state/atoms/userConfig.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 
-import { closeDiffTabAtom } from "./atoms.ts";
 import styles from "./DeletedFileBanner.module.scss";
 
 type DeletedFileBannerProps = {
-  workspaceId: string;
-  filePath: string;
+  /** Dismiss the deleted file. The embedding viewer clears both the shared diff
+   *  tab and the host panel's local click selection, so the close takes effect
+   *  regardless of which source drove the view. */
+  onClose: () => void;
 };
 
-export const DeletedFileBanner = ({ workspaceId, filePath }: DeletedFileBannerProps): ReactElement => {
-  const closeDiffTab = useSetAtom(closeDiffTabAtom);
-  const tabCloseBehavior = useAtomValue(fileBrowserTabCloseBehaviorAtom);
+export const DeletedFileBanner = ({ onClose }: DeletedFileBannerProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
-
-  const handleCloseTab = useCallback((): void => {
-    closeDiffTab({ workspaceId, filePath, tabCloseBehavior });
-  }, [closeDiffTab, workspaceId, filePath, tabCloseBehavior]);
 
   return (
     <Flex
@@ -37,7 +29,7 @@ export const DeletedFileBanner = ({ workspaceId, filePath }: DeletedFileBannerPr
       <AlertTriangle size={14} />
       <Text size="2">This file was deleted</Text>
       <span className={styles.spacer} />
-      <Button variant="soft" size="1" color={dangerColor} onClick={handleCloseTab}>
+      <Button variant="soft" size="1" color={dangerColor} onClick={onClose}>
         Close tab
       </Button>
     </Flex>

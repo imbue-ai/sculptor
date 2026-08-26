@@ -1,0 +1,38 @@
+// The ghost Select trigger hosting the file breadcrumb. min-width lets the
+// path ellipsize under pressure instead of pushing the header controls out.
+.trigger {
+  min-width: 0;
+}
+
+.breadcrumb {
+  align-items: center;
+  display: flex;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.dirPath {
+  // Size to content and ellipsize under pressure; no fixed floor so a
+  // single-character directory (e.g. a home-dir `~`) does not get padded out.
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.separator {
+  color: var(--gray-7);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- 1px breadcrumb separator gap
+  padding: 0 1px;
+}
+
+.segment {
+  color: var(--gray-9);
+}
+
+.fileName {
+  color: var(--gray-12);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+}

@@ -1,0 +1,269 @@
+<!doctype html>
+<!--
+  Preview switchboard / down-page for the OpenHost nginx /proxy front
+  (see openhost-nginx.conf, which serves this file from /app).
+
+  One page, two modes, decided client-side from location.pathname:
+    - at /proxy/<port>/... it is the error_page nginx serves when nothing
+      listens on <port> ("this preview is down", auto-reloads when it's back);
+    - at /proxy/ it is a 200 "switchboard" listing live previews.
+
+  It must work when ONLY nginx and the backend are alive, so it is a single
+  static file with no external assets. Liveness is probed same-origin from the
+  browser: a HEAD of /proxy/<port>/ answered by nginx itself (502/503/504,
+  i.e. this very page) means dead; any other status means some dev server
+  replied through the proxy. HEAD keeps dead-port probes body-less, which is
+  what makes scanning the full 9000-port band affordable.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Marker for tooling (e.g. the openhost-preview-switcher plugin) to detect the
+         OpenHost front: only there does GET /proxy/ return this page. -->
+    <meta name="sculptor-switchboard" content="1" />
+    <title>Sculptor — dev preview</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f2f0e7;
+        color: #21201c;
+        font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        max-width: 26rem;
+        width: 100%;
+        padding: 2rem 1.5rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.5rem;
+      }
+      h2 {
+        font-size: 1rem;
+        margin: 1.75rem 0 0.5rem;
+      }
+      p {
+        margin: 0.25rem 0 1rem;
+        opacity: 0.8;
+      }
+      .btn {
+        display: block;
+        margin: 0.5rem auto;
+        padding: 0.65rem 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(33, 32, 28, 0.25);
+        background: #fff;
+        color: inherit;
+        text-decoration: none;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .btn.primary {
+        background: #21201c;
+        color: #f2f0e7;
+        border-color: #21201c;
+      }
+      #previews:empty::after {
+        content: "none found yet";
+        opacity: 0.6;
+        font-size: 0.9rem;
+      }
+      .btn[disabled] {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #status {
+        font-size: 0.85rem;
+        opacity: 0.6;
+        min-height: 1.2em;
+      }
+      footer {
+        margin-top: 1.25rem;
+        font-size: 0.8rem;
+        opacity: 0.5;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #111110;
+          color: #eeeeec;
+        }
+        .btn {
+          background: #222;
+          border-color: rgba(238, 238, 236, 0.25);
+        }
+        .btn.primary {
+          background: #eeeeec;
+          color: #111110;
+          border-color: #eeeeec;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="headline"></h1>
+      <p id="detail"></p>
+      <a class="btn primary" id="back" href="/">&larr; Back to Sculptor</a>
+      <h2>Live previews</h2>
+      <div id="previews"></div>
+      <p id="status"></p>
+      <button class="btn" id="rescan" type="button">Rescan 51000&ndash;51099</button>
+      <button class="btn" id="fullscan" type="button">Scan full band 51000&ndash;59999</button>
+      <footer id="backend"></footer>
+    </main>
+    <script>
+      // Preserve the SPA's hash route across switches: /proxy/<p>/#/foo and
+      // /#/foo are the same app screen on different bundles.
+      var hash = location.hash || "";
+      var deadMatch = location.pathname.match(/^\/proxy\/(5[1-9][0-9][0-9][0-9])(\/|$)/);
+      var deadPort = deadMatch ? Number(deadMatch[1]) : null;
+
+      document.getElementById("back").href = "/" + hash;
+      if (deadPort) {
+        document.getElementById("headline").textContent = "Preview on port " + deadPort + " is not running";
+        document.getElementById("detail").textContent =
+          "Its dev server is unreachable. This page reloads automatically if it comes back.";
+      } else {
+        document.getElementById("headline").textContent = "Preview switchboard";
+        document.getElementById("detail").textContent = "Pick a live dev preview, or head back to the main app.";
+      }
+
+      // 502/503/504 here are nginx's own dead-upstream statuses (this page);
+      // a live dev server never produces them, so anything else means alive.
+      var NGINX_DOWN = { 502: true, 503: true, 504: true };
+      function probe(port, timeoutMs) {
+        var ctl = new AbortController();
+        var timer = setTimeout(function () {
+          ctl.abort();
+        }, timeoutMs || 5000);
+        return fetch("/proxy/" + port + "/", { method: "HEAD", cache: "no-store", signal: ctl.signal })
+          .then(function (r) {
+            return !NGINX_DOWN[r.status];
+          })
+          .catch(function () {
+            return false;
+          })
+          .finally(function () {
+            clearTimeout(timer);
+          });
+      }
+
+      // Best-effort identity for a live preview: a sculptor-preview <meta> if
+      // the dev server injects one, else the document title.
+      function label(port) {
+        return fetch("/proxy/" + port + "/", { cache: "no-store" })
+          .then(function (r) {
+            return r.text();
+          })
+          .then(function (text) {
+            var meta = text.match(/<meta name="sculptor-preview" content="([^"]*)"/);
+            if (meta) return meta[1];
+            var title = text.match(/<title>([^<]*)<\/title>/i);
+            return title ? title[1] : "";
+          })
+          .catch(function () {
+            return "";
+          });
+      }
+
+      var found = {};
+      function addResult(port, info) {
+        if (found[port]) return;
+        found[port] = true;
+        var a = document.createElement("a");
+        a.className = "btn";
+        a.href = "/proxy/" + port + "/" + hash;
+        a.textContent = ":" + port + (info ? " — " + info : "");
+        document.getElementById("previews").appendChild(a);
+      }
+
+      var statusEl = document.getElementById("status");
+      var scanning = false;
+      // Disable the scan buttons while a scan runs, rather than silently
+      // ignoring clicks — the quick scan auto-runs on load, so an early tap on
+      // "full band" would otherwise appear to do nothing.
+      function setScanning(value) {
+        scanning = value;
+        document.getElementById("rescan").disabled = value;
+        document.getElementById("fullscan").disabled = value;
+      }
+      function scan(from, to) {
+        if (scanning) return;
+        setScanning(true);
+        var total = to - from + 1;
+        var ports = [];
+        for (var p = from; p <= to; p++) ports.push(p);
+        var done = 0;
+        statusEl.textContent = "scanning…";
+        function worker() {
+          if (!ports.length) return Promise.resolve();
+          var port = ports.shift();
+          return probe(port)
+            .then(function (alive) {
+              if (!alive) return null;
+              return label(port).then(function (info) {
+                addResult(port, info);
+              });
+            })
+            .then(function () {
+              done++;
+              if (done % 50 === 0) statusEl.textContent = "scanned " + done + "/" + total + "…";
+              return worker();
+            });
+        }
+        var lanes = [];
+        for (var i = 0; i < 24; i++) lanes.push(worker());
+        Promise.all(lanes).then(function () {
+          statusEl.textContent =
+            "scanned " + total + " ports · " + Object.keys(found).length + " live";
+          setScanning(false);
+        });
+      }
+
+      document.getElementById("rescan").onclick = function () {
+        document.getElementById("previews").replaceChildren();
+        found = {};
+        scan(51000, 51099);
+      };
+      document.getElementById("fullscan").onclick = function () {
+        scan(51000, 59999);
+      };
+
+      // launch-preview.sh suggests the 510xx range, so a quick scan of it on
+      // load catches the common case; the full-band button covers the rest.
+      scan(51000, 51099);
+
+      // Down-page mode: return to the app the moment the preview is back.
+      if (deadPort) {
+        setInterval(function () {
+          probe(deadPort, 2000).then(function (alive) {
+            if (alive) location.reload();
+          });
+        }, 3000);
+      }
+
+      // Identify the main deployment for orientation (unauthenticated endpoint).
+      fetch("/api/v1/health", { cache: "no-store" })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (h) {
+          document.getElementById("backend").textContent =
+            "backend " + (h.version || "?") + (h.git_sha ? " @ " + String(h.git_sha).slice(0, 8) : "");
+        })
+        .catch(function () {});
+    </script>
+  </body>
+</html>

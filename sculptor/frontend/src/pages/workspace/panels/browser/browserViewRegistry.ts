@@ -54,8 +54,8 @@ export const browserViewStatusAtomFamily = atomFamily((_workspaceId: string) =>
 );
 
 // Identifies which workspace's panel placeholder is currently mounted (if any).
-// The slot for this workspace mirrors its webContentsId onto window.__BROWSER_PANEL_TEST__
-// so the existing test bridge keeps working without changes to the test harness.
+// The slot for this workspace carries the BROWSER_WEBVIEW test id, marking the
+// active guest apart from the hidden background slots.
 export const focusedBrowserWorkspaceIdAtom = atom<string | null>(null);
 
 // Imperative controllers — refs to webview instance methods. Not Jotai

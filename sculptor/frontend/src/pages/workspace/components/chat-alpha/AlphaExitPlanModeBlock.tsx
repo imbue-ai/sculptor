@@ -6,21 +6,22 @@ import { useCallback, useState } from "react";
 
 import type { ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
-import { useImbueParams, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail";
 import { MarkdownBlock } from "~/components/MarkdownBlock";
 import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 
 import styles from "./AlphaChatView.module.scss";
+import { useChatTask } from "./ChatTaskContext.tsx";
 import { PulsingDot } from "./pill-animations";
 
 const DISMISSED_ANSWER = "[Dismissed]";
 const APPROVE_PLAN_ANSWER = "Approve plan";
 
 export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock }): ReactElement => {
-  const { taskID } = useImbueParams();
-  const { workspaceID } = useWorkspacePageParams();
-  const { pendingUserQuestion, submittedQuestionAnswers } = useTaskDetailWithDefaults(taskID ?? "");
+  // The owning chat panel's agent — the pending-question and answer lookups
+  // must resolve against the agent whose transcript holds this block.
+  const { workspaceId: workspaceID, taskId: taskID } = useChatTask();
+  const { pendingUserQuestion, submittedQuestionAnswers } = useTaskDetailWithDefaults(taskID);
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   const [isExpanded, setIsExpanded] = useState(false);
 

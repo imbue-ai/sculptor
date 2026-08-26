@@ -12,20 +12,52 @@ import re
 import signal
 import sys
 import time
-from pathlib import Path
 from uuid import uuid4
 
-from sculptor.agents.default.claude_code_sdk.harness import compute_claude_jsonl_directory
 from sculptor.agents.testing.fake_claude_commands import COMMAND_REGISTRY
 from sculptor.agents.testing.fake_claude_commands import UnknownFakeClaudeCommandError
+from sculptor.agents.testing.fake_claude_commands import clear_absorbed_frames
+from sculptor.agents.testing.fake_claude_commands import configure_stdin_router
 from sculptor.agents.testing.fake_claude_commands import dispatch_handler
 from sculptor.agents.testing.fake_claude_commands import handle_default
+from sculptor.agents.testing.fake_claude_commands import read_next_user_prompt
+from sculptor.agents.testing.fake_claude_jsonl import append_transcript_entry
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
+from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
 from sculptor.agents.testing.fake_claude_jsonl import make_init_message
+from sculptor.agents.testing.fake_claude_jsonl import make_plain_user_transcript_entry
+from sculptor.agents.testing.fake_claude_jsonl import make_streaming_text_events
+from sculptor.agents.testing.fake_claude_jsonl import make_text_block
+from sculptor.agents.testing.fake_claude_jsonl import make_user_frame_echo
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
 
 _FAKE_CLAUDE_PREFIX = "fake_claude:"
+
+# When this env var is set (it is forwarded from the backend because it starts
+# with CLAUDE_), every cycle appends an assistant text message echoing the CLI
+# launch arguments. Lets UI-level tests assert which model / fast-mode /
+# effort the CLI was actually relaunched with — e.g. that an answer-driven
+# turn after a backend restart reuses the conversation's settings.
+_ECHO_LAUNCH_ARGS_ENV_VAR = "CLAUDE_FAKE_ECHO_LAUNCH_ARGS"
+
+
+def _build_launch_args_echo(parsed: argparse.Namespace) -> str:
+    """Render the parsed launch args as a stable, greppable one-liner."""
+    fast_mode = False
+    if parsed.settings:
+        try:
+            fast_mode = bool(json.loads(parsed.settings).get("fastMode", False))
+        except json.JSONDecodeError:
+            pass
+    parts = [
+        f"model={parsed.model or 'default'}",
+        f"fast_mode={str(fast_mode).lower()}",
+        f"effort={parsed.effort or 'default'}",
+        f"resumed={'yes' if parsed.resume else 'no'}",
+    ]
+    return f"[FakeClaude] launch-args: {' '.join(parts)}"
+
 
 # Seconds to stall a resumed /compact so integration tests can observe the
 # transient Compacting indicator before FakeClaude exits.
@@ -45,9 +77,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dangerously-skip-permissions", action="store_true")
     parser.add_argument("--include-partial-messages", action="store_true")
     parser.add_argument("--include-hook-events", action="store_true")
+    # Echo each accepted user frame back on stdout (delivery confirmation). When
+    # set, turn-starting frames are echoed just after their init and absorbed
+    # frames are echoed inside the open turn — matching the real CLI's
+    # --replay-user-messages, whose only discriminator is echo position.
+    parser.add_argument("--replay-user-messages", action="store_true")
     parser.add_argument("--resume", default=None)
     parser.add_argument("--append-system-prompt", default=None)
     parser.add_argument("--model", default=None)
+    parser.add_argument("--effort", default=None)
+    parser.add_argument("--settings", default=None)
     parser.add_argument("--plugin-dir", action="append", default=[])
     # Flags specific to the /btw forked-session invocation; accepted + ignored.
     parser.add_argument("--fork-session", action="store_true")
@@ -117,24 +156,6 @@ def _get_session_id(resume_id: str | None) -> str:
     return f"session_fakeclaude_{uuid4().hex}"
 
 
-def _get_session_file_path(session_id: str) -> Path:
-    """Compute the session file path matching the Claude harness's layout.
-
-    Uses the resolved CWD, which matches `ClaudeCodeHarness.get_jsonl_path`
-    since the process is launched with get_working_directory() as its CWD.
-    """
-    resolved_cwd = Path(os.path.realpath(os.getcwd()))
-    return compute_claude_jsonl_directory(Path.home(), resolved_cwd) / f"{session_id}.jsonl"
-
-
-def _write_session_file(session_id: str) -> None:
-    """Write the session history file so is_session_id_valid() passes."""
-    session_path = _get_session_file_path(session_id)
-    session_path.parent.mkdir(parents=True, exist_ok=True)
-    session_data = {"sessionId": session_id, "type": "user", "message": {"role": "user", "content": "test"}}
-    session_path.write_text(json.dumps(session_data) + "\n")
-
-
 def _emit_jsonl(messages: list[dict]) -> None:
     """Write JSONL messages to stdout."""
     for msg in messages:
@@ -180,91 +201,99 @@ def _install_sigterm_handler() -> None:
     signal.signal(signal.SIGTERM, lambda _signum, _frame: sys.exit(AGENT_EXIT_CODE_FROM_SIGTERM))
 
 
-def _read_prompt_from_stream_json_stdin() -> str:
-    """Read a user message from stdin in stream-json format.
+def _read_prompt_from_stream_json_stdin() -> str | None:
+    """Read the next turn-starting user message from stdin (stream-json mode).
 
-    Reads lines from stdin until a JSON object with "type": "user" is found,
-    then extracts and returns the message content. Ignores control_request
-    messages (e.g. interrupts) and other non-user message types.
-    Returns empty string if stdin is closed without a user message.
+    Delegates to the unified stdin router's between-cycle reader (see
+    ``read_next_user_prompt``). Returns the frame's (HTML-unescaped, stripped)
+    content — ``""`` for an empty-content frame so the default handler still
+    runs — or ``None`` when stdin closes first, so the caller exits cleanly
+    rather than running a turn the user never sent. An ``interrupt``
+    control_request seen while idle exits with the SIGTERM code.
+
+    The router owns a single stdin buffer shared with the in-cycle readers, so
+    a frame that lands while a cycle's handler is polling stdin is absorbed as
+    steering there (not lost, and not misread as a turn-start here); whatever a
+    handler pulled off stdin but did not consume stays buffered and is seen here
+    at the cycle boundary.
     """
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(data, dict):
-            continue
-        if data.get("type") == "user":
-            message = data.get("message", {})
-            content = message.get("content", "")
-            return html.unescape(content).strip() if isinstance(content, str) else ""
-    return ""
+    return read_next_user_prompt()
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run FakeClaude: read prompt, dispatch command, emit JSONL, write session file."""
-    _install_sigterm_handler()
-    parsed = _parse_args(argv)
+def _maybe_delay_for_compact_indicator(prompt: str, resume_id: str | None) -> None:
+    """Stall a resumed ``/compact`` so tests can observe the Compacting indicator.
 
-    # `-p <question>` carries the prompt on argv (e.g. the /btw forked
-    # invocation). Otherwise read from stdin using the stream-json protocol
-    # (the standard main-agent path).
-    if isinstance(parsed.p_flag, str):
-        prompt = parsed.p_flag
-    elif parsed.input_format == "stream-json":
-        prompt = _read_prompt_from_stream_json_stdin()
-    elif not sys.stdin.isatty():
-        prompt = html.unescape(sys.stdin.read()).strip()
-    else:
-        prompt = ""
-
-    # Add a delay during compact operations so that integration tests can
-    # observe transient UI states like the Compacting indicator.
-    if prompt == "/compact" and parsed.resume:
+    Only the resumed-compact turn stalls; a fresh session never runs /compact.
+    """
+    if prompt == "/compact" and resume_id:
         time.sleep(_COMPACT_INDICATOR_DELAY_SECONDS)
 
-    emit_streaming = parsed.include_partial_messages
-    session_id = _get_session_id(parsed.resume)
-    cwd = os.getcwd()
 
-    # Emit the init message immediately so the output processor gets the
-    # session ID before any handler might block (e.g. ask_user_question
-    # waiting for the kill signal).
+def _run_cycle(
+    prompt: str,
+    session_id: str,
+    cwd: str,
+    emit_streaming: bool,
+    plugin_dir: str | None,
+    system_commands: list[str],
+    persist_session: bool,
+    replay_user_messages: bool,
+    launch_args_echo: str | None = None,
+) -> int | None:
+    """Run one full ``init → messages → result`` cycle for a single user frame.
+
+    Emits the cycle's own ``init`` first — an init per cycle mirrors the real
+    CLI and is the shape Sculptor's output processor expects for every turn —
+    then records this turn-starting frame, then dispatches the frame's
+    ``fake_claude:`` directives, then the terminating ``result``. Emitting
+    ``init`` up front also means the output processor has the session id before
+    any handler blocks (e.g. ask_user_question waiting on an MCP response).
+
+    ``persist_session`` appends this frame to the on-disk transcript as a plain
+    user message — the turn-starting shape, distinct from the ``queued_command``
+    attachment an absorbed mid-cycle frame gets. It doubles as the ``--resume``
+    validity record. Writing happens inside the cycle, so an immediate-EOF exit
+    (no cycle) leaves nothing on disk; ``--no-session-persistence`` skips it.
+
+    ``replay_user_messages`` echoes this frame on stdout right after ``init``
+    (the turn-starting replay position), the counterpart to an absorbed frame's
+    echo inside the open turn.
+
+    ``system_commands`` (directives extracted from ``--append-system-prompt``)
+    run before the frame's own directives. The caller passes them only for the
+    first cycle, since an appended system prompt is a launch-time input, not a
+    per-turn one.
+
+    Returns an exit code if the cycle terminates the whole process (an unknown
+    command → 1), or ``None`` to signal the caller may run further cycles.
+    """
+    # Start the turn's absorption record fresh so a reference_absorbed directive
+    # in this cycle sees only frames absorbed during this turn.
+    clear_absorbed_frames()
+
     _emit_jsonl([make_init_message(session_id)])
-    # `--no-session-persistence` (used by /btw's forked invocation) means we
-    # must leave the resumed session file untouched and not write a new one.
-    if not parsed.no_session_persistence:
-        _write_session_file(session_id)
+
+    if persist_session:
+        append_transcript_entry(session_id, make_plain_user_transcript_entry(session_id, prompt))
+    if replay_user_messages:
+        _emit_jsonl([make_user_frame_echo(prompt)])
 
     all_messages: list[dict] = []
     end_result = ""
 
-    # FakeClaude handlers only inspect a single plugin_dir for testing. The real
-    # Claude CLI accepts multiple --plugin-dir flags (Sculptor passes one for the
-    # sculptor plugin and one for the sculptor-workflow plugin); we collapse to
-    # the first here since no handler actually reads multiple.
-    plugin_dir = parsed.plugin_dir[0] if parsed.plugin_dir else None
+    # System-prompt directives run first, before the frame's own directives.
+    for system_command in system_commands:
+        try:
+            messages, result = _dispatch_single_prompt(system_command, cwd, emit_streaming, plugin_dir=plugin_dir)
+            all_messages.extend(messages)
+            if result:
+                end_result = result
+        except UnknownFakeClaudeCommandError as e:
+            sys.stderr.write(f"FakeClaude (system prompt): {e}\n")
+            all_messages.append(make_end_message(session_id, is_error=True))
+            _emit_jsonl(all_messages)
+            return 1
 
-    # Execute any fake_claude: commands found in the system prompt first
-    if parsed.append_system_prompt:
-        system_commands = _extract_fake_claude_commands(parsed.append_system_prompt)
-        for system_command in system_commands:
-            try:
-                messages, result = _dispatch_single_prompt(system_command, cwd, emit_streaming, plugin_dir=plugin_dir)
-                all_messages.extend(messages)
-                if result:
-                    end_result = result
-            except UnknownFakeClaudeCommandError as e:
-                sys.stderr.write(f"FakeClaude (system prompt): {e}\n")
-                all_messages.append(make_end_message(session_id, is_error=True))
-                _emit_jsonl(all_messages)
-                return 1
-
-    # Execute the stdin prompt
     try:
         messages, result = _dispatch_single_prompt(prompt, cwd, emit_streaming, plugin_dir=plugin_dir)
         all_messages.extend(messages)
@@ -276,10 +305,122 @@ def main(argv: list[str] | None = None) -> int:
         _emit_jsonl(all_messages)
         return 1
 
+    if launch_args_echo is not None:
+        # Mirror handle_default's shape: streaming events first, then the
+        # persistence message. The live chat renders from the stream — a bare
+        # persistence TextBlock that was never streamed does not surface.
+        echo_message_id = generate_id("msg")
+        if emit_streaming:
+            all_messages.extend(make_streaming_text_events(message_id=echo_message_id, text=launch_args_echo))
+        all_messages.append(
+            make_assistant_message(
+                message_id=echo_message_id,
+                content_blocks=[make_text_block(launch_args_echo)],
+            )
+        )
+
     all_messages.append(make_end_message(session_id, result=end_result))
     _emit_jsonl(all_messages)
+    return None
 
-    return 0
+
+def main(argv: list[str] | None = None) -> int:
+    """Run FakeClaude: read prompt(s), dispatch directives, emit JSONL, write session file.
+
+    In ``--input-format stream-json`` mode (the standard main-agent path) one
+    invocation hosts many turns: it runs a full scripted cycle per user frame
+    read from stdin and exits 0 when stdin closes. The other input modes — a
+    ``-p <question>`` argument (e.g. /btw's forked invocation) or a plain piped
+    prompt — run a single cycle. This mirrors the real CLI, which lingers on
+    stdin between turns and exits only on EOF; single-frame usage is the
+    degenerate case where exactly one cycle runs before EOF.
+    """
+    _install_sigterm_handler()
+    parsed = _parse_args(argv)
+
+    emit_streaming = parsed.include_partial_messages
+    cwd = os.getcwd()
+    # FakeClaude handlers only inspect a single plugin_dir for testing. The real
+    # Claude CLI accepts multiple --plugin-dir flags (Sculptor passes one for the
+    # sculptor plugin and one for the sculptor-workflow plugin); we collapse to
+    # the first here since no handler actually reads multiple.
+    plugin_dir = parsed.plugin_dir[0] if parsed.plugin_dir else None
+    session_id = _get_session_id(parsed.resume)
+
+    # `--no-session-persistence` (used by /btw's forked invocation) means we
+    # must leave the resumed session file untouched and not write a new one.
+    # The transcript write is deferred into the first cycle (see `_run_cycle`)
+    # so an immediate-EOF exit leaves no orphan session file on disk.
+    persist_session = not parsed.no_session_persistence
+
+    # Hand the stdin router its launch-time flags before any cycle runs: it owns
+    # every stdin read and decides how a mid-cycle frame is absorbed.
+    configure_stdin_router(replay_user_messages=parsed.replay_user_messages, persist_session=persist_session)
+
+    # fake_claude: directives embedded in the appended system prompt are a
+    # launch-time input, so they run once — on the first cycle only.
+    system_commands = _extract_fake_claude_commands(parsed.append_system_prompt) if parsed.append_system_prompt else []
+
+    launch_args_echo = _build_launch_args_echo(parsed) if os.environ.get(_ECHO_LAUNCH_ARGS_ENV_VAR) else None
+
+    # `-p <question>` carries the prompt on argv (e.g. the /btw forked
+    # invocation) — a single cycle, no stdin loop.
+    if isinstance(parsed.p_flag, str):
+        _maybe_delay_for_compact_indicator(parsed.p_flag, parsed.resume)
+        exit_code = _run_cycle(
+            parsed.p_flag,
+            session_id,
+            cwd,
+            emit_streaming,
+            plugin_dir,
+            system_commands,
+            persist_session=persist_session,
+            replay_user_messages=parsed.replay_user_messages,
+            launch_args_echo=launch_args_echo,
+        )
+        return exit_code if exit_code is not None else 0
+
+    # Stream-json stdin (the standard main-agent path): one scripted cycle per
+    # user frame, exiting 0 when stdin closes.
+    if parsed.input_format == "stream-json":
+        is_first_cycle = True
+        while True:
+            prompt = _read_prompt_from_stream_json_stdin()
+            if prompt is None:
+                # stdin closed while idle between cycles — exit silently.
+                return 0
+            _maybe_delay_for_compact_indicator(prompt, parsed.resume)
+            cycle_system_commands = system_commands if is_first_cycle else []
+            exit_code = _run_cycle(
+                prompt,
+                session_id,
+                cwd,
+                emit_streaming,
+                plugin_dir,
+                cycle_system_commands,
+                persist_session=persist_session,
+                replay_user_messages=parsed.replay_user_messages,
+                launch_args_echo=launch_args_echo,
+            )
+            if exit_code is not None:
+                return exit_code
+            is_first_cycle = False
+
+    # Non-stream-json single-shot: a plain piped prompt, or nothing on a tty.
+    prompt = html.unescape(sys.stdin.read()).strip() if not sys.stdin.isatty() else ""
+    _maybe_delay_for_compact_indicator(prompt, parsed.resume)
+    exit_code = _run_cycle(
+        prompt,
+        session_id,
+        cwd,
+        emit_streaming,
+        plugin_dir,
+        system_commands,
+        persist_session=persist_session,
+        replay_user_messages=parsed.replay_user_messages,
+        launch_args_echo=launch_args_echo,
+    )
+    return exit_code if exit_code is not None else 0
 
 
 if __name__ == "__main__":

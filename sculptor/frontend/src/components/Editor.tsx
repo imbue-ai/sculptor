@@ -3,7 +3,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { useAtomValue } from "jotai";
 import type React from "react";
 import type { ReactElement } from "react";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import { projectsArrayAtom } from "~/common/state/atoms/projects";
@@ -102,6 +102,15 @@ type EditorProps = {
    * ref so the editor isn't torn down on every parent re-render.
    */
   onTriggerImageUpload?: () => void;
+  /**
+   * When > 0, coalesce content changes: serialize + call `onChange` at most once
+   * per this many ms (trailing) instead of on every keystroke, cutting the
+   * per-keystroke markdown serialization that lags typing/IME on slow devices.
+   * The pending change is flushed on blur and on unmount; a host that submits
+   * should read the live editor (via `editorRef`), not the debounced value.
+   * Default 0 = emit on every change (current behavior).
+   */
+  changeDebounceMs?: number;
 };
 
 export const Editor = ({
@@ -121,6 +130,7 @@ export const Editor = ({
   projectID: projectIDProp,
   workspaceID: workspaceIDProp,
   onTriggerImageUpload,
+  changeDebounceMs = 0,
 }: EditorProps): ReactElement => {
   const { projectID: routeProjectID } = useImbueParams();
   const routeWorkspaceID = useParams<{ workspaceID?: string }>().workspaceID;
@@ -142,13 +152,34 @@ export const Editor = ({
   // parent that swaps in a new closure (e.g. one that captures other state)
   // doesn't end up calling a stale handler.
   const onChangeRef = useRef(onChange);
+  // Debounce machinery for the opt-in `changeDebounceMs`. Refs so the long-lived
+  // Tiptap onUpdate closure always sees the current setting + timer/editor.
+  const changeDebounceMsRef = useRef(changeDebounceMs);
+  const changeDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingChangeEditorRef = useRef<TipTapEditor | null>(null);
   useEffect(() => {
     onKeyDownRef.current = onKeyDown;
     onFilesChangeRef.current = onFilesChange;
     onErrorRef.current = onError;
     onTriggerImageUploadRef.current = onTriggerImageUpload;
     onChangeRef.current = onChange;
+    changeDebounceMsRef.current = changeDebounceMs;
   });
+
+  // Emit any pending debounced change immediately (on blur / unmount) so the
+  // draft is persisted and a host reading the editor at submit sees a value
+  // consistent with what's been typed.
+  const flushPendingChange = useCallback((): void => {
+    if (changeDebounceTimerRef.current !== null) {
+      clearTimeout(changeDebounceTimerRef.current);
+      changeDebounceTimerRef.current = null;
+    }
+    const pendingEditor = pendingChangeEditorRef.current;
+    pendingChangeEditorRef.current = null;
+    if (pendingEditor && !pendingEditor.isDestroyed) {
+      onChangeRef.current(normalizeMarkdown(pendingEditor.getMarkdown()));
+    }
+  }, []);
 
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const projects = useAtomValue(projectsArrayAtom);
@@ -265,7 +296,23 @@ export const Editor = ({
       content: value || undefined,
       ...(value ? { contentType: "markdown" as const } : {}),
       onUpdate: ({ editor }) => {
-        onChangeRef.current(normalizeMarkdown(editor.getMarkdown()));
+        const debounceMs = changeDebounceMsRef.current;
+        if (debounceMs > 0) {
+          // Coalesce: stash the editor and (re)arm a trailing timer instead of
+          // serializing on every keystroke (the serialization is O(doc) and lags
+          // typing / IME on slow devices).
+          pendingChangeEditorRef.current = editor;
+          if (changeDebounceTimerRef.current !== null) {
+            clearTimeout(changeDebounceTimerRef.current);
+          }
+          changeDebounceTimerRef.current = setTimeout(flushPendingChange, debounceMs);
+        } else {
+          onChangeRef.current(normalizeMarkdown(editor.getMarkdown()));
+        }
+      },
+      onBlur: () => {
+        // Don't strand a pending debounced change when focus leaves the editor.
+        flushPendingChange();
       },
     },
     // `extensions` is memoized on the same deps that would invalidate the
@@ -273,6 +320,15 @@ export const Editor = ({
     // without duplicating the dependency list.
     [extensions],
   );
+
+  // Flush a pending debounced change on unmount so a draft isn't lost if the host
+  // unmounts before the trailing timer fires. Declared after `useEditor` so this
+  // cleanup runs before the editor is destroyed (React runs cleanups in reverse
+  // declaration order); the `isDestroyed` guard in flushPendingChange covers the
+  // edge case where it doesn't.
+  useEffect(() => {
+    return flushPendingChange;
+  }, [flushPendingChange]);
 
   // Expose the TipTap editor instance to parent components via ref, and stash it
   // on its own contenteditable DOM node as `__tiptapEditor`. The DOM handle lets

@@ -726,6 +726,20 @@ def test_fake_pi_set_model_rejects_unknown_model() -> None:
     assert state["data"]["model"]["id"] == "fake-pi-opus-4-8"
 
 
+def test_fake_pi_report_model_echoes_the_switched_current_model() -> None:
+    """`fake_pi:report_model` echoes the session's current model into the turn text, and a
+    preceding `set_model` is reflected — the hook the pre-message-switch integration test
+    uses to prove a switch reached pi (the turn ran under it), not just the display."""
+    set_model = json.dumps({"type": "set_model", "id": "sm", "provider": "anthropic", "modelId": "fake-pi-sonnet-4-6"})
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=set_model + "\n" + _send_prompt("fake_pi:report_model"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    assert "fake-pi-sonnet-4-6" in _last_assistant_text(events)
+
+
 def test_fake_pi_rpc_rejects_non_rpc_mode_with_exit_2() -> None:
     result = _run_fake_pi(["--mode", "something-else"])
 

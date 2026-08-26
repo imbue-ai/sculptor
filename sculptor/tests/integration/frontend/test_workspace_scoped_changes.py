@@ -13,23 +13,15 @@ different file, and verify that both files appear in the Changes tab
 for BOTH agents.
 """
 
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.playwright_utils import add_agent_and_wait_for_ready
-from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-
-def _enable_review_all_via_settings(page: Page) -> None:
-    """Enable the Review All experimental setting via the Settings UI."""
-    settings_page = navigate_to_settings_page(page=page)
-    experimental = settings_page.click_on_experimental()
-    experimental.enable_review_all()
 
 
 @user_story("to see all workspace changes regardless of which agent made them")
@@ -77,7 +69,8 @@ fake_claude:write_file `{
     expect(changes_tree).to_be_visible()
     expect(changes_tree.get_tree_rows()).to_have_count(2)
 
-    task_page.get_agent_tab_bar().get_agent_tabs().first.click()
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    tabs.first.click()
 
     task_page.activate_changes_panel(scope="uncommitted")
     changes_tree_1 = task_page.get_changes_panel().get_changes_tree()
@@ -98,8 +91,6 @@ def test_review_modal_shows_changes_from_all_agents(
     3. Open Review All — should contain diffs for BOTH files
     """
     page = sculptor_instance_.page
-
-    _enable_review_all_via_settings(page)
 
     task_page = start_task_and_wait_for_ready(
         page,
@@ -129,10 +120,10 @@ fake_claude:write_file `{
     task_page_2.activate_changes_panel()
     task_page_2.click_review_all()
 
-    diff_panel = task_page_2.get_diff_panel()
-    expect(diff_panel).to_be_visible()
-    expect(diff_panel).to_contain_text("review_file1.py")
-    expect(diff_panel).to_contain_text("review_file2.py")
+    review_all_panel = task_page_2.get_review_all_panel()
+    expect(review_all_panel).to_be_visible()
+    expect(review_all_panel).to_contain_text("review_file1.py")
+    expect(review_all_panel).to_contain_text("review_file2.py")
 
 
 @user_story("to see all workspace changes regardless of which agent made them")
@@ -184,7 +175,8 @@ fake_claude:write_file `{
     )
     wait_for_completed_message_count(chat_panel=chat_panel_2, expected_message_count=2)
 
-    task_page.get_agent_tab_bar().get_agent_tabs().first.click()
+    tabs = PlaywrightPanelTabElement(page, sub_section="center").get_panel_tabs()
+    tabs.first.click()
 
     task_page.activate_changes_panel(scope="uncommitted")
     changes_tree_1 = task_page.get_changes_panel().get_changes_tree()

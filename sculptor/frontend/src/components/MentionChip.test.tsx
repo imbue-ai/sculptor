@@ -10,7 +10,7 @@ import { ElementIds } from "~/api";
 import { projectAtomFamily } from "~/common/state/atoms/projects.ts";
 import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import { diffPanelOpenAtom, diffPanelStateAtomFamily } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import { diffPanelStateAtomFamily } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { FILE_VIEW_PREFIX } from "~/pages/workspace/components/diffPanel/types.ts";
 import { fileBrowserStateAtomFamily, focusFolderAtom } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 
@@ -95,17 +95,14 @@ describe("MentionChip", () => {
       const { store } = renderChip({ id: "@src/utils.ts" });
       fireEvent.click(getChip());
 
-      const state = store.get(diffPanelStateAtomFamily(WORKSPACE_ID));
-      expect(state.openTabs).toHaveLength(1);
-      const tab = state.openTabs[0];
-      expect(tab.kind).toBe("file-view");
+      const tab = store.get(diffPanelStateAtomFamily(WORKSPACE_ID)).activeTab;
+      expect(tab).not.toBeNull();
+      expect(tab?.kind).toBe("file-view");
       // File view tabs use FILE_VIEW_PREFIX + realPath as their identity key.
-      expect(tab.filePath).toBe(`${FILE_VIEW_PREFIX}src/utils.ts`);
-      if (tab.kind === "file-view") {
+      expect(tab?.filePath).toBe(`${FILE_VIEW_PREFIX}src/utils.ts`);
+      if (tab?.kind === "file-view") {
         expect(tab.realPath).toBe("src/utils.ts");
       }
-      expect(state.activeTabPath).toBe(`${FILE_VIEW_PREFIX}src/utils.ts`);
-      expect(store.get(diffPanelOpenAtom)).toBe(true);
     });
 
     it("click does not trigger folder reveal", () => {
@@ -182,8 +179,7 @@ describe("MentionChip", () => {
       fireEvent.click(getChip());
 
       const state = store.get(diffPanelStateAtomFamily(WORKSPACE_ID));
-      expect(state.openTabs).toEqual([]);
-      expect(state.activeTabPath).toBeNull();
+      expect(state.activeTab).toBeNull();
     });
   });
 
@@ -200,7 +196,7 @@ describe("MentionChip", () => {
 
       expect(store.get(focusFolderAtom)).toBeNull();
       const state = store.get(diffPanelStateAtomFamily(WORKSPACE_ID));
-      expect(state.openTabs).toEqual([]);
+      expect(state.activeTab).toBeNull();
     });
   });
 
@@ -214,9 +210,9 @@ describe("MentionChip", () => {
       // at the default (empty). Check both the id we used elsewhere and an
       // empty-string id as a sanity check that nothing leaked.
       const stateForWs = store.get(diffPanelStateAtomFamily(WORKSPACE_ID));
-      expect(stateForWs.openTabs).toEqual([]);
+      expect(stateForWs.activeTab).toBeNull();
       const stateEmpty = store.get(diffPanelStateAtomFamily(""));
-      expect(stateEmpty.openTabs).toEqual([]);
+      expect(stateEmpty.activeTab).toBeNull();
     });
 
     it("folder chip click is a no-op", () => {

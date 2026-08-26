@@ -42,12 +42,13 @@ For each category below, look for issues in the diff. Be exhaustive — a single
 file can have multiple issues of the same type. Don't skip categories that
 look empty at a glance; spend a moment confirming.
 
-For frontend (`.tsx`) changes, you MUST read both `docs/development/review/react.md`
-(generic React rules) and `docs/development/review/sculptor.md` (Sculptor-specific
-conventions: backend data hooks, Jotai atoms, component invariants) in full
-and apply every rule in them. Do not skip this step. Do not rely on summaries
-elsewhere in this checklist or on prior knowledge — the docs are the source
-of truth and are updated independently.
+For frontend (`.tsx`) changes, you MUST read `docs/development/review/react.md`
+(generic React rules), `docs/development/review/sculptor.md` (Sculptor-specific
+conventions: backend data hooks, Jotai atoms, component invariants), and
+`docs/development/review/design.md` (design-system usage, existing patterns,
+UI copy) in full and apply every rule in them. Do not skip this step. Do not
+rely on summaries elsewhere in this checklist or on prior knowledge — the docs
+are the source of truth and are updated independently.
 
 For integration test changes (under `sculptor/tests/integration/`), you MUST
 read the file `docs/development/review/integration_tests.md` in full and apply every rule
@@ -210,14 +211,16 @@ This category applies when the stated goal is an MR/PR body produced by an auton
 - Frontend↔backend contract changes shipped together
 
 ### Frontend issues (for `.tsx` changes)
-**Required:** Read both `docs/development/review/react.md` (generic React rules) and
-`docs/development/review/sculptor.md` (Sculptor-specific frontend conventions) in full
-with the Read tool, and apply every rule in them. The rules cover effects,
+**Required:** Read `docs/development/review/react.md` (generic React rules),
+`docs/development/review/sculptor.md` (Sculptor-specific frontend conventions), and
+`docs/development/review/design.md` (design-system usage, existing patterns, UI copy)
+in full with the Read tool, and apply every rule in them. The rules cover effects,
 state, refs, render purity, performance, props, lists, backend data hooks,
-Jotai atom usage, and component-level invariants — detailed enough that
-summarizing them here would lose information, so this section intentionally
-does not list them. If you find yourself reviewing a `.tsx` change without
-having opened both docs in the current session, stop and read them.
+Jotai atom usage, component-level invariants, design-token and component-reuse
+conventions, and UI copy — detailed enough that summarizing them here would lose
+information, so this section intentionally does not list them. If you find
+yourself reviewing a `.tsx` change without having opened all three docs in the
+current session, stop and read them.
 
 Beyond the docs: `IconButton` in a `Flex` uses `gap="2"` (per CLAUDE.md).
 

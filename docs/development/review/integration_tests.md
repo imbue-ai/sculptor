@@ -250,6 +250,27 @@ create_disabled_dependency_stub(fake_bin_dir, "claude", DependencyState.INSTALLE
 
 ---
 
+### `no_user_config_coupled_assertions`
+
+**Question:** Does this test invoke a user-configurable tool or environment (a shell, `git`, an editor, locale, `$TERM`, any rc-driven CLI) and then assert on output or behaviour that the user's configuration can perturb — coupling a config-independent assertion to per-developer settings?
+
+Many tools read configuration the test does not control: a login shell sources the user's rc chain (themes, plugins, syntax highlighting, bracketed-paste); `git` reads `~/.gitconfig` (aliases, `init.defaultBranch`, signing, hooks); CLIs read dotfiles; output formatting and parsing depend on `$LANG`/`$LC_*` and `$TERM`. When a test invokes such a tool and asserts on what comes back, that configuration becomes uncontrolled input — a clean CI runner behaves nothing like a heavily-customised laptop, so the test passes in one place and flakes or fails in the other. The deeper smell is the coupling itself: the property under test (an env var is propagated, a path is built, a commit is created) is usually produced by code whose behaviour does not depend on those settings at all, yet it is being observed through a config-dependent channel. (This is the assertion-coupling counterpart to `isolate_from_host_filesystem`: that rule is about not depending on host *state*; this one is about not coupling an *assertion* to host *configuration*.)
+
+**What to look for:**
+- A process built from `$SHELL` / `os.environ["SHELL"]`, or a shell run with `-l`, without pinning the shell's environment
+- Invoking `git`, an editor, a package manager, or any rc-driven CLI without neutralising the user's global config (`HOME`, `ZDOTDIR`, `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_NOSYSTEM`, `EDITOR`, `LANG`/`LC_ALL`, `TERM`)
+- Matching on a tool's output with ANSI/escape-stripping, locale-tolerant parsing, or `errors="replace"` decoding added to cope with config-driven noise
+- Fixed sleeps or generous timeouts added so a slow, heavily-configured tool (e.g. a themed shell with an async prompt) has "enough" time before the test interacts with it
+- An assertion about logic (env handling, argument building, path construction) verified *only* end-to-end through such a tool, with no direct test of the function that implements it
+
+**Fix:**
+- Neutralise the configuration so every run gets a vanilla, deterministic tool: point `HOME`/`ZDOTDIR` at an empty directory for shells, set `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_NOSYSTEM` for git, pin `LANG`/`LC_ALL` and `TERM`, and pass an explicit tool rather than inheriting `$SHELL`/`$EDITOR` when the test does not specifically need the user's. An autouse fixture is a good home for this. Removing the variability usually lets you delete the escape-stripping / timeout band-aids too.
+- Push the real assertion down a layer: unit-test the pure function that produces the behaviour (env scrub/merge, arg building, path construction) directly with controlled inputs, and keep at most a thin end-to-end test that the value reaches the real tool.
+
+**Exceptions:** Tests that genuinely exercise the tool integration itself — that a login shell honours SIGHUP and exits, that a git hook fires — legitimately invoke the real tool, but should still pin its configuration so the behaviour under test is the only variable.
+
+---
+
 ## Test Placement
 
 ### `correct_launch_mode_markers`

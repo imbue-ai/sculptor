@@ -1,10 +1,8 @@
 import { Button, Flex, SegmentedControl, Select, Switch, Tooltip } from "@radix-ui/themes";
-import { useAtom, useSetAtom } from "jotai";
-import { LayoutGrid } from "lucide-react";
+import { useAtom } from "jotai";
 import type { ChangeEvent, KeyboardEvent, ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import type {
   AccentColor,
   ColorSettingKey,
@@ -26,7 +24,6 @@ import {
   SCALINGS,
   themeBuilderSettingsAtom,
 } from "~/common/state/atoms/themeBuilder.ts";
-import { ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
 import type { AppearanceMode } from "~/common/theme/appearanceModes.ts";
 import { APPEARANCE_MODES } from "~/common/theme/appearanceModes.ts";
 import { isValidHex } from "~/common/theme/generateColorScale.ts";
@@ -34,7 +31,6 @@ import { getColorHex9, resolveGrayColor } from "~/common/theme/radixColorHexMap.
 import type { ShikiThemePairName } from "~/common/theme/shikiThemes.ts";
 import { SHIKI_THEME_PAIR_NAMES } from "~/common/theme/shikiThemes.ts";
 import { useResolvedTheme } from "~/common/Utils.ts";
-import { COMPONENT_GALLERY_TAB_ID } from "~/components/workspaceTabIds.ts";
 
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
@@ -217,8 +213,6 @@ const HEX_TEST_IDS: Record<ColorSettingKey, string> = {
 
 export const ThemeBuilderSection = (): ReactElement => {
   const [settings, setSettings] = useAtom(themeBuilderSettingsAtom);
-  const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
-  const { navigateToComponentGallery } = useImbueNavigate();
   const appearance = useResolvedTheme();
 
   const updateSetting = <TK extends keyof typeof settings>(key: TK, value: (typeof settings)[TK]): void => {
@@ -270,11 +264,6 @@ export const ThemeBuilderSection = (): ReactElement => {
 
   const handleResetToDefaults = (): void => {
     setSettings((prev) => ({ ...DEFAULT_THEME_BUILDER_SETTINGS, appearance: prev.appearance }));
-  };
-
-  const handleOpenComponentGallery = (): void => {
-    ensurePseudoTab(COMPONENT_GALLERY_TAB_ID);
-    navigateToComponentGallery();
   };
 
   const hexOverrides = settings.hexOverrides ?? DEFAULT_HEX_OVERRIDES;
@@ -545,16 +534,7 @@ export const ThemeBuilderSection = (): ReactElement => {
         </SettingRow>
       </div>
 
-      <Flex justify="between" py="4">
-        <Button
-          data-testid={ElementIds.SETTINGS_THEME_BUILDER_COMPONENT_GALLERY}
-          variant="soft"
-          size="2"
-          onClick={handleOpenComponentGallery}
-        >
-          <LayoutGrid size={ICON_SIZE} />
-          Component gallery
-        </Button>
+      <Flex justify="end" py="4">
         <Button
           data-testid={ElementIds.SETTINGS_THEME_BUILDER_RESET}
           variant="soft"

@@ -2,22 +2,31 @@ import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
-import type { Workspace } from "../../../api";
-import { updateWorkspace } from "../../../api";
+import type { CodingAgentTaskView, Workspace } from "../../../api";
+import { TaskStatus, updateWorkspace } from "../../../api";
+import { taskAtomFamily, taskIdsAtom } from "./tasks.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import {
-  closedWorkspaceIdsAtom,
+  asLiveWorkspace,
   closeWorkspaceTabAtom,
   createMigratingTabsStorage,
   effectiveOpenTabIdsAtom,
+  getWorkspaceSyncVersion,
   INVALID_ACTIVE_INDEX,
+  isWorkspaceDeletingAtomFamily,
+  isWorkspaceKnownAtomFamily,
+  listedWorkspacesArrayAtom,
   openWorkspaceTabAtom,
   optimisticDeleteWorkspaceAtom,
+  rollbackDeleteWorkspaceAtom,
   tabOrderAtom,
   tabsAtom,
+  Tombstone,
   updateWorkspacesAtom,
   workspaceAtomFamily,
+  workspaceDotStatusAtomFamily,
   workspaceIdsAtom,
+  workspacesArrayAtom,
 } from "./workspaces";
 
 vi.mock("../../../api", async () => {
@@ -161,7 +170,7 @@ describe("closeWorkspaceTabAtom", () => {
     // by the persistent pending-close suppression.
     store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true })]);
     expect(store.get(effectiveOpenTabIdsAtom)).not.toContain("ws-1");
-    expect(store.get(workspaceAtomFamily("ws-1"))?.isOpen).toBe(false);
+    expect(asLiveWorkspace(store.get(workspaceAtomFamily("ws-1")))?.isOpen).toBe(false);
   });
 
   it("lets the user reopen the workspace via openWorkspaceTabAtom (clears suppression)", async () => {
@@ -240,43 +249,6 @@ describe("openWorkspaceTabAtom", () => {
   });
 });
 
-describe("closedWorkspaceIdsAtom — pill visibility while close is in flight", () => {
-  // See SCU-455: the ClosedWorkspacesPill derives from closedWorkspaceIdsAtom,
-  // which today only surfaces workspaces whose backend isOpen has flipped to
-  // false. If the websocket is slow, stale, or drops an update, the pill never
-  // appears. Including pending-close IDs makes the pill appear instantly and
-  // stay stable through any mid-flight stale snapshot.
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(updateWorkspace).mockReturnValue(new Promise(() => {}) as ReturnType<typeof updateWorkspace>);
-  });
-
-  afterEach(() => {
-    vi.mocked(updateWorkspace).mockReset();
-  });
-
-  it("includes the workspace ID the moment close is requested (before any ack)", () => {
-    const ws = mockWorkspace({ objectId: "ws-1", isOpen: true });
-    const store = seedHydratedStore([ws], ["ws-1"]);
-
-    expect(store.get(closedWorkspaceIdsAtom)).not.toContain("ws-1");
-
-    store.set(closeWorkspaceTabAtom, "ws-1");
-
-    expect(store.get(closedWorkspaceIdsAtom)).toContain("ws-1");
-  });
-
-  it("keeps the workspace ID visible as closed even when a stale isOpen=true snapshot arrives", () => {
-    const ws = mockWorkspace({ objectId: "ws-1", isOpen: true });
-    const store = seedHydratedStore([ws], ["ws-1"]);
-
-    store.set(closeWorkspaceTabAtom, "ws-1");
-    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true })]);
-
-    expect(store.get(closedWorkspaceIdsAtom)).toContain("ws-1");
-  });
-});
-
 describe("seedHydratedStore sanity", () => {
   it("hydrates workspace atoms so effectiveOpenTabIdsAtom sees the workspace as open", () => {
     const ws = mockWorkspace({ objectId: "ws-1", isOpen: true });
@@ -285,6 +257,45 @@ describe("seedHydratedStore sanity", () => {
     expect(store.get(workspaceIdsAtom)).toContain("ws-1");
     expect(store.get(workspaceAtomFamily("ws-1"))).toEqual(ws);
     expect(store.get(effectiveOpenTabIdsAtom)).toContain("ws-1");
+  });
+});
+
+describe("updateWorkspacesAtom skip-unchanged writes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(updateWorkspace).mockResolvedValue({ data: {} } as Awaited<ReturnType<typeof updateWorkspace>>);
+  });
+
+  it("does not notify a workspace's subscribers when a byte-identical frame is re-sent", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", isOpen: true })], ["ws-1"]);
+    const listener = vi.fn();
+    const unsubscribe = store.sub(workspaceAtomFamily("ws-1"), listener);
+
+    // A fresh Workspace object with identical fields — the deep-equality write
+    // skip must swallow it so the row/header/peek don't re-render every frame.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true })]);
+    expect(listener).not.toHaveBeenCalled();
+
+    // A genuinely changed field still writes through.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true, description: "changed" })]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("does not notify workspaceIdsAtom subscribers when the id membership is unchanged", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", isOpen: true })], ["ws-1"]);
+    const listener = vi.fn();
+    const unsubscribe = store.sub(workspaceIdsAtom, listener);
+
+    // Re-sending the same workspace rebuilds the ids array with identical
+    // membership; the membership-equality skip must not publish a fresh array.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isOpen: true })]);
+    expect(listener).not.toHaveBeenCalled();
+
+    // A new workspace changes membership and must notify.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-2", isOpen: true })]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
   });
 });
 
@@ -496,5 +507,191 @@ describe("createMigratingTabsStorage", () => {
       ],
       activeIndex: INVALID_ACTIVE_INDEX,
     });
+  });
+});
+
+describe("isWorkspaceKnownAtomFamily", () => {
+  it("is undefined before the first workspace snapshot arrives", () => {
+    const store = createStore();
+    expect(store.get(isWorkspaceKnownAtomFamily("w1"))).toBeUndefined();
+  });
+
+  it("reports membership once the id list is loaded", () => {
+    const store = createStore();
+    store.set(workspaceIdsAtom, ["w1"]);
+    expect(store.get(isWorkspaceKnownAtomFamily("w1"))).toBe(true);
+    expect(store.get(isWorkspaceKnownAtomFamily("w2"))).toBe(false);
+  });
+
+  it("does not notify subscribers when the id array is rebuilt with the same membership", () => {
+    const store = createStore();
+    store.set(workspaceIdsAtom, ["w1", "w2"]);
+    const listener = vi.fn();
+    const unsubscribe = store.sub(isWorkspaceKnownAtomFamily("w1"), listener);
+
+    // A fresh array identity with identical contents — the boolean slice
+    // resolves to the same primitive, so no notification is expected.
+    store.set(workspaceIdsAtom, ["w1", "w2"]);
+    expect(listener).not.toHaveBeenCalled();
+
+    store.set(workspaceIdsAtom, ["w2"]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+});
+
+describe("workspaceDotStatusAtomFamily", () => {
+  const dotTask = (
+    id: string,
+    workspaceId: string,
+    overrides: Partial<CodingAgentTaskView> = {},
+  ): CodingAgentTaskView =>
+    ({
+      id,
+      workspaceId,
+      status: TaskStatus.RUNNING,
+      lastReadAt: "2026-01-02T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      isDeleted: false,
+      isArchived: false,
+      ...overrides,
+    }) as CodingAgentTaskView;
+
+  it("aggregates only the workspace's own tasks", () => {
+    const store = createStore();
+    store.set(taskIdsAtom, ["t1", "t2"]);
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
+    store.set(taskAtomFamily("t2"), dotTask("t2", "ws-b", { status: TaskStatus.ERROR }));
+
+    expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toMatchObject({ hasRunning: true, hasError: false });
+    expect(store.get(workspaceDotStatusAtomFamily("ws-b"))).toMatchObject({ hasRunning: false, hasError: true });
+  });
+
+  it("keeps reference identity across a task tick that does not flip any flag", () => {
+    const store = createStore();
+    store.set(taskIdsAtom, ["t1"]);
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
+
+    const first = store.get(workspaceDotStatusAtomFamily("ws-a"));
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a", { title: "tick" }));
+
+    expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toBe(first);
+  });
+
+  it("notifies subscribers when an aggregate flag flips", () => {
+    const store = createStore();
+    store.set(taskIdsAtom, ["t1"]);
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a"));
+    const listener = vi.fn();
+    const unsubscribe = store.sub(workspaceDotStatusAtomFamily("ws-a"), listener);
+
+    store.set(taskAtomFamily("t1"), dotTask("t1", "ws-a", { status: TaskStatus.WAITING }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.get(workspaceDotStatusAtomFamily("ws-a"))).toMatchObject({ hasRunning: false, hasWaiting: true });
+    unsubscribe();
+  });
+});
+
+describe("workspace sync versions and the deleting tombstone (SCU-1834)", () => {
+  it("bumps the sync version for every workspace a frame carries, including deletions", () => {
+    const store = createStore();
+    const before = getWorkspaceSyncVersion("ws-1");
+
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1" })]);
+    expect(getWorkspaceSyncVersion("ws-1")).toBe(before + 1);
+
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isDeleted: true })]);
+    expect(getWorkspaceSyncVersion("ws-1")).toBe(before + 2);
+  });
+
+  it("distinguishes deleting (Tombstone) from never-delivered (null), carrying the last-known model", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", description: "My workspace" })], ["ws-1"]);
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-1"))).toBe(false);
+
+    store.set(optimisticDeleteWorkspaceAtom, "ws-1");
+    const entry = store.get(workspaceAtomFamily("ws-1"));
+    expect(entry).toBeInstanceOf(Tombstone);
+    // The tombstone keeps the model it replaced — the sidebar has no other
+    // data source for rendering a "Deleting…" row.
+    expect((entry as Tombstone).workspace.description).toBe("My workspace");
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-1"))).toBe(true);
+
+    // An id the store never loaded is unknown, not deleting.
+    expect(store.get(workspaceAtomFamily("ws-unknown"))).toBeNull();
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-unknown"))).toBe(false);
+  });
+
+  it("lists a delete in flight with its last-known model, and drops it when the server confirms", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", description: "My workspace" })], ["ws-1"]);
+
+    store.set(optimisticDeleteWorkspaceAtom, "ws-1");
+
+    // Still listed (the sidebar renders it as "Deleting…"), excluded from the
+    // live/actionable array (palette actions, mentions, shortcuts).
+    expect(store.get(listedWorkspacesArrayAtom)?.map((ws) => ws.objectId)).toEqual(["ws-1"]);
+    expect(store.get(workspacesArrayAtom)).toEqual([]);
+
+    // The confirming frame removes the id — the listed row leaves with it.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isDeleted: true })]);
+    expect(store.get(listedWorkspacesArrayAtom)).toEqual([]);
+  });
+
+  it("keeps classifying as deleting after the confirmation frame drops the id (no Home un-dim flash)", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1" })], ["ws-1"]);
+    store.set(optimisticDeleteWorkspaceAtom, "ws-1");
+
+    // Server confirms: the frame removes the id from the membership list. A
+    // Home row rendered from a stale pulled list must keep reading as
+    // deleting until the refetch drops it — never flash back to normal.
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", isDeleted: true })]);
+
+    expect(store.get(workspaceIdsAtom)).not.toContain("ws-1");
+    expect(store.get(workspaceAtomFamily("ws-1"))).toBeInstanceOf(Tombstone);
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-1"))).toBe(true);
+  });
+
+  it("rolls back symmetrically: the workspace atom and the deleting state clear together", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1" })], ["ws-1"]);
+    const context = store.set(optimisticDeleteWorkspaceAtom, "ws-1");
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-1"))).toBe(true);
+
+    store.set(rollbackDeleteWorkspaceAtom, { workspaceId: "ws-1", context });
+
+    expect(asLiveWorkspace(store.get(workspaceAtomFamily("ws-1")))).not.toBeNull();
+    expect(store.get(isWorkspaceDeletingAtomFamily("ws-1"))).toBe(false);
+  });
+
+  it("returns a request-worthy context even when the store does not know the workspace", () => {
+    const store = createStore();
+    const context = store.set(optimisticDeleteWorkspaceAtom, "ws-ghost");
+
+    // No snapshot means nothing was applied and rollback is a no-op — but the
+    // caller still has a context to thread through the mutation.
+    expect(context.snapshot).toBeNull();
+    store.set(rollbackDeleteWorkspaceAtom, { workspaceId: "ws-ghost", context });
+    expect(store.get(workspaceAtomFamily("ws-ghost"))).toBeNull();
+  });
+
+  it("yields the rollback when an authoritative frame bumped the version mid-request", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1", description: "stale" })], ["ws-1"]);
+    const context = store.set(optimisticDeleteWorkspaceAtom, "ws-1");
+
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", description: "fresh" })]);
+    store.set(rollbackDeleteWorkspaceAtom, { workspaceId: "ws-1", context });
+
+    expect(asLiveWorkspace(store.get(workspaceAtomFamily("ws-1")))?.description).toBe("fresh");
+  });
+
+  it("does not notify deleting-state subscribers on a frame that only ticks the model", () => {
+    const store = seedHydratedStore([mockWorkspace({ objectId: "ws-1" })], ["ws-1"]);
+    store.get(isWorkspaceDeletingAtomFamily("ws-1"));
+    const listener = vi.fn();
+    const unsubscribe = store.sub(isWorkspaceDeletingAtomFamily("ws-1"), listener);
+
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-1", description: "tick" })]);
+
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
   });
 });

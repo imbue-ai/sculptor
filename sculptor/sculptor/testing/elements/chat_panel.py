@@ -72,6 +72,11 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         return self._locator.locator(", ".join((alpha_pill, alpha_bash, alpha_file)))
 
     def get_bash_blocks(self) -> Locator:
+        """Bash tool calls (``ALPHA_CHAT_BASH_BLOCK``).
+
+        Bash renders as a dedicated bash block, not as a generic
+        ``get_tool_pills`` pill — assert on a Bash tool call through here.
+        """
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_BASH_BLOCK)
 
     def get_bash_output(self) -> Locator:
@@ -225,6 +230,27 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         """The dropdown option for a specific model id (testid ``MODEL_OPTION-<model id>``)."""
         return self._page.get_by_test_id(f"{ElementIDs.MODEL_OPTION}-{model_id}")
 
+    def get_model_provider_option(self, provider: str) -> Locator:
+        """A provider's cascade sub-trigger (testid ``MODEL_PROVIDER_OPTION-<provider>``).
+
+        Its models open in the submenu it reveals, not the top-level menu.
+        """
+        return self._page.get_by_test_id(f"{ElementIDs.MODEL_PROVIDER_OPTION}-{provider}")
+
+    def get_picker_empty_state(self) -> Locator:
+        """The pi model-picker disabled "no models available" state (shown when no
+        providers are authenticated)."""
+        return self.get_by_test_id(ElementIDs.PI_PICKER_EMPTY_STATE)
+
+    def get_harness_config_cta(self) -> Locator:
+        """The composer "Go to harness configuration" CTA that replaces Send when the
+        harness has no usable model (routes to that harness's settings section)."""
+        return self.get_by_test_id(ElementIDs.HARNESS_CONFIG_CTA)
+
+    def get_error_block_login_cta(self, error_block: Locator) -> Locator:
+        """The "Open pi login" CTA inside a given (auth-failure) error block."""
+        return error_block.get_by_test_id(ElementIDs.PI_ERROR_LOGIN_CTA)
+
     def get_fast_mode_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FAST_MODE_TOGGLE)
 
@@ -244,6 +270,13 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_TOOL_PILL_ROW)
 
     def get_tool_pills(self) -> Locator:
+        """Generic tool pills only (``ALPHA_CHAT_TOOL_PILL``).
+
+        This does NOT match every tool: Bash renders as a bash block (use
+        ``get_bash_blocks``) and Write / Edit / MultiEdit render as file chips
+        (use ``get_file_chips``). To match every tool surface regardless of
+        which tool ran, use ``get_completed_tool_calls``.
+        """
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_TOOL_PILL)
 
     def get_tool_pill_popover(self) -> Locator:
@@ -251,6 +284,18 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
 
     def get_subagent_pills(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL)
+
+    def get_workflow_pills(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_PILL)
+
+    def get_workflow_popover(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_POPOVER)
+
+    def get_workflow_phase_tabs(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_PHASE_TAB)
+
+    def get_workflow_agent_rows(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ALPHA_CHAT_WORKFLOW_AGENT_ROW)
 
     def get_file_chips(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ALPHA_CHAT_FILE_CHIP)

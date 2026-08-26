@@ -1,0 +1,38 @@
+// Container for a split section. The primary pane has an explicit flex-basis (its
+// ratio of the section); the split pane fills the rest. min-* lets both panes shrink
+// so the resize handle can move freely.
+.stacked,
+.sideBySide {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.stacked {
+  flex-direction: column;
+}
+
+.sideBySide {
+  flex-direction: row;
+}
+
+.primaryPane {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 0;
+  flex-shrink: 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.splitPane {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}

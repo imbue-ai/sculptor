@@ -38,6 +38,7 @@ const makeStatus = (overrides: Partial<DependenciesStatus>): DependenciesStatus 
   claude: makeInfo({}),
   pi: makeInfo({}),
   gh: makeInfo({}),
+  voiceModels: makeInfo({}),
   ...overrides,
 });
 
@@ -61,8 +62,9 @@ describe("useManagedDependency", () => {
       makeStatus({
         pi: makeInfo({
           installed: true,
-          version: "0.78.0",
+          version: "0.80.10",
           mode: "MANAGED",
+          source: "MANAGED",
           isVersionInRange: true,
           installError: "stale error from an earlier attempt",
         }),
@@ -75,6 +77,30 @@ describe("useManagedDependency", () => {
     expect(result.current.displayMode).toBe("MANAGED");
     expect(result.current.isManagedUpToDate).toBe(true);
     expect(result.current.effectiveInstallError).toBeNull();
+  });
+
+  it("does not treat a PATH-fallback pi as a managed install being up to date", () => {
+    // pi's MANAGED mode resolves a system-PATH binary while no managed copy is
+    // downloaded; that binary being healthy must not read as "managed install
+    // up to date", nor suppress a managed-install error.
+    store.set(
+      dependenciesStatusAtom,
+      makeStatus({
+        pi: makeInfo({
+          installed: true,
+          version: "0.80.10",
+          mode: "MANAGED",
+          source: "EXTERNAL",
+          isVersionInRange: true,
+          installError: "managed download failed",
+        }),
+      }),
+    );
+
+    const { result } = renderHook(() => useManagedDependency({ tool: "PI", onSettingChange }), { wrapper });
+
+    expect(result.current.isManagedUpToDate).toBe(false);
+    expect(result.current.effectiveInstallError).toBe("managed download failed");
   });
 
   it("surfaces the backend install error while the binary is not up to date", () => {

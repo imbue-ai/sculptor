@@ -1,15 +1,19 @@
-"""Regression test: switching to a terminal agent's tab must focus its pane.
+"""Regression test: switching to a terminal agent's panel tab must focus its pane.
 
 A terminal agent's main panel is a PTY terminal that occupies the chat space.
-The terminal is the agent's only input surface, so selecting its tab should
-place keyboard focus into the terminal immediately — the user must be able to
-type without first clicking into the pane (SCU-1578).
+The terminal is the agent's only input surface, so selecting its panel tab
+should place keyboard focus into the terminal immediately — the user must be
+able to type without first clicking into the pane (SCU-1578).
+
+Terminal-running agents are created from registered terminal programs via the
+section `+` dropdown's agent-type sub-menu (there is no bare "Terminal" agent
+type), so the test registers a minimal echoing program and drives that.
 """
 
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.terminal import expect_chat_replaces_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
@@ -19,30 +23,22 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-
-def _create_terminal_agent(agent_tab_bar: PlaywrightAgentTabBarElement) -> None:
-    agent_tab_bar.open_agent_type_menu()
-    agent_tab_bar.get_agent_type_menu_item_terminal().click()
-
-
-def _wait_for_terminal_ready(page: Page) -> None:
-    """Wait until the agent terminal's xterm is mounted and the shell is up.
-
-    The backend PTY may still be spawning when the panel mounts (the
-    WebSocket retries 4404 closes every 2s), so give the prompt a moment
-    after the textarea attaches.
-    """
-    expect(get_agent_terminal_textarea(page)).to_be_attached()
-    page.wait_for_timeout(3_000)
+# A registered terminal program: it banners (the "PTY is up" signal), then echoes
+# each stdin line — enough of a TUI stand-in for a focus test, since the PTY's
+# canonical-mode echo shows typed characters in the buffer as they arrive. The
+# banner is assembled with printf so the wait can't match the launch command's
+# own echo in the buffer (a plain `echo TERM-FOCUS-READY` would).
+_FOCUS_PROGRAM_COMMAND = "printf %sREADY TERM-FOCUS-; echo; while read -r _line; do echo GOT:$_line; done"
 
 
-@user_story("to start typing in a terminal agent immediately after selecting its tab")
+@user_story("to start typing in a terminal agent immediately after selecting its panel tab")
 def test_terminal_agent_tab_switch_focuses_terminal(sculptor_instance_: SculptorInstance) -> None:
-    """Selecting a terminal agent's tab auto-focuses its terminal pane.
+    """Selecting a terminal agent's panel tab auto-focuses its terminal pane.
 
     Steps:
-    1. Create a workspace with a chat agent (tab 1).
-    2. Create a terminal agent (tab 2); creating it navigates to the new tab.
+    1. Create a workspace with a chat agent (one agent panel tab in center).
+    2. Create a registered terminal agent from the agent-type sub-menu (tab 2);
+       creating it activates the new tab.
     3. Switch away to the chat agent — the terminal pane unmounts and gives up
        keyboard focus.
     4. Switch back to the terminal agent's tab.
@@ -50,38 +46,57 @@ def test_terminal_agent_tab_switch_focuses_terminal(sculptor_instance_: Sculptor
        global keyboard (which routes to ``document.activeElement``) must land in
        the xterm buffer — proving typing works without clicking into the pane.
     """
+    registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
+    registrations_dir.mkdir(parents=True, exist_ok=True)
+    registration = registrations_dir / "focus-term.toml"
+    registration.write_text(f'display_name = "Focus Term"\nlaunch_command = "{_FOCUS_PROGRAM_COMMAND}"\n')
+
     page = sculptor_instance_.page
-    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Focus WS")
-    agent_tab_bar = PlaywrightAgentTabBarElement(page)
-    agent_tabs = agent_tab_bar.get_agent_tabs()
-    expect(agent_tabs).to_have_count(1)
+    try:
+        start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Focus WS")
+        panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        agent_tabs = panel_tabs.get_agent_tabs()
+        expect(agent_tabs).to_have_count(1)
 
-    _create_terminal_agent(agent_tab_bar)
-    expect(agent_tabs).to_have_count(2)
-    terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
-    expect(terminal_tab).to_be_visible()
-    _wait_for_terminal_ready(page)
+        # Create the terminal agent; creation activates its tab, so the agent
+        # terminal panel mounts in place of the chat.
+        dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+        dropdown.open()
+        dropdown.open_agent_type_submenu()
+        registered_item = dropdown.get_agent_type_item_registered("focus-term")
+        expect(registered_item).to_be_visible()
+        registered_item.click()
 
-    # Switch away to the chat agent — the terminal pane unmounts (chat input
-    # replaces it), so the terminal no longer owns keyboard focus.
-    agent_tabs.first.click()
-    expect_chat_replaces_terminal_panel(page)
+        expect(agent_tabs).to_have_count(2)
+        terminal_tab = panel_tabs.get_panel_tab_by_name("Focus Term 1").first
+        expect(terminal_tab).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
+        # The program's banner is the deterministic "shell is up" signal — the
+        # backend PTY may still be spawning when the panel mounts.
+        wait_for_xterm_substring(page, "TERM-FOCUS-READY")
 
-    # Switch back to the terminal agent's tab.
-    terminal_tab.click()
-    expect(get_agent_terminal_panel(page)).to_be_visible()
-    agent_terminal_textarea = get_agent_terminal_textarea(page)
-    expect(agent_terminal_textarea).to_be_attached()
+        # Switch away to the chat agent — the terminal pane unmounts (chat input
+        # replaces it), so the terminal no longer owns keyboard focus.
+        agent_tabs.first.click()
+        expect_chat_replaces_terminal_panel(page)
 
-    # The terminal pane must auto-focus on tab switch (SCU-1578). Without the
-    # fix the freshly-mounted panel never grabs focus, so the user has to click
-    # into it before typing.
-    expect(agent_terminal_textarea).to_be_focused()
+        # Switch back to the terminal agent's tab.
+        terminal_tab.click()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
+        agent_terminal_textarea = get_agent_terminal_textarea(page)
+        expect(agent_terminal_textarea).to_be_attached()
 
-    # Prove the user-facing guarantee, not just the focus snapshot: type a probe
-    # with the GLOBAL keyboard (routes to document.activeElement) and confirm it
-    # reaches the shell. The leading throwaway chars absorb any keystrokes xterm
-    # may drop right as input begins.
-    probe_marker = "TAB_SWITCH_FOCUS_OK"
-    type_with_global_keyboard(page, "zzz " + probe_marker)
-    wait_for_xterm_substring(page, probe_marker)
+        # The terminal pane must auto-focus on tab switch (SCU-1578). Without the
+        # fix the freshly-mounted panel never grabs focus, so the user has to click
+        # into it before typing.
+        expect(agent_terminal_textarea).to_be_focused()
+
+        # Prove the user-facing guarantee, not just the focus snapshot: type a probe
+        # with the GLOBAL keyboard (routes to document.activeElement) and confirm it
+        # reaches the program's PTY. The leading throwaway chars absorb any
+        # keystrokes xterm may drop right as input begins.
+        probe_marker = "TAB_SWITCH_FOCUS_OK"
+        type_with_global_keyboard(page, "zzz " + probe_marker)
+        wait_for_xterm_substring(page, probe_marker)
+    finally:
+        registration.unlink(missing_ok=True)

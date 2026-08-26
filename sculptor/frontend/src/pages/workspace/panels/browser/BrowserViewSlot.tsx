@@ -17,7 +17,7 @@ import { useBrowserWebview } from "./useBrowserWebview";
 // One <webview> per registered workspace, mounted under BrowserViewHost
 // at the root of the React tree. Lifetime is tied to the registry, not
 // to whichever route is currently rendered, so the webContents (and
-// in-page state) survives panel-tab switches, zone visibility flips, and
+// in-page state) survives panel-tab switches, section collapse/expand, and
 // route detours through /settings or /ws/new.
 export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const setPanelState = useSetAtom(browserPanelStateAtomFamily(workspaceId));
@@ -77,17 +77,12 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
     }
   }, [agentWebviewState, workspaceId, webContentsId, navigate, reload, setPanelState, store]);
 
-  // Mirror the active workspace's webContentsId onto the global test
-  // bridge so the existing Playwright fixture keeps working unchanged.
+  // Only the focused (active-route) workspace's slot carries the
+  // BROWSER_WEBVIEW test id, marking it apart from the hidden background slots.
+  // Integration tests read the active workspace's committed webview status from
+  // the BrowserPanel toolbar's data-webview-* attributes, not from this slot.
   const focusedWorkspaceId = useAtomValue(focusedBrowserWorkspaceIdAtom);
   const isFocused = focusedWorkspaceId === workspaceId;
-  useEffect(() => {
-    if (!isFocused || webContentsId === null) return;
-    window.__BROWSER_PANEL_TEST__ = { webContentsId };
-    return (): void => {
-      delete window.__BROWSER_PANEL_TEST__;
-    };
-  }, [isFocused, webContentsId]);
 
   const placement = useAtomValue(browserViewPlacementAtomFamily(workspaceId));
   const partition = `persist:sculptor-browser-${workspaceId}`;
@@ -114,7 +109,6 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
       : { display: "none" }),
   };
 
-  // Only the focused workspace's slot carries the BROWSER_WEBVIEW test id.
   const testId = isFocused ? ElementIds.BROWSER_WEBVIEW : undefined;
 
   return (

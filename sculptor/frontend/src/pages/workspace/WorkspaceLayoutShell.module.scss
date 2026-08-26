@@ -1,0 +1,12 @@
+// The shell stacks the header above the section grid and fills the content area
+// the route layout gives it. min-height: 0 lets the grid shrink and own its own
+// internal scrolling instead of overflowing the shell.
+.shell {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}

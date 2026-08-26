@@ -17,7 +17,7 @@ Before writing your test, decide whether you need to control the agent's behavio
 
 ### Default response (prefer this when possible)
 
-When `create_task()` is called without a `fake_claude:` prefix in the task text, FakeClaude returns a default response (`"[FakeClaude] Task completed."`) without making any LLM calls.
+When the prompt has no `fake_claude:` prefix, FakeClaude returns a default response (`"[FakeClaude] Task completed."`) without making any LLM calls.
 
 **Use the default response when:** the test doesn't depend on specific agent behavior — e.g., testing UI elements, task list rendering, settings pages, modals, branch switching, navigation, or any feature where it doesn't matter *what* the agent says, only that a task exists.
 
@@ -25,7 +25,7 @@ When `create_task()` is called without a `fake_claude:` prefix in the task text,
 - Simplest possible test — no command strings to construct
 - Fast — instant responses, no real LLM calls
 
-**How:** Just call `create_task()` with plain task text (no `fake_claude:` prefix).
+**How:** Call `start_task_and_wait_for_ready()` with a plain prompt (no `fake_claude:` prefix) — or with no prompt at all when the test only needs the workspace UI shell.
 
 ### FakeClaude commands (for controlled agent behavior)
 
@@ -33,7 +33,7 @@ If your test needs the agent to perform specific actions — e.g., writing files
 
 **Use FakeClaude commands when:** the test asserts on specific agent output, tool usage, file changes, or any behavior that requires controlling what the agent does.
 
-**How:** Prefix the task text with `fake_claude:<command>` followed by a JSON argument in backticks.
+**How:** Prefix the prompt (or a follow-up `send_chat_message`) with `fake_claude:<command>` followed by a JSON argument in backticks.
 
 ### Available FakeClaude commands
 
@@ -67,7 +67,7 @@ Key conventions:
 - Use `@user_story("...")` decorator
 - Use Playwright `expect()` for all assertions (auto-retrying)
 - Access elements through the POM hierarchy, never raw `get_by_test_id()` in test code
-- Use `only()` from `imbue_core.itertools` when expecting exactly one element
+- Use `only()` from `sculptor.foundation.itertools` when expecting exactly one element
 - Read `docs/development/review/integration_tests.md` to avoid common anti-patterns (flaky sleeps, snapshot races, missing waits)
 
 #### Minimal example (default response — no commands needed):
@@ -77,10 +77,7 @@ Key conventions:
 
 from playwright.sync_api import expect
 
-from imbue_core.itertools import only
-from sculptor.testing.elements.task import navigate_to_task_page
-from sculptor.testing.elements.task_list import wait_for_tasks_to_finish
-from sculptor.testing.elements.task_starter import create_task
+from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -88,19 +85,15 @@ from sculptor.testing.user_stories import user_story
 @user_story("to verify my new feature works")
 def test_my_feature(sculptor_instance_: SculptorInstance) -> None:
     """Test that my feature works correctly."""
-    home_page = sculptor_instance_
-
-    task_starter = home_page.get_task_starter()
-    create_task(
-        task_starter=task_starter,
-        task_text="Do something",
+    # No fake_claude: prefix — FakeClaude returns the default response.
+    # The helper creates the workspace, sends the prompt as the first chat
+    # message, and (by default) waits for the agent to finish.
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=sculptor_instance_.page,
+        prompt="Do something",
     )
-    # No fake_claude: prefix — FakeClaude returns default response
-
-    task_list = home_page.get_task_list()
-    tasks = task_list.get_tasks()
-    expect(tasks).to_have_count(1)
-    wait_for_tasks_to_finish(task_list=task_list)
+    chat_panel = task_page.get_chat_panel()
+    expect(chat_panel.get_messages().last).to_contain_text("Task completed")
 
     # ... your assertions on UI elements here ...
 ```
@@ -112,11 +105,8 @@ def test_my_feature(sculptor_instance_: SculptorInstance) -> None:
 
 from playwright.sync_api import expect
 
-from imbue_core.itertools import only
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.task import navigate_to_task_page
-from sculptor.testing.elements.task_list import wait_for_tasks_to_finish
-from sculptor.testing.elements.task_starter import create_task
+from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -124,24 +114,15 @@ from sculptor.testing.user_stories import user_story
 @user_story("to verify agent creates files correctly")
 def test_agent_creates_file(sculptor_instance_: SculptorInstance) -> None:
     """Test that the agent creates a file and it appears in changes."""
-    home_page = sculptor_instance_
-
-    task_starter = home_page.get_task_starter()
-    create_task(
-        task_starter=task_starter,
-        task_text="""\
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=sculptor_instance_.page,
+        prompt="""\
 fake_claude:write_file `{
   "file_path": "hello.py",
   "content": "def hello_world():\\n    print('hello world')\\n"
 }`""",
     )
 
-    task_list = home_page.get_task_list()
-    tasks = task_list.get_tasks()
-    expect(tasks).to_have_count(1)
-    wait_for_tasks_to_finish(task_list=task_list)
-
-    task_page = navigate_to_task_page(task=only(tasks.all()))
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
@@ -151,9 +132,9 @@ fake_claude:write_file `{
 #### Multi-step example (sequential commands):
 
 ```python
-    create_task(
-        task_starter=task_starter,
-        task_text="""\
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=sculptor_instance_.page,
+        prompt="""\
 fake_claude:multi_step `{
   "steps": [
     {
@@ -193,9 +174,9 @@ git add sculptor/tests/integration/frontend/test_my_feature.py
 When FakeClaude commands have complex JSON arguments (nested objects, arrays), use multiline strings for readability:
 
 ```python
-    create_task(
-        task_starter=task_starter,
-        task_text="""\
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=sculptor_instance_.page,
+        prompt="""\
 fake_claude:ask_user_question `{
   "questions": [
     {
@@ -215,9 +196,9 @@ fake_claude:ask_user_question `{
 For simple single-field JSON, inline is fine:
 
 ```python
-    create_task(
-        task_starter=task_starter,
-        task_text='fake_claude:text `{"text": "Hello from FakeClaude"}`',
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=sculptor_instance_.page,
+        prompt='fake_claude:text `{"text": "Hello from FakeClaude"}`',
     )
 ```
 

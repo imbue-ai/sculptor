@@ -1,0 +1,26 @@
+.header {
+  border-bottom: 1px solid var(--gray-a5);
+  box-sizing: border-box;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the tree header / tab bar height
+  height: 41px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.lineStats {
+  display: flex;
+  flex-shrink: 0;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+}
+
+.lineStatsAdded {
+  color: var(--green-11);
+}
+
+.lineStatsRemoved {
+  color: var(--red-11);
+}

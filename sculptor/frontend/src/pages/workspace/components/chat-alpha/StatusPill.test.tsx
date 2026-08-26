@@ -1,4 +1,5 @@
 import { Theme } from "@radix-ui/themes";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
@@ -7,12 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChatMessage, Task } from "~/api";
 import { AgentTaskStatus, ArtifactType, ElementIds } from "~/api";
+import { queryClient } from "~/common/queryClient.ts";
 import {
   activeTurnIdAtomFamily,
   liveTaskTurnIdAtomFamily,
   tasksPhaseAtomFamily,
 } from "~/common/state/atoms/statusPillTasks.ts";
 
+import { ChatTaskProvider } from "./ChatTaskContext.tsx";
 import { StatusPill } from "./StatusPill.tsx";
 
 const { mockUseAgentStatus, mockUseElapsedTime, mockUseTaskDetailWithDefaults } = vi.hoisted(() => ({
@@ -33,13 +36,6 @@ vi.mock("~/common/state/hooks/useTaskDetail.ts", () => ({
   useTaskDetailWithDefaults: mockUseTaskDetailWithDefaults,
 }));
 
-vi.mock("~/common/NavigateUtils.ts", () => ({
-  useWorkspacePageParams: (): { workspaceID: string; agentID: string } => ({
-    workspaceID: "ws-1",
-    agentID: "agent-1",
-  }),
-}));
-
 vi.mock("~/electron/utils.ts", () => ({
   getMetaKey: (): string => "⌘",
   isModifierPressed: (): boolean => false,
@@ -51,10 +47,19 @@ vi.mock("~/electron/utils.ts", () => ({
 // is cleared in beforeEach for the same reason — atomWithStorage reads it.
 let testStore = createStore();
 
+// StatusPill reads the interruption capability via useTaskSupportsInterruption,
+// which is a subscription-only useQuery over the task cache, so a
+// QueryClientProvider is required. No task is seeded for "agent-1": an absent
+// task yields `undefined`, and the component's `?? true` keeps Stop enabled —
+// the same default the Jotai atom gave before this hook read the cache.
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
-  <Provider store={testStore}>
-    <Theme>{children}</Theme>
-  </Provider>
+  <QueryClientProvider client={queryClient}>
+    <Provider store={testStore}>
+      <ChatTaskProvider workspaceId="ws-1" taskId="agent-1">
+        <Theme>{children}</Theme>
+      </ChatTaskProvider>
+    </Provider>
+  </QueryClientProvider>
 );
 
 const defaultProps = {
@@ -94,6 +99,8 @@ beforeEach(() => {
   liveTaskTurnIdAtomFamily.remove("agent-1");
   tasksPhaseAtomFamily.remove("agent-1");
   testStore = createStore();
+  // Clear the shared query cache so task state can't leak between tests.
+  queryClient.removeQueries({ queryKey: ["sculptor"] });
 });
 
 afterEach(() => {

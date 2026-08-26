@@ -7,6 +7,7 @@ import { COLOR_SETTING_KEYS, DEFAULT_HEX_OVERRIDES } from "~/common/state/atoms/
 import { useThemeBuilderSettings } from "~/common/state/hooks/useThemeBuilder.ts";
 import { generateColorScale, isValidHex } from "~/common/theme/generateColorScale.ts";
 import { getColorScale, resolveGrayColor } from "~/common/theme/radixColorHexMap.ts";
+import { syncStatusBarThemeColor } from "~/common/theme/statusBarThemeColor.ts";
 import { useResolvedTheme } from "~/common/Utils.ts";
 
 /**
@@ -140,6 +141,16 @@ export const ImbueTheme = ({ children }: PropsWithChildren): ReactElement => {
   // Track whether this is the initial mount (no theme switch yet).
   const prevAppearanceRef = useRef(appearance);
 
+  // Mirror the appearance class onto <html>. The Radix token scales are keyed
+  // on .dark/.light, and index.css paints <html>'s background from them — the
+  // backdrop the browser exposes during window resizes and paint lag. Without
+  // this the tokens only exist inside the app root and <html> stays white.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove(appearance === "light" ? "dark" : "light");
+    root.classList.add(appearance);
+  }, [appearance]);
+
   // Work around two issues that cause a visible flash on theme toggle:
   //
   // 1. Radix Theme's internal useEffect-based appearance sync — it copies
@@ -173,6 +184,16 @@ export const ImbueTheme = ({ children }: PropsWithChildren): ReactElement => {
     });
   }, [appearance]);
 
+  const themeRootRef = useRef<HTMLDivElement>(null);
+
+  // Declared after the effect above so the root theme class is already
+  // corrected when the status bar color is computed from the live CSS vars.
+  useLayoutEffect(() => {
+    if (themeRootRef.current !== null) {
+      syncStatusBarThemeColor(themeRootRef.current);
+    }
+  }, [appearance, settings]);
+
   return (
     <RadixTheme
       accentColor={settings.accentColor}
@@ -183,7 +204,11 @@ export const ImbueTheme = ({ children }: PropsWithChildren): ReactElement => {
       scaling={settings.scaling}
       style={fontStyles}
     >
-      <div style={overrideStyles}>{children}</div>
+      {/* Hex overrides land on this div (not the Radix root), so it is
+          also where the status bar color must be read from. */}
+      <div ref={themeRootRef} style={overrideStyles}>
+        {children}
+      </div>
     </RadixTheme>
   );
 };

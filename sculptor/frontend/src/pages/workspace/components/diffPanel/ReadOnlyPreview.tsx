@@ -1,6 +1,6 @@
 import type { FileOptions, SupportedLanguages } from "@pierre/diffs";
 import { File as PierreFile } from "@pierre/diffs/react";
-import { Box, Flex, Text } from "@radix-ui/themes";
+import { Flex, Text } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useLayoutEffect, useMemo, useRef } from "react";
@@ -8,23 +8,29 @@ import ReactMarkdown, { type Components } from "react-markdown";
 
 import { ElementIds } from "~/api";
 import { themeCodeThemeAtom } from "~/common/state/atoms/themeBuilder.ts";
-import {
-  appThemeAtom,
-  fileBrowserLineWrappingAtom,
-  isRichMarkdownRenderingEnabledAtom,
-} from "~/common/state/atoms/userConfig.ts";
+import { appThemeAtom, fileBrowserLineWrappingAtom } from "~/common/state/atoms/userConfig.ts";
 import { useWorkspaceFileContent } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import { getShikiThemes } from "~/common/theme/shikiThemes.ts";
+import { parseFrontmatter } from "~/components/MarkdownDiff/frontmatter.ts";
+import { FrontmatterBlock } from "~/components/MarkdownDiff/FrontmatterBlock.tsx";
 import { MarkdownAnchor } from "~/components/MarkdownDiff/MarkdownAnchor.tsx";
 import {
   FILE_MARKDOWN_REHYPE_PLUGINS,
   FILE_MARKDOWN_REMARK_PLUGINS,
   safeUrlTransform,
 } from "~/components/MarkdownDiff/markdownPlugins.ts";
+import { VerticalOverlayScrollbar } from "~/components/VerticalOverlayScrollbar.tsx";
 
+import type { MarkdownRenderMode } from "./atoms.ts";
 import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
+import {
+  adoptPierreOverrideSheet,
+  createPierreOverrideSheet,
+  HIDE_NATIVE_HSCROLLBAR_CSS,
+} from "./pierreShadowStyles.ts";
 import styles from "./ReadOnlyPreview.module.scss";
 import { StickyHorizontalScrollbar } from "./StickyHorizontalScrollbar.tsx";
+import { usePierreHighlighterReady } from "./usePierreHighlighterReady.ts";
 
 // react-markdown hands its components map a renderer-internal `node` prop
 // alongside the regular HTML attributes. We deliberately destructure only
@@ -40,23 +46,9 @@ const READ_ONLY_PREVIEW_COMPONENTS: Components = {
   ),
 };
 
-/**
- * Override Pierre's shadow DOM background and hide the native horizontal
- * scrollbar (replaced by StickyHorizontalScrollbar at the panel bottom).
- */
-const bgOverrideSheet = new CSSStyleSheet();
-bgOverrideSheet.replaceSync(
-  [
-    "[data-diffs], [data-diffs-header], [data-error-wrapper] {",
-    "  --diffs-light-bg: var(--color-panel-solid) !important;",
-    "  --diffs-dark-bg: var(--color-background) !important;",
-    "  --diffs-bg: light-dark(var(--color-panel-solid), var(--color-background)) !important;",
-    "}",
-    // Hide Pierre's native horizontal scrollbar — replaced by StickyHorizontalScrollbar.
-    "[data-code] { scrollbar-width: none; }",
-    "[data-code]::-webkit-scrollbar { display: none; }",
-  ].join("\n"),
-);
+// The shared Pierre background override plus the native-scrollbar hide (this
+// preview replaces it with StickyHorizontalScrollbar at the panel bottom).
+const bgOverrideSheet = createPierreOverrideSheet(HIDE_NATIVE_HSCROLLBAR_CSS);
 
 const EXTENSION_LANGUAGE_MAP: Record<string, SupportedLanguages> = {
   ts: "typescript",
@@ -110,44 +102,43 @@ const getLanguageFromPath = (filePath: string): SupportedLanguages | undefined =
 type ReadOnlyPreviewProps = {
   workspaceId: string;
   filePath: string;
+  /** When set, wins over the persisted global render-mode preference — used by
+   *  the quick-open-rendered-markdown path so one explicit open never rewrites
+   *  the preference itself. */
+  renderModeOverride?: MarkdownRenderMode;
 };
 
-export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps): ReactElement => {
+export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: ReadOnlyPreviewProps): ReactElement => {
   const { data: content, isPending, isError: hasError } = useWorkspaceFileContent(workspaceId, filePath, null);
   const overflow = useAtomValue(fileBrowserLineWrappingAtom);
   const appTheme = useAtomValue(appThemeAtom);
   const codeTheme = useAtomValue(themeCodeThemeAtom);
   const shikiThemes = getShikiThemes(codeTheme);
-  const markdownMode = useAtomValue(markdownRenderModeAtom);
-  const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
+  // Pierre must not MOUNT before its shared highlighter has these themes
+  // attached — a cold-themes first mount paints nothing and does not survive
+  // React StrictMode's remount (see usePierreHighlighterReady).
+  const isHighlighterReady = usePierreHighlighterReady(shikiThemes);
+  const globalMarkdownMode = useAtomValue(markdownRenderModeAtom);
+  const markdownMode = renderModeOverride ?? globalMarkdownMode;
   const pierreRef = useRef<HTMLDivElement>(null);
-  // The persisted `markdownRenderModeAtom` may carry "rendered" from before
-  // the flag was introduced (or after the user flipped it on then off again).
-  // Guard the render path on the flag so the source view is shown until the
-  // user explicitly enables the experimental feature.
-  const shouldRenderMarkdown =
-    isMarkdownPath(filePath) && markdownMode === "rendered" && isRichMarkdownRenderingEnabled;
+  // The scroll container (native scrollbar suppressed in CSS); VerticalOverlayScrollbar
+  // draws a persistent vertical bar off it, since a styled native scrollbar renders
+  // nothing at rest under macOS overlay-scrollbar mode.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const shouldRenderMarkdown = isMarkdownPath(filePath) && markdownMode === "rendered";
 
-  /**
-   * Inject our override stylesheet into Pierre's shadow DOM.
-   *
-   * `useLayoutEffect` so the sheet is adopted between React's commit and the
-   * browser's next paint — without this, Pierre's first paint shows the
-   * Shiki theme background (passed inline on the `<pre>`) until our override
-   * lands, which flashes in dark mode against the surrounding `#111`.
-   * Pierre's web component upgrades synchronously on element creation, so
-   * the shadow root is already attached by the time this effect runs.
-   */
+  // Inject our override stylesheet into Pierre's shadow DOM (see
+  // adoptPierreOverrideSheet for why this is a layout effect). The container
+  // only exists once content has loaded AND the highlighter gate has opened
+  // (Pierre mounts at that point). Re-run on overflow changes because Pierre
+  // re-creates its shadow DOM when the wrap mode flips, and when
+  // `isHighlighterReady` flips (though it isn't read here) so the sheet is
+  // adopted the moment Pierre first mounts.
   const hasContent = content != null;
   useLayoutEffect(() => {
-    const el = pierreRef.current;
-    if (!el || !hasContent) return;
-    const shadowRoot = el.querySelector("diffs-container")?.shadowRoot;
-    if (!shadowRoot) return;
-    if (!shadowRoot.adoptedStyleSheets.includes(bgOverrideSheet)) {
-      shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, bgOverrideSheet];
-    }
-  }, [hasContent, overflow]);
+    if (!hasContent) return;
+    adoptPierreOverrideSheet(pierreRef.current, bgOverrideSheet);
+  }, [hasContent, overflow, isHighlighterReady]);
 
   const fileName = useMemo(() => filePath.split("/").pop() ?? filePath, [filePath]);
   const lang = useMemo(() => getLanguageFromPath(filePath), [filePath]);
@@ -166,6 +157,14 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
     if (content == null) return null;
     return { name: fileName, contents: content, lang };
   }, [content, fileName, lang]);
+
+  // Split frontmatter off the body only when the markdown is actually being
+  // rendered, and memoize it so unrelated re-renders (theme, panel resize,
+  // atom updates) don't reparse a potentially large file every time.
+  const parsedMarkdown = useMemo(
+    () => (shouldRenderMarkdown && content != null ? parseFrontmatter(content) : null),
+    [shouldRenderMarkdown, content],
+  );
 
   if (isPending) {
     return (
@@ -187,39 +186,73 @@ export const ReadOnlyPreview = ({ workspaceId, filePath }: ReadOnlyPreviewProps)
     );
   }
 
-  if (shouldRenderMarkdown) {
+  if (shouldRenderMarkdown && parsedMarkdown != null) {
+    // Frontmatter is stripped before `react-markdown` sees the content —
+    // otherwise the closing `---` underlines the `key: value` lines into a
+    // setext `<h2>`. It's rendered as a styled metadata block instead; the
+    // source view (eye-toggle off, below) keeps showing it verbatim.
+    const { frontmatter, body } = parsedMarkdown;
     // Plugin policy lives in `markdownPlugins.ts`. `data-markdown-body`
     // scopes the fragment-anchor scroll lookup in `anchorBehavior.ts` so
     // a `#install` click never lands on an unrelated id elsewhere in the
     // app shell.
     return (
       <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
-        <Box
+        {/* A plain <div>, not a Radix <Box>: the code branch's scroll container
+            is also a <div>, so switching between a code file and a markdown one
+            reuses the same DOM node instead of swapping element types — which
+            would strand VerticalOverlayScrollbar observing the detached old
+            node (its effect only re-reads on remount). Padding lives in
+            `.markdownBody` instead of a `p` prop for the same reason. */}
+        <div
+          ref={containerRef}
           className={`${styles.container} ${styles.markdownBody}`}
-          p="4"
           data-testid={ElementIds.READ_ONLY_PREVIEW_MARKDOWN}
           data-markdown-body
         >
-          <ReactMarkdown
-            remarkPlugins={FILE_MARKDOWN_REMARK_PLUGINS}
-            rehypePlugins={FILE_MARKDOWN_REHYPE_PLUGINS}
-            urlTransform={safeUrlTransform}
-            components={READ_ONLY_PREVIEW_COMPONENTS}
-          >
-            {fileContents.contents}
-          </ReactMarkdown>
-        </Box>
+          {/* Single content wrapper so it's always the scroll container's
+              firstElementChild — the element VerticalOverlayScrollbar observes
+              for content growth. Rendering the frontmatter and body as separate
+              direct children would leave later growth (e.g. a late image load)
+              unobserved and the thumb stale. */}
+          <div>
+            {frontmatter && <FrontmatterBlock frontmatter={frontmatter} />}
+            <ReactMarkdown
+              remarkPlugins={FILE_MARKDOWN_REMARK_PLUGINS}
+              rehypePlugins={FILE_MARKDOWN_REHYPE_PLUGINS}
+              urlTransform={safeUrlTransform}
+              components={READ_ONLY_PREVIEW_COMPONENTS}
+            >
+              {body}
+            </ReactMarkdown>
+          </div>
+        </div>
+        <VerticalOverlayScrollbar scrollRef={containerRef} thumbTestId={ElementIds.READ_ONLY_PREVIEW_SCROLLBAR_THUMB} />
       </div>
+    );
+  }
+
+  // Only the Pierre source view below needs the highlighter; the markdown
+  // branch above renders without it. The gate resolves in milliseconds, so it
+  // shares the file fetch's loading placeholder rather than a distinct state.
+  if (!isHighlighterReady) {
+    return (
+      <Flex align="center" justify="center" flexGrow="1">
+        <Text size="2" color="gray">
+          Loading file...
+        </Text>
+      </Flex>
     );
   }
 
   return (
     <div className={styles.wrapper} data-testid={ElementIds.READ_ONLY_PREVIEW}>
-      <div className={styles.container}>
+      <div ref={containerRef} className={styles.container}>
         <div ref={pierreRef}>
           <PierreFile file={fileContents} options={fileOptions} />
         </div>
       </div>
+      <VerticalOverlayScrollbar scrollRef={containerRef} thumbTestId={ElementIds.READ_ONLY_PREVIEW_SCROLLBAR_THUMB} />
       {overflow === "scroll" && <StickyHorizontalScrollbar containerRef={pierreRef} />}
     </div>
   );

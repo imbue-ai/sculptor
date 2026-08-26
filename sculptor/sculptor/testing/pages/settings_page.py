@@ -2,18 +2,17 @@ from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 from sculptor.testing.elements.settings_actions import PlaywrightActionsSettingsElement
 from sculptor.testing.elements.settings_agent import PlaywrightAgentSettingsElement
 from sculptor.testing.elements.settings_ci_babysitter import PlaywrightCIBabysitterSettingsElement
 from sculptor.testing.elements.settings_claude_cli import PlaywrightClaudeCliSettingsElement
 from sculptor.testing.elements.settings_env_vars import PlaywrightEnvVarsSettingsElement
 from sculptor.testing.elements.settings_experimental import PlaywrightExperimentalSettingsElement
+from sculptor.testing.elements.settings_extensions import PlaywrightExtensionsSettingsElement
+from sculptor.testing.elements.settings_general import PlaywrightGeneralSettingsElement
 from sculptor.testing.elements.settings_git import PlaywrightGitSettingsElement
 from sculptor.testing.elements.settings_keybindings import PlaywrightKeybindingsSettingsElement
-from sculptor.testing.elements.settings_panels import PlaywrightPanelsSettingsElement
 from sculptor.testing.elements.settings_pi import PlaywrightPiSettingsElement
-from sculptor.testing.elements.settings_plugins import PlaywrightPluginsSettingsElement
 from sculptor.testing.elements.settings_privacy import PlaywrightPrivacySettingsElement
 from sculptor.testing.elements.settings_repositories import PlaywrightRepositoriesSettingsElement
 from sculptor.testing.elements.settings_theme_builder import PlaywrightThemeBuilderSettingsElement
@@ -37,10 +36,10 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         self._get_dependencies_nav().click()
         return PlaywrightClaudeCliSettingsElement(locator=self._get_settings_content(), page=self._page)
 
-    def click_on_general(self) -> PlaywrightIntegrationTestElement:
+    def click_on_general(self) -> PlaywrightGeneralSettingsElement:
         """Navigate to General settings and return the section element."""
         self._get_general_nav().click()
-        return PlaywrightIntegrationTestElement(locator=self._get_settings_content(), page=self._page)
+        return PlaywrightGeneralSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_agent(self) -> PlaywrightAgentSettingsElement:
         """Navigate to Agent settings and return the section element."""
@@ -52,24 +51,19 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         self._get_keybindings_nav().click()
         return PlaywrightKeybindingsSettingsElement(locator=self._get_settings_content(), page=self._page)
 
-    def click_on_panels(self) -> PlaywrightPanelsSettingsElement:
-        """Navigate to Panels settings and return the section element."""
-        self._get_panels_nav().click()
-        return PlaywrightPanelsSettingsElement(locator=self._get_settings_content(), page=self._page)
-
     def click_on_pi(self) -> PlaywrightPiSettingsElement:
-        """Navigate to Pi (experimental) settings and return the section element."""
+        """Navigate to Pi settings and return the section element."""
         self._get_pi_nav().click()
         return PlaywrightPiSettingsElement(locator=self._get_settings_content(), page=self._page)
 
-    def click_on_plugins(self) -> PlaywrightPluginsSettingsElement:
-        """Navigate to Plugins settings and return the section element.
+    def click_on_extensions(self) -> PlaywrightExtensionsSettingsElement:
+        """Navigate to Extensions settings and return the section element.
 
-        The Plugins nav item is gated on the experimental frontend-plugins flag,
-        so this only works on an instance with that flag enabled.
+        The Extensions nav item is always present (it hosts the extensions
+        master switch), so this works regardless of whether the system is on.
         """
-        self.get_plugins_nav().click()
-        return PlaywrightPluginsSettingsElement(locator=self._get_settings_content(), page=self._page)
+        self.get_extensions_nav().click()
+        return PlaywrightExtensionsSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_privacy(self) -> PlaywrightPrivacySettingsElement:
         """Navigate to Privacy settings and return the section element."""
@@ -127,20 +121,16 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         """Get the Keybindings navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_KEYBINDINGS)
 
-    def _get_panels_nav(self) -> Locator:
-        """Get the Panels navigation item."""
-        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PANELS)
+    def get_extensions_nav(self) -> Locator:
+        """Get the Extensions navigation item.
 
-    def get_plugins_nav(self) -> Locator:
-        """Get the Plugins navigation item.
-
-        The Plugins section is gated on the experimental frontend-plugins
-        flag, so this locator is expected to be absent unless that flag is on.
+        The Extensions section is always present — it hosts the extensions
+        master switch, so it stays reachable even when the system is off.
         """
-        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PLUGINS)
+        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_EXTENSIONS)
 
     def _get_pi_nav(self) -> Locator:
-        """Get the Pi (experimental) navigation item."""
+        """Get the Pi navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PI)
 
     def _get_privacy_nav(self) -> Locator:
