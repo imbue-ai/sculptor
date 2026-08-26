@@ -16,7 +16,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  OFFLOAD_VERSION: "0.9.12"
+  OFFLOAD_VERSION: "0.9.13"
 
 jobs:
   offload-integration-tests:
