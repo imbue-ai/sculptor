@@ -12,6 +12,7 @@ import { useModifiedEnter } from "~/common/ShortcutUtils";
 import { draftQuestionStateAtomFamily, EMPTY_DRAFT_QUESTION_STATE } from "~/common/state/atoms/taskDetails";
 import { mergeClasses, optional } from "~/common/Utils";
 import { MarkdownBlock } from "~/components/MarkdownBlock";
+import { ResizeHandle } from "~/components/sections/ResizeHandle";
 import { useFocusOnMountIfUnclaimed } from "~/hooks/useFocusOnMountIfUnclaimed";
 
 import styles from "./AskUserQuestion.module.scss";
@@ -92,6 +93,9 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
   const [isResizable, setIsResizable] = useState(false);
   // Count of options not fully in view; null hides the footer "N more" cue.
   const [moreCount, setMoreCount] = useState<number | null>(null);
+  // Current panel height and its max, in px, reported as the resize handle's
+  // aria-value* range for assistive tech.
+  const [resizeRange, setResizeRange] = useState({ now: 0, max: 0 });
 
   // True while the answer POST is in flight. Drives the disabled state (instant
   // lock). The ref is the actual re-entrancy guard: setState is async, so a fast
@@ -321,6 +325,13 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // The resize handle is a focusable separator nested in this container; let
+      // it own its keys (arrows resize it). Only Escape still bubbles up here to
+      // dismiss the panel.
+      if ((e.target as HTMLElement).getAttribute("role") === "separator" && e.key !== "Escape") {
+        return;
+      }
+
       // Tab/Shift+Tab navigate between questions with wrap-around
       if (e.key === "Tab" && questions.length > 1) {
         e.preventDefault();
@@ -433,13 +444,26 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
     pill.style.top = `${buttonsRect.top - footerRect.top}px`;
   }, []);
 
+  // Largest cap that still leaves a slice of chat visible above the panel.
+  const getMaxPanelCap = useCallback((): number => {
+    const chatColumn = containerRef.current?.parentElement;
+    const available = chatColumn ? chatColumn.getBoundingClientRect().height : window.innerHeight;
+    return Math.max(MIN_PANEL_CAP_PX, available - MIN_CHAT_ABOVE_PX);
+  }, []);
+
   // Update the resize affordance and the "N more" cue from the body's scroll
   // geometry. scrollHeight is the content height (independent of the cap), so the
   // resize handle stays put while dragging; moreCount reflects the live scroll.
   const recomputeScrollCue = useCallback((): void => {
     const body = scrollBodyRef.current;
+    const card = cardRef.current;
     if (!body) return;
     setIsResizable(body.scrollHeight > window.innerHeight * DEFAULT_PANEL_CAP_FRACTION + 4);
+    if (card) {
+      const now = Math.round(card.getBoundingClientRect().height);
+      const max = Math.round(getMaxPanelCap());
+      setResizeRange((prev) => (prev.now === now && prev.max === max ? prev : { now, max }));
+    }
     const isOverflowing = body.scrollHeight > body.clientHeight + 2;
     const isAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 2;
     if (!isOverflowing || isAtBottom) {
@@ -455,7 +479,7 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
       if (el.getBoundingClientRect().bottom > bodyBottom - 2) hidden += 1;
     });
     setMoreCount((prev) => (prev === hidden ? prev : hidden));
-  }, []);
+  }, [getMaxPanelCap]);
 
   useEffect(() => {
     const body = scrollBodyRef.current;
@@ -496,36 +520,21 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
     (optionEls[focusedOptionIndex] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" });
   }, [focusedOptionIndex]);
 
-  const handleResizeHandleMouseDown = useCallback((e: React.MouseEvent): void => {
-    e.preventDefault();
-    const card = cardRef.current;
-    if (!card) return;
-    const startY = e.clientY;
-    const startHeight = card.getBoundingClientRect().height;
-    const chatColumn = containerRef.current?.parentElement;
-    const available = chatColumn ? chatColumn.getBoundingClientRect().height : window.innerHeight;
-    const maxCap = Math.max(MIN_PANEL_CAP_PX, available - MIN_CHAT_ABOVE_PX);
-    const onMove = (moveEvent: MouseEvent): void => {
-      // Drag up (smaller clientY) grows the panel.
-      const next = Math.min(maxCap, Math.max(MIN_PANEL_CAP_PX, startHeight + (startY - moveEvent.clientY)));
-      setPanelCapPx(next);
-    };
+  // Current panel height, as the base the resize handle applies its delta to.
+  const getPanelHeight = useCallback((): number => cardRef.current?.getBoundingClientRect().height ?? 0, []);
 
-    const onUp = (): void => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    document.body.style.cursor = "ns-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, []);
+  // Clamp a proposed panel height and store it as the card's max-height cap.
+  const handlePanelResize = useCallback(
+    (nextPx: number): void => {
+      setPanelCapPx(Math.min(getMaxPanelCap(), Math.max(MIN_PANEL_CAP_PX, nextPx)));
+    },
+    [getMaxPanelCap],
+  );
 
   const scrollBodyDown = useCallback((): void => {
     const body = scrollBodyRef.current;
-    body?.scrollBy({ top: body.clientHeight * 0.85, behavior: "smooth" });
+    if (!body) return;
+    body.scrollBy({ top: body.clientHeight * 0.85, behavior: "smooth" });
   }, []);
 
   const shouldShowNavigation = questions.length > 1;
@@ -550,16 +559,18 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
       onKeyDown={handleKeyDown}
     >
       {isResizable && (
-        <div
+        <ResizeHandle
+          axis="y"
+          direction={-1}
+          getSize={getPanelHeight}
+          onResize={handlePanelResize}
+          ariaValueNow={resizeRange.now}
+          ariaValueMin={MIN_PANEL_CAP_PX}
+          ariaValueMax={resizeRange.max}
+          ariaLabel="Resize question panel"
           className={styles.resizeHandle}
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize question panel"
           data-testid={ElementIds.ASK_USER_QUESTION_RESIZE_HANDLE}
-          onMouseDown={handleResizeHandleMouseDown}
-        >
-          <span className={styles.resizeGrip} />
-        </div>
+        />
       )}
       <div
         ref={cardRef}

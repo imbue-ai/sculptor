@@ -23,26 +23,38 @@
   padding: var(--space-4) var(--space-5);
 }
 
-.resizeGrip {
-  background: var(--gray-7);
-  border-radius: var(--radius-2);
-  height: 4px; // stylelint-disable-line sculptor/no-hardcoded-values
-  transition: background var(--duration-fast) ease;
-  width: 40px; // stylelint-disable-line sculptor/no-hardcoded-values
-}
-
+// Composed onto the shared, accessible ResizeHandle (components/sections): the
+// base class owns the line, hit area, and hover/active states; this adds a
+// centered grip pill for discoverability plus a keyboard-focus ring on it.
 .resizeHandle {
-  align-items: center;
-  cursor: ns-resize;
-  display: flex;
-  height: 14px; // stylelint-disable-line sculptor/no-hardcoded-values
-  justify-content: center;
-  margin-bottom: -2px; // stylelint-disable-line sculptor/no-hardcoded-values
-  touch-action: none;
-  width: 100%;
+  &::after {
+    background: var(--gray-8);
+    border-radius: var(--radius-2);
+    content: "";
+    height: 4px; // stylelint-disable-line sculptor/no-hardcoded-values
+    left: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px; // stylelint-disable-line sculptor/no-hardcoded-values
+  }
 
-  &:hover .resizeGrip {
-    background: var(--gray-9);
+  &:focus-visible {
+    outline: none;
+  }
+
+  &:hover::after {
+    background: var(--gray-10);
+  }
+
+  &[data-resize-handle-active]::after {
+    background: var(--accent-9);
+  }
+
+  &:focus-visible::after {
+    background: var(--accent-9);
+    outline: 2px solid var(--accent-a8); // stylelint-disable-line sculptor/no-hardcoded-values
+    outline-offset: 2px; // stylelint-disable-line sculptor/no-hardcoded-values
   }
 }
 
