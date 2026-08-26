@@ -520,7 +520,6 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
     (optionEls[focusedOptionIndex] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" });
   }, [focusedOptionIndex]);
 
-  // Current panel height, as the base the resize handle applies its delta to.
   const getPanelHeight = useCallback((): number => cardRef.current?.getBoundingClientRect().height ?? 0, []);
 
   // Clamp a proposed panel height and store it as the card's max-height cap.
