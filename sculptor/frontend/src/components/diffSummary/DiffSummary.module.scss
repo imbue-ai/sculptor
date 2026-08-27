@@ -26,7 +26,7 @@
 }
 
 .refreshing {
-  composes: shimmer from "../../../styles/shimmer.module.css";
+  composes: shimmer from "../../styles/shimmer.module.css";
 }
 
 .additions {
