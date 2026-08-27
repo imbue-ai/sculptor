@@ -49,7 +49,7 @@ export const agentDetailStateAtomFamily = atomFamily<string, PrimitiveAtom<Agent
 );
 
 type WorkflowTaskStateKey = {
-  taskId: string;
+  agentId: string;
   toolUseId: string;
 };
 
@@ -61,11 +61,11 @@ type WorkflowTaskStateKey = {
 export const workflowTaskStateAtomFamily = atomFamily<WorkflowTaskStateKey, Atom<WorkflowTaskState | undefined>>(
   (key) =>
     selectAtom(
-      agentDetailStateAtomFamily(key.taskId),
+      agentDetailStateAtomFamily(key.agentId),
       (detail) => detail?.workflowTaskStates?.[key.toolUseId],
       isEqual,
     ),
-  (a, b) => a.taskId === b.taskId && a.toolUseId === b.toolUseId,
+  (a, b) => a.agentId === b.agentId && a.toolUseId === b.toolUseId,
 );
 
 export const getEmptyAgentDetailState = (): AgentDetailState => {

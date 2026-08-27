@@ -16,17 +16,17 @@ const workspaceName = (description: string | undefined): string => (description 
 /**
  * Millisecond timestamp of a workspace's most recent activity, used as the
  * recency tiebreak within an attention tier. There is no workspace-level
- * "last activity" field, so we take the newest task `updatedAt` and fall back
- * to the workspace's own `createdAt` for task-less workspaces. Unparseable /
+ * "last activity" field, so we take the newest agent `updatedAt` and fall back
+ * to the workspace's own `createdAt` for agent-less workspaces. Unparseable /
  * missing timestamps collapse to 0 (sorts last within the tier).
  */
-const latestActivityMs = (tasks: ReadonlyArray<CodingAgentTaskView>, ws: Workspace): number => {
-  // Callers pass the workspace's already-active tasks (see the per-workspace
+const latestActivityMs = (agents: ReadonlyArray<CodingAgentTaskView>, ws: Workspace): number => {
+  // Callers pass the workspace's already-active agents (see the per-workspace
   // bucket in produce()), so this just takes the newest of them.
   let best = ws.createdAt ? Date.parse(ws.createdAt) : 0;
   if (Number.isNaN(best)) best = 0;
-  for (const task of tasks) {
-    const ts = Date.parse(task.updatedAt);
+  for (const agent of agents) {
+    const ts = Date.parse(agent.updatedAt);
     if (!Number.isNaN(ts) && ts > best) best = ts;
   }
   return best;
@@ -73,7 +73,7 @@ export const buildWorkspaceProvider = (runtime: CommandRuntime): DynamicProvider
       const workspaces = runtime.store.get(workspacesArrayAtom) ?? [];
       if (workspaces.length === 0) return [];
 
-      const tasks = runtime.store.get(agentsArrayAtom) ?? [];
+      const agents = runtime.store.get(agentsArrayAtom) ?? [];
       const projects = runtime.store.get(projectsArrayAtom) ?? [];
       const projectNameById = new Map<string, string>();
       for (const project of projects) projectNameById.set(project.objectId, project.name);
@@ -87,17 +87,17 @@ export const buildWorkspaceProvider = (runtime: CommandRuntime): DynamicProvider
       // more than one project — otherwise every row carries a redundant tag.
       const hasMultipleProjects = new Set(workspaces.map((ws) => ws.projectId)).size > 1;
 
-      // Bucket tasks by workspace in a single pass rather than re-scanning the
-      // whole task list once per workspace (O(workspaces × tasks) every time
-      // produce() re-runs — i.e. on every palette keystroke). Deleted tasks are
+      // Bucket agents by workspace in a single pass rather than re-scanning the
+      // whole agent list once per workspace (O(workspaces × agents) every time
+      // produce() re-runs — i.e. on every palette keystroke). Deleted agents are
       // dropped here so the attention rank and the recency tiebreak below count
-      // the exact same tasks.
-      const tasksByWorkspace = new Map<string, Array<CodingAgentTaskView>>();
-      for (const task of tasks) {
-        if (task.isDeleted || task.workspaceId === null) continue;
-        const bucket = tasksByWorkspace.get(task.workspaceId);
-        if (bucket) bucket.push(task);
-        else tasksByWorkspace.set(task.workspaceId, [task]);
+      // the exact same agents.
+      const agentsByWorkspace = new Map<string, Array<CodingAgentTaskView>>();
+      for (const agent of agents) {
+        if (agent.isDeleted || agent.workspaceId === null) continue;
+        const bucket = agentsByWorkspace.get(agent.workspaceId);
+        if (bucket) bucket.push(agent);
+        else agentsByWorkspace.set(agent.workspaceId, [agent]);
       }
 
       // Attention-first ordering, most-recent activity as the in-tier
@@ -106,8 +106,8 @@ export const buildWorkspaceProvider = (runtime: CommandRuntime): DynamicProvider
       // once the user types, cmdk re-ranks by fuzzy score as usual.
       const ordered = workspaces
         .map((ws) => {
-          const wsTasks = tasksByWorkspace.get(ws.objectId) ?? [];
-          return { ws, rank: getWorkspaceAttentionRank(wsTasks), recencyMs: latestActivityMs(wsTasks, ws) };
+          const wsAgents = agentsByWorkspace.get(ws.objectId) ?? [];
+          return { ws, rank: getWorkspaceAttentionRank(wsAgents), recencyMs: latestActivityMs(wsAgents, ws) };
         })
         .sort((a, b) => {
           if (a.rank !== b.rank) return a.rank - b.rank;

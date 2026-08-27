@@ -15,7 +15,7 @@ vi.mock("~/common/state/hooks/useAgentDetail.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof UseAgentDetailModule>();
   return {
     ...actual,
-    useCurrentTaskWorkflowState: (toolUseId: string): WorkflowTaskState | undefined =>
+    useCurrentAgentWorkflowState: (toolUseId: string): WorkflowTaskState | undefined =>
       mockWorkflowTaskStates[toolUseId],
   };
 });

@@ -4,8 +4,8 @@ import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
+import { useVoiceEntry } from "~/common/hooks/useVoiceEntry.ts";
 import { neutral } from "~/common/theme/neutralColor.ts";
-import { useVoiceEntry } from "~/common/useVoiceEntry.ts";
 import { optional } from "~/common/utils/optional.ts";
 
 import styles from "./VoiceEntryButton.module.scss";

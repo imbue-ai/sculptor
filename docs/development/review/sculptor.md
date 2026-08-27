@@ -12,7 +12,7 @@ For each issue found, note the issue type, file/line, and a brief description of
 
 The dominant data-flow in this codebase is WS push → Jotai atom → `useX` hook. The backend pushes full payloads over the unified stream (`useUnifiedStream`); incoming frames update Jotai atoms (`workspaceAtomFamily`, `projectAtomFamily`, `workspaceIdsAtom`, `projectsArrayAtom`, …); components read those atoms through generic hooks (`useWorkspace`, `useProject`, `useProjects`, `useIsWorkspaceDeleted`, …). Nothing fetches — the data is kept fresh by the stream. Reach for this path first.
 
-Agent *tasks* are the exception: their WS frames land in the TanStack Query cache (`syncTasksToQueryCache`), read via `useTask`/`useTaskIds`, and the Jotai task atoms are a legacy projection maintained by a single mirror (`useTaskQueryMirror`) — never write them directly (see [`no_dual_store_writes`](#no_dual_store_writes)).
+Agents (the wire still calls an agent run a task) are the exception: their WS frames land in the TanStack Query cache (`syncAgentsToQueryCache`), read via `useAgent`/`useAgentIds`, and the Jotai agent atoms are a legacy projection maintained by a single mirror (`useAgentQueryMirror`) — never write them directly (see [`no_dual_store_writes`](#no_dual_store_writes)).
 
 TanStack Query ([`use_tanstack_for_pulled_data`](#use_tanstack_for_pulled_data)) covers the cases where this doesn't apply: data that isn't pushed over the WS, or is too large to ship every frame (the workspace diff, commit history, file content at a ref, per-commit diffs, …). Those endpoints are pulled on demand and cached by TanStack instead.
 
@@ -71,7 +71,7 @@ HTTP-pulled data — anything `fetch`-ed from the backend via the generated API 
 **Exceptions:**
 - WS-pushed payloads belong in atoms. The streaming-data pipeline writes to atoms; this rule is not about those.
 - Client state (form drafts, optimistic UI, "currently selected item" identifiers) belongs in atoms — that's what they're for. The data behind a selected ID still belongs in TanStack if it's HTTP-pulled, or in the WS-pushed atom if it's streamed.
-- Mutations on server facts use `useMutation` with cache-only optimistic writes — see the canonical hooks and shared helpers in `sculptor/frontend/src/common/state/mutations/` and the state-ownership rules below ([`no_dual_store_writes`](#no_dual_store_writes), [`optimistic_write_without_failure_path`](#optimistic_write_without_failure_path)). The old pattern of optimistically writing the Jotai atom and fire-and-forgetting the HTTP call is retired: the delta stream only re-sends a task when it *changes*, so a failed request left the optimistic value on screen forever.
+- Mutations on server facts use `useMutation` with cache-only optimistic writes — see the canonical hooks and shared helpers in `sculptor/frontend/src/common/state/mutations/` and the state-ownership rules below ([`no_dual_store_writes`](#no_dual_store_writes), [`optimistic_write_without_failure_path`](#optimistic_write_without_failure_path)). The old pattern of optimistically writing the Jotai atom and fire-and-forgetting the HTTP call is retired: the delta stream only re-sends an agent when it *changes*, so a failed request left the optimistic value on screen forever.
 
 ---
 
@@ -79,11 +79,11 @@ HTTP-pulled data — anything `fetch`-ed from the backend via the generated API 
 
 **Question:** Does this change write the same server fact into more than one store (query cache + Jotai atom, atom + module map, …)?
 
-Every server fact has exactly one written store. A second store may hold the fact only as a **derived projection with a single writer** — one subscription/mirror module that projects the canonical store into the legacy one (`useTaskQueryMirror` is the template). Dual-writing at call sites means every writer must know about both stores, any missed site silently diverges them, and the eventual cleanup requires hunting every write site instead of deleting one mirror.
+Every server fact has exactly one written store. A second store may hold the fact only as a **derived projection with a single writer** — one subscription/mirror module that projects the canonical store into the legacy one (`useAgentQueryMirror` is the template). Dual-writing at call sites means every writer must know about both stores, any missed site silently diverges them, and the eventual cleanup requires hunting every write site instead of deleting one mirror.
 
 **What to look for:**
 - A mutation, WS handler, or action that calls both `queryClient.setQueryData(...)` and `store.set(someAtomFamily(...), ...)` for the same entity
-- A new writer of `taskAtomFamily` / `taskIdsAtom` outside `useTaskQueryMirror` (tests and stories excepted)
+- A new writer of `agentAtomFamily` / `agentIdsAtom` outside `useAgentQueryMirror` (tests and stories excepted)
 - A "keep X in sync with Y" comment on a write site — synchronization belongs in one projection, not at N call sites
 - Snapshot/rollback logic that captures from one store and restores into another
 
@@ -102,7 +102,7 @@ Every optimistic write must name its healing mechanism for both outcomes. On **s
 - A comment asserting the WS/stream will reconcile a *failure* path
 - `useMutation` with `onMutate` but no `onError`
 
-**Fix:** Use the shared helpers in `sculptor/frontend/src/common/state/mutations/` (`applyOptimisticTaskUpdate` / `rollbackOptimisticTaskUpdate`) or follow their shape: snapshot in `onMutate`, restore in `onError` (subject to [`unsound_optimistic_rollback`](#unsound_optimistic_rollback)), never write in `onSuccess`.
+**Fix:** Use the shared helpers in `sculptor/frontend/src/common/state/mutations/` (`applyOptimisticAgentUpdate` / `rollbackOptimisticAgentUpdate`) or follow their shape: snapshot in `onMutate`, restore in `onError` (subject to [`unsound_optimistic_rollback`](#unsound_optimistic_rollback)), never write in `onSuccess`.
 
 **Exceptions:** Fire-and-forget without a local optimistic write (telemetry, analytics, reply-POSTs like extension-command results) is fine — there is no local state to heal. The rule triggers only when a local write preceded the swallowed failure.
 
@@ -117,9 +117,9 @@ A rollback that blindly restores a mutate-time snapshot can clobber a WS frame t
 **What to look for:**
 - `onError` that calls `setQueryData(key, ctx.prev)` with no check that the cache still holds the optimistic value (the mutations module's sync-version check is the sanctioned mechanism)
 - `onMutate` that writes N pieces of state (cache entry + override map + ids list, …) while `onError` restores fewer than N
-- Rollback logic duplicated per-mutation instead of using `rollbackOptimisticTaskUpdate`
+- Rollback logic duplicated per-mutation instead of using `rollbackOptimisticAgentUpdate`
 
-**Fix:** Capture the per-entity sync version in `onMutate` (`getTaskSyncVersion`), restore only if it is unchanged in `onError`, and pair every side effect of `onMutate` with its undo in the same guard.
+**Fix:** Capture the per-entity sync version in `onMutate` (`getAgentSyncVersion`), restore only if it is unchanged in `onError`, and pair every side effect of `onMutate` with its undo in the same guard.
 
 ---
 
@@ -131,7 +131,7 @@ Using the TanStack cache as a push-fed store means opting out of its fetch machi
 
 **What to look for:**
 - `queryFn: () => null` / `queryFn: () => []` or any synchronous stub instead of `queryFn: skipToken`
-- A push-fed key family without `gcTime: Infinity` pinned via `queryClient.setQueryDefaults` (see the task keys in `queryClient.ts`)
+- A push-fed key family without `gcTime: Infinity` pinned via `queryClient.setQueryDefaults` (see the agent keys in `queryClient.ts`)
 - `staleTime` / `refetchOn*` options on a `skipToken` query — dead config implying fetch behavior that can't happen
 
 **Fix:** `queryFn: skipToken`, pin `gcTime` for the key prefix next to the other defaults in `queryClient.ts`, and let `undefined` mean "not delivered yet" so loading is distinguishable from empty/deleted.
@@ -361,7 +361,7 @@ Use `useState` for component-local state. Atoms add indirection — only promote
 
 **Question:** Does this `scroll` listener on the alpha chat container distinguish user-initiated scrolls from programmatic ones?
 
-The alpha chat scroll container has multiple `scroll` listeners that react to user intent (engage/disengage auto-scroll, save scroll position, dismiss open popovers). The container also fires `scroll` events for programmatic scrolls: virtualizer measurement corrections, `scrollToIndex` from auto-scroll, viewport-stability compensation, scroll-position restore on task switch. These events look identical to user scrolls at the DOM level. To tell them apart, `useAlphaAutoScroll` exposes a shared `isProgrammaticScrollRef` — every callsite that scrolls programmatically sets it `true` before the scroll, and `useAlphaAutoScroll.handleScroll` clears it after consuming. Any new `scroll` listener on the same container that wants to act on user intent must read this flag, or it will treat the codebase's own scrolls as user input.
+The alpha chat scroll container has multiple `scroll` listeners that react to user intent (engage/disengage auto-scroll, save scroll position, dismiss open popovers). The container also fires `scroll` events for programmatic scrolls: virtualizer measurement corrections, `scrollToIndex` from auto-scroll, viewport-stability compensation, scroll-position restore on agent switch. These events look identical to user scrolls at the DOM level. To tell them apart, `useAlphaAutoScroll` exposes a shared `isProgrammaticScrollRef` — every callsite that scrolls programmatically sets it `true` before the scroll, and `useAlphaAutoScroll.handleScroll` clears it after consuming. Any new `scroll` listener on the same container that wants to act on user intent must read this flag, or it will treat the codebase's own scrolls as user input.
 
 **What to look for:**
 - A new `addEventListener("scroll", ...)` (or equivalent) on the alpha chat scroll container that doesn't reference `isProgrammaticScrollRef`

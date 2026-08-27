@@ -116,7 +116,7 @@ export type DynamicAgentInput = {
   // closePanelAtom (removes the panel from the layout without deleting the agent).
   onRequestClose?: () => void;
   // Committing an inline tab rename persists the new title on the agent;
-  // supplied by the sync hook (useTaskRenameMutation).
+  // supplied by the sync hook (useAgentRenameMutation).
   onRename?: (newName: string) => void;
   // "Mark as unread" from the tab context menu: records the unread override and
   // persists it (see unreadOverrides.ts). Supplied by the sync hook

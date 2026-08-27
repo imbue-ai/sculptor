@@ -94,7 +94,7 @@ const taskWith = (status: TaskStatus, lastReadAt: string | null, updatedAt: stri
 });
 
 describe("getWorkspaceAttentionRank", () => {
-  it("ranks an empty / task-less workspace as IDLE", () => {
+  it("ranks an empty / agent-less workspace as IDLE", () => {
     expect(getWorkspaceAttentionRank([])).toBe(WORKSPACE_ATTENTION_TIER.IDLE);
   });
 

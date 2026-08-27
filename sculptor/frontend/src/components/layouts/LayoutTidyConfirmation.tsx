@@ -27,7 +27,7 @@ import { isSystemLayoutId } from "~/pages/workspace/layout/utils/systemDefaultLa
 
 import { LayoutPreview } from "./LayoutPreview.tsx";
 import styles from "./LayoutTidyConfirmation.module.scss";
-import { saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
+import { saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
 
 // The tidy dialog shows the live workspace, so name the agent/terminal homes plainly
 // (the save dialog's "default" framing is about seeding and doesn't apply here).
@@ -38,7 +38,7 @@ export const LayoutTidyConfirmation = (): ReactElement | undefined => {
   const layout = useAtomValue(workspaceLayoutAtom);
   const tidyToLayout = useSetAtom(tidyToLayoutAtom);
   const setTidyConfirmationSuppressed = useSetAtom(tidyConfirmationSuppressedAtom);
-  const setSaveRequest = useSetAtom(saveLayoutModalRequestAtom);
+  const setSaveRequest = useSetAtom(saveLayoutDialogRequestAtom);
 
   const [shouldSuppress, setShouldSuppress] = useState<boolean>(false);
   // Reset the checkbox for each fresh confirmation so it never carries a stale tick

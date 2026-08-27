@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { CodingAgentTaskView, ModelOption } from "../../../api";
 import { ModelCatalogState } from "../../../api";
-import { queryClient, syncTasksToQueryCache } from "../queryClient.ts";
+import { queryClient, syncAgentsToQueryCache } from "../queryClient.ts";
 import { useAgentAvailableModels, useAgentStatusField } from "./useAgentHelpers.ts";
 
 const createMockAgent = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
@@ -31,9 +31,9 @@ const flushNotifications = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-const writeTasksAndFlush = async (tasks: Record<string, CodingAgentTaskView>): Promise<void> => {
+const writeAgentsAndFlush = async (agents: Record<string, CodingAgentTaskView>): Promise<void> => {
   await act(async () => {
-    syncTasksToQueryCache(tasks);
+    syncAgentsToQueryCache(agents);
     await flushNotifications();
   });
 };
@@ -64,7 +64,7 @@ describe("useAgentStatusField", () => {
 
   it("does not re-render when an unrelated agent field changes", async () => {
     const agent = createMockAgent({ id: "task-1", status: "RUNNING", goal: "before" });
-    await writeTasksAndFlush({ "task-1": agent });
+    await writeAgentsAndFlush({ "task-1": agent });
 
     const { result } = renderCountingStatus("task-1");
     const rendersAfterSeed = result.current.renders;
@@ -72,7 +72,7 @@ describe("useAgentStatusField", () => {
 
     // Same status, different goal: the select result is unchanged, so structural
     // sharing must suppress the re-render.
-    await writeTasksAndFlush({ "task-1": { ...agent, goal: "after" } as CodingAgentTaskView });
+    await writeAgentsAndFlush({ "task-1": { ...agent, goal: "after" } as CodingAgentTaskView });
 
     expect(result.current.renders).toBe(rendersAfterSeed);
     expect(result.current.status).toBe("RUNNING");
@@ -80,12 +80,12 @@ describe("useAgentStatusField", () => {
 
   it("re-renders when the status changes", async () => {
     const agent = createMockAgent({ id: "task-1", status: "RUNNING" });
-    await writeTasksAndFlush({ "task-1": agent });
+    await writeAgentsAndFlush({ "task-1": agent });
 
     const { result } = renderCountingStatus("task-1");
     const rendersAfterSeed = result.current.renders;
 
-    await writeTasksAndFlush({ "task-1": { ...agent, status: "WAITING" } as CodingAgentTaskView });
+    await writeAgentsAndFlush({ "task-1": { ...agent, status: "WAITING" } as CodingAgentTaskView });
 
     expect(result.current.renders).toBeGreaterThan(rendersAfterSeed);
     expect(result.current.status).toBe("WAITING");
@@ -99,7 +99,7 @@ describe("useAgentAvailableModels", () => {
     // distinguishing "not fetched" from "fetched, empty" is what lets the switcher
     // show a loading state instead of flashing the empty state at startup.
     const agent = createMockAgent({ id: "task-1", availableModels: undefined, status: "RUNNING" });
-    await writeTasksAndFlush({ "task-1": agent });
+    await writeAgentsAndFlush({ "task-1": agent });
 
     const seen: Array<ReadonlyArray<ModelOption> | ModelCatalogState> = [];
     renderHook(
@@ -110,7 +110,7 @@ describe("useAgentAvailableModels", () => {
       { wrapper },
     );
 
-    await writeTasksAndFlush({ "task-1": { ...agent, status: "WAITING" } as CodingAgentTaskView });
+    await writeAgentsAndFlush({ "task-1": { ...agent, status: "WAITING" } as CodingAgentTaskView });
 
     // Every observed value is the same sentinel (both the absent-data coalesce
     // and the select fallback yield NOT_FETCHED_YET).

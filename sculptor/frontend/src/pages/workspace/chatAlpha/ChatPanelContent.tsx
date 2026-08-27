@@ -5,7 +5,7 @@ import { type ReactElement, useEffect, useRef } from "react";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
-import { useAgentSupportsChatInterface, useTaskWorkspaceId } from "~/common/state/hooks/useAgentHelpers.ts";
+import { useAgentSupportsChatInterface, useAgentWorkspaceId } from "~/common/state/hooks/useAgentHelpers.ts";
 import { lastFocusedChatAgentAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
@@ -60,7 +60,7 @@ const ChatPanelInner = ({ agentId }: ChatPanelContentProps): ReactElement => {
   // (any placed agent panel renders this component). The narrow field hook
   // keeps unrelated agent churn (status, timestamps) from re-rendering the whole
   // chat surface.
-  const workspaceID = useTaskWorkspaceId(agentId) ?? "";
+  const workspaceID = useAgentWorkspaceId(agentId) ?? "";
 
   // Registration seams tying this panel's composer to the workspace-scoped
   // consumers: useChatData registers the chatActions append/insert closures

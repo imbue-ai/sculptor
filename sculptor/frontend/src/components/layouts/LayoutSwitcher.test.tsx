@@ -19,7 +19,7 @@ import { EMPTY_WORKSPACE_LAYOUT, SAVED_LAYOUT_VERSION } from "~/pages/workspace/
 import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import { LayoutSwitcher } from "./LayoutSwitcher.tsx";
-import { layoutsSwitcherOpenAtom, saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
+import { layoutsSwitcherOpenAtom, saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
 
 // Force the platform modifier to Cmd so a "Meta+…" binding matches a metaKey press
 // regardless of the host OS the suite runs on (jsdom reports no platform).
@@ -174,7 +174,7 @@ describe("LayoutSwitcher keyboard machine", () => {
 
     press("s", { meta: true });
 
-    expect(store.get(saveLayoutModalRequestAtom)).toEqual({ mode: "create" });
+    expect(store.get(saveLayoutDialogRequestAtom)).toEqual({ mode: "create" });
     expect(store.get(layoutsSwitcherOpenAtom)).toBe(false);
   });
 });

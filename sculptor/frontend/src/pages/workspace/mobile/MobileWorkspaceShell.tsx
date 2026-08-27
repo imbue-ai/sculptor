@@ -28,7 +28,7 @@ type Overlay = "review" | "terminal" | null;
  * shell no longer supplies a bespoke input. In the status row the agent switcher
  * sits on the left, the changes pill on the right (S/C).
  */
-export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactElement => {
+export const MobileWorkspaceShell = ({ agentID }: { agentID: string }): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAgentSheetOpen, setIsAgentSheetOpen] = useState(false);
@@ -43,7 +43,7 @@ export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactEleme
     setIsDrawerOpen(false);
     setIsAgentSheetOpen(false);
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [taskID, workspaceID]);
+  }, [agentID, workspaceID]);
 
   return (
     <div className={`mobileTheme ${styles.shell}`} data-testid={ElementIds.MOBILE_WORKSPACE_SHELL}>
@@ -64,7 +64,7 @@ export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactEleme
         {/* The panel model keys the chat on an explicit agentId (never the
             route), so the shell passes its agent through — same contract as a
             desktop agent panel. */}
-        <ChatPanelContent agentId={taskID} />
+        <ChatPanelContent agentId={agentID} />
       </div>
 
       <div

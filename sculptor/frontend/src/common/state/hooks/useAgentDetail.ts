@@ -19,9 +19,9 @@ export const useAgentDetail = (agentId: string): AgentDetailState | null => {
  * launching tool_use_id) on the agent in the current URL; undefined when no
  * state has arrived for it.
  */
-export const useCurrentTaskWorkflowState = (toolUseId: string): WorkflowTaskState | undefined => {
+export const useCurrentAgentWorkflowState = (toolUseId: string): WorkflowTaskState | undefined => {
   const { agentID } = useWorkspacePageParams();
-  return useAtomValue(workflowTaskStateAtomFamily({ taskId: agentID ?? "", toolUseId }));
+  return useAtomValue(workflowTaskStateAtomFamily({ agentId: agentID ?? "", toolUseId }));
 };
 
 export const useAgentDetailWithDefaults = (agentId: string): AgentDetailState => {

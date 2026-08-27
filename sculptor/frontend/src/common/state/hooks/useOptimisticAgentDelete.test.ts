@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
 import { deleteErrorToastAtom } from "../atoms/toasts";
-import { queryClient, taskIdsQueryKey, taskQueryKey } from "../queryClient.ts";
+import { agentIdsQueryKey, agentQueryKey, queryClient } from "../queryClient.ts";
 import { useOptimisticAgentDelete } from "./useOptimisticAgentDelete";
 
 // Mock the delete endpoint so we can force failures and inspect retry targets.
@@ -43,14 +43,14 @@ const flushMicrotasks = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-// The hook snapshots and tombstones tasks in the query cache; tests seed the
+// The hook snapshots and tombstones agents in the query cache; tests seed the
 // cache the same way the WS bridge does.
-const seedTask = (task: CodingAgentTaskView): void => {
-  queryClient.setQueryData(taskQueryKey(task.id as string), task);
+const seedAgent = (agent: CodingAgentTaskView): void => {
+  queryClient.setQueryData(agentQueryKey(agent.id as string), agent);
 };
 
-const getCachedTask = (id: string): CodingAgentTaskView | null | undefined =>
-  queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(id));
+const getCachedAgent = (id: string): CodingAgentTaskView | null | undefined =>
+  queryClient.getQueryData<CodingAgentTaskView | null>(agentQueryKey(id));
 
 // The hook uses both a Jotai store (workspace mapping, toasts) and a TanStack
 // mutation (the delete request), so both providers are required.
@@ -74,9 +74,9 @@ describe("useOptimisticAgentDelete", () => {
     // whichever agent failed most recently, so retrying the FIRST failure would
     // wrongly target the SECOND agent.
     const store = createStore();
-    queryClient.setQueryData(taskIdsQueryKey(), ["agent-A", "agent-B"]);
-    seedTask(createMockAgent("agent-A"));
-    seedTask(createMockAgent("agent-B"));
+    queryClient.setQueryData(agentIdsQueryKey(), ["agent-A", "agent-B"]);
+    seedAgent(createMockAgent("agent-A"));
+    seedAgent(createMockAgent("agent-B"));
 
     const { result } = renderHook(() => useOptimisticAgentDelete({ workspaceId: "ws-1" }), {
       wrapper: makeWrapper(store),
@@ -98,8 +98,8 @@ describe("useOptimisticAgentDelete", () => {
     expect(firstRetry).not.toBe(secondRetry);
 
     // Re-seed agent-A so its optimistic re-delete proceeds to the API call.
-    seedTask(createMockAgent("agent-A"));
-    queryClient.setQueryData(taskIdsQueryKey(), ["agent-A"]);
+    seedAgent(createMockAgent("agent-A"));
+    queryClient.setQueryData(agentIdsQueryKey(), ["agent-A"]);
 
     mockDeleteWorkspaceAgent.mockClear();
     mockDeleteWorkspaceAgent.mockResolvedValue(undefined);
@@ -114,7 +114,7 @@ describe("useOptimisticAgentDelete", () => {
     );
   });
 
-  it("sends the DELETE even when the task is missing from the cache (SCU-1832)", async () => {
+  it("sends the DELETE even when the agent is missing from the cache (SCU-1832)", async () => {
     // A stale reference (route, palette action) can outlive the cache entry.
     // The cache's ignorance must not silently swallow the user's delete —
     // the server is the authority on deletability.
@@ -153,17 +153,17 @@ describe("useOptimisticAgentDelete", () => {
     expect(mockDeleteWorkspaceAgent).toHaveBeenCalledOnce();
   });
 
-  it("tombstones the task before the navigation callback observes it", () => {
+  it("tombstones the agent before the navigation callback observes it", () => {
     // The removal must be visible in every store by the time callbacks run, so
-    // a callback reading the cache sees the tombstone, not the live task.
+    // a callback reading the cache sees the tombstone, not the live agent.
     const store = createStore();
-    queryClient.setQueryData(taskIdsQueryKey(), ["task-A"]);
-    seedTask(createMockAgent("task-A"));
+    queryClient.setQueryData(agentIdsQueryKey(), ["task-A"]);
+    seedAgent(createMockAgent("task-A"));
     mockDeleteWorkspaceAgent.mockResolvedValue(undefined);
 
     let observedDuringCallback: CodingAgentTaskView | null | undefined = createMockAgent("task-A");
-    const onNavigateAfterDelete = vi.fn((taskId: string): void => {
-      observedDuringCallback = getCachedTask(taskId);
+    const onNavigateAfterDelete = vi.fn((agentId: string): void => {
+      observedDuringCallback = getCachedAgent(agentId);
     });
 
     const { result } = renderHook(() => useOptimisticAgentDelete({ workspaceId: "ws-1", onNavigateAfterDelete }), {
@@ -174,6 +174,6 @@ describe("useOptimisticAgentDelete", () => {
 
     expect(onNavigateAfterDelete).toHaveBeenCalledOnce();
     expect(observedDuringCallback).toBeNull();
-    expect(queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey())).toEqual([]);
+    expect(queryClient.getQueryData<ReadonlyArray<string>>(agentIdsQueryKey())).toEqual([]);
   });
 });

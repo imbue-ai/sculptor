@@ -17,7 +17,7 @@ export const buildLayoutCommands = (runtime: CommandRuntime): Array<Command> => 
     icon: Plus,
     order: 100,
     when: (ctx) => ctx.activeWorkspaceId != null,
-    perform: () => runtime.openSaveLayoutModal(),
+    perform: () => runtime.openSaveLayoutDialog(),
   },
   {
     id: "layouts.open",
@@ -30,6 +30,6 @@ export const buildLayoutCommands = (runtime: CommandRuntime): Array<Command> => 
     shortcut: "open_layouts",
     order: 110,
     when: (ctx) => ctx.activeWorkspaceId != null,
-    perform: () => runtime.openLayoutsModal(),
+    perform: () => runtime.openLayoutsDialog(),
   },
 ];

@@ -1,4 +1,4 @@
-import { appendTranscript } from "~/common/voiceEntryText.ts";
+import { appendTranscript } from "~/common/utils/voiceEntryText.ts";
 
 export type VoiceDraftComposer = {
   /** The text to display for an interim preview. The first preview of an

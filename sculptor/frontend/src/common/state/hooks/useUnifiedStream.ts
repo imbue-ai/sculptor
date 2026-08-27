@@ -26,9 +26,9 @@ import { updateWorkspacesAtom } from "../atoms/workspaces";
 import { appendSetupOutputChunkAtom } from "../atoms/workspaceSetupOutput";
 import { updateWorkspaceSetupStatusAtom } from "../atoms/workspaceSetupStatus";
 import { updateWorkspaceTargetBranchesAtom } from "../atoms/workspaceTargetBranches";
-import { syncTasksToQueryCache } from "../queryClient.ts";
+import { syncAgentsToQueryCache } from "../queryClient.ts";
 import { acknowledgeRequests, updateActiveWebsockets } from "../requestTracking";
-import { useTaskQueryMirror } from "./useTaskQueryMirror.ts";
+import { useAgentQueryMirror } from "./useAgentQueryMirror.ts";
 import { useWebsocket } from "./useWebsocket";
 
 const API_BASE_URL = "/api/v1";
@@ -99,10 +99,10 @@ const respondToExtensionCommand = (
  * doesn't lose state.
  */
 export const useUnifiedStream = (): void => {
-  // Whoever owns the stream (AppShell) owns the projection of its task frames
+  // Whoever owns the stream (AppShell) owns the projection of its agent frames
   // into the legacy Jotai atoms. Mounted first so the mirror subscribes before
   // a frame can arrive.
-  useTaskQueryMirror();
+  useAgentQueryMirror();
   const updateProjects = useSetAtom(updateProjectsAtom);
   const updateWorkspaces = useSetAtom(updateWorkspacesAtom);
   const setNotifications = useSetAtom(notificationsAtom);
@@ -131,9 +131,9 @@ export const useUnifiedStream = (): void => {
     (data: StreamingUpdate): void => {
       // Handle agent views (for agent list/sidebar).
       // Single-writer: the frame goes into the TanStack Query cache only;
-      // useTaskQueryMirror projects it into the legacy Jotai agent atoms.
+      // useAgentQueryMirror projects it into the legacy Jotai agent atoms.
       if (data.taskViewsByTaskId) {
-        syncTasksToQueryCache(data.taskViewsByTaskId);
+        syncAgentsToQueryCache(data.taskViewsByTaskId);
       }
 
       // Handle agent details (for chat pages)

@@ -13,7 +13,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
-import { useMarkUnreadMutation, useTaskRenameMutation } from "~/common/state/mutations";
+import { useAgentRenameMutation, useMarkUnreadMutation } from "~/common/state/mutations";
 import {
   agentDeleteTargetAtom,
   terminalCloseTargetAtom,
@@ -61,7 +61,7 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const setTerminalTabs = useSetAtom(terminalTabStateAtom);
   const setTerminalCloseTarget = useSetAtom(terminalCloseTargetAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
-  const { mutate: renameMutate } = useTaskRenameMutation(workspaceId);
+  const { mutate: renameMutate } = useAgentRenameMutation(workspaceId);
   const { mutate: markUnreadMutate } = useMarkUnreadMutation();
 
   // This workspace's agents; rebuilt on every agent tick — the downstream memos and the

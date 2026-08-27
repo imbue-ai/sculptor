@@ -6,7 +6,7 @@ import { ElementIds } from "~/api";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useIsWorkspaceDeleted } from "~/common/state/hooks/useWorkspace.ts";
-import { useRestoreTaskMutation } from "~/common/state/mutations";
+import { useRestoreAgentMutation } from "~/common/state/mutations";
 import { Toast } from "~/components/Toast.tsx";
 
 import styles from "./ErrorInput.module.scss";
@@ -20,7 +20,7 @@ export const ErrorInput = ({ workspaceId, agentId }: ErrorInputProps): ReactElem
   const [toast, setToast] = useState<ToastContent | null>(null);
   const isWorkspaceDeleted = useIsWorkspaceDeleted(workspaceId);
   const dangerColor = useThemeDangerColor();
-  const { mutate: restoreMutate } = useRestoreTaskMutation();
+  const { mutate: restoreMutate } = useRestoreAgentMutation();
 
   const handleRestore = (): void => {
     restoreMutate(

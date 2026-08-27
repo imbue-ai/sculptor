@@ -5,7 +5,7 @@ import { atomFamily } from "jotai/utils";
 import type { CodingAgentTaskView, TaskStatus } from "../../../api";
 
 // The agent atoms are legacy read models: the TanStack Query cache is the
-// written store for agent state, and useTaskQueryMirror projects it into these
+// written store for agent state, and useAgentQueryMirror projects it into these
 // atoms for the remaining Jotai readers. Nothing else should write them.
 //
 // React components read per-agent fields through the `useAgent*` hooks in

@@ -12,7 +12,7 @@ import { PaletteDialog } from "~/components/newWorkspace/PaletteDialog.tsx";
 import { LayoutSwitcher } from "./LayoutSwitcher.tsx";
 import { layoutsSwitcherOpenAtom } from "./layoutUiAtoms.ts";
 
-export const LayoutsModal = (): ReactElement | undefined => {
+export const LayoutsDialog = (): ReactElement | undefined => {
   const [isOpen, setIsOpen] = useAtom(layoutsSwitcherOpenAtom);
 
   // Close on unmount so a stale open request can't outlive this host.

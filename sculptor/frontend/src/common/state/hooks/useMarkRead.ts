@@ -13,13 +13,13 @@ import { useEffect, useRef } from "react";
 import type { CodingAgentTaskView } from "../../../api";
 import { clearUnreadOverride, isUnreadOverrideActive } from "../atoms/unreadOverrides";
 import { useMarkReadMutation } from "../mutations";
-import { queryClient, taskQueryKey } from "../queryClient.ts";
-import { useTask } from "./useTask";
+import { agentQueryKey, queryClient } from "../queryClient.ts";
+import { useAgent } from "./useAgent";
 
 const DEBOUNCE_MS = 1000;
 
 export const useMarkRead = (workspaceID: string, agentID: string): void => {
-  const agent = useTask(agentID);
+  const agent = useAgent(agentID);
   const { mutate: markReadMutate } = useMarkReadMutation();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while a debounced mark-read is scheduled but hasn't fired yet, so the
@@ -36,7 +36,7 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
   // Read the latest agent from the cache (not the rendered `agent`): the
   // decision must reflect updates that arrived after this closure was created.
   const isExplicitlyUnread = (): boolean => {
-    const latest = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(agentID));
+    const latest = queryClient.getQueryData<CodingAgentTaskView | null>(agentQueryKey(agentID));
     return !!latest && isUnreadOverrideActive(agentID, latest);
   };
 

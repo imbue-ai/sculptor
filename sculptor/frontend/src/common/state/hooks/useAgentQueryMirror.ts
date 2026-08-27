@@ -4,46 +4,46 @@ import { useEffect } from "react";
 import type { CodingAgentTaskView } from "../../../api";
 import { agentAtomFamily, agentIdsAtom } from "../atoms/agents";
 import { removeAgentSettings } from "../atoms/draftAgentSettings.ts";
-import { queryClient, SCULPTOR_QUERY_KEY_PREFIX, taskIdsQueryKey } from "../queryClient.ts";
+import { agentIdsQueryKey, queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
 
 type JotaiStore = ReturnType<typeof useStore>;
 
-const projectTask = (store: JotaiStore, taskId: string, data: CodingAgentTaskView | null | undefined): void => {
+const projectAgent = (store: JotaiStore, agentId: string, data: CodingAgentTaskView | null | undefined): void => {
   if (data === undefined) {
-    // No value written yet (e.g. a subscription-only query built by useTask
-    // before the stream has delivered the task) — nothing to project.
+    // No value written yet (e.g. a subscription-only query built by useAgent
+    // before the stream has delivered the agent) — nothing to project.
     return;
   }
 
   if (data === null) {
-    // Run before the same-value guard: a task deleted in the initial dump
+    // Run before the same-value guard: an agent deleted in the initial dump
     // after a reload still has persisted per-agent settings to drop.
-    removeAgentSettings(taskId);
+    removeAgentSettings(agentId);
   }
 
-  if (!Object.is(store.get(agentAtomFamily(taskId)), data)) {
-    store.set(agentAtomFamily(taskId), data);
+  if (!Object.is(store.get(agentAtomFamily(agentId)), data)) {
+    store.set(agentAtomFamily(agentId), data);
   }
 };
 
-const projectTaskIds = (store: JotaiStore, data: ReadonlyArray<string> | undefined): void => {
+const projectAgentIds = (store: JotaiStore, data: ReadonlyArray<string> | undefined): void => {
   if (data !== undefined && !Object.is(store.get(agentIdsAtom), data)) {
     store.set(agentIdsAtom, data);
   }
 };
 
 /**
- * One-way projection of agent-task state from the TanStack Query cache into
- * the legacy Jotai atoms (`agentAtomFamily` / `agentIdsAtom`).
+ * One-way projection of agent state from the TanStack Query cache into the
+ * legacy Jotai atoms (`agentAtomFamily` / `agentIdsAtom`).
  *
- * The query cache is the single written store for task state — the WS bridge
+ * The query cache is the single written store for agent state — the WS bridge
  * writes authoritative frames, mutation hooks write optimistic updates — and
  * this mirror keeps the remaining Jotai readers (`agentsArrayAtom`, the
  * per-field selector families) consistent without any writer having to know
  * about both stores. Cache notifications fire synchronously inside
  * `setQueryData`, so Jotai readers never lag the cache within a tick.
  *
- * Structural sharing in the cache keeps unchanged tasks referentially
+ * Structural sharing in the cache keeps unchanged agents referentially
  * identical, so the `Object.is` guards make repeated frames free for Jotai
  * subscribers.
  *
@@ -51,18 +51,18 @@ const projectTaskIds = (store: JotaiStore, data: ReadonlyArray<string> | undefin
  * frames. Seeding on mount covers hand-offs between stream owners; a brief
  * double-mount is harmless because projection is idempotent.
  *
- * Delete this hook (and the task atoms) once the last Jotai reader is
- * migrated to `useTask`/`useTaskIds`.
+ * Delete this hook (and the agent atoms) once the last Jotai reader is
+ * migrated to `useAgent`/`useAgentIds`.
  */
-export const useTaskQueryMirror = (): void => {
+export const useAgentQueryMirror = (): void => {
   const store = useStore();
   useEffect(() => {
     // Seed from whatever the cache already holds, so a (re)mount after frames
     // have arrived — e.g. React StrictMode's remount — starts consistent.
     queryClient
-      .getQueriesData<CodingAgentTaskView | null>({ queryKey: [SCULPTOR_QUERY_KEY_PREFIX, "task"] })
-      .forEach(([key, data]) => projectTask(store, key[2] as string, data));
-    projectTaskIds(store, queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey()));
+      .getQueriesData<CodingAgentTaskView | null>({ queryKey: [SCULPTOR_QUERY_KEY_PREFIX, "agent"] })
+      .forEach(([key, data]) => projectAgent(store, key[2] as string, data));
+    projectAgentIds(store, queryClient.getQueryData<ReadonlyArray<string>>(agentIdsQueryKey()));
 
     return queryClient.getQueryCache().subscribe((event) => {
       if (event.type !== "updated") {
@@ -73,10 +73,10 @@ export const useTaskQueryMirror = (): void => {
         return;
       }
 
-      if (key[1] === "task" && key.length === 3) {
-        projectTask(store, key[2] as string, event.query.state.data as CodingAgentTaskView | null | undefined);
-      } else if (key[1] === "taskIds") {
-        projectTaskIds(store, event.query.state.data as ReadonlyArray<string> | undefined);
+      if (key[1] === "agent" && key.length === 3) {
+        projectAgent(store, key[2] as string, event.query.state.data as CodingAgentTaskView | null | undefined);
+      } else if (key[1] === "agentIds") {
+        projectAgentIds(store, event.query.state.data as ReadonlyArray<string> | undefined);
       }
     });
   }, [store]);

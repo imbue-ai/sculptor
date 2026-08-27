@@ -48,9 +48,9 @@ vi.mock("~/electron/platform.ts", () => ({
 let testStore = createStore();
 
 // StatusPill reads the interruption capability via useAgentSupportsInterruption,
-// which is a subscription-only useQuery over the task cache, so a
-// QueryClientProvider is required. No task is seeded for "agent-1": an absent
-// task yields `undefined`, and the component's `?? true` keeps Stop enabled —
+// which is a subscription-only useQuery over the agent cache, so a
+// QueryClientProvider is required. No agent is seeded for "agent-1": an absent
+// agent yields `undefined`, and the component's `?? true` keeps Stop enabled —
 // the same default the Jotai atom gave before this hook read the cache.
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
   <QueryClientProvider client={queryClient}>

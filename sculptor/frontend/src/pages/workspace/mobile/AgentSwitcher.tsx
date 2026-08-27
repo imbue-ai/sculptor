@@ -28,7 +28,7 @@ const DRAG_CAP = 40; // px the name is allowed to follow the finger
 export const AgentSwitcher = ({ onOpenSheet }: AgentSwitcherProps): ReactElement | null => {
   const { workspaceID, agentID } = useWorkspacePageParams();
   const { navigateToAgent } = useImbueNavigate();
-  const tasks = useAtomValue(agentsArrayAtom);
+  const allAgents = useAtomValue(agentsArrayAtom);
 
   const nameRef = useRef<HTMLSpanElement>(null);
   const startXRef = useRef<number | null>(null);
@@ -36,10 +36,10 @@ export const AgentSwitcher = ({ onOpenSheet }: AgentSwitcherProps): ReactElement
 
   const agents = useMemo(
     () =>
-      (tasks ?? [])
+      (allAgents ?? [])
         .filter((t) => t.workspaceId === workspaceID && !t.isDeleted)
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [tasks, workspaceID],
+    [allAgents, workspaceID],
   );
 
   const index = agents.findIndex((a) => a.id === agentID);

@@ -64,8 +64,8 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
       toAgent: vi.fn(),
     },
     openNewWorkspaceDialog: vi.fn(),
-    openLayoutsModal: vi.fn(),
-    openSaveLayoutModal: vi.fn(),
+    openLayoutsDialog: vi.fn(),
+    openSaveLayoutDialog: vi.fn(),
     ui: {
       toggleHelpDialog: vi.fn(),
       toggleDevPanel: vi.fn(),
@@ -691,14 +691,14 @@ describe("buildLayoutCommands", () => {
     const runtime = makeRuntime();
     const cmd = buildLayoutCommands(runtime).find((c) => c.id === "layouts.open")!;
     runPerform(cmd);
-    expect(runtime.openLayoutsModal).toHaveBeenCalledTimes(1);
+    expect(runtime.openLayoutsDialog).toHaveBeenCalledTimes(1);
   });
 
   it("layouts.save perform opens the Save-layout dialog", () => {
     const runtime = makeRuntime();
     const cmd = buildLayoutCommands(runtime).find((c) => c.id === "layouts.save")!;
     runPerform(cmd);
-    expect(runtime.openSaveLayoutModal).toHaveBeenCalledTimes(1);
+    expect(runtime.openSaveLayoutDialog).toHaveBeenCalledTimes(1);
   });
 });
 

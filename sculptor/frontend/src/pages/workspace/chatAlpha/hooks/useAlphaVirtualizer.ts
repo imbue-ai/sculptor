@@ -20,17 +20,17 @@ const OVERSCAN = 5;
 const MAX_CACHED_AGENTS = 20;
 
 /**
- * Per-task caches: item heights (for estimateSize) and tail content height.
+ * Per-agent caches: item heights (for estimateSize) and tail content height.
  * MODULE-scoped, not refs: the mobile shell unmounts the whole chat on every
  * navigation (home ↔ workspace), so a ref-held cache restarts cold on each
  * return visit. Cold caches mean estimateSize falls back to the generic 120px
  * guess for every item, and the scroll-position restore first lands far from
  * the saved spot, then visibly leaps as real measurements land — for seconds
- * on a phone. Keyed by task id, so surviving the component is safe: a return
- * visit reads the same task's own heights from its last visit.
+ * on a phone. Keyed by agent id, so surviving the component is safe: a return
+ * visit reads the same agent's own heights from its last visit.
  */
-const heightCacheByTask = new Map<string, Array<number>>();
-const tailCacheByTask = new Map<string, number>();
+const heightCacheByAgent = new Map<string, Array<number>>();
+const tailCacheByAgent = new Map<string, number>();
 
 /**
  * Vertical padding above the virtualised list.
@@ -150,10 +150,10 @@ export const useAlphaVirtualizer = (
   // Seed from the module-level caches so a REMOUNT of a previously-visited
   // agent starts with its real heights and tail from the first render — the
   // agent-switch branch below only handles agentId changing while mounted.
-  const [tailContentHeight, setTailContentHeight] = useState(() => tailCacheByTask.get(agentId) ?? 0);
-  const tailContentHeightRef = useRef(tailCacheByTask.get(agentId) ?? 0);
+  const [tailContentHeight, setTailContentHeight] = useState(() => tailCacheByAgent.get(agentId) ?? 0);
+  const tailContentHeightRef = useRef(tailCacheByAgent.get(agentId) ?? 0);
   const prevAgentIdRef = useRef(agentId);
-  const currentEstimatesRef = useRef<Array<number>>(heightCacheByTask.get(agentId) ?? []);
+  const currentEstimatesRef = useRef<Array<number>>(heightCacheByAgent.get(agentId) ?? []);
 
   // The settle window (per-item scroll-adjustment suppression after an agent
   // switch) is owned by the scroll state machine's layout phase: `measuring`
@@ -278,8 +278,8 @@ export const useAlphaVirtualizer = (
       setIsTailSettling(false);
 
       // Restore saved state for the incoming agent.
-      currentEstimatesRef.current = heightCacheByTask.get(agentId) ?? [];
-      const savedTail = tailCacheByTask.get(agentId);
+      currentEstimatesRef.current = heightCacheByAgent.get(agentId) ?? [];
+      const savedTail = tailCacheByAgent.get(agentId);
 
       if (savedTail != null) {
         // Return visit: use the exact tail height from last time.
@@ -360,10 +360,10 @@ export const useAlphaVirtualizer = (
       const item = virtualizer.measurementsCache[i];
       if (item) heights[i] = item.size;
     }
-    heightCacheByTask.set(agentId, heights);
-    tailCacheByTask.set(agentId, tailContentHeightRef.current);
-    touchLRU(heightCacheByTask, agentId, MAX_CACHED_AGENTS);
-    touchLRU(tailCacheByTask, agentId, MAX_CACHED_AGENTS);
+    heightCacheByAgent.set(agentId, heights);
+    tailCacheByAgent.set(agentId, tailContentHeightRef.current);
+    touchLRU(heightCacheByAgent, agentId, MAX_CACHED_AGENTS);
+    touchLRU(tailCacheByAgent, agentId, MAX_CACHED_AGENTS);
   });
 
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = buildShouldAdjustScrollPositionOnItemSizeChange(

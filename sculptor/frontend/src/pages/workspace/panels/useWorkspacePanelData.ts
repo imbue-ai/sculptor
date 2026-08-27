@@ -2,8 +2,8 @@ import { useMemo } from "react";
 
 import type { CodingAgentTaskView } from "~/api";
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/hooks/navigation.ts";
+import { useAgent } from "~/common/state/hooks/useAgent.ts";
 import { useAgentChatMessages, useAgentDetailWithDefaults } from "~/common/state/hooks/useAgentDetail";
-import { useAgent } from "~/common/state/hooks/useAgentHelpers";
 
 import type { ArtifactsMap } from "../../../common/state/atoms/agentDetails.ts";
 import { extractUserMessageIds } from "./suggestionUtils";

@@ -2,7 +2,7 @@ import { Text, Tooltip } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import { useAgent } from "~/common/state/hooks/useAgentHelpers";
+import { useAgent } from "~/common/state/hooks/useAgent.ts";
 import { type AgentDotStatus, getAgentDotStatus } from "~/common/utils/statusDot.ts";
 import { AgentStatusDot as AgentStatusDotBase } from "~/components/statusDot";
 

@@ -39,7 +39,7 @@ import { isSystemLayoutId } from "~/pages/workspace/layout/utils/systemDefaultLa
 
 import { layoutSummary } from "./layoutSummary.ts";
 import styles from "./LayoutSwitcher.module.scss";
-import { layoutsSwitcherOpenAtom, saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
+import { layoutsSwitcherOpenAtom, saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
 import { LayoutWireframeIcon } from "./LayoutWireframeIcon.tsx";
 import { initialHighlightIndex, orderLayoutsByMru } from "./switcherOrder.ts";
 
@@ -87,7 +87,7 @@ export const LayoutSwitcher = (): ReactElement => {
   const registry = useAtomValue(panelRegistryAtom);
 
   const setOpen = useSetAtom(layoutsSwitcherOpenAtom);
-  const setSaveRequest = useSetAtom(saveLayoutModalRequestAtom);
+  const setSaveRequest = useSetAtom(saveLayoutDialogRequestAtom);
   const applyLayout = useSetAtom(applyLayoutAtom);
   const setDefaultLayout = useSetAtom(setDefaultLayoutAtom);
   const deleteLayout = useSetAtom(deleteLayoutAtom);

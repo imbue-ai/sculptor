@@ -19,7 +19,7 @@ import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/secti
 import { SYSTEM_DEFAULT_LAYOUT } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import { LayoutTidyConfirmation } from "./LayoutTidyConfirmation.tsx";
-import { saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
+import { saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
 
 // Dynamic (multi-instance) panels: the tidy closure never includes these, so they
 // stand in as the agent/terminal that must survive a tidy.
@@ -240,7 +240,7 @@ describe("LayoutTidyConfirmation", () => {
     render(withStore(store, <LayoutTidyConfirmation />));
     await user.click(screen.getByTestId(ElementIds.LAYOUT_TIDY_EDIT_LINK));
 
-    expect(store.get(saveLayoutModalRequestAtom)).toEqual({ mode: "edit", layout: target });
+    expect(store.get(saveLayoutDialogRequestAtom)).toEqual({ mode: "edit", layout: target });
     expect(store.get(layoutTidyTargetAtom)).toBeNull();
   });
 });

@@ -53,7 +53,7 @@ export const useContextActionRuntimes = (): {
       // handoff to agentRenameTargetAtom from its onCloseAutoFocus so the inline
       // rename input never mounts inside the still-open dialog's focus trap (see
       // palettePendingRenameAtom). Activation is scoped to the active workspace's
-      // layout, so it keys off the task id alone.
+      // layout, so it keys off the agent id alone.
       beginRename: (agent): void => {
         activateAgentPanel(agent.id);
         setPendingRename({ kind: "agent", panelId: makeAgentPanelId(agent.id) });

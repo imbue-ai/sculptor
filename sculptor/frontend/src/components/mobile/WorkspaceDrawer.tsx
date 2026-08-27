@@ -50,11 +50,11 @@ const DrawerWorkspaceRow = ({
   onSelect: () => void;
   onRequestDelete: (workspace: Workspace) => void;
 }): ReactElement => {
-  const tasks = useAtomValue(agentsArrayAtom);
+  const agents = useAtomValue(agentsArrayAtom);
   const branchInfo = useWorkspaceBranch(workspace.objectId);
   const dotStatus = useMemo(
-    () => computeWorkspaceDotStatus((tasks ?? []).filter((t) => t.workspaceId === workspace.objectId)),
-    [tasks, workspace.objectId],
+    () => computeWorkspaceDotStatus((agents ?? []).filter((t) => t.workspaceId === workspace.objectId)),
+    [agents, workspace.objectId],
   );
   const branch = branchInfo?.currentBranch ?? workspace.sourceBranch ?? "";
   const [isRenaming, setIsRenaming] = useState(false);

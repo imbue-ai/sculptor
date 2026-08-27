@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ToolResultBlock, ToolUseBlock, WorkflowTaskState } from "~/api";
 import { ElementIds } from "~/api";
-import { useCurrentTaskWorkflowState } from "~/common/state/hooks/useAgentDetail.ts";
+import { useCurrentAgentWorkflowState } from "~/common/state/hooks/useAgentDetail.ts";
 
 // Shares the subagent pill's stylesheet so workflows read as the same kind
 // of chat object — full-width accent pill with a gutter icon and duration.
@@ -152,7 +152,7 @@ export const AlphaWorkflowPill = ({ toolUseId, block, result, rowIndex }: AlphaW
   // eslint-disable-next-line react/hook-use-state
   const [animationIndex] = useState(pickAnimationIndex);
 
-  const state = useCurrentTaskWorkflowState(toolUseId);
+  const state = useCurrentAgentWorkflowState(toolUseId);
   const displayName = getWorkflowDisplayName({ state, input: block?.input });
   const isRunning = state?.status === "running";
 

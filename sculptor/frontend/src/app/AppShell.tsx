@@ -45,9 +45,9 @@ import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
 import { CommandPalette } from "~/components/commandPalette";
 import { CommandRegistrations } from "~/components/commandPalette/CommandRegistrations.tsx";
-import { LayoutsModal } from "~/components/layouts/LayoutsModal.tsx";
+import { LayoutsDialog } from "~/components/layouts/LayoutsDialog.tsx";
 import { LayoutTidyConfirmation } from "~/components/layouts/LayoutTidyConfirmation.tsx";
-import { SaveLayoutModal } from "~/components/layouts/SaveLayoutModal.tsx";
+import { SaveLayoutDialog } from "~/components/layouts/SaveLayoutDialog.tsx";
 import { NewWorkspaceDialog } from "~/components/newWorkspace/NewWorkspaceDialog.tsx";
 import { ExtensionLoader } from "~/extensions/ExtensionLoader.tsx";
 import { ExtensionOverlays } from "~/extensions/ExtensionOverlays.tsx";
@@ -141,8 +141,8 @@ export const AppShell = (): ReactElement => {
       <CommandPalette />
       <KeyboardShortcutsDialog />
       <NewWorkspaceDialog />
-      <LayoutsModal />
-      <SaveLayoutModal />
+      <LayoutsDialog />
+      <SaveLayoutDialog />
       <LayoutTidyConfirmation />
       <RepoPathDialog
         isOpen={isRepoPathDialogOpen}

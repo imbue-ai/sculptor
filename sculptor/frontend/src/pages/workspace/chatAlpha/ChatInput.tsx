@@ -65,6 +65,7 @@ import {
 import { useAgentDetailWithDefaults } from "../../../common/state/hooks/useAgentDetail";
 import {
   useAgentAvailableModels,
+  useAgentConfigurationSettingsSection,
   useAgentModel,
   useAgentSelectedModelId,
   useAgentSourcesBackendModels,
@@ -75,7 +76,6 @@ import {
   useAgentSupportsInteractiveBackchannel,
   useAgentSupportsInterruption,
   useAgentSupportsModelSelection,
-  useTaskConfigurationSettingsSection,
 } from "../../../common/state/hooks/useAgentHelpers.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
 import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent.ts";
@@ -181,7 +181,7 @@ export const ChatInput = ({
   // No usable model (pi with no authenticated providers): the picker renders disabled
   // and Send is replaced by a "Go to harness configuration" button routing to the
   // harness's own settings section (pi -> Pi, else Dependencies).
-  const configurationSettingsSection = useTaskConfigurationSettingsSection(agentId ?? "");
+  const configurationSettingsSection = useAgentConfigurationSettingsSection(agentId ?? "");
   const isMissingUsableModel = hasNoUsableModel(hasBackendModelSource, backendModels);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);

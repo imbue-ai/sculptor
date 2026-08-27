@@ -19,14 +19,14 @@ import { defaultLayoutIdAtom } from "~/pages/workspace/layout/atoms/savedLayout.
 import { saveCurrentLayoutAtom, updateLayoutAtom } from "~/pages/workspace/layout/atoms/savedLayoutActions.ts";
 
 import { LayoutPreview } from "./LayoutPreview.tsx";
-import type { SaveLayoutModalRequest } from "./layoutUiAtoms.ts";
-import { saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
-import styles from "./SaveLayoutModal.module.scss";
+import type { SaveLayoutDialogRequest } from "./layoutUiAtoms.ts";
+import { saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
+import styles from "./SaveLayoutDialog.module.scss";
 
 const SAVE_HINT = formatShortcutForDisplay("Meta+Enter");
 
-export const SaveLayoutModal = (): ReactElement | undefined => {
-  const [request, setRequest] = useAtom(saveLayoutModalRequestAtom);
+export const SaveLayoutDialog = (): ReactElement | undefined => {
+  const [request, setRequest] = useAtom(saveLayoutDialogRequestAtom);
 
   useEffect(() => (): void => setRequest(null), [setRequest]);
 
@@ -66,7 +66,7 @@ const SaveLayoutForm = ({
   request,
   onClose,
 }: {
-  request: SaveLayoutModalRequest;
+  request: SaveLayoutDialogRequest;
   onClose: () => void;
 }): ReactElement => {
   const isEdit = request.mode === "edit";

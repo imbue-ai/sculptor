@@ -27,7 +27,7 @@ type UsePiModelsResult = BackendQueryResult<PiModelsResponse | undefined> & {
 
 /**
  * Fetch pi's curated, authenticated-only model catalog probed on the host — the
- * pre-workspace twin of the in-task catalog, feeding the New Workspace modal's
+ * pre-workspace twin of the in-agent catalog, feeding the New Workspace modal's
  * pi model picker.
  *
  * `enabled` gates the fetch on pi actually being the selected agent type, so the

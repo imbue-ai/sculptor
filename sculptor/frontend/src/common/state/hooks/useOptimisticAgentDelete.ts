@@ -8,8 +8,8 @@ import type { CodingAgentTaskView } from "../../../api";
 import { useImbueLocation, useImbueNavigate, useImbueParams } from "../../hooks/navigation.ts";
 import { deleteErrorToastAtom } from "../atoms/toasts";
 import { agentIdForWorkspaceAtomFamily, setAgentForWorkspaceAtom } from "../atoms/workspaces.ts";
-import { applyOptimisticTaskDelete, useDeleteTaskMutation } from "../mutations";
-import { queryClient, taskQueryKey } from "../queryClient.ts";
+import { applyOptimisticAgentDelete, useDeleteAgentMutation } from "../mutations";
+import { agentQueryKey, queryClient } from "../queryClient.ts";
 
 type UseOptimisticAgentDeleteInputs = {
   workspaceId: string;
@@ -36,7 +36,7 @@ export const useOptimisticAgentDelete = (inputs: UseOptimisticAgentDeleteInputs)
   const { navigateToRoot } = useImbueNavigate();
   const { isAgentRoute } = useImbueLocation();
   const { agentId: routedAgentId } = useImbueParams();
-  const { mutateAsync: deleteTask } = useDeleteTaskMutation();
+  const { mutateAsync: deleteAgent } = useDeleteAgentMutation();
   // The Retry action re-invokes execute. Reach it through a ref (kept current
   // by the effect below) so the callback doesn't reference itself before it is
   // declared.
@@ -44,7 +44,7 @@ export const useOptimisticAgentDelete = (inputs: UseOptimisticAgentDeleteInputs)
 
   const execute = useCallback(
     (agentId: string, agentTitle: string): void => {
-      const snapshot = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(agentId));
+      const snapshot = queryClient.getQueryData<CodingAgentTaskView | null>(agentQueryKey(agentId));
 
       // Tombstone the agent and drop it from the ids list *now*, before the
       // navigation callbacks run: the mirror projects the removal into the
@@ -54,7 +54,7 @@ export const useOptimisticAgentDelete = (inputs: UseOptimisticAgentDeleteInputs)
       // nothing — the DELETE is still sent (the server is the authority on
       // deletability, and a stale reference must not silently swallow the
       // user's intent).
-      const deleteContext = applyOptimisticTaskDelete(agentId);
+      const deleteContext = applyOptimisticAgentDelete(agentId);
 
       // A deleted agent must not linger as the workspace's saved agent, or the next
       // cold-start redirect targets a dead route. Left cleared on a failed delete —
@@ -76,7 +76,7 @@ export const useOptimisticAgentDelete = (inputs: UseOptimisticAgentDeleteInputs)
 
       // The mutation owns the rollback (onError, so it survives an unmount); the
       // rejection here only drives the client-state toast.
-      deleteTask({ workspaceId, agentId, deleteContext }).catch(() => {
+      deleteAgent({ workspaceId, agentId, deleteContext }).catch(() => {
         setDeleteErrorToast({
           title: `Failed to delete "${agentTitle}"`,
           description: "The agent has been restored. Try again or check your connection.",
@@ -100,9 +100,9 @@ export const useOptimisticAgentDelete = (inputs: UseOptimisticAgentDeleteInputs)
       routedAgentId,
       navigateToRoot,
       workspaceId,
-      deleteTask,
+      deleteAgent,
     ],
-    // deleteTask (mutateAsync) is referentially stable across renders.
+    // deleteAgent (mutateAsync) is referentially stable across renders.
   );
 
   useEffect(() => {

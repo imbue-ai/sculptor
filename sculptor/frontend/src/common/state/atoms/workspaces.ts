@@ -66,7 +66,7 @@ export const workspaceIdsAtom = atom<ReadonlyArray<string> | undefined>(undefine
 export const hasEverHadWorkspacesAtom = atom<boolean>(false);
 
 // Monotonic count of authoritative (WS) writes per workspace, mirroring the
-// task sync versions in queryClient.ts. The delete mutation captures the
+// agent sync versions in queryClient.ts. The delete mutation captures the
 // version at apply time and rolls back in onError only if it is unchanged:
 // a frame that landed while the request was in flight holds server truth
 // (whether or not the mutation committed) and a snapshot restore would

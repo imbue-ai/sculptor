@@ -109,7 +109,7 @@ export const WorkspacePage = (): ReactElement | null => {
   // render nothing — same brief window as the desktop branch below.
   if (isMobile) {
     if (!agentIDFromUrl) return null;
-    return <MobileWorkspaceShell taskID={agentIDFromUrl} />;
+    return <MobileWorkspaceShell agentID={agentIDFromUrl} />;
   }
 
   if (agentIDFromUrl) {

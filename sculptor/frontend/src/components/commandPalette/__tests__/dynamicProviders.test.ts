@@ -54,8 +54,8 @@ const makeRuntime = (): CommandRuntime => {
       toAgent: vi.fn(),
     },
     openNewWorkspaceDialog: noop,
-    openLayoutsModal: noop,
-    openSaveLayoutModal: noop,
+    openLayoutsDialog: noop,
+    openSaveLayoutDialog: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
@@ -119,23 +119,23 @@ const seedProjects = (projects: Array<{ id: string; name: string }>): void => {
 
 // Seed agents carrying the status/read fields the attention ranking reads
 // (setAgents below only carries the title/prompt fields the agent tests need).
-const seedAttentionTasks = (
-  tasks: Array<{ id: string; workspaceId: string; status: TaskStatus; updatedAt: string; lastReadAt: string | null }>,
+const seedAttentionAgents = (
+  agents: Array<{ id: string; workspaceId: string; status: TaskStatus; updatedAt: string; lastReadAt: string | null }>,
 ): void => {
   const store = getDefaultStore();
-  for (const t of tasks) {
-    store.set(agentAtomFamily(t.id), {
-      id: t.id,
-      workspaceId: t.workspaceId,
-      status: t.status,
-      updatedAt: t.updatedAt,
-      lastReadAt: t.lastReadAt,
+  for (const a of agents) {
+    store.set(agentAtomFamily(a.id), {
+      id: a.id,
+      workspaceId: a.workspaceId,
+      status: a.status,
+      updatedAt: a.updatedAt,
+      lastReadAt: a.lastReadAt,
       isDeleted: false,
     } as unknown as CodingAgentTaskView);
   }
   store.set(
     agentIdsAtom,
-    tasks.map((t) => t.id),
+    agents.map((a) => a.id),
   );
 };
 
@@ -261,7 +261,7 @@ describe("buildWorkspaceProvider", () => {
     seedWorkspaceIn("idle", "Idle", "pA");
     seedWorkspaceIn("waiting", "Waiting", "pA");
     setWorkspaceIds(["idle", "waiting"]);
-    seedAttentionTasks([
+    seedAttentionAgents([
       { id: "t-idle", workspaceId: "idle", status: TaskStatus.READY, updatedAt: OLDER, lastReadAt: NEWER },
       { id: "t-wait", workspaceId: "waiting", status: TaskStatus.WAITING, updatedAt: OLDER, lastReadAt: OLDER },
     ]);
@@ -273,7 +273,7 @@ describe("buildWorkspaceProvider", () => {
     seedWorkspaceIn("stale", "Stale", "pA");
     seedWorkspaceIn("fresh", "Fresh", "pA");
     setWorkspaceIds(["stale", "fresh"]);
-    seedAttentionTasks([
+    seedAttentionAgents([
       { id: "t-stale", workspaceId: "stale", status: TaskStatus.READY, updatedAt: OLDER, lastReadAt: NEWER },
       { id: "t-fresh", workspaceId: "fresh", status: TaskStatus.READY, updatedAt: NEWER, lastReadAt: NEWER },
     ]);
@@ -285,7 +285,7 @@ describe("buildWorkspaceProvider", () => {
     seedWorkspaceIn("ackedError", "Seen error", "pA");
     seedWorkspaceIn("unread", "Fresh reply", "pA");
     setWorkspaceIds(["ackedError", "unread"]);
-    seedAttentionTasks([
+    seedAttentionAgents([
       // Errored but viewed after it broke → drops below the unread reply.
       { id: "t-err", workspaceId: "ackedError", status: TaskStatus.ERROR, updatedAt: OLDER, lastReadAt: NEWER },
       { id: "t-unread", workspaceId: "unread", status: TaskStatus.READY, updatedAt: NEWER, lastReadAt: OLDER },

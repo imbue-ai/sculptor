@@ -78,48 +78,49 @@ export const workspaceGitQueryKeyPrefix = (workspaceId: string): QueryKey =>
 export const recentWorkspacesQueryKey = (): ReadonlyArray<string> =>
   [SCULPTOR_QUERY_KEY_PREFIX, "recentWorkspaces"] as const;
 
-/** Query key for a single agent task by its id, populated by the WS bridge. */
-export const taskQueryKey = (taskId: string): ReadonlyArray<string> =>
-  [SCULPTOR_QUERY_KEY_PREFIX, "task", taskId] as const;
+/** Query key for a single agent by its id, populated by the WS bridge. */
+export const agentQueryKey = (agentId: string): ReadonlyArray<string> =>
+  [SCULPTOR_QUERY_KEY_PREFIX, "agent", agentId] as const;
 
-/** Query key for the ordered list of non-deleted task ids, updated by the WS bridge. */
-export const taskIdsQueryKey = (): ReadonlyArray<string> => [SCULPTOR_QUERY_KEY_PREFIX, "taskIds"] as const;
+/** Query key for the ordered list of non-deleted agent ids, updated by the WS bridge. */
+export const agentIdsQueryKey = (): ReadonlyArray<string> => [SCULPTOR_QUERY_KEY_PREFIX, "agentIds"] as const;
 
-// Task entries are fed exclusively by the WS stream, which sends one full
-// dump at connect and then only *changed* tasks. The default 5-minute gcTime
-// would evict any unobserved, quiet task, and nothing re-delivers it until it
-// next changes — so pin task entries for the app's lifetime (like the Jotai
-// atoms they replace). Deleted tasks stay as tiny `null` tombstones.
-queryClient.setQueryDefaults([SCULPTOR_QUERY_KEY_PREFIX, "task"], { gcTime: Infinity });
-queryClient.setQueryDefaults([SCULPTOR_QUERY_KEY_PREFIX, "taskIds"], { gcTime: Infinity });
+// Agent entries are fed exclusively by the WS stream, which sends one full
+// dump at connect and then only *changed* agents. The default 5-minute gcTime
+// would evict any unobserved, quiet agent, and nothing re-delivers it until it
+// next changes — so pin agent entries for the app's lifetime (like the Jotai
+// atoms they replace). Deleted agents stay as tiny `null` tombstones.
+queryClient.setQueryDefaults([SCULPTOR_QUERY_KEY_PREFIX, "agent"], { gcTime: Infinity });
+queryClient.setQueryDefaults([SCULPTOR_QUERY_KEY_PREFIX, "agentIds"], { gcTime: Infinity });
 
-// Monotonic count of authoritative (WS) writes per task. Optimistic mutations
+// Monotonic count of authoritative (WS) writes per agent. Optimistic mutations
 // capture it in `onMutate` and roll back in `onError` only if it is unchanged:
-// if a WS frame wrote the task while the request was in flight, the frame
+// if a WS frame wrote the agent while the request was in flight, the frame
 // holds server truth (whether or not the mutation committed) and a snapshot
 // restore would clobber it.
-const taskSyncVersionByTaskId = new Map<string, number>();
+const agentSyncVersionByAgentId = new Map<string, number>();
 
-export const getTaskSyncVersion = (taskId: string): number => taskSyncVersionByTaskId.get(taskId) ?? 0;
+export const getAgentSyncVersion = (agentId: string): number => agentSyncVersionByAgentId.get(agentId) ?? 0;
 
 /**
- * Write a batch of task-view updates into the query cache. Called by the WS
- * bridge (`useUnifiedStream`) on every `taskViewsByTaskId` frame — the single
- * writer of authoritative task state. Structural sharing keeps unchanged
- * tasks referentially identical, and the task-ids list is only rewritten when
- * ids actually change (except the first frame, which writes even an empty
- * list so consumers can tell "loaded, no tasks" from "still loading").
+ * Write a batch of agent-view updates into the query cache. Called by the WS
+ * bridge (`useUnifiedStream`) on every `taskViewsByTaskId` frame (the wire
+ * still says task for an agent run) — the single writer of authoritative
+ * agent state. Structural sharing keeps unchanged agents referentially
+ * identical, and the agent-ids list is only rewritten when ids actually
+ * change (except the first frame, which writes even an empty list so
+ * consumers can tell "loaded, no agents" from "still loading").
  */
-export const syncTasksToQueryCache = (taskViewsByTaskId: Record<string, CodingAgentTaskView>): void => {
-  const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(taskIdsQueryKey());
+export const syncAgentsToQueryCache = (agentViewsByAgentId: Record<string, CodingAgentTaskView>): void => {
+  const currentIds = queryClient.getQueryData<ReadonlyArray<string>>(agentIdsQueryKey());
   const idSet = new Set(currentIds);
   let didIdsChange = currentIds === undefined;
 
-  Object.entries(taskViewsByTaskId).forEach(([id, task]) => {
-    queryClient.setQueryData<CodingAgentTaskView | null>(taskQueryKey(id), task.isDeleted ? null : task);
-    taskSyncVersionByTaskId.set(id, getTaskSyncVersion(id) + 1);
+  Object.entries(agentViewsByAgentId).forEach(([id, agent]) => {
+    queryClient.setQueryData<CodingAgentTaskView | null>(agentQueryKey(id), agent.isDeleted ? null : agent);
+    agentSyncVersionByAgentId.set(id, getAgentSyncVersion(id) + 1);
 
-    if (task.isDeleted) {
+    if (agent.isDeleted) {
       if (idSet.delete(id)) {
         didIdsChange = true;
       }
@@ -130,7 +131,7 @@ export const syncTasksToQueryCache = (taskViewsByTaskId: Record<string, CodingAg
   });
 
   if (didIdsChange) {
-    queryClient.setQueryData<ReadonlyArray<string>>(taskIdsQueryKey(), Array.from(idSet));
+    queryClient.setQueryData<ReadonlyArray<string>>(agentIdsQueryKey(), Array.from(idSet));
   }
 };
 

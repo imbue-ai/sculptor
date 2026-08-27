@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appendTranscript } from "~/common/voiceEntryText.ts";
+import { appendTranscript } from "./voiceEntryText.ts";
 
 describe("appendTranscript", () => {
   it("uses the trimmed segment as-is when the draft is empty", () => {

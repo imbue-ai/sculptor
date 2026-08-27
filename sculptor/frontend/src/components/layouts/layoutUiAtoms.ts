@@ -16,7 +16,7 @@ export const layoutsSwitcherOpenAtom: PrimitiveAtom<boolean> = atom<boolean>(fal
 // existing Layout to change its name / shortcut / tidy / default without
 // re-capturing its arrangement. One atom rather than an open flag + a separate
 // target so the two can never disagree.
-export type SaveLayoutModalRequest = { mode: "create" } | { mode: "edit"; layout: SavedLayout };
+export type SaveLayoutDialogRequest = { mode: "create" } | { mode: "edit"; layout: SavedLayout };
 
-export const saveLayoutModalRequestAtom: PrimitiveAtom<SaveLayoutModalRequest | null> =
-  atom<SaveLayoutModalRequest | null>(null);
+export const saveLayoutDialogRequestAtom: PrimitiveAtom<SaveLayoutDialogRequest | null> =
+  atom<SaveLayoutDialogRequest | null>(null);
