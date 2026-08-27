@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { formatShortcutForDisplay } from "~/common/keybindings/format.ts";
 import { shouldHandleKeybinding } from "~/common/keybindings/matching.ts";
-import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
+import { isFocusInDismissibleOverlay } from "~/common/utils/overlays.ts";
 
 import type { KeybindingId } from "./model.ts";
 import { keybindingsMapAtom } from "./resolvedBindings.ts";
@@ -38,7 +38,11 @@ export const useKeybindingHandler = (id: KeybindingId, handler: () => void): voi
     if (binding == null) return;
 
     const listener = (e: KeyboardEvent): void => {
-      if (isDismissibleOverlayOpen()) return;
+      // Focus-based (not the DOM-walking isDismissibleOverlayOpen): Radix can keep a
+      // closed popper mounted (data-state="closed") after a menu is used, and the
+      // walker would treat it as open — permanently suppressing every registry
+      // keybinding. An overlay that is actually open traps focus, which this detects.
+      if (isFocusInDismissibleOverlay()) return;
       if (shouldHandleKeybinding(e, binding)) {
         e.preventDefault();
         e.stopPropagation();
