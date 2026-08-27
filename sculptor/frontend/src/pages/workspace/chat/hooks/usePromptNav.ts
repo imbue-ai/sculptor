@@ -8,7 +8,10 @@ import { CHAT_INPUT_ELEMENT_ID } from "~/common/utils/elementIds.ts";
 import { createScrollStateMachine, type ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 import type { ActivePromptIndex } from "./useActivePromptIndex.ts";
 
-const HIGHLIGHT_CLASS = "chatPromptHighlight";
+// The literal class string is pinned: the Python integration tests select
+// `.alphaPromptHighlight` directly, and renaming it is part of the coordinated
+// alpha_chat test-helper rename deferred by this PR.
+const HIGHLIGHT_CLASS = "alphaPromptHighlight";
 
 /** Cancel a pending rAF tracked in the ref and reset it. */
 const cancelRaf = (ref: React.MutableRefObject<number | null>): void => {

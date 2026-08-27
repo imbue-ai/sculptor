@@ -426,7 +426,7 @@ describe("usePromptNav", () => {
     act(() => dispatchArrowUp());
     await flushRaf(); // let applyHighlight add the class
 
-    expect(item.classList.contains("chatPromptHighlight")).toBe(true);
+    expect(item.classList.contains("alphaPromptHighlight")).toBe(true);
 
     // Move focus away so we can prove exitNavigation re-focuses.
     editableEl.blur();
@@ -435,7 +435,7 @@ describe("usePromptNav", () => {
 
     expect(result.current.isNavigating).toBe(false);
     expect(mockSetIsSuppressed).toHaveBeenLastCalledWith(false);
-    expect(item.classList.contains("chatPromptHighlight")).toBe(false);
+    expect(item.classList.contains("alphaPromptHighlight")).toBe(false);
     expect(document.activeElement).toBe(editableEl);
   });
 
@@ -612,15 +612,15 @@ describe("usePromptNav", () => {
     act(() => dispatchArrowUp());
     await flushRaf();
     expect(result.current.isNavigating).toBe(true);
-    expect(item.classList.contains("chatPromptHighlight")).toBe(true);
+    expect(item.classList.contains("alphaPromptHighlight")).toBe(true);
 
     // Exit before unmount: ensures the highlight is cleaned up.
     act(() => dispatchEscape());
-    expect(item.classList.contains("chatPromptHighlight")).toBe(false);
+    expect(item.classList.contains("alphaPromptHighlight")).toBe(false);
 
     unmount();
     // Still no highlight anywhere in the DOM after tear-down.
-    expect(document.querySelectorAll(".chatPromptHighlight")).toHaveLength(0);
+    expect(document.querySelectorAll(".alphaPromptHighlight")).toHaveLength(0);
   });
 
   it("exits navigation when filteredMessages shrinks to no user prompts", () => {
