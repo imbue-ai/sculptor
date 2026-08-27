@@ -1,3 +1,10 @@
+## AGENTS.md / .agents aliases
+
+This directory is the canonical one. `.agents/` is a symlink to `.claude/`, and
+`AGENTS.md` (repo root) is a symlink to `CLAUDE.md`, so agent tools that follow
+the AGENTS.md convention read the same content. Edit `.claude/` and `CLAUDE.md`,
+not the aliases.
+
 ## How to configure hooks
 
 1. `settings.json` - these hooks are committed and will run automatically for everyone on this repo.

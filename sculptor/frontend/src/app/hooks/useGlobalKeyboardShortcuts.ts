@@ -17,10 +17,7 @@ import { useResolvedTheme } from "../../common/state/hooks/useResolvedTheme.ts";
 import { CHAT_INPUT_ELEMENT_ID } from "../../common/utils/elementIds.ts";
 import { isDismissibleOverlayOpen } from "../../common/utils/overlays.ts";
 import { useCommandPalette } from "../../components/commandPalette";
-import {
-  areGlobalShortcutsDisabledAtom,
-  newWorkspaceDialogAtom,
-} from "../../components/newWorkspace/newWorkspaceAtoms.ts";
+import { newWorkspaceDialogAtom } from "../../components/newWorkspace/newWorkspaceAtoms.ts";
 import { chatToolDensityAtom } from "../../pages/workspace/chatAlpha/atoms/chatAlpha.ts";
 
 export const useGlobalKeyboardShortcuts = (): void => {
@@ -49,32 +46,10 @@ export const useGlobalKeyboardShortcuts = (): void => {
     isChatSearchVisibleRef.current = isChatSearchVisible;
   });
 
-  // In the empty first-run state, global shortcuts are off. Read
-  // through a ref so the keydown effect doesn't re-subscribe when the flag
-  // flips (it reads the latest value at event time instead).
-  const areGlobalShortcutsDisabled = useAtomValue(areGlobalShortcutsDisabledAtom);
-  const areGlobalShortcutsDisabledRef = useRef(areGlobalShortcutsDisabled);
-  useEffect(() => {
-    areGlobalShortcutsDisabledRef.current = areGlobalShortcutsDisabled;
-  });
-
   const keybindingsMap = useAtomValue(keybindingsMapAtom);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
-      // Empty first-run state — only Settings is reachable. Suppress
-      // every other global shortcut (including Cmd+K) so the user can't escape
-      // the inline form by keyboard. Settings still works so they can reach
-      // preferences; it's the one allowed destination per the empty-state spec.
-      if (areGlobalShortcutsDisabledRef.current) {
-        const settingsBinding = keybindingsMap["settings"]?.binding;
-        if (settingsBinding != null && shouldHandleKeybinding(e, settingsBinding)) {
-          e.preventDefault();
-          openSettings();
-        }
-        return;
-      }
-
       // Ctrl+Alt+/ — toggle the dev panel (not a registry keybinding)
       if (e.ctrlKey && e.altKey && e.key === "/") {
         e.preventDefault();

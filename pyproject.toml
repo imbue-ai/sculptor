@@ -66,6 +66,8 @@ exclude = [
   "**/quarantine/**",
   "test_data/**",
   "**/*.ipynb",
+  # Machine-generated OpenAPI client (rebuilt by `just generate-sculpt-client`).
+  "tools/sculpt/sculpt/client/**",
 ]
 
 [tool.ruff.format]

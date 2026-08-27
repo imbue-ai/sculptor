@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mobile New Workspace — Mocks</title>
+<style>
+  :root {
+    /* Neutral dark theme (matches Sculptor: appearance dark). */
+    --bg: #191919;          /* gray-2 / --mobile-surface-2 — unified app surface (workspace page base) */
+    --raised: #212121;      /* gray-3  — pills / cards (contrast against base) */
+    --raised-2: #292929;    /* gray-4  */
+    --line: #333;           /* --mobile-line */
+    --line-soft: #262626;   /* hairline divider */
+    --ink: #ededed;         /* gray-12 */
+    --ink-2: #b4b4b4;       /* gray-11 */
+    --ink-3: #7c7c7c;       /* gray-10 (placeholder / labels) */
+    --ink-4: #555;
+    --btn-accent: #4f5bd5;     /* blue Create button (matches the desktop modal) */
+    --btn-accent-hover: #5d68e0;
+    --near-black: #0d0d0d;  /* --color-background — the OLD (mismatched) page bg */
+    --page: #0d0d0d;
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--page); color: var(--ink); font-family: var(--font); margin: 0; padding: 32px 20px 80px; -webkit-font-smoothing: antialiased; }
+  svg { display: block; }
+
+  .page-head { max-width: 1100px; margin: 0 auto 28px; }
+  .page-head h1 { font-size: 22px; margin: 0 0 6px; }
+  .page-head p { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 4px 0; max-width: 860px; }
+  .page-head code { background: var(--raised); padding: 1px 5px; border-radius: 5px; font-family: var(--mono); font-size: 12px; color: var(--ink); }
+
+  .row-of-phones { display: flex; flex-wrap: wrap; gap: 40px 44px; justify-content: center; align-items: flex-start; max-width: 1500px; margin: 0 auto; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 340px; }
+  .v-head { text-align: center; }
+  .v-head .tag { display: inline-block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; margin-bottom: 8px; }
+  .v-head.is-current .tag { color: #e5837b; border-color: #4a2d2c; }
+  .v-head.is-pick .tag { color: #b8bdf0; border-color: #3a3f6b; }
+  .v-head.is-rejected .tag { color: var(--ink-3); }
+  .v-head.is-rejected { opacity: .72; }
+  .v-head h2 { font-size: 16px; margin: 0 0 4px; }
+  .v-head p { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 0; }
+
+  /* ---- phone frame (~19.5:9) ---- */
+  .phone { width: 320px; height: 690px; background: var(--bg); border: 1px solid #2a2a2a; border-radius: 38px; box-shadow: 0 20px 55px rgba(0,0,0,.6); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .phone.old-bg { background: var(--near-black); }
+  .phone.rejected { opacity: .72; }
+
+  .statusbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 26px 6px; font-size: 12px; color: var(--ink-2); font-weight: 600; flex: 0 0 auto; }
+  .statusbar .glyphs { letter-spacing: 2px; font-size: 10px; }
+
+  .header { display: flex; align-items: center; gap: 6px; padding: 6px 10px; flex: 0 0 auto; }
+  .header .icon { width: 40px; height: 40px; border: none; background: none; color: var(--ink); border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .header .icon svg { width: 22px; height: 22px; }
+  .header .icon:hover { background: rgba(255,255,255,.05); }
+  .header .title { flex: 1; min-width: 0; text-align: center; font-weight: 700; font-size: 16px; }
+
+  .ic svg { width: 16px; height: 16px; }
+  .repo-badge { width: 19px; height: 19px; border-radius: 5px; background: #3a3a3a; color: var(--ink); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+
+  /* =====================================================================
+     FINAL (Option A): name title on top · stacked pills below · centered
+     group · accent Create pinned to the bottom.
+     ===================================================================== */
+  .body3 { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 26px; padding: 20px 18px; overflow-y: auto; }
+  .name-block { text-align: center; }
+  .name-hero { font-size: 27px; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ink-3); }
+  .name-hero.filled { color: var(--ink); }
+  .name-caret { display: inline-block; width: 2px; height: 25px; background: var(--btn-accent); vertical-align: -5px; margin-left: 3px; }
+  .name-hint { font-size: 13px; color: var(--ink-3); line-height: 1.45; margin-top: 9px; }
+
+  .pills { display: flex; flex-direction: column; gap: 10px; }
+  .pill { width: 100%; display: flex; align-items: center; gap: 9px; padding: 12px 14px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); font-size: 14px; cursor: pointer; }
+  .pill .ic { color: var(--ink-2); flex: 0 0 auto; }
+  .pill .lbl { color: var(--ink-3); }
+  .pill .val { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pill .repo-name { font-weight: 600; }
+  .pill .end { margin-left: auto; color: var(--ink-3); display: flex; flex: 0 0 auto; padding-left: 6px; }
+  .pill .end svg { width: 16px; height: 16px; }
+
+  .footer2 { flex: 0 0 auto; padding: 14px 18px 22px; }
+  .create { width: 100%; height: 48px; background: var(--btn-accent); color: #fff; border: none; border-radius: 13px; font-size: 15px; font-weight: 600; font-family: var(--font); display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+  .create:hover { background: var(--btn-accent-hover); }
+  .create svg { width: 17px; height: 17px; }
+
+  /* ---- Option B (not chosen): labeled card ---- */
+  .body2 { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 14px 18px; gap: 16px; }
+  .canvas { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 9px; }
+  .card { background: var(--raised); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; }
+  .crow { padding: 12px 15px; }
+  .clabel { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-bottom: 6px; }
+  .cvalue { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
+  .cvalue .ic { color: var(--ink-2); flex: 0 0 auto; }
+  .cvalue .repo-name { font-weight: 600; }
+  .cvalue .branch-name { font-family: var(--mono); font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cvalue .end { margin-left: auto; color: var(--ink-3); display: flex; flex: 0 0 auto; }
+  .cvalue .end svg { width: 16px; height: 16px; }
+  .cdivider { height: 1px; background: var(--line-soft); margin: 0 15px; }
+
+  /* ---- CURRENT (today) ---- */
+  .old-body { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 22px; }
+  .old-hero { text-align: center; font-size: 30px; font-weight: 700; color: var(--ink); }
+  .old-input { width: 100%; background: #1d1d1d; border: 1.5px solid #2e2e2e; border-radius: 18px; padding: 18px; color: var(--ink-3); font-size: 17px; }
+  .old-meta { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-3); font-size: 13px; }
+  .old-meta .mono { font-family: var(--mono); font-size: 12px; }
+  .old-meta svg { width: 13px; height: 13px; vertical-align: -1px; }
+  .old-create { width: 100%; height: 56px; background: #6f6f6f; color: #fff; border: none; border-radius: 16px; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+  .caption { font-size: 12px; color: var(--ink-3); text-align: center; margin-top: 2px; max-width: 300px; line-height: 1.45; }
+  .legend { max-width: 900px; margin: 40px auto 0; border-top: 1px solid var(--line); padding-top: 18px; color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+  .legend b { color: var(--ink); }
+  .legend code { background: var(--raised); padding: 1px 5px; border-radius: 5px; font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="page-head">
+    <h1>Mobile New Workspace — redesign (Option A, final layout)</h1>
+    <p>Aligned to the desktop create-workspace modal. <b>Name title on top</b>, then the three options as <b>stacked pills</b> (Repo · Branch · Source), as one <b>vertically-centered</b> group; accent <b>Create workspace</b> button pinned to the bottom. No "Name" heading, no first-prompt field, no "Keep open" toggle. Page base is <code>--gray-2</code> (matches the workspace page); pills sit on <code>--gray-3</code>.</p>
+  </div>
+
+  <div class="row-of-phones">
+
+    <!-- ============ CURRENT (today) ============ -->
+    <div class="col">
+      <div class="v-head is-current">
+        <span class="tag">Current · today</span>
+        <h2>Before</h2>
+        <p>Clusters mid-screen; tiny unlabeled meta; 56px button floating in the middle; near-black <code>--color-background</code>.</p>
+      </div>
+      <div class="phone old-bg">
+        <div class="statusbar"><span>9:41</span><span class="glyphs">●●● 5G ▮</span></div>
+        <div class="header">
+          <button class="icon" aria-label="Workspaces"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 8h7"/><path d="M9 12h7"/><path d="M9 16h7"/></svg></button>
+          <div class="title">Sculptor</div>
+          <button class="icon" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        </div>
+        <div class="old-body">
+          <div class="old-hero">Name your workspace</div>
+          <div class="old-input">Workspace name</div>
+          <div class="old-meta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6A2 2 0 0 1 18.45 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>
+            code <span>·</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+            <span class="mono">origin/main</span>
+          </div>
+          <button class="old-create">+ Create workspace</button>
+        </div>
+      </div>
+      <div class="caption">Today's screen for reference.</div>
+    </div>
+
+    <!-- ============ FINAL A — empty ============ -->
+    <div class="col">
+      <div class="v-head is-pick">
+        <span class="tag">Final · empty</span>
+        <h2>Default landing</h2>
+        <p>Name title first, then the three option-pills. Branch pre-filled with an auto-generated name (⇄ to reroll).</p>
+      </div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="glyphs">●●● 5G ▮</span></div>
+        <div class="header">
+          <button class="icon" aria-label="Workspaces"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 8h7"/><path d="M9 12h7"/><path d="M9 16h7"/></svg></button>
+          <div class="title">Sculptor</div>
+          <button class="icon" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div class="body3">
+          <div class="name-block">
+            <h1 class="name-hero">Untitled workspace<span class="name-caret"></span></h1>
+            <div class="name-hint">Tap to name it, or just create.</div>
+          </div>
+          <div class="pills">
+            <div class="pill">
+              <span class="repo-badge">C</span>
+              <span class="repo-name">code</span>
+              <span class="end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <div class="pill">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+              <span class="val">bryden/splendid-junglefowl</span>
+              <span class="end" aria-label="Regenerate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/></svg></span>
+            </div>
+            <div class="pill">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+              <span class="lbl">source</span>
+              <span class="val">origin/main</span>
+              <span class="end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+          </div>
+        </div>
+        <div class="footer2">
+          <button class="create"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Create workspace</button>
+        </div>
+      </div>
+      <div class="caption">Title → pills → bottom CTA.</div>
+    </div>
+
+    <!-- ============ FINAL A — named ============ -->
+    <div class="col">
+      <div class="v-head is-pick">
+        <span class="tag">Final · named</span>
+        <h2>As you type</h2>
+        <p>The name fills in; the generated Branch pill tracks it. Source unchanged.</p>
+      </div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span class="glyphs">●●● 5G ▮</span></div>
+        <div class="header">
+          <button class="icon" aria-label="Workspaces"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 8h7"/><path d="M9 12h7"/><path d="M9 16h7"/></svg></button>
+          <div class="title">Sculptor</div>
+          <button class="icon" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div class="body3">
+          <div class="name-block">
+            <h1 class="name-hero filled">Fix login redirect<span class="name-caret"></span></h1>
+          </div>
+          <div class="pills">
+            <div class="pill">
+              <span class="repo-badge">C</span>
+              <span class="repo-name">code</span>
+              <span class="end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <div class="pill">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+              <span class="val">bryden/fix-login-redirect</span>
+              <span class="end" aria-label="Regenerate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/></svg></span>
+            </div>
+            <div class="pill">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+              <span class="lbl">source</span>
+              <span class="val">origin/main</span>
+              <span class="end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+          </div>
+        </div>
+        <div class="footer2">
+          <button class="create"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Create workspace</button>
+        </div>
+      </div>
+      <div class="caption">Generated branch tracks the name live.</div>
+    </div>
+
+    <!-- ============ OPTION B — not chosen (record) ============ -->
+    <div class="col">
+      <div class="v-head is-rejected">
+        <span class="tag">Option B · not chosen</span>
+        <h2>Labeled card</h2>
+        <p>Kept for the record — the three options as a settings-style card. User chose the stacked pills.</p>
+      </div>
+      <div class="phone rejected">
+        <div class="statusbar"><span>9:41</span><span class="glyphs">●●● 5G ▮</span></div>
+        <div class="header">
+          <button class="icon" aria-label="Workspaces"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 8h7"/><path d="M9 12h7"/><path d="M9 16h7"/></svg></button>
+          <div class="title">Sculptor</div>
+          <button class="icon" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div class="body2">
+          <div class="card">
+            <div class="crow">
+              <div class="clabel">Repo</div>
+              <div class="cvalue">
+                <span class="repo-badge">C</span>
+                <span class="repo-name">code</span>
+                <span class="end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+              </div>
+            </div>
+            <div class="cdivider"></div>
+            <div class="crow">
+              <div class="clabel">Branch</div>
+              <div class="cvalue">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+                <span class="branch-name">bryden/splendid-junglefowl</span>
+                <span class="end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/></svg></span>
+              </div>
+            </div>
+            <div class="cdivider"></div>
+            <div class="crow">
+              <div class="clabel">Source</div>
+              <div class="cvalue">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+                <span class="branch-name">origin/main</span>
+                <span class="end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+              </div>
+            </div>
+          </div>
+          <div class="canvas">
+            <h1 class="name-hero">Untitled workspace</h1>
+          </div>
+        </div>
+        <div class="footer2">
+          <button class="create"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Create workspace</button>
+        </div>
+      </div>
+      <div class="caption">Not chosen — kept as history.</div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <p><b>Final direction (Option A)</b></p>
+    <p>• <b>Name title first</b> ("Untitled workspace" → fills in), then the three options as <b>stacked pills</b>: Repo · Branch · Source.</p>
+    <p>• <b>Branch</b> = the generated/target branch with a <b>⇄ regenerate</b> action; <b>Source</b> is a selectable pill defaulting to <code>origin/main</code>.</p>
+    <p>• Title + pills are one <b>vertically-centered</b> group; the accent/blue <b>Create</b> button is pinned to the bottom.</p>
+    <p>• No "Name" heading, no first-prompt field, no "Keep open" toggle (mobile).</p>
+    <p>• Page base <code>--gray-2</code> (matches the workspace page); pills on <code>--gray-3</code>.</p>
+  </div>
+</body>
+</html>

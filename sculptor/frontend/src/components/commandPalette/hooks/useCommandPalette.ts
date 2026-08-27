@@ -5,13 +5,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExtern
 import { useImbueLocation } from "~/common/hooks/navigation.ts";
 import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
+import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { recentAgentTypeAtom } from "~/pages/workspace/layout/atoms/addPanel.ts";
+import { layoutMruAtom, savedLayoutsAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
 import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { maximizedSectionAtom } from "~/pages/workspace/layout/atoms/transient.ts";
 import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 
-import { areGlobalShortcutsDisabledAtom } from "../../newWorkspace/newWorkspaceAtoms.ts";
 import {
   commandPaletteInitialPageAtom,
   commandPaletteOpenAtom,
@@ -111,12 +112,6 @@ export const useCommandPalette = (): {
   const setSearch = useSetAtom(commandPaletteSearchAtom);
   const setPages = useSetAtom(commandPalettePagesAtom);
   const setInitialPage = useSetAtom(commandPaletteInitialPageAtom);
-  // The palette is unreachable in the empty first-run state. Gate the
-  // open paths here (rather than only at the keyboard hook) so every entry —
-  // the sidebar Search button, deep links, commands that re-open it — is
-  // covered by one rule. `close`/`toggle` never get stuck open because opening
-  // is blocked in the first place.
-  const areGlobalShortcutsDisabled = useAtomValue(areGlobalShortcutsDisabledAtom);
 
   // open/close just flip `isOpen`. The reset of search / page stack /
   // context-action targets is owned exclusively by `useResetOnOpenChange`
@@ -125,13 +120,11 @@ export const useCommandPalette = (): {
   // ensures raw `setIsOpen(...)` callers (tests, deep links) get the
   // same reset behavior.
   const open = useCallback(() => {
-    if (areGlobalShortcutsDisabled) return;
     setIsOpen(true);
-  }, [areGlobalShortcutsDisabled, setIsOpen]);
+  }, [setIsOpen]);
 
   const openTo = useCallback(
     (pageId: PageId) => {
-      if (areGlobalShortcutsDisabled) return;
       if (!isValidPageId(pageId)) {
         console.error(`[command-palette] openTo: unknown page id "${pageId}" — opening at root`);
         setIsOpen(true);
@@ -142,7 +135,7 @@ export const useCommandPalette = (): {
       setInitialPage(pageId);
       setIsOpen(true);
     },
-    [areGlobalShortcutsDisabled, setInitialPage, setIsOpen],
+    [setInitialPage, setIsOpen],
   );
 
   const close = useCallback(() => {
@@ -150,9 +143,8 @@ export const useCommandPalette = (): {
   }, [setIsOpen]);
 
   const toggle = useCallback(() => {
-    if (areGlobalShortcutsDisabled) return;
     setIsOpen((prev) => !prev);
-  }, [areGlobalShortcutsDisabled, setIsOpen]);
+  }, [setIsOpen]);
 
   const pushPage = useCallback(
     (pageId: PageId) => {
@@ -238,6 +230,10 @@ const dynamicProviderInputsAtom = atom((get) => {
   return {
     workspaces: get(workspacesArrayAtom),
     agents: get(agentsArrayAtom),
+    // The workspace switcher provider reads project names to tag cross-project
+    // rows; without this the badges wouldn't refresh when a project snapshot
+    // lands while the palette is open.
+    projects: get(projectsArrayAtom),
     openTabIds: get(effectiveOpenTabIdsAtom),
     panelRegistry: get(panelRegistryAtom),
     // The panel-toggle provider reads the layout's placement to list only
@@ -248,6 +244,11 @@ const dynamicProviderInputsAtom = atom((get) => {
     // chosen section; without it, picking a section wouldn't recompute the
     // list and the panel page would show "No commands here".
     addPanelTarget: get(addPanelTargetSubSectionAtom),
+    // The layouts provider lists one "Switch to <layout>" per saved layout in
+    // MRU order; tracking both keeps the list live when a layout is saved,
+    // deleted, or applied while the palette is open.
+    savedLayouts: get(savedLayoutsAtom),
+    layoutMru: get(layoutMruAtom),
     // The add-panel provider builds the "New {recent} agent" row title from the
     // normalized last-used agent type; tracking it keeps that title in sync when a
     // userConfig frame or the pi flag lands while the palette is open.

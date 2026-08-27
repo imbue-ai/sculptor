@@ -1,12 +1,16 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { StorybookConfig } from "@storybook/react-vite";
 
 import { sharedCss, sharedResolve } from "../vite.base.config.ts";
 
 // The frontend root (parent of `.storybook`), which anchors the `~` alias and
-// SCSS load paths.
-const FRONTEND_ROOT = path.resolve(__dirname, "..");
+// SCSS load paths. Storybook loads this config as an ES module, where `__dirname`
+// is undefined — derive the config directory from import.meta.url instead so the
+// path resolves under the ESM config loader.
+const CONFIG_DIR = path.dirname(fileURLToPath(import.meta.url));
+const FRONTEND_ROOT = path.resolve(CONFIG_DIR, "..");
 
 const config: StorybookConfig = {
   stories: ["../src/**/*.mdx", "../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],

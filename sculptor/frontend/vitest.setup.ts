@@ -91,3 +91,33 @@ if (typeof globalThis.DOMRect === "undefined") {
     }
   } as unknown as typeof DOMRect;
 }
+
+// jsdom does not implement DataTransfer or ClipboardEvent. Provide minimal polyfills.
+if (typeof globalThis.DataTransfer === "undefined") {
+  class MinimalDataTransfer {
+    private data = new Map<string, string>();
+    get types(): ReadonlyArray<string> {
+      return Array.from(this.data.keys());
+    }
+    setData(type: string, value: string): void {
+      this.data.set(type, value);
+    }
+    getData(type: string): string {
+      return this.data.get(type) ?? "";
+    }
+  }
+  (globalThis as { DataTransfer: typeof DataTransfer }).DataTransfer =
+    MinimalDataTransfer as unknown as typeof DataTransfer;
+}
+
+if (typeof globalThis.ClipboardEvent === "undefined") {
+  class MinimalClipboardEvent extends Event {
+    clipboardData: DataTransfer | null;
+    constructor(type: string, init?: { bubbles?: boolean; cancelable?: boolean; clipboardData?: DataTransfer | null }) {
+      super(type, { bubbles: init?.bubbles, cancelable: init?.cancelable });
+      this.clipboardData = init?.clipboardData ?? null;
+    }
+  }
+  (globalThis as { ClipboardEvent: typeof ClipboardEvent }).ClipboardEvent =
+    MinimalClipboardEvent as unknown as typeof ClipboardEvent;
+}

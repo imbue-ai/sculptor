@@ -142,6 +142,12 @@ same actionable message.
   MUST surface an actionable message — *"No models available — please log in to
   authenticate"* — extending the existing empty / failed-turn surface, with a route
   to the interactive `/login`.
+  > **Follow-up — see `agent_docs/no-usable-model-guard/design.md`.** As shipped, a
+  > *previously-selected* model is retained even with no providers, so the "empty
+  > catalog" precondition here is unreachable in that case and the turn is allowed to
+  > run and crash. The follow-up empties the catalog for an unusable selection and adds
+  > a pre-send guard (a generic "Go to harness configuration" CTA) so this message is
+  > shown *before* a doomed send, not after.
 
 ### Compatibility (REQ-COMPAT)
 - **REQ-COMPAT-1 (MUST):** Claude's model selection and all non-pi behavior MUST

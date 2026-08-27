@@ -20,6 +20,7 @@ import { useSearchParams } from "react-router-dom";
 import { type DependencyInfo, ElementIds, type UserConfigField } from "../../../api";
 import { getBackendCapabilities } from "../../../common/state/atoms/backendCapabilities";
 import { dependenciesStatusAtom } from "../../../common/state/atoms/dependenciesStatus";
+import { useVoiceModelsInstall } from "../../../common/useVoiceEntry";
 import { useManagedDependency } from "../hooks/useManagedDependency";
 import { SettingRow } from "./SettingRow.tsx";
 import { SectionTitle, SettingsSectionLayout } from "./SettingsSection.tsx";
@@ -119,6 +120,7 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
     setCustomPathInput,
     handleApplyCustomPath,
   } = useManagedDependency({ tool: "CLAUDE", onSettingChange });
+  const voiceModels = useVoiceModelsInstall();
 
   // Deep-link from onboarding ("?cli=gh") scrolls to that CLI section.
   const [searchParams] = useSearchParams();
@@ -300,6 +302,62 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
                 Not installed — install Git and ensure it is on your PATH
               </Text>
             </>
+          )}
+        </Flex>
+      </SettingRow>
+
+      <Separator size="4" my="5" />
+
+      <SectionTitle>Voice Models</SectionTitle>
+
+      <SettingRow
+        title="Status"
+        description="On-device speech-to-text models for voice entry (~316 MB), downloaded on demand and stored locally — never bundled with the app."
+      >
+        <Flex align="center" gap="2" data-testid={ElementIds.SETTINGS_VOICE_MODELS_STATUS}>
+          {dependenciesStatus === null ? (
+            <Spinner size="1" />
+          ) : voiceModels.isInstalling ? (
+            <Flex direction="column" gap="2" minWidth="200px">
+              <Flex align="center" gap="2">
+                <Spinner size="1" />
+                <Text size="2">Installing...</Text>
+              </Flex>
+              {voiceModels.progressPercent !== null && <Progress value={voiceModels.progressPercent} />}
+            </Flex>
+          ) : voiceModels.installError ? (
+            <Flex direction="column" gap="2">
+              <Text size="2" color="red">
+                {voiceModels.installError}
+              </Text>
+              <Button
+                variant="soft"
+                onClick={voiceModels.handleInstall}
+                data-testid={ElementIds.SETTINGS_VOICE_MODELS_INSTALL_BUTTON}
+              >
+                Retry
+              </Button>
+            </Flex>
+          ) : voiceModels.isInstalled ? (
+            <>
+              <CheckCircledIcon color="var(--green-9)" />
+              <Text size="2" color="green">
+                v{voiceModels.info?.version} — Installed
+              </Text>
+            </>
+          ) : (
+            <Flex direction="column" gap="2" align="start">
+              <Text size="2" color="gray">
+                Not downloaded — models download the first time you use voice entry
+              </Text>
+              <Button
+                variant="soft"
+                onClick={voiceModels.handleInstall}
+                data-testid={ElementIds.SETTINGS_VOICE_MODELS_INSTALL_BUTTON}
+              >
+                Download voice models
+              </Button>
+            </Flex>
           )}
         </Flex>
       </SettingRow>

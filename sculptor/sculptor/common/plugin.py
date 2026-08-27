@@ -20,7 +20,7 @@ def get_plugin_dirs() -> list[Path]:
 
     Sculptor ships three plugins:
       - `sculptor-plugin` — runtime helpers (/help, /sculpt-cli,
-        /build-sculptor-plugin)
+        /build-sculptor-extension)
       - `sculptor-workflow` — opinionated engineering workflow
         (/spec, /mock, /architect, /plan, /build, /review, /fix-bug,
         /setup-repo)

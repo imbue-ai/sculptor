@@ -2,11 +2,10 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useEffect, useRef } from "react";
 
-import { agentWorkspaceIdAtomFamily } from "~/common/state/atoms/agents.ts";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
-import { useAgentSupportsChatInterface } from "~/common/state/hooks/useAgentHelpers.ts";
+import { useAgentSupportsChatInterface, useTaskWorkspaceId } from "~/common/state/hooks/useAgentHelpers.ts";
 import { lastFocusedChatAgentAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
@@ -57,11 +56,11 @@ export const ChatPanelContent = ({ agentId }: ChatPanelContentProps): ReactEleme
 
 const ChatPanelInner = ({ agentId }: ChatPanelContentProps): ReactElement => {
   // The chat data hook needs the agent's workspace id; derive it from the agent
-  // atom rather than the route — the panel's agent can differ from the routed
-  // one (any placed agent panel renders this component). The narrow derived
-  // atom keeps unrelated agent churn (status, timestamps) from re-rendering
-  // the whole chat surface.
-  const workspaceID = useAtomValue(agentWorkspaceIdAtomFamily(agentId)) ?? "";
+  // rather than the route — the panel's agent can differ from the routed one
+  // (any placed agent panel renders this component). The narrow field hook
+  // keeps unrelated agent churn (status, timestamps) from re-rendering the whole
+  // chat surface.
+  const workspaceID = useTaskWorkspaceId(agentId) ?? "";
 
   // Registration seams tying this panel's composer to the workspace-scoped
   // consumers: useChatData registers the chatActions append/insert closures

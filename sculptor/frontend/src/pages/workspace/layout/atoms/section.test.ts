@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { layoutPersistenceAdapter } from "~/pages/workspace/layout/persistence/LocalStorageLayoutAdapter.ts";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
-import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import {
+  DEFAULT_GLOBAL_LAYOUT,
+  DEFAULT_SECTION_SIZES,
+  EMPTY_WORKSPACE_LAYOUT,
+} from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { SECTION_SIZE_MAX_PERCENT, SECTION_SIZE_MIN_PERCENT } from "~/pages/workspace/layout/utils/sectionGeometry.ts";
 
 import {
@@ -12,6 +16,7 @@ import {
   EXPLORER_LIST_MAX_WIDTH_PX,
   EXPLORER_LIST_MIN_WIDTH_PX,
   explorerListWidthAtom,
+  explorerSidebarHiddenAtom,
   globalLayoutAtom,
   isSectionExpandedAtom,
   panelsInSubSectionAtom,
@@ -122,18 +127,26 @@ describe("narrow read slices", () => {
   });
 });
 
-describe("global slices are shared across workspaces", () => {
-  it("sectionSizes are identical regardless of active workspace", () => {
+describe("section sizes are per-workspace", () => {
+  it("keeps each workspace's sizes isolated across a switch", () => {
     const store = createStore();
-    store.set(globalLayoutAtom, { ...DEFAULT_GLOBAL_LAYOUT, sectionSizes: { left: 10, right: 15, bottom: 20 } });
+    store.set(activeWorkspaceIdAtom, "ws-sizes-1");
+    store.set(setSectionSizeAtom, { side: "left", percent: 12 });
+    expect(store.get(sectionSizesAtom).left).toBe(12);
 
-    store.set(activeWorkspaceIdAtom, "ws-shared-1");
-    expect(store.get(sectionSizesAtom)).toEqual({ left: 10, right: 15, bottom: 20 });
+    // A workspace never sized starts at the defaults, unaffected by ws-sizes-1.
+    store.set(activeWorkspaceIdAtom, "ws-sizes-2");
+    expect(store.get(sectionSizesAtom).left).toBe(DEFAULT_SECTION_SIZES.left);
+    store.set(setSectionSizeAtom, { side: "left", percent: 30 });
+    expect(store.get(sectionSizesAtom).left).toBe(30);
 
-    store.set(activeWorkspaceIdAtom, "ws-shared-2");
-    expect(store.get(sectionSizesAtom)).toEqual({ left: 10, right: 15, bottom: 20 });
+    // Returning to ws-sizes-1 restores its own size, not ws-sizes-2's.
+    store.set(activeWorkspaceIdAtom, "ws-sizes-1");
+    expect(store.get(sectionSizesAtom).left).toBe(12);
   });
+});
 
+describe("global slices are shared across workspaces", () => {
   it("sidebar atoms are writable slices of the global snapshot", () => {
     const store = createStore();
     store.set(sidebarWidthAtom, 333);
@@ -159,6 +172,35 @@ describe("global clamping write atoms", () => {
     expect(store.get(explorerListWidthAtom)).toBe(EXPLORER_LIST_MIN_WIDTH_PX);
     store.set(explorerListWidthAtom, 10_000);
     expect(store.get(explorerListWidthAtom)).toBe(EXPLORER_LIST_MAX_WIDTH_PX);
+  });
+});
+
+describe("explorer sidebar visibility (per-panel, persisted)", () => {
+  it("defaults to visible and hides each panel independently", () => {
+    const store = createStore();
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(false);
+
+    store.set(explorerSidebarHiddenAtom("files"), true);
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(true);
+    expect(store.get(explorerSidebarHiddenAtom("changes"))).toBe(false);
+  });
+
+  it("reads and writes when a snapshot persisted before the field existed lacks it", () => {
+    const store = createStore();
+    // Stand in for a pre-upgrade global snapshot: everything except the map.
+    store.set(globalLayoutAtom, {
+      sidebarWidthPx: DEFAULT_GLOBAL_LAYOUT.sidebarWidthPx,
+      sidebarCollapsed: DEFAULT_GLOBAL_LAYOUT.sidebarCollapsed,
+      explorerListWidthPx: DEFAULT_GLOBAL_LAYOUT.explorerListWidthPx,
+      sidebarOrder: DEFAULT_GLOBAL_LAYOUT.sidebarOrder,
+    });
+
+    // The absent map coalesces to "visible" on read...
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(false);
+    // ...and a write seeds the map without crashing on the missing key.
+    store.set(explorerSidebarHiddenAtom("files"), true);
+    expect(store.get(explorerSidebarHiddenAtom("files"))).toBe(true);
+    expect(store.get(globalLayoutAtom).explorerSidebarHiddenByPanel).toEqual({ files: true });
   });
 });
 

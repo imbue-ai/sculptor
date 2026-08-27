@@ -1,0 +1,239 @@
+/* ChangesPill (C1-C3). A compact bar under the header — restyled to match the
+   chat's StatusPill / JumpToBottomButton indicators — that expands into a
+   floating flat file list overlaying the chat. */
+
+/* Right-hand item of the shell's `.statusRow`. The expanded panel is positioned
+   against that row (its positioned ancestor), so `.wrap` stays unpositioned. */
+.wrap {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Chrome borrowed verbatim from StatusPill / JumpToBottomButton: gray-1
+   surface, gray-4 hairline border, radius-2, shadow-sm. */
+.bar {
+  align-items: center;
+  background: var(--gray-1);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-sm);
+  display: inline-flex;
+  font-size: var(--font-size-1);
+  max-width: 100%;
+  overflow: hidden;
+
+  /* The status row is click-through; the bar itself is interactive. */
+  pointer-events: auto;
+}
+
+/* Left: a soft "+ PR" button (no split-button popover). */
+.pr {
+  align-items: center;
+  background: var(--gray-a3);
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  gap: var(--space-1);
+  margin: var(--space-1);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+}
+
+.pr svg {
+  color: var(--gray-11);
+}
+
+.pr:hover {
+  background: var(--gray-a4);
+}
+
+/* Open / merged PR references read as monospace, like the desktop PrButton. */
+.prRef {
+  font-family: var(--mono-font-family);
+  font-weight: var(--font-weight-medium);
+}
+
+.mergeIcon {
+  color: var(--purple-9);
+}
+
+.mergedLabel {
+  color: var(--green-11);
+}
+
+.closedLabel {
+  color: var(--gray-9);
+}
+
+/* PR status dots — pipeline + review — mirroring the desktop PrButton dots. */
+.dot {
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 6px;
+  width: 6px;
+}
+
+.dotRunning {
+  animation: pulse 1.5s ease-in-out infinite;
+  background: var(--blue-9);
+}
+
+.dotPassed {
+  background: var(--green-9);
+}
+
+.dotFailed {
+  background: var(--red-9);
+}
+
+.dotPending {
+  background: var(--orange-9);
+}
+
+.dotApproved {
+  background: var(--green-9);
+}
+
+.dotMuted {
+  background: var(--gray-7);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 100%;
+  }
+
+  50% {
+    opacity: 40%;
+  }
+}
+
+/* Right: the change summary; taps to expand the list. */
+.changes {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-11);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  gap: var(--space-2);
+  margin: var(--space-1) var(--space-1) var(--space-1) 0;
+  padding: var(--space-1) var(--space-2);
+}
+
+.changes:hover {
+  background: var(--gray-3);
+}
+
+.stat {
+  align-items: center;
+  display: inline-flex;
+  font-family: var(--mono-font-family);
+  white-space: nowrap;
+}
+
+/* The "· N files" suffix — dropped (unmounted) when the bar would overlap the
+   agent switcher; the +X −Y counts always stay. */
+.files {
+  white-space: pre;
+}
+
+.add {
+  color: var(--green-11);
+}
+
+.del {
+  color: var(--red-11);
+}
+
+.chevron {
+  align-items: center;
+  color: var(--gray-9);
+  display: flex;
+  transition: transform var(--duration-normal) var(--ease-default);
+}
+
+.open .chevron {
+  transform: rotate(180deg);
+}
+
+/* Expanded list = a floating panel overlaying the chat (the row + input stay
+   put). Anchored to the `.statusRow`, so it spans the row width (inset from the
+   screen edges) rather than the narrow bar, and drops below the whole row. */
+.panel {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-5);
+  left: var(--space-3);
+  max-height: 0;
+  opacity: 0%;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: var(--space-3);
+  top: calc(100% + var(--space-1));
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+
+.open .panel {
+  max-height: 64vh;
+  opacity: 100%;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+/* All / Uncommitted toggle — sticks to the top while the list scrolls. */
+.scopeRow {
+  background: var(--color-panel-solid);
+  border-bottom: 1px solid var(--gray-a4);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.list {
+  padding: var(--space-1) 0;
+}
+
+.reviewFoot {
+  border-top: 1px solid var(--gray-a4);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-1);
+}
+
+/* Subtle "Review all" — a quiet ghost text affordance, not a filled accent CTA. */
+.reviewButton {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-11);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.reviewButton svg {
+  color: var(--gray-9);
+}
+
+.reviewButton:hover {
+  background: var(--gray-3);
+  color: var(--gray-12);
+}

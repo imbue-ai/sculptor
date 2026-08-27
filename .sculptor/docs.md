@@ -15,6 +15,12 @@ here.
   visual style.
 -->
 
+- **Mock starter template (START HERE):** copy
+  `.sculptor/mock_templates/sculptor-shell.html` — a self-contained
+  starter with the app's exact dark tokens, fonts, app-shell backdrop,
+  and dialog components, verified against live app captures. See
+  `.sculptor/mock_templates/README.md` for usage and the companion
+  screenshot script.
 - **Component library:** `sculptor/frontend/src/components/` (React
   + Radix UI primitives).
 - **Design tokens / styles:** see the `/frontend-design-tokens` skill

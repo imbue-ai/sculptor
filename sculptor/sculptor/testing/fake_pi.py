@@ -439,20 +439,6 @@ def _emit_agent_end(text: str) -> None:
     )
 
 
-def _emit_reaction_turn(ack: str) -> None:
-    """Emit the out-of-band reaction turn pi runs when the extension wakes the agent
-    via `sendUserMessage` after a completion: an assistant acknowledgement bracketed
-    by agent_start/agent_end, so Sculptor consumes it as the auto-resume reaction."""
-    _emit({"type": "agent_start"})
-    _emit(
-        {
-            "type": "message_end",
-            "message": {"role": "assistant", "content": [{"type": "text", "text": ack}], "stopReason": "stop"},
-        }
-    )
-    _emit_agent_end(ack)
-
-
 def _emit_aborted_agent_end(text: str) -> None:
     """Emit the interrupted-turn boundary: an `agent_end` whose assistant message
     carries `stopReason:"aborted"` plus the partial text streamed so far.
@@ -720,14 +706,12 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
         "notifyType": "info" if status == "completed" else "warning",
         "message": json.dumps({"sculptorSubagentTask": completion}, separators=(",", ":")),
     }
-    # Optionally script the auto-resume reaction turn pi runs when the extension
-    # wakes the agent (sendUserMessage) after the completion notify.
-    reaction = args.get("reaction")
+    # No reaction turn is scripted here: real pi never self-starts a run after a
+    # completion — Sculptor initiates the reaction by sending a wake prompt,
+    # which FakePi answers like any other prompt (SCU-1776).
 
     def _emit_completion() -> None:
         _emit(notify_event)
-        if isinstance(reaction, str) and reaction:
-            _emit_reaction_turn(reaction)
 
     wait_path = args.get("wait_path")
     if wait_path:
@@ -841,14 +825,12 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
         "notifyType": "info" if status == "completed" else "warning",
         "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
     }
-    # Optionally script the auto-resume reaction turn pi runs when the extension
-    # wakes the agent (sendUserMessage) after the completion notify.
-    reaction = args.get("reaction")
+    # No reaction turn is scripted here: real pi never self-starts a run after a
+    # completion — Sculptor initiates the reaction by sending a wake prompt,
+    # which FakePi answers like any other prompt (SCU-1776).
 
     def _emit_completion() -> None:
         _emit(notify_event)
-        if isinstance(reaction, str) and reaction:
-            _emit_reaction_turn(reaction)
 
     wait_path = args.get("wait_path")
     if wait_path:

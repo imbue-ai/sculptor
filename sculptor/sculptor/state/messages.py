@@ -12,8 +12,12 @@ from sculptor.state.chat_state import ContentBlockTypes
 
 
 class LLMModel(StrEnum):
+    # Rolling "latest Opus" (shortnames `opus[1m]` / `opus`), relabeled per generation.
     CLAUDE_4_OPUS = "CLAUDE-4-OPUS"
     CLAUDE_4_OPUS_200K = "CLAUDE-4-OPUS-200K"
+    # Pinned Opus generations.
+    CLAUDE_4_8_OPUS = "CLAUDE-4-8-OPUS"
+    CLAUDE_4_8_OPUS_200K = "CLAUDE-4-8-OPUS-200K"
     CLAUDE_4_7_OPUS = "CLAUDE-4-7-OPUS"
     CLAUDE_4_7_OPUS_200K = "CLAUDE-4-7-OPUS-200K"
     CLAUDE_4_6_OPUS = "CLAUDE-4-6-OPUS"
@@ -45,6 +49,28 @@ class ModelOption(SerializableModel):
     provider: str
     model_id: str
     display_name: str
+
+
+class ModelCatalogState(StrEnum):
+    """The catalog states a plain `list[ModelOption]` cannot express.
+
+    `NOT_FETCHED_YET` is the birth state of a backend (pi) catalog on task state,
+    before the start-time probe runs — distinct from a fetched-but-empty `[]`
+    (authenticated, but no providers), which is what drives the empty state. Keeping
+    the two apart is what stops the switcher flashing that empty state during startup. A
+    StrEnum member is a value-less, interned singleton that survives serialization
+    by identity, so read sites use `is` rather than overloading `None`.
+    """
+
+    NOT_FETCHED_YET = "not_fetched_yet"
+
+
+# Canonical singleton, so call sites read `NOT_FETCHED_YET` not the dotted form.
+NOT_FETCHED_YET = ModelCatalogState.NOT_FETCHED_YET
+
+# A backend model catalog as stored on task state and surfaced to the switcher:
+# the fetched list (possibly empty = no providers), or a lifecycle sentinel.
+ModelCatalog = list[ModelOption] | ModelCatalogState
 
 
 class AgentMessageSource(StrEnum):

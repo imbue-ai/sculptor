@@ -23,7 +23,7 @@ export const useWorkspaceNavigation = (): WorkspaceNavigationResult => {
   const openTab = useSetAtom(openWorkspaceTabAtom);
   const convertHomeTab = useSetAtom(convertHomeTabToWorkspaceAtom);
   // The id-keyed core of the click handler, so callers that only hold a
-  // workspace id (e.g. the plugin SDK's navigate verb) get the same tab-opening
+  // workspace id (e.g. the extension SDK's navigate verb) get the same tab-opening
   // and MRU-agent resolution without reconstructing a RecentWorkspaceResponse.
   const navigateToWorkspaceById = useCallback(
     (workspaceId: string): void => {

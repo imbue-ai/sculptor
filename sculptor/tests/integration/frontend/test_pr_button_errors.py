@@ -89,14 +89,14 @@ def _set_path_without_cli(factory: SculptorInstanceFactory, tmp_path: Path) -> N
 
 
 def _cleanup_workspaces(instance: SculptorInstance) -> None:
-    """Delete all workspaces and navigate to the add-workspace page for the next scenario.
+    """Delete all workspaces, then land on the add-workspace page for the next scenario.
 
-    `delete_all_workspaces_via_ui` ends on /home (where Phase 2 finds the
-    closed-workspace rows). With sculptor-tabs MRU restoration, leaving the
-    user on /home means the next `_set_remote` full reload's rootLoader
-    sees __home__ as the active tab and redirects there — and the test
-    expects to land on /ws/new instead. Explicitly navigate to the
-    add-workspace page to set the active tab before any subsequent reload.
+    `delete_all_workspaces_via_ui` clears the sidebar rows in place without forcing
+    a route, so the resulting active tab is indeterminate. With sculptor-tabs MRU
+    restoration, the next `_set_remote` full reload's rootLoader restores whatever
+    tab was last active — and the test expects to land on /ws/new instead.
+    Explicitly open the add-workspace form to pin the active tab before any
+    subsequent reload.
     """
     delete_all_workspaces_via_ui(instance.page)
     open_new_workspace_form(instance.page)

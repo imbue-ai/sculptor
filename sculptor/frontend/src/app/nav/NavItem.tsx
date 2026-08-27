@@ -6,6 +6,8 @@ import { Tooltip } from "@radix-ui/themes";
 import type { LucideIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
+import { ShortcutHint } from "~/components/ShortcutHint.tsx";
+
 import styles from "./NavItem.module.scss";
 
 type NavItemProps = {
@@ -14,10 +16,15 @@ type NavItemProps = {
   isActive?: boolean;
   disabled?: boolean;
   /**
-   * Tooltip shown on hover while the item is disabled, explaining why it
-   * can't be used right now (e.g. no workspaces yet). Ignored when enabled.
+   * Tooltip shown on hover or keyboard focus while the item is disabled,
+   * explaining why it can't be used right now. Ignored when enabled.
    */
   disabledTooltip?: string;
+  /**
+   * Raw keybinding for the action (e.g. "Meta+K"), shown as a quiet right-aligned
+   * hint. Omitted for actions with no shortcut.
+   */
+  shortcut?: string | null;
   onClick: () => void;
   testId?: string;
 };
@@ -28,6 +35,7 @@ export const NavItem = ({
   isActive,
   disabled,
   disabledTooltip,
+  shortcut,
   onClick,
   testId,
 }: NavItemProps): ReactElement => {
@@ -35,21 +43,23 @@ export const NavItem = ({
     <button
       type="button"
       className={`${styles.navItem} ${isActive ? styles.navItemActive : ""}`}
-      onClick={onClick}
-      disabled={disabled}
+      // aria-disabled (not the native disabled attribute) keeps the row focusable, so
+      // keyboard users can land on it to discover why it's unavailable and the
+      // explanatory tooltip fires on focus as well as hover. An aria-disabled button
+      // still emits events, so the click is guarded here.
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onClick}
       data-testid={testId}
     >
       <Icon size={16} className={styles.navIcon} />
       <span className={styles.navLabel}>{label}</span>
+      {shortcut ? <ShortcutHint binding={shortcut} className={styles.navShortcut} /> : null}
     </button>
   );
-  // Disabled buttons don't emit pointer events, so the tooltip anchors on a
-  // wrapper span that still receives hover — this keeps the affordance
-  // discoverable ("why can't I click this?") instead of a silent no-op.
   if (disabled && disabledTooltip) {
     return (
       <Tooltip content={disabledTooltip} side="right">
-        <span className={styles.navItemTooltipAnchor}>{button}</span>
+        {button}
       </Tooltip>
     );
   }

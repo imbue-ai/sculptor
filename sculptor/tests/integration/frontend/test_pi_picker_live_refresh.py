@@ -12,6 +12,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
+from sculptor.testing.backend_url import resolve_backend_api_url
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -63,7 +64,7 @@ def test_pi_picker_refreshes_live_after_paste_key(
 
         # Authenticate google by writing its credential (the paste-key endpoint that
         # the Settings form drives); the same broadcast fires as in production.
-        base_url = page.url.split("#")[0].rstrip("/")
+        base_url = resolve_backend_api_url(page)
         response = page.request.post(
             f"{base_url}/api/v1/pi/providers/paste-key",
             data={"providerId": "google", "keyValue": "sk-google-test"},

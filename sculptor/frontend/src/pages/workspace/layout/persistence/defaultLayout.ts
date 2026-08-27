@@ -3,19 +3,20 @@
 // agent/terminal ids are resolved by the caller (the bootstrap) from the active
 // agent and the first-visit seeded terminal — never hardcoded.
 //
-//   center — the only EXPANDED section: holds the active agent, and is the
+//   center — EXPANDED: holds the active agent, and is the
 //            active sub-section on load.
-//   left   — COLLAPSED, with Files/Changes/Commits open and Files active.
+//   left   — EXPANDED, with Files/Changes/Commits open and Files active.
 //   bottom — COLLAPSED, with one terminal open.
 //   right  — COLLAPSED and empty; Actions/Skills/Notes default here only WHEN opened,
 //            and nothing is open at first run.
 //
 // No splits. `center` is intentionally omitted from `expanded` — it is always
-// expanded (see types.ts / isSectionExpandedAtom).
+// expanded (see snapshot.ts / isSectionExpandedAtom).
 
 import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 
 import type { WorkspaceLayoutState } from "./snapshot.ts";
+import { DEFAULT_SECTION_SIZES } from "./snapshot.ts";
 
 // The left explorer panels, in tab order, with Files active.
 const DEFAULT_LEFT_PANEL_IDS: ReadonlyArray<PanelId> = ["files", "changes", "commits"];
@@ -52,13 +53,14 @@ export const buildDefaultWorkspaceLayout = ({
       left: DEFAULT_ACTIVE_LEFT_PANEL_ID,
       bottom: terminalPanelId,
     },
-    // center omitted — always expanded; the other three start collapsed.
+    // center omitted — always expanded. left also starts expanded; right/bottom collapsed.
     expanded: {
-      left: false,
+      left: true,
       right: false,
       bottom: false,
     },
     splits: {},
+    sectionSizes: DEFAULT_SECTION_SIZES,
     activeSubSection: "center",
   };
 };

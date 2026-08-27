@@ -172,14 +172,15 @@ def get_alpha_scroll_height(page: Page) -> float:
 
 
 def start_scroll_top_sampler(page: Page) -> None:
-    """Start an rAF loop recording the max scrollTop seen (the peak we followed to)."""
+    """Start an rAF loop recording the range of scrollTop values seen."""
     page.evaluate(
         f"""() => {{
         const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
         if (!el) return;
-        window.__st = {{ max: el.scrollTop }};
+        window.__st = {{ first: el.scrollTop, min: el.scrollTop, max: el.scrollTop }};
         const tick = () => {{
             if (el.scrollTop > window.__st.max) window.__st.max = el.scrollTop;
+            if (el.scrollTop < window.__st.min) window.__st.min = el.scrollTop;
             window.__st.raf = requestAnimationFrame(tick);
         }};
         window.__st.raf = requestAnimationFrame(tick);
@@ -188,12 +189,20 @@ def start_scroll_top_sampler(page: Page) -> None:
 
 
 def read_scroll_top_sampler(page: Page) -> dict:
-    """Stop the sampler; return {"max": peak scrollTop while sampling, "final": current}."""
+    """Stop the sampler; return the sampled scrollTop range.
+
+    Keys: ``first`` (at sampler start), ``min``/``max`` (extremes while
+    sampling), ``final`` (current). ``first``/``min``/``max`` are ``None`` when
+    the sampler was never started; ``final`` is ``None`` when the chat view is
+    absent at read time.
+    """
     return page.evaluate(
         f"""() => {{
         if (window.__st && window.__st.raf) cancelAnimationFrame(window.__st.raf);
         const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
         return {{
+            first: window.__st ? Math.round(window.__st.first) : null,
+            min: window.__st ? Math.round(window.__st.min) : null,
             max: window.__st ? Math.round(window.__st.max) : null,
             final: el ? Math.round(el.scrollTop) : null,
         }};
@@ -220,6 +229,34 @@ def get_last_turn_footer_viewport_gaps(page: Page) -> dict | None:
         const f = footers[footers.length - 1].getBoundingClientRect();
         return {{ bottom_gap: Math.round(v.bottom - f.bottom), top_gap: Math.round(f.top - v.top) }};
     }}"""
+    )
+
+
+def wait_for_last_turn_footer_near_bottom(
+    page: Page, *, max_bottom_gap: int, min_bottom_gap: int = -6, timeout_ms: int = 30_000
+) -> None:
+    """Retry until the last turn footer sits near the viewport bottom.
+
+    An auto-retrying wait (Playwright ``wait_for_function``) rather than a
+    one-shot ``get_last_turn_footer_viewport_gaps`` read, so it can't snapshot a
+    frame before the footer has rendered or the restore has finished landing:
+    it resolves once the footer exists AND its bottom edge is within
+    ``[min_bottom_gap, max_bottom_gap]`` px of the viewport bottom (in view and
+    close to the bottom). ``min_bottom_gap`` defaults to a small negative edge
+    tolerance so a footer flush with the viewport bottom still counts as in view.
+    """
+    page.wait_for_function(
+        f"""({{ maxGap, minGap }}) => {{
+        const view = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        const footers = document.querySelectorAll('[data-testid="{ElementIDs.TURN_FOOTER}"]');
+        if (!view || footers.length === 0) return false;
+        const v = view.getBoundingClientRect();
+        const f = footers[footers.length - 1].getBoundingClientRect();
+        const bottomGap = v.bottom - f.bottom;
+        return bottomGap >= minGap && bottomGap <= maxGap;
+    }}""",
+        arg={"maxGap": max_bottom_gap, "minGap": min_bottom_gap},
+        timeout=timeout_ms,
     )
 
 
@@ -313,6 +350,40 @@ def scroll_alpha_chat_to_top(page: Page) -> None:
         }};
         requestAnimationFrame(enforce);
     }})"""
+    )
+
+
+def wait_for_scroll_save_debounce(page: Page) -> None:
+    """Wait for the chat's rAF-debounced scroll-position save to record.
+
+    The save fires one animation frame after the last scroll event and there is
+    nothing user-visible to await; two frames of frame-clock cover it and hold
+    under CI load where a fixed sleep would not.
+    """
+    page.evaluate("() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+
+
+def get_chat_task_id(page: Page) -> str | None:
+    """Read the task id the chat panel is currently showing (``data-taskid``)."""
+    return page.get_by_test_id(ElementIDs.CHAT_PANEL).get_attribute("data-taskid")
+
+
+def wait_for_chat_task_changed(page: Page, outgoing_task_id: str | None) -> None:
+    """Wait until the chat panel is showing a different task than ``outgoing_task_id``.
+
+    The chat element persists across a task/agent switch, so the outgoing
+    task's ``data-scroll-settled="true"`` remains on it until the incoming
+    restore dispatches. Call this after triggering a switch and before
+    ``wait_for_alpha_scroll_settled`` — a settled-wait sampled in that window
+    would race ahead of the restore, whose late frames then clobber whatever
+    the test scrolls to next.
+    """
+    page.wait_for_function(
+        f"""(outgoingTaskId) => {{
+            const el = document.querySelector('[data-testid="{ElementIDs.CHAT_PANEL}"]');
+            return el && el.getAttribute("data-taskid") !== outgoingTaskId;
+        }}""",
+        arg=outgoing_task_id,
     )
 
 

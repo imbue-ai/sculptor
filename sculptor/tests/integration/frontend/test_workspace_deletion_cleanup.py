@@ -32,6 +32,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
+from sculptor.testing.backend_url import resolve_backend_api_url
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
@@ -130,7 +131,7 @@ def _wait_for_dead(page: Page, pid: int, timeout: float = 15.0) -> bool:
 
 def _assert_workspace_gone_from_backend(page: Page, workspace_id: str) -> None:
     """Assert the workspace now 404s — proves the soft-delete (and cascade) committed."""
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = resolve_backend_api_url(page)
     response = request_with_retry(page.request.get, f"{base_url}/api/v1/workspaces/{workspace_id}")
     assert response.status == 404, f"expected workspace {workspace_id} to be gone, got {response.status}"
 

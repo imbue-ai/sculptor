@@ -9,7 +9,10 @@ export type LayoutPersistenceAdapter = {
   /**
    * Synchronously return the cached snapshot for a scope, or undefined if it is
    * not (yet) hydrated. MUST be synchronous and total (never throw) — it is the
-   * source for the pre-paint layout restore.
+   * source for the pre-paint layout restore — and MUST return the full declared
+   * shape: fields a stored snapshot lacks (it may predate them; additive schema
+   * growth is deliberately not a version bump) are filled from the scope's
+   * defaults by the adapter, so callers can rely on every field being present.
    */
   read<TScope extends LayoutScope>(scope: TScope): LayoutSnapshotFor<TScope> | undefined;
 

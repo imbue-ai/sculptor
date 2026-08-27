@@ -1,20 +1,31 @@
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { appliedLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
+import { applyLayoutAtom } from "~/pages/workspace/layout/atoms/savedLayoutActions.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
-import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import type { CapturedLayout, SavedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import {
+  DEFAULT_SECTION_SIZES,
+  EMPTY_WORKSPACE_LAYOUT,
+  SAVED_LAYOUT_VERSION,
+} from "~/pages/workspace/layout/persistence/snapshot.ts";
 import type { PanelDefinition } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
+import { SYSTEM_LAYOUTS } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
-import type { CodingAgentTaskView, UserConfig, Workspace } from "../../../api";
+import type { CodingAgentTaskView, Project, UserConfig, Workspace } from "../../../api";
+import { TaskStatus } from "../../../api";
 import { agentAtomFamily, agentIdsAtom } from "../../../common/state/atoms/agents.ts";
 import { encodeRegisteredAgentType } from "../../../common/state/atoms/agentTabs.ts";
+import { projectAtomFamily, projectIdsAtom } from "../../../common/state/atoms/projects.ts";
 import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { addPanelTargetSubSectionAtom } from "../contextActions/atoms/contextActions.ts";
 import { buildAddPanelProvider } from "../dynamic/addPanel.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";
+import { buildLayoutsProvider } from "../dynamic/layouts.ts";
 import { buildPanelTogglesProvider } from "../dynamic/panels.ts";
 import { buildWorkspaceProvider } from "../dynamic/workspaceCommands.tsx";
 import type { PaletteContext } from "../types/commandPalette.ts";
@@ -43,6 +54,8 @@ const makeRuntime = (): CommandRuntime => {
       toAgent: vi.fn(),
     },
     openNewWorkspaceDialog: noop,
+    openLayoutsModal: noop,
+    openSaveLayoutModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
@@ -75,8 +88,55 @@ const seedWorkspace = (id: string, description: string): void => {
   store.set(workspaceAtomFamily(id), { objectId: id, description, isOpen: true } as unknown as Workspace);
 };
 
+// Variant of seedWorkspace that also stamps projectId + createdAt, for the
+// cross-project / recency ordering tests.
+const seedWorkspaceIn = (id: string, description: string, projectId: string, createdAt?: string): void => {
+  getDefaultStore().set(workspaceAtomFamily(id), {
+    objectId: id,
+    description,
+    isOpen: true,
+    projectId,
+    createdAt,
+  } as unknown as Workspace);
+};
+
 const setWorkspaceIds = (ids: Array<string>): void => {
   getDefaultStore().set(workspaceIdsAtom, ids);
+};
+
+const seedProjects = (projects: Array<{ id: string; name: string }>): void => {
+  const store = getDefaultStore();
+  for (const p of projects) {
+    // The provider only reads objectId/name; projectsArrayAtom's URL-dedupe
+    // keeps entries with no userGitRepoUrl, so a bare partial is enough.
+    store.set(projectAtomFamily(p.id), { objectId: p.id, name: p.name } as unknown as Project);
+  }
+  store.set(
+    projectIdsAtom,
+    projects.map((p) => p.id),
+  );
+};
+
+// Seed agents carrying the status/read fields the attention ranking reads
+// (setAgents below only carries the title/prompt fields the agent tests need).
+const seedAttentionTasks = (
+  tasks: Array<{ id: string; workspaceId: string; status: TaskStatus; updatedAt: string; lastReadAt: string | null }>,
+): void => {
+  const store = getDefaultStore();
+  for (const t of tasks) {
+    store.set(agentAtomFamily(t.id), {
+      id: t.id,
+      workspaceId: t.workspaceId,
+      status: t.status,
+      updatedAt: t.updatedAt,
+      lastReadAt: t.lastReadAt,
+      isDeleted: false,
+    } as unknown as CodingAgentTaskView);
+  }
+  store.set(
+    agentIdsAtom,
+    tasks.map((t) => t.id),
+  );
 };
 
 const setAgents = (
@@ -108,6 +168,7 @@ const setAgents = (
 beforeEach(() => {
   setWorkspaceIds([]);
   setAgents([]);
+  seedProjects([]);
 });
 
 afterEach(() => {
@@ -189,6 +250,98 @@ describe("buildWorkspaceProvider", () => {
     setWorkspaceIds(["ws1", "ws2"]);
     const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
     expect(cmds.find((c) => c.id.startsWith("workspaces.go."))).toBeUndefined();
+  });
+
+  const OLDER = "2024-01-01T00:00:00.000Z";
+  const NEWER = "2024-01-02T00:00:00.000Z";
+  const orderOf = (cmds: ReturnType<ReturnType<typeof buildWorkspaceProvider>["produce"]>, id: string): number =>
+    cmds.find((c) => c.id === `workspaces.page.${id}`)?.order ?? Number.POSITIVE_INFINITY;
+
+  it("sorts attention-needing workspaces above idle ones via `order`", () => {
+    seedWorkspaceIn("idle", "Idle", "pA");
+    seedWorkspaceIn("waiting", "Waiting", "pA");
+    setWorkspaceIds(["idle", "waiting"]);
+    seedAttentionTasks([
+      { id: "t-idle", workspaceId: "idle", status: TaskStatus.READY, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-wait", workspaceId: "waiting", status: TaskStatus.WAITING, updatedAt: OLDER, lastReadAt: OLDER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "waiting")).toBeLessThan(orderOf(cmds, "idle"));
+  });
+
+  it("breaks ties within a tier by recency (newest activity first)", () => {
+    seedWorkspaceIn("stale", "Stale", "pA");
+    seedWorkspaceIn("fresh", "Fresh", "pA");
+    setWorkspaceIds(["stale", "fresh"]);
+    seedAttentionTasks([
+      { id: "t-stale", workspaceId: "stale", status: TaskStatus.READY, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-fresh", workspaceId: "fresh", status: TaskStatus.READY, updatedAt: NEWER, lastReadAt: NEWER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "fresh")).toBeLessThan(orderOf(cmds, "stale"));
+  });
+
+  it("keeps an already-viewed error out of the top tier (acked error → idle)", () => {
+    seedWorkspaceIn("ackedError", "Seen error", "pA");
+    seedWorkspaceIn("unread", "Fresh reply", "pA");
+    setWorkspaceIds(["ackedError", "unread"]);
+    seedAttentionTasks([
+      // Errored but viewed after it broke → drops below the unread reply.
+      { id: "t-err", workspaceId: "ackedError", status: TaskStatus.ERROR, updatedAt: OLDER, lastReadAt: NEWER },
+      { id: "t-unread", workspaceId: "unread", status: TaskStatus.READY, updatedAt: NEWER, lastReadAt: OLDER },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(PAGE_WS_CTX);
+    expect(orderOf(cmds, "unread")).toBeLessThan(orderOf(cmds, "ackedError"));
+  });
+
+  it("tags every row with its project when the list spans projects and there is no current one", () => {
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pB");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([
+      { id: "pA", name: "Alpha" },
+      { id: "pB", name: "Beta" },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBe("Alpha");
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBe("Beta");
+  });
+
+  it("only tags rows from a different project than the current one", () => {
+    seedWorkspaceIn("cur", "Current", "pA");
+    seedWorkspaceIn("same", "Same project", "pA");
+    seedWorkspaceIn("other", "Other project", "pB");
+    setWorkspaceIds(["cur", "same", "other"]);
+    seedProjects([
+      { id: "pA", name: "Alpha" },
+      { id: "pB", name: "Beta" },
+    ]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce({ ...ROOT_CTX, activeWorkspaceId: "cur" });
+    expect(cmds.find((c) => c.id === "workspaces.page.cur")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.same")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.other")?.trailingBadge).toBe("Beta");
+  });
+
+  it("shows no project badges when every workspace shares one project", () => {
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pA");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([{ id: "pA", name: "Alpha" }]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBeUndefined();
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBeUndefined();
+  });
+
+  it("omits the badge for a row whose project record hasn't loaded", () => {
+    // Two distinct projects (so badges are in play), but only pA's record is
+    // loaded — the pB row has no resolvable name, so it must not be tagged.
+    seedWorkspaceIn("ws1", "One", "pA");
+    seedWorkspaceIn("ws2", "Two", "pB");
+    setWorkspaceIds(["ws1", "ws2"]);
+    seedProjects([{ id: "pA", name: "Alpha" }]);
+    const cmds = buildWorkspaceProvider(makeRuntime()).produce(ROOT_CTX);
+    expect(cmds.find((c) => c.id === "workspaces.page.ws1")?.trailingBadge).toBe("Alpha");
+    expect(cmds.find((c) => c.id === "workspaces.page.ws2")?.trailingBadge).toBeUndefined();
   });
 });
 
@@ -593,18 +746,19 @@ describe("buildAddPanelProvider", () => {
     expect(cmds.find((c) => c.id === "addpanel.panels.files")?.title).toBe("File browser");
   });
 
-  it('titles the new-agent row "New Claude agent" by default', () => {
+  it('titles the new-agent row "New Claude" by default', () => {
     seedLayout();
     getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
     const cmd = buildAddPanelProvider(makeRuntime())
       .produce(WORKSPACE_CTX)
       .find((c) => c.id === "addpanel.panels.new_agent");
-    expect(cmd?.title).toBe("New Claude agent");
+    expect(cmd?.title).toBe("New Claude");
   });
 
-  it('collapses the new-agent row to "New agent" (no doubled word) when the recent type is a registered terminal agent', () => {
+  it('shows a generic "New agent" when the recent type is a registered terminal agent', () => {
     // The provider runs outside React and can't resolve a registered program's
-    // display name, so the row must not read "New agent agent".
+    // display name, so the row falls back to a generic "New agent" rather than a
+    // nameless row.
     seedLayout();
     getDefaultStore().set(addPanelTargetSubSectionAtom, "left");
     getDefaultStore().set(userConfigAtom, {
@@ -625,5 +779,86 @@ describe("buildAddPanelProvider", () => {
       .find((c) => c.id === "addpanel.open")!;
     root.perform({ ctx: WORKSPACE_CTX, keepOpen: false, pushPage: vi.fn() });
     expect(runtime.store.get(addPanelTargetSubSectionAtom)).toBeNull();
+  });
+});
+
+describe("buildLayoutsProvider", () => {
+  const CAPTURED: CapturedLayout = {
+    placement: {},
+    order: {},
+    activePanel: {},
+    expanded: {},
+    splits: {},
+    sectionSizes: DEFAULT_SECTION_SIZES,
+    maximizedSection: null,
+    activeSubSection: null,
+  };
+  const layout = (id: string, name: string): SavedLayout => ({
+    id,
+    name,
+    captured: CAPTURED,
+    version: SAVED_LAYOUT_VERSION,
+  });
+  // Command ids for the built-in layouts (System Default + presets), in switcher order.
+  const systemLayoutCommandIds = SYSTEM_LAYOUTS.map((entry) => `layouts.switch.${entry.id}`);
+  const WS_CTX: PaletteContext = {
+    ...ROOT_CTX,
+    route: { isHome: false, isWorkspace: true, isSettings: false, isAgent: false },
+    activeWorkspaceId: "ws1",
+  };
+
+  beforeEach(() => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, []);
+    store.set(layoutMruAtom, []);
+    store.set(appliedLayoutIdAtom, undefined);
+  });
+
+  it("emits nothing off a workspace route", () => {
+    expect(buildLayoutsProvider(makeRuntime()).produce(ROOT_CTX)).toHaveLength(0);
+  });
+
+  it("emits a 'Switch to <layout>' command per resolved layout in the layouts group", () => {
+    getDefaultStore().set(savedLayoutsAtom, [layout("a", "Focused"), layout("b", "Wide")]);
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    expect(commands.map((command) => command.id)).toEqual([
+      ...systemLayoutCommandIds,
+      "layouts.switch.a",
+      "layouts.switch.b",
+    ]);
+    expect(commands.every((command) => command.group === "layouts")).toBe(true);
+    expect(commands.find((command) => command.id === "layouts.switch.a")?.title).toBe("Switch to Focused");
+  });
+
+  it("marks the workspace's applied layout with a 'Current layout' subtitle", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused")]);
+    store.set(appliedLayoutIdAtom, "a");
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    expect(commands.find((command) => command.id === "layouts.switch.a")?.subtitle).toBe("Current layout");
+  });
+
+  it("orders the rows most-recently-applied first", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused"), layout("b", "Wide")]);
+    store.set(layoutMruAtom, ["b", "a"]);
+    const commands = buildLayoutsProvider(makeRuntime()).produce(WS_CTX);
+    // b, a first (most-recently-applied), then the built-ins in their default order.
+    expect(commands.map((command) => command.id)).toEqual([
+      "layouts.switch.b",
+      "layouts.switch.a",
+      ...systemLayoutCommandIds,
+    ]);
+  });
+
+  it("perform applies the re-resolved layout via applyLayoutAtom", () => {
+    const store = getDefaultStore();
+    store.set(savedLayoutsAtom, [layout("a", "Focused")]);
+    const command = buildLayoutsProvider(makeRuntime())
+      .produce(WS_CTX)
+      .find((entry) => entry.id === "layouts.switch.a");
+    const setSpy = vi.spyOn(store, "set");
+    command?.perform({ ctx: WS_CTX, keepOpen: false, pushPage: vi.fn() });
+    expect(setSpy).toHaveBeenCalledWith(applyLayoutAtom, expect.objectContaining({ id: "a" }));
   });
 });

@@ -26,43 +26,14 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-DEVTOOLS_HOOK_SCRIPT = """
-window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
-    renderers: new Map(),
-    supportsFiber: true,
-    inject: function(renderer) {
-        var id = this.renderers.size + 1;
-        this.renderers.set(id, renderer);
-        return id;
-    },
-    onScheduleFiberRoot: function() {},
-    onCommitFiberRoot: function() {},
-    onCommitFiberUnmount: function() {},
-    isDisabled: false,
-    checkDCE: function() {},
-};
-"""
-
-COUNTER_SCRIPT = """
-window.__RENDER_COUNTS__ = {};
-window.__COMMIT_COUNT__ = 0;
-var hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
-hook.onCommitFiberRoot = function(id, root) {
-    if (!root || !root.current) return;
-    window.__COMMIT_COUNT__++;
-    function walk(fiber) {
-        if (!fiber) return;
-        var name = fiber.type?.displayName || fiber.type?.name;
-        if (name && typeof name === 'string' && name.length < 100) {
-            window.__RENDER_COUNTS__[name] =
-                (window.__RENDER_COUNTS__[name] || 0) + 1;
-        }
-        walk(fiber.child);
-        walk(fiber.sibling);
-    }
-    walk(root.current);
-};
-"""
+# DevTools-hook stub and the per-component render counter live in
+# sculptor.testing.perf.init_scripts so the SCU-1294 perf-test fixture
+# and this skill can't drift apart on what "count a render" means.
+# If you're reading this because the unification stalled and you want
+# to evolve perf-compare without touching the shared module, copy these
+# constants back inline and note the divergence in SCU-1294.
+from sculptor.testing.perf.init_scripts import DEVTOOLS_HOOK_STUB_JS
+from sculptor.testing.perf.init_scripts import RENDER_COUNTER_SCRIPT
 
 
 def free_port():
@@ -133,7 +104,7 @@ def measure_renders(port, workspace_id, task_id, scenario, label):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         ctx = browser.new_context(viewport={"width": 1400, "height": 900})
-        ctx.add_init_script(DEVTOOLS_HOOK_SCRIPT)
+        ctx.add_init_script(DEVTOOLS_HOOK_STUB_JS)
         ctx.add_cookies([{
             "name": "x-session-token", "value": "",
             "domain": "127.0.0.1", "path": "/",
@@ -161,7 +132,7 @@ def measure_renders(port, workspace_id, task_id, scenario, label):
                 + "that add_init_script ran before React loaded."
             )
 
-        page.evaluate(COUNTER_SCRIPT)
+        page.evaluate(RENDER_COUNTER_SCRIPT)
         time.sleep(0.5)
         page.evaluate("window.__RENDER_COUNTS__ = {}; window.__COMMIT_COUNT__ = 0;")
 

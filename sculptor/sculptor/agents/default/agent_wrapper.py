@@ -160,6 +160,16 @@ class DefaultAgentWrapper(Agent):
         # if it is a claude client error, let's report it and allow the user to retry or continue
         # otherwise, let's raise it out of the agent wrapper to be handled by the caller
         except AgentClientError as e:
+            # A signal-killed turn is either a user Stop that escalated past the
+            # stdin interrupt (the interrupt flag is set) or a stop the user did
+            # not ask for (backend shutdown/restart). RequestStoppedAgentMessage
+            # records which via stopped_by_user, so state reconstruction can keep
+            # a pending AskUserQuestion alive across a restart while still
+            # dismissing it when the user explicitly stopped the turn. Consume
+            # the flag either way — a stale set() must not mark the next turn's
+            # RequestSuccess as interrupted.
+            stopped_by_user = self._was_interrupted.is_set()
+            self._was_interrupted.clear()
             # if we got a sigterm, it's likely because we are shutting down in tests, so, probably worth bailing
             # also in this case it doesn't matter what kind of AgentClientError it is
             if e.exit_code in SIGTERM_EXIT_CODES:
@@ -184,7 +194,11 @@ class DefaultAgentWrapper(Agent):
                     # Lower priority of transient LLM API errors
                     priority=ExceptionPriority.LOW_PRIORITY,
                 )
-            self._output_messages.put(serialize_agent_wrapper_error(e=e, message=message, is_stopping=is_stopping))
+            self._output_messages.put(
+                serialize_agent_wrapper_error(
+                    e=e, message=message, is_stopping=is_stopping, stopped_by_user=stopped_by_user
+                )
+            )
         except Exception as e:
             log_exception(
                 e,

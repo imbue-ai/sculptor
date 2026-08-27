@@ -50,6 +50,7 @@ from sculptor.state.chat_state import ContentBlock
 from sculptor.state.chat_state import ToolInput
 from sculptor.state.chat_state import ToolInteractiveRole
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ModelCatalog
 from sculptor.state.messages import ModelOption
 
 
@@ -156,6 +157,16 @@ class Harness(BaseModel, abc.ABC):
         """
         return []
 
+    def get_model_catalog(self, task_state: AgentTaskStateV2 | None) -> ModelCatalog:
+        """The raw switcher catalog, preserving lifecycle states a plain list
+        cannot express (e.g. `NOT_FETCHED_YET`, before a dynamic catalog's probe
+        has run). `get_available_models` coalesces those to `[]` for callers that
+        only need to offer models; the frontend reads this to tell a still-loading
+        catalog from a fetched-but-empty one. A harness that sources no backend
+        catalog has nothing to load, so its resolved list is authoritative.
+        """
+        return self.get_available_models(task_state)
+
     def get_selected_model_id(self, task_state: AgentTaskStateV2 | None) -> str | None:
         """The `model_id` of the task's currently-selected model, or `None` when
         the harness does not track one (the frontend then uses its own selection
@@ -171,6 +182,17 @@ class Harness(BaseModel, abc.ABC):
         sources none, so the frontend uses its built-in default list.
         """
         return False
+
+    def configuration_settings_section(self) -> str:
+        """The Settings section a user opens to make this harness usable when it has
+        no usable model. The composer's send-guard replaces Send with a "Go to harness
+        configuration" button that routes here. The value is a frontend `SettingsSection`
+        id — that enum is frontend-only, so this crosses the boundary as a string, and a
+        drift test pins every harness's value to a real section. The base points at
+        Dependencies, where a harness's binary and its auth/login status live (Claude's
+        home); pi overrides to its own provider-auth section.
+        """
+        return "DEPENDENCIES"
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return False

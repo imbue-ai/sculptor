@@ -32,6 +32,7 @@ class AgentToolName(enum.StrEnum):
 
     # Agent orchestration
     TASK = "Task"
+    WORKFLOW = "Workflow"
     TASK_CREATE = "TaskCreate"
     TASK_UPDATE = "TaskUpdate"
     TASK_LIST = "TaskList"

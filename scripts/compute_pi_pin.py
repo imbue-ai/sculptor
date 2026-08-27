@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Recompute pi's per-platform sha256 pin for a given pi version.
 
-pi publishes no checksums of its own, so Sculptor computes and bakes them into
-``PI_PIN`` (``sculptor/services/managed_tools.py``). This dev tool downloads each
+Sculptor bakes its own per-platform digests into ``PI_PIN``
+(``sculptor/services/managed_tools.py``); upstream's published ``SHA256SUMS`` is
+only ever a cross-check, never the source of truth. This dev tool downloads each
 supported-platform release tarball, hashes it, and prints the ``platforms={...}``
-block to paste into ``PI_PIN``. It is the single manual step at a pi version bump.
+block to paste into ``PI_PIN``. ``scripts/bump_pi_pin.py`` (``just bump-pi``)
+wraps it end-to-end at a version bump; run this directly to print the block
+without editing files.
 
 Usage:
     just compute-pi-pin 0.78.0

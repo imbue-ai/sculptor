@@ -2,10 +2,11 @@ import { Flex, Link, Text } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
-import { ElementIds, restoreWorkspaceAgent } from "~/api";
+import { ElementIds } from "~/api";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useIsWorkspaceDeleted } from "~/common/state/hooks/useWorkspace.ts";
+import { useRestoreTaskMutation } from "~/common/state/mutations";
 import { Toast } from "~/components/Toast.tsx";
 
 import styles from "./ErrorInput.module.scss";
@@ -19,16 +20,18 @@ export const ErrorInput = ({ workspaceId, agentId }: ErrorInputProps): ReactElem
   const [toast, setToast] = useState<ToastContent | null>(null);
   const isWorkspaceDeleted = useIsWorkspaceDeleted(workspaceId);
   const dangerColor = useThemeDangerColor();
+  const { mutate: restoreMutate } = useRestoreTaskMutation();
 
-  const handleRestore = async (): Promise<void> => {
-    try {
-      await restoreWorkspaceAgent({
-        path: { workspace_id: workspaceId, agent_id: agentId },
-      });
-    } catch (error) {
-      console.error("Failed to restore agent:", error);
-      setToast({ title: "Failed to restore agent", type: ToastType.ERROR });
-    }
+  const handleRestore = (): void => {
+    restoreMutate(
+      { workspaceId, agentId },
+      {
+        onError: (error): void => {
+          console.error("Failed to restore agent:", error);
+          setToast({ title: "Failed to restore agent", type: ToastType.ERROR });
+        },
+      },
+    );
   };
 
   return (

@@ -1,5 +1,4 @@
 import { Flex, Select, Text } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
 import { BotIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
@@ -7,45 +6,78 @@ import { ElementIds } from "~/api";
 import {
   AGENT_TYPE_LABELS,
   encodeRegisteredAgentType,
+  formatRegisteredAgentLabel,
   parseStoredAgentType,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
-import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { INSTALL_PI_LABEL, usePiAgentOption } from "~/common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 
 type AgentTypeSelectProps = {
   /** The stored agent type (e.g. "claude", "registered:<id>"). */
   value: StoredAgentType;
   onChange: (value: StoredAgentType) => void;
+  /**
+   * Called after the "Install Pi" entry routes to Settings → Pi. A host that
+   * overlays the settings page (the new-workspace dialog) dismisses itself
+   * here so the navigation is actually visible; inline hosts omit it.
+   */
+  onRouteToPiSettings?: () => void;
   className?: string;
 };
 
 /**
  * The first-agent type picker — the same per-agent choice as the tab bar's `+`
- * menu. Only the pi option is gated behind the experimental pi-agent flag;
- * Claude, Terminal, and any registered terminal agents are available to everyone.
+ * menu. Claude, Terminal, and any registered terminal agents are always
+ * available; pi is an optional harness, so while no usable pi binary is resolved
+ * its entry reads "Install Pi" and choosing it routes to Settings → Pi.
  */
-export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectProps): ReactElement => {
+export const AgentTypeSelect = ({
+  value,
+  onChange,
+  onRouteToPiSettings,
+  className,
+}: AgentTypeSelectProps): ReactElement => {
   // State and hooks
-  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
+  const { isPiAvailable, openPiSettings, refreshPiAvailability } = usePiAgentOption();
 
   // JSX and rendering logic
   const { agentType, registrationId } = parseStoredAgentType(value);
+  const registeredDisplayName =
+    agentType === "registered"
+      ? registrations.find((r) => r.registrationId === registrationId)?.displayName
+      : undefined;
   const triggerLabel =
     agentType === "registered"
-      ? (registrations.find((r) => r.registrationId === registrationId)?.displayName ?? "Registered")
+      ? registeredDisplayName === undefined
+        ? "Registered"
+        : formatRegisteredAgentLabel(registeredDisplayName)
       : AGENT_TYPE_LABELS[agentType];
 
   return (
     <Select.Root
       size="1"
       value={value}
-      onValueChange={(next) => onChange(next as StoredAgentType)}
+      onValueChange={(next) => {
+        // The pi item reads "Install Pi" while no usable pi is resolved; choosing
+        // it routes to Settings → Pi instead of selecting a harness that cannot
+        // launch.
+        if (next === "pi" && !isPiAvailable) {
+          openPiSettings();
+          onRouteToPiSettings?.();
+          return;
+        }
+        onChange(next as StoredAgentType);
+      }}
       onOpenChange={(open) => {
-        // Re-read the registrations directory on every open so the options track
-        // the filesystem without a restart.
-        if (open) refreshRegistrations();
+        // Re-read the registrations directory and pi's availability on every
+        // open so the options track the filesystem without a restart — the
+        // select's host (the new-workspace form) can outlive a pi install.
+        if (open) {
+          refreshRegistrations();
+          refreshPiAvailability();
+        }
       }}
     >
       <Select.Trigger variant="ghost" className={className} data-testid={ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT}>
@@ -63,11 +95,9 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
         <Select.Item value="claude" data-testid={ElementIds.AGENT_TYPE_OPTION_CLAUDE}>
           {AGENT_TYPE_LABELS.claude}
         </Select.Item>
-        {isPiAgentEnabled && (
-          <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
-            {AGENT_TYPE_LABELS.pi}
-          </Select.Item>
-        )}
+        <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
+          {isPiAvailable ? AGENT_TYPE_LABELS.pi : INSTALL_PI_LABEL}
+        </Select.Item>
         <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
           {AGENT_TYPE_LABELS.terminal}
         </Select.Item>
@@ -78,7 +108,7 @@ export const AgentTypeSelect = ({ value, onChange, className }: AgentTypeSelectP
             data-testid={ElementIds.AGENT_TYPE_OPTION_REGISTERED}
             data-registration-id={registration.registrationId}
           >
-            {registration.displayName}
+            {formatRegisteredAgentLabel(registration.displayName)}
           </Select.Item>
         ))}
       </Select.Content>

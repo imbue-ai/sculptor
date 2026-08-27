@@ -1,4 +1,5 @@
 import { Theme } from "@radix-ui/themes";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
@@ -12,6 +13,7 @@ import {
   liveTaskTurnIdAtomFamily,
   tasksPhaseAtomFamily,
 } from "~/common/state/atoms/statusPillTasks.ts";
+import { queryClient } from "~/common/state/queryClient.ts";
 
 import { ChatAgentProvider } from "./ChatAgentContext.tsx";
 import { StatusPill } from "./StatusPill.tsx";
@@ -45,12 +47,19 @@ vi.mock("~/electron/platform.ts", () => ({
 // is cleared in beforeEach for the same reason — atomWithStorage reads it.
 let testStore = createStore();
 
+// StatusPill reads the interruption capability via useAgentSupportsInterruption,
+// which is a subscription-only useQuery over the task cache, so a
+// QueryClientProvider is required. No task is seeded for "agent-1": an absent
+// task yields `undefined`, and the component's `?? true` keeps Stop enabled —
+// the same default the Jotai atom gave before this hook read the cache.
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
-  <Provider store={testStore}>
-    <ChatAgentProvider workspaceId="ws-1" agentId="agent-1">
-      <Theme>{children}</Theme>
-    </ChatAgentProvider>
-  </Provider>
+  <QueryClientProvider client={queryClient}>
+    <Provider store={testStore}>
+      <ChatAgentProvider workspaceId="ws-1" agentId="agent-1">
+        <Theme>{children}</Theme>
+      </ChatAgentProvider>
+    </Provider>
+  </QueryClientProvider>
 );
 
 const defaultProps = {
@@ -90,6 +99,8 @@ beforeEach(() => {
   liveTaskTurnIdAtomFamily.remove("agent-1");
   tasksPhaseAtomFamily.remove("agent-1");
   testStore = createStore();
+  // Clear the shared query cache so task state can't leak between tests.
+  queryClient.removeQueries({ queryKey: ["sculptor"] });
 });
 
 afterEach(() => {

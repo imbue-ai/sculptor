@@ -4,7 +4,7 @@ import type { KeybindingId } from "~/common/keybindings/model.ts";
 
 export type CommandId = string;
 
-export type CommandGroupId = "navigation" | "workspaces" | "panels" | "view" | "chat" | "terminal" | "help";
+export type CommandGroupId = "navigation" | "workspaces" | "panels" | "layouts" | "view" | "chat" | "terminal" | "help";
 
 export type PageId =
   | "theme.appearance"
@@ -172,6 +172,15 @@ export type Command = {
    * subtitle already conveys the reason.
    */
   disabledReason?: string;
+  /**
+   * Short right-aligned label shown at the trailing edge of the row (before
+   * the shortcut / kind slot). Used to annotate a row with a bit of
+   * disambiguating context — e.g. the workspace switcher tags rows that
+   * belong to a different project than the one you're in. Keep it a single
+   * short token; it renders as a quiet pill, not a focal point. Suppressed
+   * while the row is pending (the spinner takes the slot).
+   */
+  trailingBadge?: string;
   /**
    * Multiplicative score multiplier. Default 1 (no adjustment).
    *   - Values > 1 boost — e.g. dynamic panel toggles outrank same-tier

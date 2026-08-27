@@ -6,6 +6,7 @@ import { type ReactElement, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useInstallUpdate } from "~/app/hooks/useInstallUpdate.ts";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
@@ -19,11 +20,11 @@ import {
   configuredDefaultModelAtom,
   defaultEffortLevelAtom,
   isAlwaysInterruptAndSendAtom,
+  isAutoRenameEnabledAtom,
   isCloneWorkspacesEnabledAtom,
   isDefaultFastModeAtom,
   isEntityMentionsEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
-  isPiAgentEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
   userEmailAtom,
 } from "../../common/state/atoms/userConfig.ts";
@@ -38,16 +39,18 @@ import { CustomBackendSection } from "./components/AdvancedSection.tsx";
 import { CIBabysitterSettingsSection } from "./components/CIBabysitterSettingsSection.tsx";
 import { DependenciesSettingsSection } from "./components/DependenciesSettingsSection.tsx";
 import { EnvironmentVariablesSection } from "./components/EnvironmentVariablesSection.tsx";
+import { ExtensionsSettingsSection } from "./components/ExtensionsSettingsSection.tsx";
 import { FileBrowserSettingsSection } from "./components/FileBrowserSettingsSection.tsx";
 import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
 import { PiSettingsSection } from "./components/PiSettingsSection.tsx";
-import { PluginsSettingsSection } from "./components/PluginsSettingsSection.tsx";
 import { ReposSection } from "./components/ReposSection.tsx";
 import { SettingRow } from "./components/SettingRow.tsx";
 import { SettingsSectionLayout } from "./components/SettingsSection.tsx";
 import { TelemetryRow } from "./components/TelemetryRow.tsx";
 import { ThemeBuilderSection } from "./components/ThemeBuilderSection.tsx";
+import { TidyConfirmationSettingRow } from "./components/TidyConfirmationSettingRow.tsx";
+import { MobileSettingsHeader } from "./MobileSettingsHeader.tsx";
 import { SETTINGS_SECTIONS, SettingsSection, type SettingsSectionId } from "./sections.ts";
 import styles from "./SettingsPage.module.scss";
 
@@ -64,9 +67,45 @@ const SECTION_TEST_IDS: Partial<Record<SettingsSection, string>> = Object.fromEn
 );
 const getDisplayName = (section: SettingsSection): string => SECTION_DISPLAY_NAMES[section] ?? section;
 
+const mobileSelectItem = (id: SettingsSectionId): ReactElement => (
+  <Select.Item key={id} value={id} data-testid={SECTION_TEST_IDS[id] ?? ""}>
+    {getDisplayName(id)}
+  </Select.Item>
+);
+
+// Build the mobile section dropdown, wrapping each consecutive run of sections
+// that share a `group` in a Select.Group under one non-selectable label —
+// mirroring the desktop sidebar's grouped headers.
+const renderMobileNavNodes = (): Array<ReactElement> => {
+  const nodes: Array<ReactElement> = [];
+  for (let i = 0; i < SETTINGS_SECTIONS.length; ) {
+    const { id, group } = SETTINGS_SECTIONS[i];
+    if (group === undefined) {
+      nodes.push(mobileSelectItem(id));
+      i += 1;
+      continue;
+    }
+    const members: Array<SettingsSectionId> = [];
+    while (i < SETTINGS_SECTIONS.length && SETTINGS_SECTIONS[i].group === group) {
+      members.push(SETTINGS_SECTIONS[i].id);
+      i += 1;
+    }
+    nodes.push(
+      <Select.Group key={group}>
+        <Select.Label>{group}</Select.Label>
+        {members.map(mobileSelectItem)}
+      </Select.Group>,
+    );
+  }
+  return nodes;
+};
+
 const activeSectionAtom = atomWithStorage<SettingsSection>("sculptor-settings-active-section", SettingsSection.GENERAL);
 
 export const SettingsPage = (): ReactElement => {
+  // On mobile the global chrome (sidebar rail) is suppressed, so Settings
+  // carries its own header with a back affordance, like the Workspace view.
+  const isMobile = useIsMobile();
   const [storedSection, setActiveSection] = useAtom(activeSectionAtom);
   // A persisted section id can outlive the section it names (e.g. a section that
   // existed in an earlier build is gone here). An unknown value would leave the
@@ -91,8 +130,8 @@ export const SettingsPage = (): ReactElement => {
   const isAlwaysInterruptAndSend = useAtomValue(isAlwaysInterruptAndSendAtom);
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
-  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
+  const isAutoRenameEnabled = useAtomValue(isAutoRenameEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
@@ -148,6 +187,9 @@ export const SettingsPage = (): ReactElement => {
 
   return (
     <>
+      {/* On mobile the global chrome is suppressed, so Settings carries its own
+          header with a back affordance, like the Workspace view. */}
+      {isMobile && <MobileSettingsHeader />}
       <Flex
         direction="column"
         className={styles.container}
@@ -156,33 +198,43 @@ export const SettingsPage = (): ReactElement => {
         <Flex position="relative" flexGrow="1" data-testid={ElementIds.SETTINGS_PAGE} minHeight="0" overflow="hidden">
           <Flex direction="column" px="6" pt="8" pb="4" className={styles.sidebar}>
             <Flex direction="column" gap="2">
-              {SETTINGS_SECTIONS.map(({ id }) => (
-                <Box key={id}>
-                  {id === SettingsSection.EXPERIMENTAL && <Separator size="4" my="2" className={styles.navSeparator} />}
-                  <Box
-                    className={mergeClasses(styles.navItem, optional(activeSection === id, styles.active))}
-                    onClick={() => setActiveSection(id)}
-                    px="3"
-                    py="2"
-                    data-testid={SECTION_TEST_IDS[id] ?? ""}
-                  >
-                    {getDisplayName(id)}
+              {SETTINGS_SECTIONS.map(({ id, group }, index) => {
+                // A grouped run renders its label once at the top and a divider
+                // once at the bottom, comparing against its neighbors' groups.
+                const previousGroup = index > 0 ? SETTINGS_SECTIONS[index - 1].group : undefined;
+                const nextGroup = index < SETTINGS_SECTIONS.length - 1 ? SETTINGS_SECTIONS[index + 1].group : undefined;
+                const isGroupStart = group !== undefined && group !== previousGroup;
+                const isGroupEnd = group !== undefined && group !== nextGroup;
+                return (
+                  <Box key={id}>
+                    {id === SettingsSection.EXPERIMENTAL && (
+                      <Separator size="4" my="2" className={styles.navSeparator} />
+                    )}
+                    {isGroupStart && <Box className={styles.navGroupHeader}>{group}</Box>}
+                    <Box
+                      className={mergeClasses(
+                        styles.navItem,
+                        optional(group !== undefined, styles.navItemGrouped),
+                        optional(activeSection === id, styles.active),
+                      )}
+                      onClick={() => setActiveSection(id)}
+                      px="3"
+                      py="2"
+                      data-testid={SECTION_TEST_IDS[id] ?? ""}
+                    >
+                      {getDisplayName(id)}
+                    </Box>
+                    {isGroupEnd && <Separator size="4" my="2" className={styles.navSeparator} />}
                   </Box>
-                </Box>
-              ))}
+                );
+              })}
             </Flex>
           </Flex>
           <div className={styles.contentScroll} data-testid={ElementIds.SETTINGS_CONTENT}>
             <Flex direction="column" className={styles.mobileNav} px="5" pt="5">
               <Select.Root value={activeSection} onValueChange={(value) => setActiveSection(value as SettingsSection)}>
                 <Select.Trigger variant="soft" />
-                <Select.Content>
-                  {SETTINGS_SECTIONS.map(({ id }) => (
-                    <Select.Item key={id} value={id} data-testid={SECTION_TEST_IDS[id] ?? ""}>
-                      {getDisplayName(id)}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
+                <Select.Content>{renderMobileNavNodes()}</Select.Content>
               </Select.Root>
             </Flex>
             <Flex className={styles.contentArea}>
@@ -221,6 +273,8 @@ export const SettingsPage = (): ReactElement => {
                       </SegmentedControl.Item>
                     </SegmentedControl.Root>
                   </SettingRow>
+
+                  <TidyConfirmationSettingRow />
 
                   <SettingRow
                     title="Software Updates"
@@ -351,17 +405,12 @@ export const SettingsPage = (): ReactElement => {
               {activeSection === SettingsSection.DEPENDENCIES && (
                 <DependenciesSettingsSection onSettingChange={handleSettingChange} />
               )}
-              {activeSection === SettingsSection.PI && (
-                <PiSettingsSection
-                  onSettingChange={handleSettingChange}
-                  onNavigateToExperimental={() => setActiveSection(SettingsSection.EXPERIMENTAL)}
-                />
-              )}
+              {activeSection === SettingsSection.PI && <PiSettingsSection onSettingChange={handleSettingChange} />}
               {activeSection === SettingsSection.KEYBINDINGS && (
                 <KeybindingsSection onSettingChange={handleSettingChange} />
               )}
-              {activeSection === SettingsSection.PLUGINS && (
-                <PluginsSettingsSection onSettingChange={handleSettingChange} />
+              {activeSection === SettingsSection.EXTENSIONS && (
+                <ExtensionsSettingsSection onSettingChange={handleSettingChange} />
               )}
               {activeSection === SettingsSection.PRIVACY && (
                 <SettingsSectionLayout description="Your email and telemetry preferences.">
@@ -458,13 +507,13 @@ export const SettingsPage = (): ReactElement => {
                     />
                   </SettingRow>
                   <SettingRow
-                    title="Pi agent"
-                    description="Offer the experimental pi agent as a choice when creating new agents."
+                    title="Auto-name workspace and agent"
+                    description="After your first message, the agent is asked to name this workspace and itself based on the task. Set conventions in .sculptor/naming.md (shared with your team) or .sculptor/naming.local.md (personal, git-ignored)."
                   >
                     <Switch
-                      checked={isPiAgentEnabled}
-                      onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_PI_AGENT, checked)}
-                      data-testid={ElementIds.SETTINGS_ENABLE_PI_AGENT_TOGGLE}
+                      checked={isAutoRenameEnabled}
+                      onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_AUTO_RENAME, checked)}
+                      data-testid={ElementIds.SETTINGS_ENABLE_AUTO_RENAME_TOGGLE}
                     />
                   </SettingRow>
                   <CustomBackendSection setToast={setToast} />

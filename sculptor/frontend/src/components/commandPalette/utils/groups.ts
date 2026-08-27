@@ -16,6 +16,7 @@ const COMMAND_GROUPS_BY_ID: Record<CommandGroupId, CommandGroup> = {
   // Panel and section affordances (add panel, toggle sections, show
   // panel, maximize) cluster together right after Navigation.
   panels: { id: "panels", heading: "Panels & Sections", order: 25 },
+  layouts: { id: "layouts", heading: "Layouts", order: 27 },
   view: { id: "view", heading: "Theme", order: 30 },
   chat: { id: "chat", heading: "Chat", order: 40 },
   terminal: { id: "terminal", heading: "Terminal", order: 50 },

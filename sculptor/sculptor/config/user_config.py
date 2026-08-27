@@ -53,7 +53,10 @@ class DependencyPaths(SerializableModel):
     the binary is resolved from the system PATH.
 
     The ``pi`` field is a unified mode + path value mirroring ``claude``:
-      - ``"MANAGED"`` (default): Sculptor downloads and version-pins the pi CLI.
+      - ``"MANAGED"`` (default): prefer Sculptor's downloaded, version-pinned pi
+        when present; with no downloaded copy, fall back to a ``pi`` on the
+        system PATH. pi is optional, so the managed copy is only downloaded on
+        an explicit user action (onboarding or Settings), never automatically.
       - ``"CUSTOM"``, an absolute path, or a bare command name: a user-provided
         binary, resolved via the system PATH.
 
@@ -94,9 +97,7 @@ class BabysitterAgentClaude(SerializableModel):
 
 
 class BabysitterAgentPi(SerializableModel):
-    """Always use a Pi chat agent. Only valid when the pi agent is enabled;
-    that validity is enforced by the resolver, not this model.
-    """
+    """Always use a Pi chat agent."""
 
     object_type: str = "pi"
 
@@ -271,17 +272,17 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, typing % in the chat input opens entity mention completions for repositories, workspaces, and agents",
     )
-    enable_pi_agent: bool = Field(
+    enable_auto_rename: bool = Field(
         default=False,
-        description="When enabled, the agent-type menus offer the experimental pi agent. Off by default. Gates only the creation entry point — an existing pi agent keeps running regardless.",
+        description="When enabled, a first-message system reminder asks the agent to rename its workspace and itself to concise, task-derived names (via the sculpt CLI) once it understands the task. Naming conventions can be supplied at three tiers, most-specific wins: ~/.sculptor/naming.md (yours, all repos), .sculptor/naming.md (this repo, shared), and .sculptor/naming.local.md (yours, this repo only). Experimental; off by default.",
     )
-    enable_frontend_plugins: bool = Field(
+    enable_extensions: bool = Field(
         default=True,
-        description="When enabled, the frontend plugin system loads runtime plugins and shows the plugin-management UI in the Plugins settings section. On by default. The Plugins settings section itself is always present (it hosts the toggle for this flag); this flag gates loading plugins and the management UI, not the section's visibility. Enabling applies immediately; disabling takes effect after an app reload (already-loaded plugins are not unloaded mid-session).",
+        description="When enabled, the extension system loads runtime extensions and shows the extension-management UI in the Extensions settings section. On by default. The Extensions settings section itself is always present (it hosts the toggle for this flag); this flag gates loading extensions and the management UI, not the section's visibility. Enabling applies immediately; disabling takes effect after an app reload (already-loaded extensions are not unloaded mid-session).",
     )
-    allow_agent_plugin_loading: bool = Field(
+    allow_agent_extension_loading: bool = Field(
         default=False,
-        description="When enabled, agents can install, reload, and inspect frontend plugins in your Sculptor UI via `sculpt plugin` commands. This effectively lets a workspace run arbitrary frontend code in your UI, so it is off by default. Independent of enable_frontend_plugins, which gates the plugin feature itself.",
+        description="When enabled, agents can install, reload, and inspect extensions in your Sculptor UI via `sculpt extension` commands. This effectively lets a workspace run arbitrary frontend code in your UI, so it is off by default. Independent of enable_extensions, which gates the extension feature itself.",
     )
     default_fast_mode: bool = Field(
         default=False,
@@ -337,6 +338,30 @@ class UserConfig(SerializableModel):
                     paths[claude_key] = "claude"  # bare command, resolved via system PATH
                 else:
                     paths[claude_key] = old_mode
+        return data
+
+    @model_validator(mode="before")
+    @staticmethod
+    def _migrate_frontend_plugin_keys(data: Any) -> Any:
+        """Accept the pre-rename extension keys so existing configs keep their settings.
+
+        Extensions were previously called "frontend plugins": persisted configs (and
+        older frontends) may still carry enable_frontend_plugins /
+        allow_agent_plugin_loading in either snake_case (TOML/backend) or camelCase
+        (frontend API) form. Copy each onto the renamed field unless the new key is
+        already present, so an explicit new value always wins.
+        """
+        if not isinstance(data, dict):
+            return data
+        for old_key, new_key in (
+            ("enable_frontend_plugins", "enable_extensions"),
+            ("enableFrontendPlugins", "enableExtensions"),
+            ("allow_agent_plugin_loading", "allow_agent_extension_loading"),
+            ("allowAgentPluginLoading", "allowAgentExtensionLoading"),
+        ):
+            old_value = data.pop(old_key, None)
+            if old_value is not None and new_key not in data:
+                data[new_key] = old_value
         return data
 
     @model_validator(mode="before")

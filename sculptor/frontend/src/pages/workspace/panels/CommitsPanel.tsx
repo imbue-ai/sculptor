@@ -71,6 +71,7 @@ const CommitsPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
 
   return (
     <ExplorerLayout
+      panelId="commits"
       list={list}
       detail={(sidebarToggle) => (
         <DiffViewer

@@ -43,7 +43,7 @@
 | REQ-PERSIST-3 (session-only multi-value, deferred) | Covered | SESSION_ONLY group + explainer; no paste form offered |
 | REQ-ERR-1 (actionable empty message + route) | Covered | picker empty state + `AlphaErrorBlock.tsx:115-127` failed-turn CTA |
 | REQ-COMPAT-1 (Claude unchanged) | Covered | `sources_backend_models()` False for Claude; `PRODUCTION_MODELS` fallback retained |
-| REQ-COMPAT-2 (#53 seam keeps working) | Covered | filter layered on `_curate_models`; current model always retained |
+| REQ-COMPAT-2 (#53 seam keeps working) | Covered | filter layered on `_curate_models`; current model always retained (being revised — see `agent_docs/no-usable-model-guard/design.md`: dropped when its provider is unauthenticated with no fallback, so the empty state is reachable) |
 | REQ-COMPAT-3 (no pi-core changes) | Covered | only existing RPCs + `auth.json` read/write + driving pi's own `/login` |
 
 ## User Scenarios

@@ -17,6 +17,7 @@ from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
+from sculptor.agents.default.claude_code_sdk.naming_conventions import resolve_naming_conventions
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor
 from sculptor.agents.default.claude_code_sdk.output_processor import is_first_user_message_of_conversation
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_claude_command
@@ -164,6 +165,28 @@ class ClaudeProcessManager:
         if binary_path is None:
             raise ClaudeBinaryNotFoundError()
         return binary_path
+
+    def apply_conversation_launch_settings(
+        self,
+        model_name: LLMModel | None,
+        fast_mode: bool,
+        effort: str | None,
+    ) -> None:
+        """Seed the conversation's CLI launch settings from replayed history.
+
+        Model-less turns (UserQuestionAnswerMessage, answer-continuation
+        resumes) continue the conversation with the in-memory launch settings
+        — the command shape (real vs fake CLI), fast mode, and effort — which a
+        manager constructed after a backend restart would otherwise reset to
+        defaults. The runner calls this with the last processed chat turn's
+        settings so such turns relaunch the CLI the same way the conversation
+        has been running.
+        """
+        if model_name is None:
+            return
+        self._is_fake_claude = model_name in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2)
+        self._fast_mode = fast_mode
+        self._effort = effort
 
     def process_input_message(
         self, message: ChatInputUserMessage | ResumeAgentResponseRunnerMessage | UserQuestionAnswerMessage
@@ -586,6 +609,11 @@ class ClaudeProcessManager:
             is_first_message = is_first_user_message_of_conversation(self.environment, self._harness)
             env_var_names = self.environment.get_project_env_var_names()
             setup_state = self._fetch_setup_state(is_first_message)
+            enable_auto_rename = get_user_config_instance().enable_auto_rename
+            # Only read the on-disk convention docs when the reminder will actually use them.
+            naming_conventions = (
+                resolve_naming_conventions(self.environment) if is_first_message and enable_auto_rename else None
+            )
             user_instructions = get_user_instructions(
                 # UserMessageUnion is wider than get_user_instructions accepts; non-chat messages never reach here
                 # pyrefly: ignore [bad-argument-type]
@@ -595,6 +623,8 @@ class ClaudeProcessManager:
                 env_var_names=env_var_names,
                 is_first_message=is_first_message,
                 setup_state=setup_state,
+                enable_auto_rename=enable_auto_rename,
+                naming_conventions=naming_conventions,
             )
             filename = str(self.environment.get_state_path() / f"user_instructions_{message.message_id}.txt")
             self.environment.write_file(filename, user_instructions)
@@ -618,16 +648,24 @@ class ClaudeProcessManager:
                     # otherwise, use the previous validated session id if it exists
                     maybe_session_id = get_state_file_contents(self.environment, validated_session_id_state_file)
             combined_system_prompt = self._get_combined_system_prompt()
-            if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)):
+            # A model-less turn (UserQuestionAnswerMessage, or an answer-
+            # continuation resume) continues the conversation with its
+            # existing launch settings — only model-carrying turns update
+            # them. After a restart the runner seeds them from replayed
+            # history via apply_conversation_launch_settings, so they hold
+            # even on a freshly constructed manager.
+            if (
+                isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage))
+                and message.model_name is not None
+            ):
                 self._is_fake_claude = message.model_name in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2)
+                self._fast_mode = message.fast_mode
+                self._effort = message.effort
             maybe_model = (
                 MODEL_SHORTNAME_MAP.get(message.model_name)
                 if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)) and message.model_name
                 else None
             )
-            if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)):
-                self._fast_mode = message.fast_mode
-                self._effort = message.effort
             plugin_dirs = get_plugin_dirs()
             claude_command = get_claude_command(
                 system_prompt=combined_system_prompt,

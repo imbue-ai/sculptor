@@ -231,3 +231,64 @@ def test_generate_autoupdate_manifest_linux(tmp_path: Path) -> None:
     assert manifest["files"][0]["sha512"] == LINUX_ARTIFACT_SHA512
     assert manifest["files"][0]["size"] == len(LINUX_ARTIFACT_CONTENT)
     assert "releaseDate" in manifest
+
+
+def _invoke_publish(missing_substrings: tuple[str, ...]) -> tuple[int, list[tuple[str, str]], str]:
+    """Run publish-build-artifacts with S3 faked out.
+
+    Any `aws s3 ls` for a URI containing one of `missing_substrings` reports the
+    object as absent; every `aws s3 cp` is recorded instead of performed. Returns
+    the exit code, the (source, destination) copies attempted, and the output.
+    """
+    copies: list[tuple[str, str]] = []
+
+    def fake_run_out(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        if "ls" in cmd:
+            uri = cmd[-1]
+            if any(substring in uri for substring in missing_substrings):
+                raise subprocess.CalledProcessError(1, cmd)
+        elif "cp" in cmd:
+            copies.append((cmd[-2], cmd[-1]))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    runner = CliRunner()
+    with (
+        patch("builder.cli._run_out", side_effect=fake_run_out),
+        patch("builder.cli.ensure_clean_tree"),
+        patch("builder.cli.pyproject_version", return_value="0.44.0"),
+        patch("builder.cli.dev_git_sha", return_value="1f1d00c0"),
+        # artifacts.py resolves the version and SHA itself when interpolating the
+        # S3 keys; patch it too so the paths under test don't drift with the repo.
+        patch("builder.artifacts.pyproject_version", return_value="0.44.0"),
+        patch("builder.artifacts.dev_git_sha", return_value="1f1d00c0"),
+    ):
+        result = runner.invoke(app, ["publish-build-artifacts", "--no-dry-run"])
+
+    return result.exit_code, copies, result.output
+
+
+def test_publish_skips_a_missing_non_blocking_target() -> None:
+    """A absent non-blocking (linux/arm64) build must not sink the whole release.
+
+    build-desktop.yml marks the linux-arm64 build `allow-failure`, so an arm64
+    runner preemption is expected to cost that one architecture and nothing else.
+    Publishing must therefore ship x64 and macOS rather than refusing outright.
+    """
+    exit_code, copies, output = _invoke_publish(missing_substrings=("AppImage/arm64/",))
+
+    assert exit_code == 0, f"publish should have succeeded without arm64:\n{output}"
+    assert copies, "expected the surviving targets to be published"
+    # Scope this to the Linux arm64 keys: the macOS artifacts are arm64 too.
+    assert not [dst for _, dst in copies if "AppImage/arm64/" in dst], (
+        "a target with missing artifacts must be skipped entirely, not partially published"
+    )
+    assert [dst for _, dst in copies if "AppImage/x64/" in dst], "x64 should still publish"
+    assert [dst for _, dst in copies if "darwin" in dst or dst.endswith(".dmg")], "macOS should still publish"
+
+
+def test_publish_fails_when_a_required_target_is_missing() -> None:
+    """A missing *blocking* target still aborts the publish, copying nothing."""
+    exit_code, copies, output = _invoke_publish(missing_substrings=("AppImage/x64/",))
+
+    assert exit_code == 1, f"publish should have refused to run:\n{output}"
+    assert copies == [], "nothing may be published once a required artifact is missing"

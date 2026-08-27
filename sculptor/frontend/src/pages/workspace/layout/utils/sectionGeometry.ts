@@ -1,9 +1,9 @@
-// Pure geometry for the four-section grid: resolve the global section size
+// Pure geometry for the four-section grid: resolve the per-workspace section size
 // percentages to pixels, protecting the center's larger minimum width by shrinking
 // the sides first (right before left). No React, no Jotai — unit-testable in
 // isolation.
 
-import type { GlobalLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import type { SectionSizes } from "~/pages/workspace/layout/persistence/snapshot.ts";
 
 // The center keeps a larger minimum width; the sides have a smaller floor and give
 // way before the center shrinks.
@@ -22,7 +22,7 @@ export type SectionPixelSizes = { leftPx: number; rightPx: number; bottomPx: num
 export type ResolveSectionSizesParams = {
   containerWidth: number;
   containerHeight: number;
-  sizes: GlobalLayoutState["sectionSizes"];
+  sizes: SectionSizes;
   isLeftExpanded: boolean;
   isRightExpanded: boolean;
   isBottomExpanded: boolean;
@@ -57,7 +57,7 @@ export const resolveSectionPixelSizes = (params: ResolveSectionSizesParams): Sec
   return { leftPx, rightPx, bottomPx };
 };
 
-// Convert a dragged pixel size back to a clamped global percentage of its axis.
+// Convert a dragged pixel size back to a clamped percentage of its axis.
 export const sizeToPercent = (px: number, dimension: number): number => {
   if (dimension <= 0) {
     return SECTION_SIZE_MIN_PERCENT;

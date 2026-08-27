@@ -156,9 +156,16 @@ jobs:
 
       - name: Install Linux build dependencies
         if: matrix.os == 'linux'
+        timeout-minutes: 10
         # Electron, node-gyp, and AppImage-maker dependencies.
         run: |
           # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          # The azure.archive.ubuntu.com mirror can also go fully dark and hang
+          # `apt-get update` past those per-connection timeouts, so drop it and
+          # let the canonical archive.ubuntu.com mirrors serve instead.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
           sudo apt-get $APT_OPTS update -qq
           sudo apt-get $APT_OPTS install -y -qq \
@@ -356,12 +363,19 @@ jobs:
 
       - name: Install Linux test dependencies
         if: matrix.os == 'linux'
+        timeout-minutes: 10
         # Electron runtime libs + xvfb. The harness auto-wraps the app in
         # `xvfb-run` when no DISPLAY is set (PackagedElectronFrontend), so we
         # only need xvfb present, not a manually-started display. Package names
         # differ between 22.04 and 24.04 (t64 suffix), so fall back.
         run: |
           # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          # The azure.archive.ubuntu.com mirror can also go fully dark and hang
+          # `apt-get update` past those per-connection timeouts, so drop it and
+          # let the canonical archive.ubuntu.com mirrors serve instead.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
           sudo apt-get $APT_OPTS update -qq
           sudo apt-get $APT_OPTS install -y -qq \
@@ -530,14 +544,24 @@ jobs:
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#sculptor-v}"
           PIPELINE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          # Dedupe by filename (publish prints from multiple buckets); keep
-          # the last URL per name (the stable bucket is printed last).
+          # Dedupe per (arch, filename): publish prints each file from both the
+          # slim-rc and slim buckets, and the x64/arm64 AppImages share a
+          # basename, differing only by the /x64/ vs /arm64/ path segment, so
+          # keying on basename alone would drop one arch. Last-wins keeps the
+          # stable URL (stable is printed last).
           # `|| true`: a dry-run publish prints no https URLs, so grep would exit
           # non-zero and abort the step under `set -o pipefail`. Tolerate an empty
           # match and create the release with whatever notes we have.
           ASSETS_MD="$(grep -E '^\s+https://' "${GITHUB_WORKSPACE}/publish_output.log" \
             | sed 's/^ *//' \
-            | awk '{n=split($0,a,"/"); name=a[n]; map[name]=$0} END {for (k in map) print "- [" k "](" map[k] ")"}' || true)"
+            | awk '{
+                n = split($0, a, "/"); name = a[n]; arch = ""
+                for (i = 1; i < n; i++) if (a[i] == "x64" || a[i] == "arm64") arch = a[i]
+                key = arch "\t" name; url[key] = $0
+                label[key] = (arch == "" ? name : name " (" arch ")")
+              }
+              END { for (k in url) print "- [" label[k] "](" url[k] ")" }' \
+            | sort || true)"
           NOTES=$(printf 'Sculptor %s — [pipeline](%s)\n\n## Assets\n%s\n' \
             "$VERSION" "$PIPELINE_URL" "$ASSETS_MD")
           PRERELEASE=""

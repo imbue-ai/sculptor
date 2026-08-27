@@ -19,9 +19,9 @@ the *surface* moved:
   opened section, and clicking a commit's file opens its commit-scoped diff into
   the panel's OWN embedded viewer rather than a page-wide active diff.
 
-The Commits panel is seeded into the (collapsed-by-default) LEFT section, so
-``_open_commits_panel_with`` reveals it there while the agent chat stays mounted
-in the CENTER section. These history assertions are read-only; the one test that
+The Commits panel is seeded into the LEFT section, so ``_open_commits_panel_with``
+reveals it there while the agent chat stays mounted in the CENTER section. These
+history assertions are read-only; the one test that
 sends a follow-up commit types into the still-mounted chat, then re-activates the
 Commits tab to read the refreshed history.
 
@@ -501,9 +501,9 @@ def _reactivate_commits_panel(page: Page) -> PlaywrightCommitsPanelElement:
 
     A single-instance panel that is already open is dropped from the add-panel
     dropdown's re-add list, so re-opening it that way would fail. The Commits panel
-    is seeded into the (collapsed-by-default) LEFT section; ``_open_commits_panel_with``
-    already expanded it, so this re-expands it (idempotent) and clicks its LEFT-section
-    panel tab to make the already-open Commits panel active again.
+    is seeded into the LEFT section; this expands it (idempotent — the left section
+    is expanded in the default layout) and clicks its LEFT-section panel tab to make
+    the already-open Commits panel active again.
     """
     left_section = PlaywrightWorkspaceSection(page, "left")
     left_section.expand_section()

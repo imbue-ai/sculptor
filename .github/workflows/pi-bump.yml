@@ -1,0 +1,111 @@
+# Keeps the managed pi pin fresh. Daily (and on manual dispatch), compare
+# PI_PINNED_VERSION against the latest earendil-works/pi release; when upstream
+# is ahead, run scripts/bump_pi_pin.py and open — or force-refresh — the single
+# rolling automation/pi-bump PR with the rewritten pins. The PR is the
+# notification; builds keep passing while the pin is stale (the checks workflow
+# separately annotates stale runs with a non-blocking warning).
+#
+# Trigger safety (see README.md): schedule and workflow_dispatch run main's own
+# code on a GitHub-hosted runner — no fork code, no self-hosted exposure — and
+# the token stays scoped to the two writes below. Actions-created PRs are
+# enabled repo-side (README.md rule 5).
+#
+# A PR opened with the workflow's GITHUB_TOKEN does not trigger pull_request
+# workflows (GitHub suppresses recursive runs), so the bump PR's CI starts only
+# once a maintainer closes and reopens it (one click) or pushes to its branch.
+# Swap the token for a GitHub App token if that friction ever outweighs the
+# extra credential.
+
+name: pi-bump
+
+on:
+  schedule:
+    # Daily. Off-hour minute: GitHub sheds scheduled load spiking at :00.
+    - cron: "23 14 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact pi version to pin (default: latest upstream release)"
+        required: false
+        type: string
+
+# Serialize runs so a manual dispatch cannot race the daily schedule for the
+# rolling branch; queue instead of cancelling so neither run's signal is lost.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The rewrite/verify tooling guards the real bump; prove it healthy before
+      # trusting it with file edits. The scripts are stdlib-only, so pytest is
+      # the sole dependency — no uv sync needed.
+      - name: Self-test the bump tooling
+        run: |
+          python3 -m pip install --quiet pytest
+          python3 -m pytest -q scripts/check_pi_pin_freshness_test.py scripts/bump_pi_pin_test.py
+
+      - name: Compare the pin with the latest release
+        id: freshness
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/check_pi_pin_freshness.py --github-output
+
+      - name: Apply the bump
+        if: inputs.version != '' || steps.freshness.outputs.stale == 'true'
+        env:
+          TARGET_VERSION: ${{ inputs.version || steps.freshness.outputs.latest }}
+        run: python3 scripts/bump_pi_pin.py "$TARGET_VERSION"
+
+      - name: Open or refresh the bump PR
+        if: inputs.version != '' || steps.freshness.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_VERSION: ${{ inputs.version || steps.freshness.outputs.latest }}
+          BRANCH: automation/pi-bump
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Pin already at $TARGET_VERSION; nothing to open."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          # Tracked files only: the bump rewrites known pins, never adds files.
+          git add -u
+          git commit -m "Bump managed pi to $TARGET_VERSION" \
+            -m "Automated by the pi-bump workflow; digests computed from the release tarballs and cross-checked against upstream SHA256SUMS."
+          # The branch is owned by this workflow and rebuilt from main every
+          # run, so an outdated open PR is force-refreshed, never stacked onto.
+          git push --force origin "$BRANCH"
+          TITLE="Bump managed pi to $TARGET_VERSION"
+          BODY="$(printf '%s\n' \
+            "Automated pin refresh: upstream pi released $TARGET_VERSION." \
+            "" \
+            "- \`scripts/bump_pi_pin.py\` rewrote \`PI_PINNED_VERSION\`, the baked per-platform sha256s, and every hardcoded copy in tests/docs." \
+            "- Digests are computed from the release tarballs and cross-checked against the release's published \`SHA256SUMS\`." \
+            "" \
+            "CI does not start automatically on workflow-opened PRs — close and reopen this PR (or push to its branch) to run checks." \
+            "" \
+            "Opened automatically by the pi-bump workflow.")"
+          EXISTING_PR="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING_PR" ]; then
+            gh pr edit "$EXISTING_PR" --title "$TITLE" --body "$BODY"
+            echo "Refreshed PR #$EXISTING_PR"
+          else
+            gh pr create --base main --head "$BRANCH" --title "$TITLE" --body "$BODY"
+          fi

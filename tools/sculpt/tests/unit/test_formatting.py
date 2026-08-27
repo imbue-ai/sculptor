@@ -13,12 +13,12 @@ class TestJsonError:
     def test_returns_valid_json(self) -> None:
         result = json_error("Not found", "No workspace matches prefix 'abc'")
         parsed = json.loads(result)
-        assert parsed == {"error": "Not found", "detail": "No workspace matches prefix 'abc'"}
+        assert parsed == {"error": "Not found", "detail": "No workspace matches prefix 'abc'", "code": None}
 
     def test_empty_detail(self) -> None:
         result = json_error("Server error")
         parsed = json.loads(result)
-        assert parsed == {"error": "Server error", "detail": ""}
+        assert parsed == {"error": "Server error", "detail": "", "code": None}
 
 
 class TestCliError:
@@ -42,7 +42,7 @@ class TestCliError:
         assert exc_info.value.exit_code == 1
         captured = capsys.readouterr()
         parsed = json.loads(captured.err.strip())
-        assert parsed == {"error": "fail", "detail": "extra"}
+        assert parsed == {"error": "fail", "detail": "extra", "code": None}
 
     def test_custom_exit_code(self) -> None:
         with pytest.raises(typer.Exit) as exc_info:
@@ -55,7 +55,7 @@ class TestCliError:
         assert exc_info.value.exit_code == 4
         captured = capsys.readouterr()
         parsed = json.loads(captured.err.strip())
-        assert parsed == {"error": "fail", "detail": ""}
+        assert parsed == {"error": "fail", "detail": "", "code": None}
 
 
 class TestHandleConnectionError:

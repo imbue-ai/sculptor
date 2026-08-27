@@ -1,11 +1,27 @@
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 
-import type { ChatMessage } from "../../../api";
-import { type AgentDetailState, agentDetailStateAtomFamily, getEmptyAgentDetailState } from "../atoms/agentDetails";
+import type { ChatMessage, WorkflowTaskState } from "../../../api";
+import { useWorkspacePageParams } from "../../hooks/navigation.ts";
+import {
+  type AgentDetailState,
+  agentDetailStateAtomFamily,
+  getEmptyAgentDetailState,
+  workflowTaskStateAtomFamily,
+} from "../atoms/agentDetails";
 
 export const useAgentDetail = (agentId: string): AgentDetailState | null => {
   return useAtomValue(agentDetailStateAtomFamily(agentId));
+};
+
+/**
+ * The Workflow-tool background task state for one Workflow call (by its
+ * launching tool_use_id) on the agent in the current URL; undefined when no
+ * state has arrived for it.
+ */
+export const useCurrentTaskWorkflowState = (toolUseId: string): WorkflowTaskState | undefined => {
+  const { agentID } = useWorkspacePageParams();
+  return useAtomValue(workflowTaskStateAtomFamily({ taskId: agentID ?? "", toolUseId }));
 };
 
 export const useAgentDetailWithDefaults = (agentId: string): AgentDetailState => {
