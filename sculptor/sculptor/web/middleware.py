@@ -85,8 +85,7 @@ def mount_extension_files(app: FastAPI) -> None:
     )
 
 
-# Note that this is overridden in tests to use the test settings (FastAPI
-# dependency overrides bypass the function entirely, so the cache is inert there).
+# Note that this is overridden in tests to use the test settings
 @cache
 def get_settings() -> SculptorSettings:
     """Parse settings from the environment once, at first call.

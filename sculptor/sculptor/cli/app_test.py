@@ -22,11 +22,6 @@ def fresh_settings_cache() -> Iterator[None]:
 def test_explicit_port_is_published_and_visible_in_the_settings_snapshot(
     fresh_settings_cache: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The CLI primes the settings cache (for logging config) before the --port
-    # option is applied. The helper must retake the snapshot afterwards, or
-    # every consumer of settings.BACKEND_PORT (agent env setup, the service
-    # collection) would see the pre-publish port instead of the one the server
-    # actually listens on.
     monkeypatch.delenv("SCULPTOR_API_PORT", raising=False)
     assert get_settings().BACKEND_PORT == DEFAULT_BACKEND_PORT
 

@@ -21,9 +21,6 @@ def test_get_settings_returns_the_same_snapshot_every_call(fresh_settings_cache:
 def test_get_settings_snapshot_is_immune_to_runtime_env_changes(
     fresh_settings_cache: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Settings are parsed from the environment once; a runtime env perturbation
-    # must not flip settings-gated behavior mid-session (e.g. the FakeClaude
-    # model gate).
     monkeypatch.setenv("TESTING__INTEGRATION_ENABLED", "true")
     first = get_settings()
     assert first.TESTING.INTEGRATION_ENABLED is True
