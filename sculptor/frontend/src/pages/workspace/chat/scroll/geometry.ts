@@ -47,6 +47,26 @@ export const STREAMING_TAIL_PADDING = PIN_BOTTOM_GAP + TURN_END_SHRINK_SLACK;
  */
 export const FOOTER_REVEAL_WINDOW_MS = 1200;
 
+/** How close to the content bottom (px) counts as "at the bottom". */
+export const BOTTOM_THRESHOLD = 200;
+// On short (mobile) viewports, 200px is ~1/4 of the screen, so at-bottom (and
+// with it pin-to-bottom) engages "too early" when scrolling down — require
+// getting closer to the actual bottom there. Keyed off the scroll container's
+// own height so it's driven by the layout, not a separate mobile flag.
+const MOBILE_BOTTOM_THRESHOLD = 80;
+const SHORT_VIEWPORT_PX = 700;
+
+/**
+ * The at-bottom threshold for this scroll container. Every site that samples
+ * `geometryAtBottom` (the scroll handler, the content ResizeObserver, the
+ * reading-anchor restore, the streaming-start engage) must use this one
+ * function: during streaming the ResizeObserver re-samples on every token, so
+ * a single site using a looser threshold overrides the others and re-engages
+ * pin-to-bottom too early on short viewports.
+ */
+export const bottomThresholdFor = (el: HTMLElement): number =>
+  el.clientHeight < SHORT_VIEWPORT_PX ? MOBILE_BOTTOM_THRESHOLD : BOTTOM_THRESHOLD;
+
 /** The largest scrollTop the browser will allow: the very end of the padded
  *  scroll range. For a chat whose last turn is short, the dynamic `paddingEnd`
  *  makes this exactly the anchored-turn rest position (last user message at

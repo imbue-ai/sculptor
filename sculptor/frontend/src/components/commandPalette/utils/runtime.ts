@@ -34,6 +34,10 @@ export type CommandRuntime = {
    * navigating away to a standalone page.
    */
   openNewWorkspaceDialog: () => void;
+  /** Open the Layouts switcher for the current workspace (wraps its open atom). */
+  openLayoutsDialog: () => void;
+  /** Open the "Save current arrangement as a layout" dialog. */
+  openSaveLayoutDialog: () => void;
   ui: {
     toggleHelpDialog: () => void;
     toggleDevPanel: () => void;

@@ -8,11 +8,15 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { createElement, memo } from "react";
 
-import { activePanelComponentInSubSectionAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
+import {
+  activePanelComponentInSubSectionAtom,
+  isSubSectionPanelLoadingAtom,
+} from "~/pages/workspace/layout/registry/panelRegistry.ts";
 import type { SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 
 import { EmptySectionState } from "./EmptySectionState.tsx";
 import styles from "./SectionBody.module.scss";
+import { SectionLoadingState } from "./SectionLoadingState.tsx";
 
 type SectionBodyProps = { subSection: SubSectionId };
 
@@ -21,11 +25,17 @@ const SectionBodyComponent = ({ subSection }: SectionBodyProps): ReactElement =>
   // createElement renders it without the compiler mistaking the local binding
   // for a component defined during render.
   const activePanelComponent = useAtomValue(activePanelComponentInSubSectionAtom(subSection));
+  // When no component resolves, tell "the placed panel is still loading (agent
+  // snapshot not in yet)" apart from "this section is genuinely empty" — a bare
+  // undefined component can't, so a reload would flash the Add-panel launcher.
+  const isPanelLoading = useAtomValue(isSubSectionPanelLoadingAtom(subSection));
 
   return (
     <div className={styles.content}>
       {activePanelComponent !== undefined ? (
         createElement(activePanelComponent)
+      ) : isPanelLoading ? (
+        <SectionLoadingState />
       ) : (
         <EmptySectionState subSection={subSection} />
       )}

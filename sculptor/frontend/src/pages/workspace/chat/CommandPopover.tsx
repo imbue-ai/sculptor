@@ -61,7 +61,9 @@ export const CommandPopover = ({ toolName, block, result, isExecuting }: Command
   const handleCopyCommand = useCallback(
     (e: React.MouseEvent): void => {
       e.stopPropagation();
-      navigator.clipboard.writeText(command).catch(() => {});
+      navigator.clipboard.writeText(command).catch((error) => {
+        console.warn("Failed to copy command to clipboard.", error);
+      });
       setIsCommandCopied(true);
       clearTimeout(commandCopyTimerRef.current);
       commandCopyTimerRef.current = setTimeout(() => setIsCommandCopied(false), COPY_FEEDBACK_DURATION_MS);
@@ -72,7 +74,9 @@ export const CommandPopover = ({ toolName, block, result, isExecuting }: Command
   const handleCopyOutput = useCallback(
     (e: React.MouseEvent): void => {
       e.stopPropagation();
-      navigator.clipboard.writeText(outputText).catch(() => {});
+      navigator.clipboard.writeText(outputText).catch((error) => {
+        console.warn("Failed to copy output to clipboard.", error);
+      });
       setIsOutputCopied(true);
       clearTimeout(outputCopyTimerRef.current);
       outputCopyTimerRef.current = setTimeout(() => setIsOutputCopied(false), COPY_FEEDBACK_DURATION_MS);

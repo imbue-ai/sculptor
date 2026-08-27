@@ -42,25 +42,35 @@ const mockRect = (over: Partial<DOMRect>): DOMRect => ({
 });
 
 /**
- * Creates a workspace-tab row nested inside a sidebar container, mirroring the
- * real DOM shape (aside[data-testid=WORKSPACE_SIDEBAR] > button[data-workspace-tab]).
+ * Creates a workspace-peek "tab" row nested inside a sidebar container, mirroring
+ * the real DOM shape:
+ *   aside[data-testid=WORKSPACE_SIDEBAR] > div[data-workspace-tab] > (name button + action button)
+ * The peek attributes live on the row container (not the name button) so the
+ * whole row — including its sibling hover-action buttons — counts as one tab.
  * The row's right edge is intentionally inset from the sidebar's right edge.
  */
-const createSidebarTab = (workspaceId: string): HTMLElement => {
+const createSidebarTab = (workspaceId: string): { nameButton: HTMLElement; actionButton: HTMLElement } => {
   const sidebar = document.createElement("aside");
   sidebar.setAttribute("data-testid", "WORKSPACE_SIDEBAR");
   sidebar.getBoundingClientRect = (): DOMRect =>
     mockRect({ left: 0, right: SIDEBAR_RIGHT, top: SIDEBAR_TOP, bottom: 600, width: SIDEBAR_RIGHT, height: 600 });
 
-  const tab = document.createElement("button");
-  tab.setAttribute("data-workspace-tab", "");
-  tab.setAttribute("data-tab-id", workspaceId);
-  tab.getBoundingClientRect = (): DOMRect =>
+  const row = document.createElement("div");
+  row.setAttribute("data-workspace-tab", "");
+  row.setAttribute("data-tab-id", workspaceId);
+  row.getBoundingClientRect = (): DOMRect =>
     mockRect({ left: 20, right: ROW_RIGHT, top: ROW_TOP, bottom: ROW_TOP + 28, width: ROW_RIGHT - 20, height: 28 });
 
-  sidebar.appendChild(tab);
+  // The clickable name button and the hover-revealed action button (menu/delete)
+  // are siblings inside the row; neither carries the peek attributes itself.
+  const nameButton = document.createElement("button");
+  const actionButton = document.createElement("button");
+  row.appendChild(nameButton);
+  row.appendChild(actionButton);
+
+  sidebar.appendChild(row);
   document.body.appendChild(sidebar);
-  return tab;
+  return { nameButton, actionButton };
 };
 
 const hoverTab = (tab: HTMLElement): void => {
@@ -89,9 +99,9 @@ afterEach(() => {
 describe("WorkspacePeekOverlay", () => {
   it("opens instantly on hover", () => {
     render(<WorkspacePeekOverlay onNavigate={vi.fn()} />);
-    const tab = createSidebarTab("ws-1");
+    const { nameButton } = createSidebarTab("ws-1");
 
-    hoverTab(tab);
+    hoverTab(nameButton);
 
     // Not visible until the (0ms) open timer flushes on the next tick.
     expect(screen.queryByTestId("workspace-peek-overlay")).toBeNull();
@@ -103,29 +113,49 @@ describe("WorkspacePeekOverlay", () => {
 
   it("reopens instantly after closing", () => {
     render(<WorkspacePeekOverlay onNavigate={vi.fn()} />);
-    const tab = createSidebarTab("ws-1");
+    const { nameButton } = createSidebarTab("ws-1");
 
     // Open the popover
-    hoverTab(tab);
+    hoverTab(nameButton);
     act(() => vi.advanceTimersByTime(OPEN_DELAY_MS));
     expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
 
     // Leave tab and let it close
-    leaveTab(tab);
+    leaveTab(nameButton);
     act(() => vi.advanceTimersByTime(CLOSE_DELAY_MS));
     expect(screen.queryByTestId("workspace-peek-overlay")).toBeNull();
 
     // Re-enter — the peek has no open delay, so it appears instantly again.
-    hoverTab(tab);
+    hoverTab(nameButton);
     act(() => vi.advanceTimersByTime(OPEN_DELAY_MS));
+    expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
+  });
+
+  it("stays open when moving from the name button onto a sibling hover-action button", () => {
+    render(<WorkspacePeekOverlay onNavigate={vi.fn()} />);
+    const { nameButton, actionButton } = createSidebarTab("ws-1");
+
+    hoverTab(nameButton);
+    act(() => vi.advanceTimersByTime(OPEN_DELAY_MS));
+    expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
+
+    // Moving from the name button onto the row's menu/delete button is NOT
+    // leaving the tab: both live inside the same [data-workspace-tab] row, so
+    // the peek must stay open.
+    const event = new MouseEvent("mouseout", { bubbles: true });
+    Object.defineProperty(event, "target", { value: nameButton });
+    Object.defineProperty(event, "relatedTarget", { value: actionButton });
+    document.dispatchEvent(event);
+
+    act(() => vi.advanceTimersByTime(CLOSE_DELAY_MS));
     expect(screen.getByTestId("workspace-peek-overlay")).toBeDefined();
   });
 
   it("anchors to the sidebar's right edge, not the (variable) row width", () => {
     render(<WorkspacePeekOverlay onNavigate={vi.fn()} />);
-    const tab = createSidebarTab("ws-1");
+    const { nameButton } = createSidebarTab("ws-1");
 
-    hoverTab(tab);
+    hoverTab(nameButton);
     act(() => vi.advanceTimersByTime(OPEN_DELAY_MS));
 
     const overlay = screen.getByTestId("workspace-peek-overlay");

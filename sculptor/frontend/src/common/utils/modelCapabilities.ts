@@ -14,16 +14,25 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFileAttachments: true,
     supportsFastMode: true,
   },
-  // CLAUDE_4_OPUS / CLAUDE_4_OPUS_200K are the current-generation Opus
-  // ("Claude 4.8 Opus" — see modelConstants.ts). Newer Opus generations are
+  // CLAUDE_4_OPUS / CLAUDE_4_OPUS_200K are the rolling current-generation Opus
+  // ("Claude 5 Opus" — see modelConstants.ts). Newer Opus generations are
   // bound to these enum values by bumping the display label there, so the
   // capabilities below must be kept in sync with that label. Fast mode is
-  // supported, matching Opus 4.7 and 4.6 (SCU-1541).
+  // supported on Opus 5 (and pinned 4.8/4.7/4.6; SCU-1541, SCU-1841).
   [LlmModel.CLAUDE_4_OPUS]: {
     supportsFileAttachments: true,
     supportsFastMode: true,
   },
   [LlmModel.CLAUDE_4_OPUS_200K]: {
+    supportsFileAttachments: true,
+    supportsFastMode: true,
+  },
+  // Pinned Opus 4.8 — fast mode supported (SCU-1841), same as the rolling entry.
+  [LlmModel.CLAUDE_4_8_OPUS]: {
+    supportsFileAttachments: true,
+    supportsFastMode: true,
+  },
+  [LlmModel.CLAUDE_4_8_OPUS_200K]: {
     supportsFileAttachments: true,
     supportsFastMode: true,
   },

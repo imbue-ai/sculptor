@@ -28,7 +28,6 @@ const meta: Meta<typeof ModelSelector> = {
     model: LlmModel.CLAUDE_4_OPUS_200K,
     onModelChange: noop,
     onBackendModelChange: noop,
-    onAuthenticate: noop,
     capabilityValue: true,
   },
 };

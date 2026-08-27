@@ -12,7 +12,7 @@ import { atom } from "jotai";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { isMultiInstancePanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import type { PanelId, SectionId, SplitAxis, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
-import { canSplitAxis, toSecondary, toSection } from "~/pages/workspace/layout/types/section.ts";
+import { canSplitAxis, primaryOf, toSecondary, toSection } from "~/pages/workspace/layout/types/section.ts";
 import { isSectionExpanded, openPanelsInSubSection } from "~/pages/workspace/layout/utils/layoutQueries.ts";
 
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./section.ts";
@@ -243,13 +243,21 @@ export const setActivePanelAtom = atom(null, (_get, set, params: SetActivePanelP
 );
 
 export const toggleSectionAtom = atom(null, (get, set, params: ToggleSectionParams) => {
+  const isCollapsibleSection = params.section !== "center";
+  const isAlreadyExpanded = isCollapsibleSection && isSectionExpanded(get(workspaceLayoutAtom), params.section);
   // A collapsed section must never stay maximized: the transient full-screen view
   // would otherwise show a section the persisted layout says is closed.
-  const willCollapse = params.section !== "center" && isSectionExpanded(get(workspaceLayoutAtom), params.section);
-  if (willCollapse && get(maximizedSectionAtom) === params.section) {
+  if (isAlreadyExpanded && get(maximizedSectionAtom) === params.section) {
     set(maximizedSectionAtom, null);
   }
   set(workspaceLayoutAtom, (prev) => withToggleSection(prev, params));
+  // Toggling a section open focuses it and pulses the active-section ring — a
+  // deliberate jump, like the keyboard section-cycle and panel add/drop. Collapsing
+  // never focuses: withToggleSection reassigns the active sub-section to center when
+  // the closed section held it.
+  if (isCollapsibleSection && !isAlreadyExpanded) {
+    set(jumpToSectionAtom, { subSection: primaryOf(params.section) });
+  }
 });
 
 export const splitSectionAtom = atom(null, (_get, set, params: SplitSectionParams) =>

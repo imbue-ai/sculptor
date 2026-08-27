@@ -58,6 +58,13 @@ let config = {
     ],
     // Path to application icon (platform-specific extensions will be auto-selected)
     icon: path.resolve(__dirname, "assets/icons/icon"),
+    // Merged into the app's Info.plist. macOS only shows the microphone consent
+    // prompt (and TCC grant) when a usage description is present; voice entry
+    // captures audio in the renderer and transcribes it locally.
+    extendInfo: {
+      NSMicrophoneUsageDescription:
+        "Sculptor uses the microphone for voice entry. Speech is transcribed to text locally on this device.",
+    },
     name: "Sculptor",
     productName: "Sculptor",
     executableName: "Sculptor",

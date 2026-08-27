@@ -142,6 +142,10 @@ type DependencyCardProps = {
   installUrl: string;
   brewPackage?: string;
   optional?: boolean;
+  // Sculptor can install this dependency itself (a managed download): the
+  // Install button triggers it directly instead of opening the popover of
+  // manual install instructions.
+  onInstall?: () => void;
   onApplyOverride?: (path: string) => Promise<void>;
   onAuthenticate?: () => void;
   // Interactive sign-in (headless/remote): when authUrl is set, the card shows
@@ -204,6 +208,7 @@ export const DependencyCard = ({
   installUrl,
   brewPackage,
   optional = false,
+  onInstall,
   onApplyOverride,
   onAuthenticate,
   authUrl = null,
@@ -331,40 +336,53 @@ export const DependencyCard = ({
             </Popover.Root>
           )}
 
-          {shouldShowInstallAction && (
-            <Popover.Root>
-              <Popover.Trigger>
-                <Button
-                  size="1"
-                  variant="soft"
-                  data-role="install-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                >
-                  Install
-                </Button>
-              </Popover.Trigger>
-              <Popover.Content side="bottom" align="end" sideOffset={4}>
-                <Flex direction="column" gap="2" style={{ minWidth: 220 }}>
-                  <Text size="2" weight="medium">
-                    Install {name}
-                  </Text>
-                  {shouldShowBrew && (
-                    <Code size="1" className={styles.brewCommand}>
-                      brew install {brewPackage}
-                    </Code>
-                  )}
-                  <Link href={installUrl} target="_blank" size="2" className={styles.installLink}>
-                    <Flex align="center" gap="1">
-                      Details
-                      <ExternalLinkIcon size={12} />
-                    </Flex>
-                  </Link>
-                </Flex>
-              </Popover.Content>
-            </Popover.Root>
-          )}
+          {shouldShowInstallAction &&
+            (onInstall ? (
+              <Button
+                size="1"
+                variant="soft"
+                data-role="install-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onInstall();
+                }}
+              >
+                Install
+              </Button>
+            ) : (
+              <Popover.Root>
+                <Popover.Trigger>
+                  <Button
+                    size="1"
+                    variant="soft"
+                    data-role="install-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    Install
+                  </Button>
+                </Popover.Trigger>
+                <Popover.Content side="bottom" align="end" sideOffset={4}>
+                  <Flex direction="column" gap="2" style={{ minWidth: 220 }}>
+                    <Text size="2" weight="medium">
+                      Install {name}
+                    </Text>
+                    {shouldShowBrew && (
+                      <Code size="1" className={styles.brewCommand}>
+                        brew install {brewPackage}
+                      </Code>
+                    )}
+                    <Link href={installUrl} target="_blank" size="2" className={styles.installLink}>
+                      <Flex align="center" gap="1">
+                        Details
+                        <ExternalLinkIcon size={12} />
+                      </Flex>
+                    </Link>
+                  </Flex>
+                </Popover.Content>
+              </Popover.Root>
+            ))}
 
           {status.state === "needs-auth" && onAuthenticate && !authUrl && (
             <Button

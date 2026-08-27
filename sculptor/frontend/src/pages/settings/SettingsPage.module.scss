@@ -18,7 +18,11 @@
 
 .sidebar {
   flex-shrink: 0;
+  min-height: 0;
+  overflow-y: auto;
   width: 300px;
+
+  @include thin-scrollbar;
 }
 
 .mobileNav {
@@ -59,10 +63,27 @@
     color: var(--accent-12);
     font-weight: var(--font-weight-medium);
   }
+
+  // Members of a group are indented so they read as sitting under their header.
+  // The compound `.navItem.navItemGrouped` outranks the Radix `px` padding.
+  &.navItemGrouped {
+    padding-left: var(--space-5);
+  }
 }
 
 .navSeparator {
   background-color: var(--gray-4);
+}
+
+// Non-interactive grouping label rendered above a run of nav items. Muted and
+// smaller than `.navItem` (which uses --gray-11) so it reads as a header, and
+// horizontally padded to align with the nav item labels above.
+.navGroupHeader {
+  color: var(--gray-10);
+  cursor: default;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-regular);
+  padding: var(--space-1) var(--space-3);
 }
 
 .settingControl {

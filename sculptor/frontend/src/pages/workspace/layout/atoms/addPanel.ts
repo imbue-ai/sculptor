@@ -24,14 +24,16 @@ import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import {
   AGENT_TYPE_LABELS,
   encodeRegisteredAgentType,
+  formatRegisteredAgentLabel,
   lastUsedAgentTypeAtom,
   parseStoredAgentType,
   REGISTERED_AGENT_TYPE_PREFIX,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
+import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { terminalNextIndexAtom, terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { createAgentErrorToastAtom, ToastType } from "~/common/state/atoms/toasts.ts";
-import { isPiAgentEnabledAtom, userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { resetReviewAllScopeAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
@@ -101,19 +103,14 @@ export const seedFirstVisitTerminal = (store: AppStore, workspaceId: string): nu
   return appendTerminalTab(store, workspaceId);
 };
 
-// Resolve a stored/requested agent type against the pi feature flag: "pi" while the
-// pi harness is disabled falls back to Claude (e.g. a remembered type from before
-// the flag was turned off). This is the single definition of that fallback — every
-// surface that turns a stored type into an effective one (the add-panel surfaces
-// via normalizeRecentAgentType, agent creation, the new-workspace form's first-agent
-// seed) resolves through here so they cannot drift. A bare "terminal" passes
-// through: the new-workspace form legitimately stores it, and surfaces that cannot
-// use it layer their own fallback on top (see normalizeRecentAgentType).
-export const resolveStoredAgentType = <T extends StoredAgentType>(
-  stored: T,
-  isPiAgentEnabled: boolean,
-): T | "claude" => {
-  return stored === "pi" && !isPiAgentEnabled ? "claude" : stored;
+// Resolve a stored/requested agent type into the effective one. Claude, pi, and
+// registered terminal-agent types all pass through unchanged, as does a bare
+// "terminal": the new-workspace form legitimately stores it, and surfaces that
+// cannot use it layer their own fallback on top (see normalizeRecentAgentType).
+// Kept as the single choke point every surface resolves through so their handling
+// of stored types cannot drift.
+export const resolveStoredAgentType = <T extends StoredAgentType>(stored: T): T => {
+  return stored;
 };
 
 // The stored last-used agent type, normalized for the pinned "New {recent} agent"
@@ -121,27 +118,31 @@ export const resolveStoredAgentType = <T extends StoredAgentType>(
 // new-agent keybinding/command, and the Cmd+K "Add panel" flow. A stored bare
 // "terminal" cannot back an agent row and falls back to Claude — the add-panel
 // model has no bare terminal AGENT; the dedicated "New terminal" row owns terminal
-// creation. A disabled "pi" falls back through resolveStoredAgentType.
-export const normalizeRecentAgentType = (stored: StoredAgentType, isPiAgentEnabled: boolean): StoredAgentType => {
+// creation.
+export const normalizeRecentAgentType = (stored: StoredAgentType): StoredAgentType => {
   if (stored === "terminal") {
     return "claude";
   }
-  return resolveStoredAgentType(stored, isPiAgentEnabled);
+  return resolveStoredAgentType(stored);
 };
 
 // Display label for the pinned "New {recent} agent" row, shared by the section "+"
 // dropdown and the Cmd+K "Add panel" flow so the two surfaces label the row
 // identically: built-in labels for Claude/pi/terminal, the registration's display
-// name for a registered terminal agent, and the generic "agent" when the
-// registration is unknown (removed since it was stored, or the caller has no
-// registrations list — the Cmd+K provider runs outside React and passes none).
+// name plus the "in terminal" marker for a registered terminal agent, and the
+// generic "agent" when the registration is unknown (removed since it was stored,
+// or the caller has no registrations list — the Cmd+K provider runs outside React
+// and passes none).
 export const recentAgentLabel = (
   stored: StoredAgentType,
   registrations: ReadonlyArray<TerminalAgentRegistration>,
 ): string => {
   if (stored.startsWith(REGISTERED_AGENT_TYPE_PREFIX)) {
     const { registrationId } = parseStoredAgentType(stored);
-    return registrations.find((registration) => registration.registrationId === registrationId)?.displayName ?? "agent";
+    const displayName = registrations.find(
+      (registration) => registration.registrationId === registrationId,
+    )?.displayName;
+    return displayName === undefined ? "agent" : formatRegisteredAgentLabel(displayName);
   }
   return AGENT_TYPE_LABELS[stored as Exclude<AgentTypeName, "registered">];
 };
@@ -156,12 +157,19 @@ export const recentAgentLabel = (
 // when an unrelated layout write (split-ratio drag) or a registry rebuild (agent
 // tick) recomputes an identical list.
 
-// The stored recent agent type, normalized (bare "terminal" / disabled "pi" fall
-// back to Claude — see normalizeRecentAgentType). A string, so Jotai's Object.is
-// guard already dedupes recomputes that land on the same value.
-export const recentAgentTypeAtom: Atom<StoredAgentType> = atom((get) =>
-  normalizeRecentAgentType(get(lastUsedAgentTypeAtom), get(isPiAgentEnabledAtom)),
-);
+// The stored recent agent type, normalized (a bare "terminal" falls back to
+// Claude — see normalizeRecentAgentType). A string, so Jotai's Object.is guard
+// already dedupes recomputes that land on the same value.
+//
+// pi can be the recorded MRU while no usable pi binary is resolved; the pinned
+// "New {recent} agent" row (and its Cmd+K / empty-state / keybinding twins, which
+// all read this atom) then falls back to Claude rather than backing it with a pi
+// agent that cannot launch. The agent-type sub-menu still lists pi, as "Install
+// Pi" — see AddPanelDropdown.
+export const recentAgentTypeAtom: Atom<StoredAgentType> = atom((get) => {
+  const recent = normalizeRecentAgentType(get(lastUsedAgentTypeAtom));
+  return recent === "pi" && !get(isPiAvailableAtom) ? "claude" : recent;
+});
 
 const availableStaticPanelListsEqual = (
   a: ReadonlyArray<AvailableStaticPanel>,
@@ -171,7 +179,10 @@ const availableStaticPanelListsEqual = (
     a.length === b.length &&
     a.every(
       (panel, index) =>
-        panel.id === b[index].id && panel.displayName === b[index].displayName && panel.icon === b[index].icon,
+        panel.id === b[index].id &&
+        panel.displayName === b[index].displayName &&
+        panel.icon === b[index].icon &&
+        panel.description === b[index].description,
     )
   );
 };
@@ -214,11 +225,12 @@ export type AgentTypeOption = {
   label: string;
 };
 
-// The agent-type sub-menu options: Claude, pi (gated), and each registered
-// terminal-agent program. No bare "Terminal" agent type — terminal creation
-// belongs to the dedicated "New terminal" row.
+// The agent-type sub-menu options: Claude, pi, and each registered terminal-agent
+// program. No bare "Terminal" agent type — terminal creation belongs to the
+// dedicated "New terminal" row. A registered option's label carries the "in
+// terminal" origin marker (via formatRegisteredAgentLabel) so it reads as
+// terminal-configured wherever the option is shown.
 export const buildAgentTypeOptions = (inputs: {
-  isPiAgentEnabled: boolean;
   registrations: ReadonlyArray<TerminalAgentRegistration>;
 }): ReadonlyArray<AgentTypeOption> => {
   const options: Array<AgentTypeOption> = [
@@ -229,16 +241,14 @@ export const buildAgentTypeOptions = (inputs: {
       registrationId: undefined,
       label: AGENT_TYPE_LABELS.claude,
     },
-  ];
-  if (inputs.isPiAgentEnabled) {
-    options.push({
+    {
       key: "pi",
       stored: "pi",
       agentType: "pi",
       registrationId: undefined,
       label: AGENT_TYPE_LABELS.pi,
-    });
-  }
+    },
+  ];
 
   for (const registration of inputs.registrations) {
     options.push({
@@ -246,7 +256,7 @@ export const buildAgentTypeOptions = (inputs: {
       stored: encodeRegisteredAgentType(registration.registrationId),
       agentType: "registered",
       registrationId: registration.registrationId,
-      label: registration.displayName,
+      label: formatRegisteredAgentLabel(registration.displayName),
     });
   }
   return options;
@@ -265,9 +275,7 @@ export const createAgentInLocation = async (
   subSection: SubSectionId,
   inputs: CreateAgentInputs,
 ): Promise<string | undefined> => {
-  // Any create surface can hand in a remembered "pi" type from before the pi flag
-  // was turned off — resolve the fallback here so no caller has to.
-  const agentType: AgentTypeName = resolveStoredAgentType(inputs.agentType, store.get(isPiAgentEnabledAtom));
+  const agentType: AgentTypeName = resolveStoredAgentType(inputs.agentType);
 
   // Optimistically reflect the chosen harness as the most-recently-used type so the
   // surfaces' "New {recent} agent" label updates immediately; the backend persists

@@ -48,7 +48,7 @@ export type WsSwitchTimingRecord = {
 };
 
 // The Window augmentation lives in this module rather than globals.d.ts so any
-// program that pulls the profiler in can compile it — the plugin-SDK .d.ts
+// program that pulls the profiler in can compile it — the extension-SDK .d.ts
 // rollup builds from the SDK entry alone and never sees ambient declaration files.
 declare global {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions

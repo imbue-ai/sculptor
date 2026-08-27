@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "~/api";
 import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { isSmoothStreamingEnabledAtom } from "~/common/state/atoms/smoothStreaming.ts";
-import { useAgent } from "~/common/state/hooks/useAgentHelpers.ts";
+import { useAgent } from "~/common/state/hooks/useAgent.ts";
 
 import { StreamingEngine } from "../utils/streamingEngine.ts";
 

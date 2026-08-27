@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mobile Agent Switcher — Mocks</title>
+<style>
+  :root {
+    /* Neutral dark theme (matches Sculptor: accentColor gray, appearance dark). */
+    --bg: #191919;          /* --mobile-surface-2 / gray-2 (unified surface) */
+    --raised: #212121;      /* gray-3  */
+    --raised-2: #292929;    /* gray-4  */
+    --line: #333;           /* --mobile-line-ish */
+    --line-soft: #272727;
+    --ink: #ededed;         /* gray-12 */
+    --ink-2: #b4b4b4;       /* gray-11 */
+    --ink-3: #7c7c7c;       /* gray-10 */
+    --ink-4: #555;
+    --dot-idle: #3f3f3f;    /* inactive pager dot */
+    --active: #9a9a9a;      /* active pager dot (accent-9 = gray-9, brightened a touch) */
+    --running: #3fb950;     /* status: running */
+    --attention: #d6a020;   /* status: needs input */
+    --error: #e5534b;       /* status: error */
+    --page: #0d0d0d;        /* area around the phones */
+    --radius: 14px;
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font);
+    margin: 0;
+    padding: 32px 20px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-head { max-width: 1100px; margin: 0 auto 28px; }
+  .page-head h1 { font-size: 22px; margin: 0 0 6px; }
+  .page-head p { color: var(--ink-2); font-size: 14px; line-height: 1.5; margin: 4px 0; max-width: 760px; }
+  .page-head code { background: var(--raised); padding: 1px 5px; border-radius: 5px; font-family: var(--mono); font-size: 12px; color: var(--ink); }
+
+  .variants { display: flex; flex-wrap: wrap; gap: 36px 48px; justify-content: center; align-items: flex-start; max-width: 1300px; margin: 0 auto; }
+  .variant { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .variant > .v-head { max-width: 380px; }
+  .v-head .tag { display: inline-block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; margin-bottom: 8px; }
+  .v-head h2 { font-size: 16px; margin: 0 0 4px; }
+  .v-head p { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 0; }
+  .phone-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+  .caption { font-size: 12px; color: var(--ink-3); text-align: center; margin-top: 8px; }
+
+  /* ---- phone frame ---- */
+  .phone {
+    width: 320px;
+    height: 600px;
+    background: var(--bg);
+    border: 1px solid #2a2a2a;
+    border-radius: 34px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.6);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .statusbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 22px 4px; font-size: 12px; color: var(--ink-2); font-weight: 600; flex: 0 0 auto; }
+  .statusbar .glyphs { letter-spacing: 2px; font-size: 10px; }
+
+  .header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px; flex: 0 0 auto;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .header .icon {
+    width: 38px; height: 38px; border: none; background: none; color: var(--ink);
+    font-size: 18px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .header .icon:hover { background: rgba(255,255,255,.05); }
+  .header .title { flex: 1; min-width: 0; text-align: center; font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header .title small { display:block; font-weight: 500; font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+
+  /* chat */
+  .chat { flex: 1; min-height: 0; overflow: hidden; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .bubble-user { align-self: flex-end; background: var(--raised-2); color: var(--ink); padding: 9px 12px; border-radius: 14px; font-size: 13px; max-width: 80%; }
+  .bubble-time { align-self: flex-end; font-size: 10px; color: var(--ink-4); margin-top: -6px; }
+  .agent-msg { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+  .agent-msg strong { color: var(--ink); }
+
+  /* input */
+  .input { flex: 0 0 auto; padding: 4px 12px; }
+  .inputbox {
+    border: 2px solid #2f2f2f; background: #1d1d1d; border-radius: 16px;
+    padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .inputbox .placeholder { color: var(--ink-3); font-size: 13px; }
+  .inputbox .inputrow { display: flex; align-items: center; }
+  .inputbox .plus { color: var(--ink-2); font-size: 18px; }
+  .inputbox .send { margin-left: auto; width: 28px; height: 28px; border-radius: 999px; background: var(--active); color: #111; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+
+  /* ===== switcher base ===== */
+  .switcher { flex: 0 0 auto; padding: 6px 12px 14px; }
+
+  /* status dot helper */
+  .sdot { width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto; display: inline-block; background: var(--ink-3); }
+  .sdot.running { background: var(--running); }
+  .sdot.attention { background: var(--attention); }
+  .sdot.idle { background: var(--ink-3); }
+
+  /* ---- Variant A: dots + centered label ---- */
+  .swA .dots { display: flex; align-items: center; justify-content: center; gap: 4px; height: 28px; }
+  .swA .dot { border: none; background: var(--dot-idle); width: 8px; height: 8px; border-radius: 999px; padding: 0; cursor: pointer; transition: width .18s ease, background .18s ease; }
+  .swA .dot.running { background: var(--running); }
+  .swA .dot.attention { background: var(--attention); }
+  .swA .dot.active { width: 24px; background: var(--active); }
+  .swA .dot.active.running { background: var(--running); }
+  .swA .dot.active.attention { background: var(--attention); }
+  .swA .dot.new { width: 11px; height: 11px; background: transparent; border: 1.5px dashed var(--ink-4); }
+  .swA .dot.new:hover { border-color: var(--ink-2); }
+  .swA .label { text-align: center; font-size: 12.5px; color: var(--ink); margin-top: 7px; font-weight: 500; }
+  .swA .label .muted { color: var(--ink-3); font-weight: 400; }
+
+  /* ---- Variant B: segment strip ---- */
+  .swB .segments { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .swB .segments::-webkit-scrollbar { display: none; }
+  .swB .seg {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 6px; max-width: 150px;
+    border: 1px solid var(--line); background: transparent; color: var(--ink-2);
+    border-radius: 999px; padding: 7px 12px; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+  }
+  .swB .seg .name { overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+  .swB .seg.active { background: var(--raised-2); border-color: #444; color: var(--ink); font-weight: 600; }
+  .swB .seg.new { color: var(--ink-3); border-style: dashed; }
+
+  /* ---- Variant C: current-agent bar + sheet ---- */
+  .swC .peek { display: flex; justify-content: center; gap: 4px; height: 12px; margin-bottom: 6px; }
+  .swC .peek .pd { width: 6px; height: 6px; border-radius: 999px; background: var(--dot-idle); }
+  .swC .peek .pd.running { background: var(--running); }
+  .swC .peek .pd.attention { background: var(--attention); }
+  .swC .peek .pd.active { width: 16px; background: var(--active); }
+  .swC .bar {
+    width: 100%; display: flex; align-items: center; gap: 9px;
+    background: var(--raised); border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 12px; color: var(--ink); cursor: pointer; font-size: 13px;
+  }
+  .swC .bar .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .swC .bar .count { margin-left: auto; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .swC .bar .chev { color: var(--ink-3); font-size: 14px; }
+
+  /* sheet (rendered open in the 2nd phone) */
+  .sheet-scrim { position: absolute; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; }
+  .sheet {
+    width: 100%; background: var(--raised); border-top-left-radius: 18px; border-top-right-radius: 18px;
+    padding: 8px 10px 16px; border-top: 1px solid var(--line);
+  }
+  .sheet .handle { width: 36px; height: 4px; border-radius: 999px; background: #444; margin: 6px auto 10px; }
+  .sheet .sheet-title { font-size: 12px; color: var(--ink-3); padding: 2px 8px 8px; }
+  .agent-row { width: 100%; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--ink); padding: 10px 8px; border-radius: 10px; cursor: pointer; text-align: left; }
+  .agent-row:hover { background: rgba(255,255,255,.04); }
+  .agent-row.active { background: var(--raised-2); }
+  .agent-row .meta { display: flex; flex-direction: column; min-width: 0; }
+  .agent-row .meta .nm { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+  .agent-row .meta .sub { font-size: 11px; color: var(--ink-3); }
+  .agent-row .tick { margin-left: auto; color: var(--ink-2); }
+  .agent-row.new { color: var(--ink-2); }
+  .agent-row.new .plus { width: 22px; text-align: center; font-size: 17px; color: var(--ink-3); }
+  .sheet-sep { height: 1px; background: var(--line-soft); margin: 6px 8px; }
+
+  /* full-width row break + label inside the flex grid */
+  .section-label { flex: 0 0 100%; max-width: 1100px; margin: 6px auto 0; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); border-top: 1px solid var(--line-soft); padding-top: 20px; text-align: center; }
+  .section-label.muted { color: var(--ink-4); }
+
+  /* ---- Variant D: minimal current-agent pill (swipe to switch, tap to open) ---- */
+  .swD .pickerWrap { display: flex; justify-content: center; padding: 2px 0; touch-action: pan-y; }
+  .swD .picker {
+    display: inline-flex; align-items: center; gap: 7px; max-width: 82%;
+    background: var(--raised); border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 15px; color: var(--ink); font-size: 13.5px; font-weight: 600;
+    cursor: pointer; user-select: none; -webkit-user-select: none;
+    transition: background .12s ease;
+  }
+  .swD .picker:hover, .swD .picker:active { background: var(--raised-2); }
+  .swD .picker-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; will-change: transform; }
+  .swD .picker-caret { color: var(--ink-3); font-size: 12px; font-weight: 400; flex: 0 0 auto; }
+</style>
+</head>
+<body>
+  <div class="page-head">
+    <h1>Mobile Agent Switcher — exploration</h1>
+    <p>
+      Three directions for the bottom switcher on the mobile Workspace. All three free the
+      <strong>header</strong> to show just the workspace name (<code>stripe-webhooks</code>) and move the
+      <strong>agent</strong> identity down to where you switch agents. Dot/segment color encodes per-agent
+      run status (<span style="color:var(--running)">●</span> running,
+      <span style="color:var(--ink-3)">●</span> idle,
+      <span style="color:var(--attention)">●</span> needs input). The new-agent affordance is kept in each.
+    </p>
+    <p style="color:var(--ink-3)">Click the dots / segments / bar to feel the interaction. Rejected variants stay in this file as a record.</p>
+  </div>
+
+  <div class="variants">
+
+    <div class="section-label">Refined direction — from your feedback</div>
+
+    <!-- ============ VARIANT D (refined) ============ -->
+    <div class="variant">
+      <div class="v-head">
+        <span class="tag">Variant D</span>
+        <h2>Minimal swipeable name → drawer</h2>
+        <p>The active agent shown as a subtle pill with a visible <strong>⌄</strong> so it clearly reads as a
+          control. <strong>Swipe</strong> the pill left/right to switch agents; <strong>tap</strong> it to open
+          the bottom drawer (full list + New agent). Minimal, but discoverable.</p>
+      </div>
+      <div class="phone-row">
+        <!-- interactive: swipe the names, tap the centered name to open the drawer -->
+        <div class="phone">
+          <div class="statusbar"><span>9:41</span><span class="glyphs">●●● ▪▪</span></div>
+          <div class="header">
+            <button class="icon">☰</button>
+            <div class="title">stripe-webhooks</div>
+            <button class="icon">⋯</button>
+          </div>
+          <div class="chat">
+            <div class="bubble-user">Add a retry with backoff to the webhook handler</div>
+            <div class="bubble-time">9:18 AM</div>
+            <div class="agent-msg"><strong>On it.</strong> Adding an exponential-backoff retry to the webhook handler now.</div>
+          </div>
+          <div class="input">
+            <div class="inputbox">
+              <div class="placeholder">Reply…</div>
+              <div class="inputrow"><span class="plus">+</span><span class="send">↑</span></div>
+            </div>
+          </div>
+          <div class="switcher swD">
+            <div class="pickerWrap">
+              <button class="picker" type="button">
+                <span class="picker-name">Fix webhook retries</span>
+                <span class="picker-caret">⌄</span>
+              </button>
+            </div>
+            <div class="sheet-scrim" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+              <div class="sheet">
+                <div class="handle"></div>
+                <div class="sheet-title">Agents in stripe-webhooks</div>
+                <button class="agent-row"><span class="sdot running"></span><span class="meta"><span class="nm">Add idempotency keys</span><span class="sub">Running · 2m ago</span></span></button>
+                <button class="agent-row active"><span class="sdot idle"></span><span class="meta"><span class="nm">Fix webhook retries</span><span class="sub">Idle · 5m ago</span></span><span class="tick">✓</span></button>
+                <button class="agent-row"><span class="sdot attention"></span><span class="meta"><span class="nm">Investigate 500s</span><span class="sub">Needs your input</span></span></button>
+                <div class="sheet-sep"></div>
+                <button class="agent-row new"><span class="plus">+</span><span class="meta"><span class="nm">New agent</span></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- drawer-open state (static reference) -->
+        <div class="phone">
+          <div class="statusbar"><span>9:41</span><span class="glyphs">●●● ▪▪</span></div>
+          <div class="header">
+            <button class="icon">☰</button>
+            <div class="title">stripe-webhooks</div>
+            <button class="icon">⋯</button>
+          </div>
+          <div class="chat" style="opacity:.5">
+            <div class="bubble-user">Add a retry with backoff to the webhook handler</div>
+            <div class="bubble-time">9:18 AM</div>
+          </div>
+          <div class="input" style="opacity:.5">
+            <div class="inputbox"><div class="placeholder">Reply…</div><div class="inputrow"><span class="plus">+</span><span class="send">↑</span></div></div>
+          </div>
+          <div class="sheet-scrim" style="display:flex; position:absolute">
+            <div class="sheet">
+              <div class="handle"></div>
+              <div class="sheet-title">Agents in stripe-webhooks</div>
+              <button class="agent-row"><span class="sdot running"></span><span class="meta"><span class="nm">Add idempotency keys</span><span class="sub">Running · 2m ago</span></span></button>
+              <button class="agent-row active"><span class="sdot idle"></span><span class="meta"><span class="nm">Fix webhook retries</span><span class="sub">Idle · 5m ago</span></span><span class="tick">✓</span></button>
+              <button class="agent-row"><span class="sdot attention"></span><span class="meta"><span class="nm">Investigate 500s</span><span class="sub">Needs your input</span></span></button>
+              <div class="sheet-sep"></div>
+              <button class="agent-row new"><span class="plus">+</span><span class="meta"><span class="nm">New agent</span></span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Left: collapsed — the active agent as a subtle pill with a visible ⌄ (reads as tappable). Swipe the pill to switch, tap to open the drawer. Right: the drawer open.</div>
+    </div>
+
+    <div class="section-label muted">Earlier explorations — kept for record (rejected)</div>
+
+    <!-- ============ VARIANT A ============ -->
+    <div class="variant">
+      <div class="v-head">
+        <span class="tag">Variant A</span>
+        <h2>Dots + centered label</h2>
+        <p>Lightest touch — keeps today's pager dots (status-colored, active elongated) and adds the
+          active agent's name centered beneath. Dashed dot = new agent.</p>
+      </div>
+      <div class="phone-row">
+        <div class="phone">
+          <div class="statusbar"><span>9:41</span><span class="glyphs">●●● ▪▪</span></div>
+          <div class="header">
+            <button class="icon">☰</button>
+            <div class="title">stripe-webhooks</div>
+            <button class="icon">⋯</button>
+          </div>
+          <div class="chat">
+            <div class="bubble-user">Add a retry with backoff to the webhook handler</div>
+            <div class="bubble-time">9:18 AM</div>
+            <div class="agent-msg"><strong>On it.</strong> I'll wrap <code style="font-family:var(--mono);font-size:11px">handle_webhook</code> in an exponential-backoff retry (3 attempts, jitter) and only retry on 5xx / network errors. Writing the change now…</div>
+          </div>
+          <div class="input">
+            <div class="inputbox">
+              <div class="placeholder">Reply…</div>
+              <div class="inputrow"><span class="plus">+</span><span class="send">↑</span></div>
+            </div>
+          </div>
+          <div class="switcher swA" data-variant="a">
+            <div class="dots">
+              <button class="dot running" data-name="Add idempotency keys" data-status="running"></button>
+              <button class="dot active" data-name="Fix webhook retries" data-status="idle"></button>
+              <button class="dot attention" data-name="Investigate 500s" data-status="attention"></button>
+              <button class="dot new" title="New agent"></button>
+            </div>
+            <div class="label"><span class="lname">Fix webhook retries</span> <span class="muted">· sculptor</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">3 agents · agent 1 running, agent 3 needs input. Scales: one agent shows a single dot + the dashed new-agent dot.</div>
+    </div>
+
+    <!-- ============ VARIANT B ============ -->
+    <div class="variant">
+      <div class="v-head">
+        <span class="tag">Variant B</span>
+        <h2>Labeled segment strip</h2>
+        <p>Every agent's name is always visible. Horizontally-scrollable chips with a status dot; the
+          active chip is filled. Trailing dashed “+ New”. More explicit, more horizontal space.</p>
+      </div>
+      <div class="phone-row">
+        <div class="phone">
+          <div class="statusbar"><span>9:41</span><span class="glyphs">●●● ▪▪</span></div>
+          <div class="header">
+            <button class="icon">☰</button>
+            <div class="title">stripe-webhooks</div>
+            <button class="icon">⋯</button>
+          </div>
+          <div class="chat">
+            <div class="bubble-user">Add a retry with backoff to the webhook handler</div>
+            <div class="bubble-time">9:18 AM</div>
+            <div class="agent-msg"><strong>On it.</strong> Wrapping the handler in an exponential-backoff retry and only retrying on transient failures. Running the test suite next.</div>
+          </div>
+          <div class="input">
+            <div class="inputbox">
+              <div class="placeholder">Reply…</div>
+              <div class="inputrow"><span class="plus">+</span><span class="send">↑</span></div>
+            </div>
+          </div>
+          <div class="switcher swB" data-variant="b">
+            <div class="segments">
+              <button class="seg"><span class="sdot running"></span><span class="name">Add idempotency keys</span></button>
+              <button class="seg active"><span class="sdot idle"></span><span class="name">Fix webhook retries</span></button>
+              <button class="seg"><span class="sdot attention"></span><span class="name">Investigate 500s</span></button>
+              <button class="seg new">+ New</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Strip scrolls horizontally past ~3 agents; active chip auto-scrolls into view.</div>
+    </div>
+
+    <!-- ============ VARIANT C ============ -->
+    <div class="variant">
+      <div class="v-head">
+        <span class="tag">Variant C</span>
+        <h2>Current-agent bar → sheet</h2>
+        <p>A single bar shows the active agent (status · name · count · ⌄). Tap to open a bottom sheet
+          listing every agent with status &amp; last activity, plus “New agent”. Tiny dot peek hints at
+          the rest. Best when an agent count grows.</p>
+      </div>
+      <div class="phone-row">
+        <!-- collapsed state -->
+        <div class="phone" id="phoneC">
+          <div class="statusbar"><span>9:41</span><span class="glyphs">●●● ▪▪</span></div>
+          <div class="header">
+            <button class="icon">☰</button>
+            <div class="title">stripe-webhooks</div>
+            <button class="icon">⋯</button>
+          </div>
+          <div class="chat">
+            <div class="bubble-user">Add a retry with backoff to the webhook handler</div>
+            <div class="bubble-time">9:18 AM</div>
+            <div class="agent-msg"><strong>On it.</strong> Adding an exponential-backoff retry to the webhook handler now.</div>
+          </div>
+          <div class="input">
+            <div class="inputbox">
+              <div class="placeholder">Reply…</div>
+              <div class="inputrow"><span class="plus">+</span><span class="send">↑</span></div>
+            </div>
+          </div>
+          <div class="switcher swC">
+            <div class="peek"><span class="pd running"></span><span class="pd active"></span><span class="pd attention"></span></div>
+            <button class="bar" onclick="document.getElementById('sheetScrim').style.display='flex'">
+              <span class="sdot idle"></span>
+              <span class="name">Fix webhook retries</span>
+              <span class="count">2 / 3</span>
+              <span class="chev">⌄</span>
+            </button>
+          </div>
+          <!-- sheet overlay (toggled) -->
+          <div class="sheet-scrim" id="sheetScrim" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+            <div class="sheet">
+              <div class="handle"></div>
+              <div class="sheet-title">Agents in stripe-webhooks</div>
+              <button class="agent-row"><span class="sdot running"></span><span class="meta"><span class="nm">Add idempotency keys</span><span class="sub">Running · 2m ago</span></span></button>
+              <button class="agent-row active"><span class="sdot idle"></span><span class="meta"><span class="nm">Fix webhook retries</span><span class="sub">Idle · 5m ago</span></span><span class="tick">✓</span></button>
+              <button class="agent-row"><span class="sdot attention"></span><span class="meta"><span class="nm">Investigate 500s</span><span class="sub">Needs your input</span></span></button>
+              <div class="sheet-sep"></div>
+              <button class="agent-row new"><span class="plus">+</span><span class="meta"><span class="nm">New agent</span></span></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- sheet-open state (static, for reference) -->
+        <div class="phone">
+          <div class="statusbar"><span>9:41</span><span class="glyphs">●●● ▪▪</span></div>
+          <div class="header">
+            <button class="icon">☰</button>
+            <div class="title">stripe-webhooks</div>
+            <button class="icon">⋯</button>
+          </div>
+          <div class="chat" style="opacity:.5">
+            <div class="bubble-user">Add a retry with backoff to the webhook handler</div>
+            <div class="bubble-time">9:18 AM</div>
+          </div>
+          <div class="input" style="opacity:.5">
+            <div class="inputbox"><div class="placeholder">Reply…</div><div class="inputrow"><span class="plus">+</span><span class="send">↑</span></div></div>
+          </div>
+          <div class="sheet-scrim" style="display:flex; position:absolute">
+            <div class="sheet">
+              <div class="handle"></div>
+              <div class="sheet-title">Agents in stripe-webhooks</div>
+              <button class="agent-row"><span class="sdot running"></span><span class="meta"><span class="nm">Add idempotency keys</span><span class="sub">Running · 2m ago</span></span></button>
+              <button class="agent-row active"><span class="sdot idle"></span><span class="meta"><span class="nm">Fix webhook retries</span><span class="sub">Idle · 5m ago</span></span><span class="tick">✓</span></button>
+              <button class="agent-row"><span class="sdot attention"></span><span class="meta"><span class="nm">Investigate 500s</span><span class="sub">Needs your input</span></span></button>
+              <div class="sheet-sep"></div>
+              <button class="agent-row new"><span class="plus">+</span><span class="meta"><span class="nm">New agent</span></span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Left: collapsed bar (tap it to open the sheet). Right: the open sheet listing all agents.</div>
+    </div>
+
+  </div>
+
+<script>
+  // Variant A — tap a dot to make it the active (elongated) one + update the label.
+  document.querySelectorAll('.swA').forEach(function (sw) {
+    var dots = sw.querySelectorAll('.dot:not(.new)');
+    var label = sw.querySelector('.lname');
+    dots.forEach(function (d) {
+      d.addEventListener('click', function () {
+        dots.forEach(function (x) { x.classList.remove('active'); });
+        d.classList.add('active');
+        if (label && d.dataset.name) label.textContent = d.dataset.name;
+      });
+    });
+  });
+
+  // Variant B — tap a segment to activate it.
+  document.querySelectorAll('.swB').forEach(function (sw) {
+    var segs = sw.querySelectorAll('.seg:not(.new)');
+    segs.forEach(function (s) {
+      s.addEventListener('click', function () {
+        segs.forEach(function (x) { x.classList.remove('active'); });
+        s.classList.add('active');
+        s.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+      });
+    });
+  });
+
+  // Variant C — agent rows in the interactive phone close the sheet on pick.
+  document.querySelectorAll('#sheetScrim .agent-row').forEach(function (row) {
+    row.addEventListener('click', function () {
+      document.getElementById('sheetScrim').style.display = 'none';
+    });
+  });
+
+  // Variant D — minimal current-agent pill: drag/swipe to switch, tap to open drawer.
+  document.querySelectorAll('.swD').forEach(function (sw) {
+    var picker = sw.querySelector('.picker');
+    var nameEl = sw.querySelector('.picker-name');
+    var sheet = sw.querySelector('.sheet-scrim');
+    if (!picker || !nameEl) return;
+    var agents = ['Add idempotency keys', 'Fix webhook retries', 'Investigate 500s'];
+    var idx = 1;
+    var startX = null, dx = 0, dragging = false;
+
+    function slideTo(newIdx, dir) {
+      nameEl.style.transition = 'transform .13s ease, opacity .13s ease';
+      nameEl.style.transform = 'translateX(' + (dir * -22) + 'px)';
+      nameEl.style.opacity = '0';
+      window.setTimeout(function () {
+        idx = (newIdx + agents.length) % agents.length;
+        nameEl.textContent = agents[idx];
+        nameEl.style.transition = 'none';
+        nameEl.style.transform = 'translateX(' + (dir * 22) + 'px)';
+        void nameEl.offsetWidth; // reflow so the entry slide animates
+        nameEl.style.transition = 'transform .13s ease, opacity .13s ease';
+        nameEl.style.transform = 'translateX(0)';
+        nameEl.style.opacity = '1';
+      }, 130);
+    }
+
+    picker.addEventListener('pointerdown', function (e) {
+      dragging = true; startX = e.clientX; dx = 0;
+      try { picker.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    picker.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      dx = e.clientX - startX;
+      nameEl.style.transition = 'none';
+      nameEl.style.transform = 'translateX(' + Math.max(-40, Math.min(40, dx)) + 'px)';
+    });
+    picker.addEventListener('pointerup', function () {
+      if (!dragging) return; dragging = false;
+      if (dx <= -30) { slideTo(idx + 1, 1); }
+      else if (dx >= 30) { slideTo(idx - 1, -1); }
+      else if (Math.abs(dx) < 6) { if (sheet) sheet.style.display = 'flex'; nameEl.style.transform = 'translateX(0)'; }
+      else { nameEl.style.transition = 'transform .13s ease'; nameEl.style.transform = 'translateX(0)'; }
+    });
+
+    sw.querySelectorAll('.sheet-scrim .agent-row').forEach(function (row) {
+      row.addEventListener('click', function () { if (sheet) sheet.style.display = 'none'; });
+    });
+  });
+</script>
+</body>
+</html>

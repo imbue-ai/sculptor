@@ -48,11 +48,12 @@ from sculptor.services.workspace_service.setup_command_runner import SetupStateC
 from sculptor.services.workspace_service.setup_command_runner import TRUNCATION_MARKER
 from sculptor.state.chat_state import ChatMessage
 from sculptor.state.messages import Message
+from sculptor.state.workflow_state import WorkflowTaskState
 from sculptor.web.auth import UserSession
 from sculptor.web.data_types import BtwUpdate
 from sculptor.web.data_types import DependenciesStatus
+from sculptor.web.data_types import ExtensionCommandUiAction
 from sculptor.web.data_types import OpenFileUiAction
-from sculptor.web.data_types import PluginCommandUiAction
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import UserUpdateSourceTypes
 from sculptor.web.data_types import WebviewCommandUiAction
@@ -337,7 +338,7 @@ class StreamingUpdate(SerializableModel):
     btw_update: BtwUpdate | None = None
     ui_open_file_by_workspace_id: dict[WorkspaceID, OpenFileUiAction] = Field(default_factory=dict)
     ui_webview_command_by_workspace_id: dict[WorkspaceID, WebviewCommandUiAction] = Field(default_factory=dict)
-    ui_plugin_command_by_workspace_id: dict[WorkspaceID, PluginCommandUiAction] = Field(default_factory=dict)
+    ui_extension_command_by_workspace_id: dict[WorkspaceID, ExtensionCommandUiAction] = Field(default_factory=dict)
 
 
 _WorkspaceValueT = TypeVar("_WorkspaceValueT")
@@ -449,8 +450,8 @@ def project_for_scope(
         ui_webview_command_by_workspace_id=_narrow_by_workspace_id(
             update.ui_webview_command_by_workspace_id, proj.scoped_workspace_ids
         ),
-        ui_plugin_command_by_workspace_id=_narrow_by_workspace_id(
-            update.ui_plugin_command_by_workspace_id, proj.scoped_workspace_ids
+        ui_extension_command_by_workspace_id=_narrow_by_workspace_id(
+            update.ui_extension_command_by_workspace_id, proj.scoped_workspace_ids
         ),
     )
 
@@ -563,6 +564,10 @@ def stream_everything(
                 completed_message_by_task_id: dict[TaskID, dict[AgentMessageID, ChatMessage]] = {}
                 task_views_by_task_id: dict[TaskID, CodingAgentTaskView] = {}
                 task_update_state_by_task_id: dict[TaskID, TaskUpdate] = {}
+                # Workflow snapshot last put on the wire per task, so unchanged
+                # snapshots can be suppressed from subsequent updates. Absence
+                # means nothing was sent yet, so the next update carries the map.
+                sent_workflow_states_by_task_id: dict[TaskID, dict[str, WorkflowTaskState] | None] = {}
                 pr_poll_last_branch: dict[WorkspaceID, str] = {}
 
                 def _pr_poll_workspace_in_scope(workspace_id: WorkspaceID) -> bool:
@@ -598,6 +603,7 @@ def stream_everything(
                         task_views_by_task_id=task_views_by_task_id,
                         task_update_state_by_task_id=task_update_state_by_task_id,
                         processed_message_by_task_id=completed_message_by_task_id,
+                        sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
                         settings=services.settings,
                     )
 
@@ -647,6 +653,7 @@ def stream_everything(
                             task_views_by_task_id=task_views_by_task_id,
                             task_update_state_by_task_id=task_update_state_by_task_id,
                             processed_message_by_task_id=completed_message_by_task_id,
+                            sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
                             settings=services.settings,
                         )
                         # Suppress duplicate dependencies status pushes
@@ -776,6 +783,7 @@ def _convert_to_streaming_update(
     task_views_by_task_id: dict[TaskID, CodingAgentTaskView],
     task_update_state_by_task_id: dict[TaskID, TaskUpdate],
     processed_message_by_task_id: dict[TaskID, dict[AgentMessageID, ChatMessage]],
+    sent_workflow_states_by_task_id: dict[TaskID, dict[str, WorkflowTaskState] | None],
     settings: SculptorSettings,
 ) -> StreamingUpdate:
     """Converts a list of source updates into a StreamingUpdate.
@@ -795,7 +803,7 @@ def _convert_to_streaming_update(
     latest_btw_update: BtwUpdate | None = None
     updated_ui_open_file_by_workspace_id: dict[WorkspaceID, OpenFileUiAction] = {}
     updated_ui_webview_command_by_workspace_id: dict[WorkspaceID, WebviewCommandUiAction] = {}
-    updated_ui_plugin_command_by_workspace_id: dict[WorkspaceID, PluginCommandUiAction] = {}
+    updated_ui_extension_command_by_workspace_id: dict[WorkspaceID, ExtensionCommandUiAction] = {}
     messages_by_task: dict[TaskID, list[Message]] = defaultdict(list)
 
     for model in all_data:
@@ -850,8 +858,8 @@ def _convert_to_streaming_update(
         elif isinstance(model, WebviewCommandUiAction):
             updated_ui_webview_command_by_workspace_id[model.workspace_id] = model
 
-        elif isinstance(model, PluginCommandUiAction):
-            updated_ui_plugin_command_by_workspace_id[model.workspace_id] = model
+        elif isinstance(model, ExtensionCommandUiAction):
+            updated_ui_extension_command_by_workspace_id[model.workspace_id] = model
 
         elif isinstance(model, Message):
             raise TypeError("should not have Message models in streaming update")
@@ -869,6 +877,7 @@ def _convert_to_streaming_update(
         changed_task_ids=changed_task_ids,
         task_views_by_task_id=task_views_by_task_id,
         task_update_state_by_task_id=task_update_state_by_task_id,
+        sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
     )
 
     user_update = _convert_to_user_update(all_data=cast(list[UserUpdateSourceTypes | None], user_update_sources))
@@ -887,7 +896,7 @@ def _convert_to_streaming_update(
         btw_update=latest_btw_update,
         ui_open_file_by_workspace_id=updated_ui_open_file_by_workspace_id,
         ui_webview_command_by_workspace_id=updated_ui_webview_command_by_workspace_id,
-        ui_plugin_command_by_workspace_id=updated_ui_plugin_command_by_workspace_id,
+        ui_extension_command_by_workspace_id=updated_ui_extension_command_by_workspace_id,
     )
 
 
@@ -1000,6 +1009,7 @@ def _extract_changed_tasks(
     changed_task_ids: set[TaskID],
     task_views_by_task_id: dict[TaskID, CodingAgentTaskView],
     task_update_state_by_task_id: dict[TaskID, TaskUpdate],
+    sent_workflow_states_by_task_id: dict[TaskID, dict[str, WorkflowTaskState] | None],
 ) -> tuple[dict[TaskID, CodingAgentTaskView], dict[TaskID, TaskUpdate]]:
     """Extract only the changed tasks from full state to create an incremental update."""
     update_task_views_by_task_id: dict[TaskID, CodingAgentTaskView] = {}
@@ -1009,9 +1019,39 @@ def _extract_changed_tasks(
         if task_id in task_views_by_task_id:
             update_task_views_by_task_id[task_id] = task_views_by_task_id[task_id]
         if task_id in task_update_state_by_task_id:
-            update_task_update_by_task_id[task_id] = task_update_state_by_task_id[task_id]
+            task_update = task_update_state_by_task_id[task_id]
+            # The workflow map rides on every stored TaskUpdate and can grow
+            # large, so put it on the wire only when it differs from what this
+            # stream last sent; None tells the frontend to keep its current map.
+            # The stored state keeps the real map either way — suppression only
+            # affects the outgoing copy.
+            if task_id in sent_workflow_states_by_task_id and _is_same_workflow_snapshot(
+                sent_workflow_states_by_task_id[task_id], task_update.workflow_task_states
+            ):
+                task_update = task_update.model_copy(update={"workflow_task_states": None})
+            else:
+                sent_workflow_states_by_task_id[task_id] = task_update.workflow_task_states
+            update_task_update_by_task_id[task_id] = task_update
 
     return update_task_views_by_task_id, update_task_update_by_task_id
+
+
+def _is_same_workflow_snapshot(
+    last_sent: dict[str, WorkflowTaskState] | None,
+    current: dict[str, WorkflowTaskState] | None,
+) -> bool:
+    """Whether the workflow map about to go on the wire matches the last one sent.
+
+    Compares values by identity, not equality: the message fold carries
+    untouched WorkflowTaskState objects forward by reference and builds a new
+    object whenever a workflow message lands, so reference equality means "no
+    workflow message folded since the last send" at O(workflows) cost instead
+    of a structural walk of every agent entry. A false negative merely re-sends
+    the snapshot.
+    """
+    if last_sent is None or current is None:
+        return last_sent is current
+    return last_sent.keys() == current.keys() and all(last_sent[key] is current[key] for key in current)
 
 
 def _empty_update_queue(

@@ -14,9 +14,9 @@ panel's OWN embedded viewer rather than a page-wide active diff. The discard
 controls only render in the Uncommitted scope, so tests select the Uncommitted
 scope through the picker before discarding.
 
-The Changes panel is seeded into the (collapsed-by-default) left section, so
-opening it reveals it there while the agent chat stays mounted in the center
-section. Tests that observe a chat message after a panel action (the commit
+The Changes panel is seeded into the left section, so opening it reveals it there
+while the agent chat stays mounted in the center section. Tests that observe a
+chat message after a panel action (the commit
 button) read the still-mounted center chat.
 
 The scope picker also drives the scope-dependent diff modes (HEAD-vs-working in
@@ -39,6 +39,7 @@ from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.diff_viewer import ensure_unified_view
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -51,6 +52,28 @@ _WRITE_FILE_PROMPT = """\
 fake_claude:write_file `{
   "file_path": "hello.py",
   "content": "print('hello')\\n"
+}`"""
+
+# Writes an uncommitted nested tree so the Changes tree shows a "src" folder row
+# with a nested "components" folder — enough depth to collapse a folder.
+_NESTED_CHANGES_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "src/App.tsx",
+        "content": "export const App = () => null;\\n"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "src/components/Header.tsx",
+        "content": "export const Header = () => null;\\n"
+      }
+    }
+  ]
 }`"""
 
 # Create a feature branch, write+commit app.py, then edit it without committing,
@@ -461,6 +484,40 @@ def _select_all_scope(changes_panel: PlaywrightChangesPanelElement) -> None:
     expect(scope_all).to_be_visible()
     scope_all.click()
     expect(scope_all).to_have_attribute("data-state", "on")
+
+
+@user_story("to return to a workspace and find the changes tree collapsed the way I left it")
+def test_reentry_preserves_changes_tree_collapse(sculptor_instance_: SculptorInstance) -> None:
+    """Re-entering a workspace keeps a folder the user collapsed in the Changes tree collapsed.
+
+    The Changes tree auto-expands every folder when it first appears, but a folder
+    the user then collapses must stay collapsed across a workspace switch — the
+    panel remounting must not re-expand it.
+    """
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(
+        page, prompt=_NESTED_CHANGES_PROMPT, workspace_name="Changes Tree Collapse A"
+    )
+    wait_for_completed_message_count(chat_panel=task_page.get_chat_panel(), expected_message_count=2)
+    section_root = open_panel(page, "changes", sub_section="left")
+    changes_panel = get_changes_panel_in(section_root, page)
+
+    # src/ auto-expands when the changes tree first appears; collapse it.
+    src_row = changes_panel.get_changes_tree().get_tree_rows().filter(has_text="src").first
+    expect(src_row).to_have_attribute("aria-expanded", "true")
+    src_row.click()
+    expect(src_row).to_have_attribute("aria-expanded", "false")
+
+    # Switch to a second workspace, then return to A.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Changes Tree Collapse B")
+    navigate_to_workspace(page, "Changes Tree Collapse A")
+    expect(task_page.get_chat_panel()).to_be_visible(timeout=60_000)
+
+    # Reveal the Changes panel and confirm src/ is still collapsed.
+    section_root = open_panel(page, "changes", sub_section="left")
+    changes_panel = get_changes_panel_in(section_root, page)
+    src_row = changes_panel.get_changes_tree().get_tree_rows().filter(has_text="src").first
+    expect(src_row).to_have_attribute("aria-expanded", "false")
 
 
 @user_story("to see only uncommitted changes when clicking a file in the Changes panel")

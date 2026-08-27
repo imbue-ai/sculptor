@@ -155,12 +155,13 @@ def test_pi_background_task_survives_stop(sculptor_instance_: SculptorInstance) 
 
 @user_story("to see the calling agent auto-resume when its background task finishes under pi")
 def test_pi_background_task_completion_auto_resumes_the_agent(sculptor_instance_: SculptorInstance) -> None:
-    """When a background task finishes, the extension wakes the calling agent and it
-    reacts in a new turn (auto-resume): the reaction surfaces after the launch yielded."""
+    """When a background task finishes, Sculptor wakes the calling agent with its own
+    prompt (SCU-1776: pi never self-starts a run) and the reaction surfaces as a new
+    turn after the launch yielded — FakePi answers the wake prompt with its default
+    text, which is the reaction turn this asserts on."""
     page = sculptor_instance_.page
     install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
     release_path = Path(tempfile.gettempdir()) / f"pi_bg_autoresume_{uuid.uuid4().hex}"
-    ack = "BG-AUTORESUME-ACK-77311"
     try:
         task_page = start_task_and_wait_for_ready(
             sculptor_page=page,
@@ -169,7 +170,7 @@ def test_pi_background_task_completion_auto_resumes_the_agent(sculptor_instance_
             agent_type="pi",
             prompt=(
                 'fake_pi:background `{"command": "true", "label": "build", "pgid": 0, '
-                + f'"summary": "done", "wait_path": "{release_path}", "reaction": "{ack}"}}`'
+                + f'"summary": "done", "wait_path": "{release_path}"}}`'
             ),
             wait_for_agent_to_finish=True,
         )
@@ -177,5 +178,6 @@ def test_pi_background_task_completion_auto_resumes_the_agent(sculptor_instance_
     finally:
         release_path.touch()
 
-    # The task completes, the agent is woken, and its reaction turn surfaces.
-    expect(chat_panel.get_messages().filter(has_text=ack).first).to_be_visible(timeout=30000)
+    # The task completes; Sculptor sends the wake prompt and the reaction turn
+    # surfaces (FakePi's default reply to the wake).
+    expect(chat_panel.get_messages().filter(has_text="[FakePi] Task completed.").first).to_be_visible(timeout=30000)

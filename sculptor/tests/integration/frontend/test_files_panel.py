@@ -502,6 +502,39 @@ def test_file_search_folders_are_collapsible(sculptor_instance_: SculptorInstanc
     expect(app_row.first).to_be_visible()
 
 
+@user_story("to return to a workspace and find the file tree collapsed the way I left it")
+def test_reentry_preserves_file_tree_collapse(sculptor_instance_: SculptorInstance) -> None:
+    """Re-entering a workspace keeps a folder the user collapsed collapsed.
+
+    The Files tree auto-expands ancestors of files an agent is actively writing,
+    but once the agent is idle that must not re-expand a folder the user chose to
+    collapse when the panel remounts on a workspace switch. (Persisting a collapse
+    also proves expansion state survives, since both directions share one atom.)
+    """
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt=WRITE_FILES_PROMPT, workspace_name="File Collapse A")
+    wait_for_completed_message_count(chat_panel=task_page.get_chat_panel(), expected_message_count=2)
+
+    # Collapse src/ (it auto-expands while the agent writes into it). Open the panel in
+    # the left section it is seeded into — opening it against the center leaves the
+    # add-panel dropdown's overlay lingering, which then intercepts the next dialog.
+    files_panel = get_files_panel_in(open_panel(page, "files", sub_section="left"), page)
+    _ensure_folder_expanded(files_panel, "src")
+    src_row = files_panel.get_tree_rows().filter(has_text="src").first
+    src_row.click()
+    expect(src_row).to_have_attribute("aria-expanded", "false")
+
+    # Switch to a second workspace, then return to A.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="File Collapse B")
+    navigate_to_workspace(page, "File Collapse A")
+    expect(task_page.get_chat_panel()).to_be_visible(timeout=60_000)
+
+    # Reveal the Files panel and confirm src/ is still collapsed.
+    files_panel = get_files_panel_in(open_panel(page, "files", sub_section="left"), page)
+    src_row = files_panel.get_tree_rows().filter(has_text="src").first
+    expect(src_row).to_have_attribute("aria-expanded", "false")
+
+
 # --------------------------------------------------------------------------- #
 # Opening a file into the embedded viewer
 #
@@ -624,6 +657,32 @@ def test_sidebar_toggle_from_viewer_header(sculptor_instance_: SculptorInstance)
     # Show it again — the list reappears.
     layout.show_sidebar()
     expect(layout.get_list()).to_be_visible()
+
+
+@user_story("to return to a workspace and find the file-browser sidebar hidden the way I left it")
+def test_reentry_preserves_hidden_sidebar(sculptor_instance_: SculptorInstance) -> None:
+    """Hiding the Explorer sidebar stays hidden across a workspace switch.
+
+    The sidebar-visibility toggle is persisted per panel, so remounting the
+    panel on a workspace switch must not reopen a sidebar the user hid.
+    """
+    page = sculptor_instance_.page
+    task_page, files_panel = _open_files_panel_with(
+        page, WRITE_FILES_PROMPT, sub_section="left", workspace_name="Sidebar Hide A"
+    )
+    layout = files_panel.get_explorer_layout()
+    expect(layout.get_list()).to_be_visible()
+    layout.hide_sidebar()
+    expect(layout.get_list()).to_have_count(0)
+
+    # Switch to a second workspace, then return to A.
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Sidebar Hide B")
+    navigate_to_workspace(page, "Sidebar Hide A")
+    expect(task_page.get_chat_panel()).to_be_visible(timeout=60_000)
+
+    # Reveal the Files panel and confirm the sidebar is still hidden.
+    files_panel = get_files_panel_in(open_panel(page, "files", sub_section="left"), page)
+    expect(files_panel.get_explorer_layout().get_list()).to_have_count(0)
 
 
 @user_story("to always see the viewer with an empty state when nothing is selected")

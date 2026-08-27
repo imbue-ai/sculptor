@@ -40,6 +40,12 @@ type RepoSelectorProps = {
    * new-workspace modal to render a breadcrumb-style avatar crumb instead.
    */
   triggerContent?: ReactNode;
+  /**
+   * Hide the inline "repo" label in the DEFAULT trigger, showing just the icon
+   * + repo name. The mobile landing's subtle `repo · origin/main` meta line
+   * omits the label to match its mock. Ignored when `triggerContent` is set.
+   */
+  hideLabel?: boolean;
 };
 
 export const RepoSelector = ({
@@ -48,6 +54,7 @@ export const RepoSelector = ({
   onProjectChange,
   className,
   triggerContent,
+  hideLabel = false,
 }: RepoSelectorProps): ReactElement => {
   const [toast, setToast] = useState<ToastContent | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -107,7 +114,7 @@ export const RepoSelector = ({
           {triggerContent ?? (
             <Flex align="center" gap="1">
               <FolderOpenIcon size={12} />
-              <Text className={styles.selectorLabel}>repo</Text>
+              {!hideLabel && <Text className={styles.selectorLabel}>repo</Text>}
               <Text truncate size="1">
                 {displayName}
               </Text>

@@ -80,7 +80,9 @@ const ReadEntry = ({
     (e: React.MouseEvent): void => {
       e.stopPropagation();
       if (!filePath) return;
-      navigator.clipboard.writeText(filePath).catch(() => {});
+      navigator.clipboard.writeText(filePath).catch((error) => {
+        console.warn("Failed to copy file path to clipboard.", error);
+      });
       setIsCopied(true);
       clearTimeout(copyTimerRef.current);
       copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);

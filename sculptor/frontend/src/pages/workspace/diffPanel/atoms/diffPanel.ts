@@ -1,7 +1,7 @@
 import { atom } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 
-import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { asLiveWorkspace, workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import type { DiffSelection } from "~/pages/workspace/diffViewer/types/diffViewer.ts";
 import { activeWorkspaceIdAtom, isEmptyLayout, workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
@@ -301,7 +301,7 @@ export const openFileFromUiEventAtom = atom(
       return;
     }
 
-    const workspace = get(workspaceAtomFamily(workspaceId));
+    const workspace = asLiveWorkspace(get(workspaceAtomFamily(workspaceId)));
     const targetBranch = workspace?.targetBranch ?? null;
     const statusMap = getUncommittedFileStatusMap(workspaceId, targetBranch);
     const status = statusMap.get(filePath);

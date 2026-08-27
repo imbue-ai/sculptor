@@ -13,7 +13,7 @@ const piNotInstalled = {
   version: null,
   isOverride: false,
   mode: null,
-  versionRange: { minVersion: "0.80.2", maxVersion: "0.80.2", recommendedVersion: "0.80.2" },
+  versionRange: { minVersion: "0.80.10", maxVersion: "0.80.10", recommendedVersion: "0.80.10" },
   isVersionInRange: null,
 } as const;
 
@@ -71,6 +71,7 @@ const managedUpToDate: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const managedOutOfRange: DependenciesStatus = {
@@ -95,6 +96,7 @@ const managedOutOfRange: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const pathMode: DependenciesStatus = {
@@ -118,6 +120,7 @@ const pathMode: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const customMode: DependenciesStatus = {
@@ -141,6 +144,7 @@ const customMode: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const notInstalled: DependenciesStatus = {
@@ -164,6 +168,7 @@ const notInstalled: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const withInstallProgress: DependenciesStatus = {
@@ -205,6 +210,7 @@ const managedUpgradeFailed: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  voiceModels: optionalCliNotInstalled,
 };
 
 const ghInstalledAuthed: DependenciesStatus = {

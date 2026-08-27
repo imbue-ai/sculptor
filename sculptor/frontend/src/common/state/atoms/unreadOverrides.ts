@@ -1,6 +1,6 @@
 // Explicit per-agent "Mark as unread" overrides.
 //
-// Marking an agent unread (markAgentUnreadAtom) does three things:
+// Marking an agent unread (useMarkUnreadMutation) does three things:
 //   1. records an override for the agent;
 //   2. optimistically clears the agent's lastReadAt so every dot derivation
 //      (panel tab, workspace row) flips to unread immediately;
@@ -37,12 +37,9 @@
 //     lastReadAt=null keeps the dot unread on its own, and returning to the agent
 //     is a fresh activation that would clear the override anyway.
 
-import { atom } from "jotai";
-
-import { markWorkspaceAgentUnread, TaskStatus } from "../../../api";
+import { TaskStatus } from "../../../api";
 import type { AgentDotStatus } from "../../utils/statusDot.ts";
 import { getAgentDotStatus } from "../../utils/statusDot.ts";
-import { agentAtomFamily } from "./agents";
 
 // The agent fields the override lifecycle depends on. Structurally satisfied by
 // both CodingAgentTaskView and the registry's DynamicAgentInput.
@@ -124,17 +121,3 @@ export const getAgentDotStatusWithUnreadOverride = (
   const baseDotStatus = getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt, isFocused);
   return baseDotStatus === "read" && isUnreadOverrideActive(agentId, agent) ? "unread" : baseDotStatus;
 };
-
-// The user-facing "Mark as unread" action: record the override, flip the agent's
-// lastReadAt optimistically so the dot updates immediately, and persist.
-export const markAgentUnreadAtom = atom(null, (get, set, target: { workspaceId: string; agentId: string }): void => {
-  const agent = get(agentAtomFamily(target.agentId));
-  if (agent === null) {
-    return;
-  }
-  setUnreadOverride(target.agentId, agent);
-  set(agentAtomFamily(target.agentId), { ...agent, lastReadAt: null });
-  markWorkspaceAgentUnread({ path: { workspace_id: target.workspaceId, agent_id: target.agentId } }).catch(() => {
-    // Fire-and-forget: the server-authoritative value will arrive via WebSocket.
-  });
-});

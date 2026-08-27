@@ -17,7 +17,7 @@ from tests.integration.real_claude.helpers import create_workspace_and_send
 from tests.integration.real_claude.helpers import interrupt_agent
 from tests.integration.real_claude.helpers import real_claude
 from tests.integration.real_claude.helpers import send_and_wait
-from tests.integration.real_claude.helpers import wait_for_streaming_text
+from tests.integration.real_claude.helpers import wait_for_any_assistant_text
 
 
 @real_claude
@@ -118,13 +118,21 @@ def test_interrupt_during_plan_mode(sculptor_instance_: SculptorInstance) -> Non
     task_page = create_workspace_and_send(
         sculptor_instance_,
         (
-            "Enter plan mode. Write a very detailed 20-step plan for building a full-stack web application. Start the plan text with PLAN-MARKER-72045: and number each step."
+            "Enter plan mode. Write a very detailed 20-step plan for building a full-stack web "
+            + "application, with a sentence or two explaining each step."
         ),
         wait_for_finish=False,
     )
     chat_panel = task_page.get_chat_panel()
 
-    wait_for_streaming_text(chat_panel, "PLAN-MARKER-72045")
+    # Interrupt as soon as the agent has started planning. We intentionally do
+    # NOT gate on a specific marker in the streamed text: in plan mode the agent
+    # idiomatically routes the plan into a `~/.claude/plans/*.md` file plus an
+    # ExitPlanMode review panel rather than streaming the plan body as chat
+    # text, so a marker-in-text wait never fires. Any assistant output is a
+    # sufficient "planning has begun, safe to interrupt" signal; the real
+    # verification is the PLAN-RECALL context check after the interrupt.
+    wait_for_any_assistant_text(chat_panel)
 
     interrupt_agent(chat_panel)
     assert_interrupted(chat_panel)

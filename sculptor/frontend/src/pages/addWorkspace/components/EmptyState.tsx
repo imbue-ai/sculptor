@@ -13,7 +13,9 @@ export const EmptyState = (): ReactElement => {
       <Text className={styles.heading} data-testid={ElementIds.ADD_WORKSPACE_EMPTY_STATE}>
         No workspaces yet
       </Text>
-      <Text className={styles.description}>Describe what you need above to create your first workspace.</Text>
+      <Text className={styles.description}>
+        Create your first workspace with the sidebar&apos;s New Workspace button.
+      </Text>
     </Flex>
   );
 };

@@ -7,10 +7,9 @@ from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
 class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
-    """Page object for the new-workspace modal and the inline empty-first-run form.
+    """Page object for the new-workspace modal's create form.
 
-    Both surfaces share the same field testids, so the getters here drive
-    either one. The create button and prompt input are keyed by
+    The create button and prompt input are keyed by
     ``NEW_WORKSPACE_CREATE_BUTTON`` / ``NEW_WORKSPACE_PROMPT_TEXTAREA``.
     """
 

@@ -1,3 +1,4 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
@@ -5,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { CodingAgentTaskView } from "~/api";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
+import { queryClient } from "~/common/state/queryClient.ts";
 import { agentDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
@@ -51,7 +53,9 @@ const renderWithAgent = (agent: CodingAgentTaskView): ReturnType<typeof createSt
   store.set(agentAtomFamily(agent.id), agent);
 
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
-    <Provider store={store}>{children}</Provider>
+    <QueryClientProvider client={queryClient}>
+      <Provider store={store}>{children}</Provider>
+    </QueryClientProvider>
   );
   renderHook(() => useWorkspaceDynamicPanels(WORKSPACE_ID), { wrapper });
   return store;

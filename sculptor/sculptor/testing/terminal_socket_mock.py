@@ -25,6 +25,7 @@ import pytest
 from playwright.sync_api import Page
 
 from sculptor.testing.playwright_utils import full_spa_reload
+from sculptor.testing.playwright_utils import settle_first_run_offer
 from sculptor.testing.sculptor_instance import SculptorInstance
 
 # Runs before any page scripts. Only wraps WebSocket when the gate flag is set,
@@ -74,6 +75,13 @@ class TerminalSocketCapture:
             _pages_with_init_script.add(page_id)
         self._page.evaluate("localStorage.setItem('__sculptor_terminal_socket_capture', 'true')")
         full_spa_reload(self._page)
+        # The reload boots onto Home with zero workspaces (this fixture runs
+        # right after per-test cleanup), and that boot-empty snapshot
+        # auto-opens the first-run new-workspace dialog. Settle it
+        # before handing the page to the test, so the offer can't pop
+        # mid-test with a prefilled prompt (or swallow a click) at an
+        # unpredictable moment.
+        settle_first_run_offer(self._page)
 
     def uninstall(self) -> None:
         """Clear the gate flag and reload so subsequent tests get a clean page."""

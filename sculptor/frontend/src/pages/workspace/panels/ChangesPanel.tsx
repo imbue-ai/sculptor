@@ -187,6 +187,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
 
   return (
     <ExplorerLayout
+      panelId="changes"
       list={list}
       detail={(sidebarToggle) => (
         <DiffViewer

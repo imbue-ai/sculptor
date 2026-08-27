@@ -46,9 +46,11 @@ export const usePollingInterval = (options?: { intervalMs?: number; timeoutMs?: 
         if (isFetchingRef.current) return;
         isFetchingRef.current = true;
         pollFn()
-          .catch(() => {
-            // Callers handle their own errors inside pollFn.
-            // Swallow here to prevent unhandled promise rejections.
+          .catch((error) => {
+            // Callers handle their own errors inside pollFn; this catch only
+            // prevents an unhandled promise rejection. Log in case a callback
+            // rejects without handling it.
+            console.warn("Polling callback rejected; callers own error handling.", error);
           })
           .finally(() => {
             isFetchingRef.current = false;

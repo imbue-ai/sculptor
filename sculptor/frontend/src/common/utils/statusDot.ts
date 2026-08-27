@@ -103,3 +103,63 @@ export const computeWorkspaceDotStatus = <T extends AgentLike>(
 
   return { hasError, hasWaiting, hasRunning, isAllError, hasUnread };
 };
+
+/**
+ * Sort priority for a workspace in attention-first ordering (LOWER = higher
+ * up the list). Derived from the same per-agent status semantics as the status
+ * dot, so the ordering and the dot never disagree about what "needs
+ * attention" means.
+ *
+ * Tiers (a workspace takes the highest-priority tier any of its agents earns):
+ *   0  WAITING       — an agent is waiting for the user's input
+ *   1  UNACKED_ERROR — an agent errored and the user hasn't viewed it since
+ *   2  UNREAD        — an agent has an unread reply
+ *   3  RUNNING       — an agent is running / building
+ *   4  IDLE          — everything else, INCLUDING an already-viewed error
+ *
+ * An acked (already-viewed) error deliberately drops to IDLE: once you've
+ * looked at a broken workspace it stops jumping the queue. Recency ordering
+ * within the tier keeps it reachable.
+ */
+export const WORKSPACE_ATTENTION_TIER = {
+  WAITING: 0,
+  UNACKED_ERROR: 1,
+  UNREAD: 2,
+  RUNNING: 3,
+  IDLE: 4,
+} as const;
+
+export type WorkspaceAttentionTier = (typeof WORKSPACE_ATTENTION_TIER)[keyof typeof WORKSPACE_ATTENTION_TIER];
+
+const isErrorStatus = (status: TaskStatus): boolean =>
+  status === TaskStatus.ERROR || status === TaskStatus.REQUEST_ERROR;
+
+export const getWorkspaceAttentionRank = <T extends AgentLike>(agents: ReadonlyArray<T>): WorkspaceAttentionTier => {
+  const activeAgents = agents.filter((agent) => !agent.isDeleted && !agent.isArchived);
+  if (activeAgents.length === 0) {
+    return WORKSPACE_ATTENTION_TIER.IDLE;
+  }
+
+  // Checked in priority order — the first match wins, so a workspace with both
+  // a waiting agent and an errored one sorts as WAITING.
+  if (activeAgents.some((agent) => agent.status === TaskStatus.WAITING)) {
+    return WORKSPACE_ATTENTION_TIER.WAITING;
+  }
+
+  // Un-acked error: errored AND not yet viewed since the failing update. A
+  // read REQUEST_ERROR has already resolved away from "error" (see
+  // getAgentDotStatus); a read full ERROR stays red but is no longer urgent,
+  // so it falls through to IDLE below.
+  if (activeAgents.some((agent) => isErrorStatus(agent.status) && hasUnreadUpdate(agent.lastReadAt, agent.updatedAt))) {
+    return WORKSPACE_ATTENTION_TIER.UNACKED_ERROR;
+  }
+
+  if (activeAgents.some((agent) => getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt) === "unread")) {
+    return WORKSPACE_ATTENTION_TIER.UNREAD;
+  }
+
+  if (activeAgents.some((agent) => agent.status === TaskStatus.RUNNING || agent.status === TaskStatus.BUILDING)) {
+    return WORKSPACE_ATTENTION_TIER.RUNNING;
+  }
+  return WORKSPACE_ATTENTION_TIER.IDLE;
+};

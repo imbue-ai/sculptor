@@ -521,12 +521,52 @@ Comments can quickly become outdated, leading to confusion rather than clarity. 
 
 ### State management
 
+**State ownership (the rule everything below follows):** every server fact has exactly one written store. A second store may hold that fact only as a derived projection with a single writer (a mirror), never via dual-writes at call sites. Every optimistic write must name its healing mechanism: "the WS delivers the authoritative value" is valid only for *success* (the server changed, so a delta frame arrives) — failure paths must roll back everything `onMutate` touched, and a rollback must yield to any authoritative write that interleaved. Push-fed cache keys neutralize fetch-cache policy (`queryFn: skipToken`, pinned `gcTime`). One operation, one implementation. The review rules in [`docs/development/review/sculptor.md`](../review/sculptor.md) (`no_dual_store_writes` and neighbors) spell out what reviewers reject; the canonical implementations live in `src/common/state/mutations/` and `src/common/state/hooks/useAgentQueryMirror.ts`.
+
 We use [Jotai](https://jotai.org/) for managing our persistent, shared, or global state — chosen for its small API and bottom-up atom composition. Read the [Jotai docs](https://jotai.org/docs) if you're unfamiliar with it.
 
 General guidelines:
 * When possible, use `useAtomValue` or `useSetAtom` over `useAtom`.
 * Use `useState` if that state exists only within a component.
 * Avoid accessing more state than necessary. For example, if you only need the `userId` create an atom like the following `atom<string>((get) => get(userAtom)!.userId);` to only access the information you need and prevent unnecessary re-renders.
+
+### WebSocket-fed TanStack Query state (agents)
+
+Agent state lives in the TanStack Query cache as a **push-fed store**, not a fetch cache. The flow is single-writer, one direction:
+
+```
+WS stream ──▶ syncAgentsToQueryCache ──▶ query cache ──▶ useAgent / useAgentIds
+mutations ──▶ optimistic setQueryData ──┘        └──▶ useAgentQueryMirror ──▶ legacy Jotai atoms
+```
+
+* The WS bridge (`syncAgentsToQueryCache` in `queryClient.ts`) is the only writer of authoritative state; it also bumps a per-agent **sync version** that mutations use for rollback.
+* Because nothing ever fetches, cache behaviors must be explicitly neutralized: subscription hooks use `queryFn: skipToken` (never a no-op queryFn — it fakes a successful fetch), and the agent keys are pinned with `gcTime: Infinity` (the stream sends deltas; an evicted entry would never come back until the agent next changes).
+* Legacy Jotai readers are served by `useAgentQueryMirror`, the one place that writes the Jotai agent atoms. Never write `agentAtomFamily`/`agentIdsAtom` directly.
+
+Server-mutating operations (POST/PUT/PATCH/DELETE) that optimistically update the UI use `useMutation`, with the shared helpers in `src/common/state/mutations/`:
+
+```typescript
+export const useMyRenameMutation = (workspaceId: string) =>
+  useMutation({
+    mutationFn: (vars: { agentId: string; newTitle: string }) =>
+      myApiCall({ path: { workspace_id: workspaceId, agent_id: vars.agentId }, body: { title: vars.newTitle } }),
+    // Snapshot the entry + sync version, apply the optimistic update.
+    onMutate: (vars) => applyOptimisticAgentUpdate(vars.agentId, (prev) => ({ ...prev, title: vars.newTitle })),
+    // Restore the snapshot — unless a WS frame wrote the agent while the
+    // request was in flight (the frame is authoritative and must win).
+    onError: (_e, vars, ctx) => {
+      rollbackOptimisticAgentUpdate(vars.agentId, ctx);
+    },
+    // No onSuccess — a successful mutation changes the agent server-side, so
+    // the WS stream delivers the authoritative value.
+  });
+```
+
+Key rules:
+* Use `applyOptimisticAgentUpdate` / `rollbackOptimisticAgentUpdate` rather than hand-rolling snapshots: the version check is what stops a failed request's stale snapshot from clobbering a newer WS frame.
+* A rollback must undo *everything* `onMutate` did — if the update records side state (e.g. the unread override), the error path clears it too.
+* Never write the cache in `onSuccess`, and don't expect the WS to correct a *failed* mutation: the stream only sends changed agents, so a failure with no rollback leaves the optimistic value on screen forever.
+* See `src/common/state/mutations/` for the canonical implementations.
 
 ### Hooks
 

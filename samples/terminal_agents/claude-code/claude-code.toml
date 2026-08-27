@@ -4,7 +4,7 @@
 # delete (deleting it sticks — it is not re-installed). The registration id
 # is this file's name ("claude-code"); renaming the file changes the id.
 
-display_name = "Claude CLI"
+display_name = "Claude"
 
 # The launch command runs in the agent's login shell. Two kinds of variables
 # are substituted in launch_command / resume_command_template:

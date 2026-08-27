@@ -17,6 +17,7 @@ type FolderStateKey = "expandedFolders" | "changesExpandedFolders";
 const DEFAULT_FILE_BROWSER_STATE: FileBrowserState = {
   expandedFolders: [],
   changesExpandedFolders: [],
+  changesAutoExpandedFolders: [],
   viewMode: "tree",
   searchQuery: "",
   searchOpen: false,

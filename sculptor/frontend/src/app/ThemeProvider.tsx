@@ -8,6 +8,7 @@ import { useResolvedTheme } from "~/common/state/hooks/useResolvedTheme.ts";
 import { useThemeBuilderSettings } from "~/common/state/hooks/useThemeBuilder.ts";
 import { generateColorScale, isValidHex } from "~/common/theme/generateColorScale.ts";
 import { getColorScale, resolveGrayColor } from "~/common/theme/radixColorHexMap.ts";
+import { syncStatusBarThemeColor } from "~/common/theme/statusBarThemeColor.ts";
 
 /**
  * Maps a ColorSettingKey to the CSS variable prefix used by Radix.
@@ -183,6 +184,16 @@ export const ImbueTheme = ({ children }: PropsWithChildren): ReactElement => {
     });
   }, [appearance]);
 
+  const themeRootRef = useRef<HTMLDivElement>(null);
+
+  // Declared after the effect above so the root theme class is already
+  // corrected when the status bar color is computed from the live CSS vars.
+  useLayoutEffect(() => {
+    if (themeRootRef.current !== null) {
+      syncStatusBarThemeColor(themeRootRef.current);
+    }
+  }, [appearance, settings]);
+
   return (
     <RadixTheme
       accentColor={settings.accentColor}
@@ -193,7 +204,11 @@ export const ImbueTheme = ({ children }: PropsWithChildren): ReactElement => {
       scaling={settings.scaling}
       style={fontStyles}
     >
-      <div style={overrideStyles}>{children}</div>
+      {/* Hex overrides land on this div (not the Radix root), so it is
+          also where the status bar color must be read from. */}
+      <div ref={themeRootRef} style={overrideStyles}>
+        {children}
+      </div>
     </RadixTheme>
   );
 };

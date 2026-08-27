@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import type { ComponentType } from "react";
 
-import { pluginHomeViewsAtom } from "~/plugins/pluginRegistry.ts";
+import { extensionHomeViewsAtom } from "~/extensions/extensionRegistry.ts";
 
 /**
  * Reserved id of the built-in homepage view (the recent-workspaces list). It is
@@ -13,7 +13,7 @@ export const BUILTIN_HOME_VIEW_ID = "recent-workspaces";
 
 const BUILTIN_HOME_VIEW_TITLE = "Recent workspaces";
 
-/** A switcher entry: the built-in view plus one per registered plugin home view. */
+/** A switcher entry: the built-in view plus one per registered extension home view. */
 export type HomeViewOption = {
   id: string;
   title: string;
@@ -24,10 +24,10 @@ export type HomeViewOption = {
 /**
  * The user's selected home view, persisted to localStorage. Kept here (per
  * browser) rather than in backend user config because the set of available
- * views is itself per-browser: plugin sources live in localStorage
- * (`pluginSourcesAtom`), so a backend-synced selection would routinely point at
- * a plugin not installed on another device. `getOnInit: true` mirrors the
- * plugin-source atoms so the very first read returns the persisted value.
+ * views is itself per-browser: extension sources live in localStorage
+ * (`extensionSourcesAtom`), so a backend-synced selection would routinely point at
+ * an extension not installed on another device. `getOnInit: true` mirrors the
+ * extension-source atoms so the very first read returns the persisted value.
  */
 export const selectedHomeViewAtom = atomWithStorage<string>(
   "sculptor-selected-home-view",
@@ -36,16 +36,16 @@ export const selectedHomeViewAtom = atomWithStorage<string>(
   { getOnInit: true },
 );
 
-/** Options shown in the switcher: the built-in view first, then plugin views. */
+/** Options shown in the switcher: the built-in view first, then extension views. */
 export const homeViewOptionsAtom = atom<ReadonlyArray<HomeViewOption>>((get) => {
-  const pluginViews = get(pluginHomeViewsAtom);
+  const extensionViews = get(extensionHomeViewsAtom);
   return [
     { id: BUILTIN_HOME_VIEW_ID, title: BUILTIN_HOME_VIEW_TITLE },
-    // Drop any plugin view that claims the reserved built-in id, so option ids
+    // Drop any extension view that claims the reserved built-in id, so option ids
     // stay unique — a duplicate would mean duplicate React keys and duplicate
     // SegmentedControl values, which breaks selection. Registration also rejects
     // this id (see registerHomeView), so this is a defensive second guard.
-    ...pluginViews
+    ...extensionViews
       .filter((view) => view.id !== BUILTIN_HOME_VIEW_ID)
       .map((view) => ({ id: view.id, title: view.title, icon: view.icon })),
   ];
@@ -53,8 +53,8 @@ export const homeViewOptionsAtom = atom<ReadonlyArray<HomeViewOption>>((get) => 
 
 /**
  * Resolves the selection against what is actually available, falling back to the
- * built-in view when the stored id is gone (e.g. its plugin was unloaded). Pure
- * so the fallback rule is unit-testable without Jotai or the plugin registry.
+ * built-in view when the stored id is gone (e.g. its extension was unloaded). Pure
+ * so the fallback rule is unit-testable without Jotai or the extension registry.
  */
 export const resolveEffectiveHomeViewId = (selectedId: string, availableIds: ReadonlyArray<string>): string =>
   availableIds.includes(selectedId) ? selectedId : BUILTIN_HOME_VIEW_ID;
