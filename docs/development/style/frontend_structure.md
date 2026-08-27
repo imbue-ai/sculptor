@@ -35,7 +35,7 @@ src/
 ├── components/   # UI shared by 2+ surfaces (CommandPalette, addRepo, kit widgets)
 ├── common/       # shared non-UI: state/, hooks/, utils/, keybindings/, theme/
 ├── api/          # generated client — never hand-edited
-├── plugins/      # plugin SDK and runtime
+├── extensions/   # extension SDK and runtime
 ├── electron/     # main-process bridge
 ├── styles/       # global styles and design tokens
 └── stories/      # Storybook stories, mirroring src/ paths

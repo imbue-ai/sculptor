@@ -22,9 +22,11 @@ import {
   workspaceAgentIdsAtomFamily,
 } from "~/common/state/agentPanelPlacement.ts";
 import { viewedAgentIdAtom } from "~/common/state/atoms/viewedAgent.ts";
+import { setAgentForWorkspaceAtom } from "~/common/state/atoms/workspaces.ts";
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
 import { useRegisterCommandAction } from "~/components/commandPalette/utils/commandActions.ts";
 import { seedFirstVisitTerminal } from "~/pages/workspace/layout/atoms/addPanel.ts";
+import { defaultLayoutAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
 import {
   isEmptyLayout,
   switchActiveWorkspaceAtom,
@@ -37,6 +39,7 @@ import { buildDefaultWorkspaceLayout } from "~/pages/workspace/layout/persistenc
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { makeAgentPanelId, makeTerminalPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 import type { PanelId } from "~/pages/workspace/layout/types/section.ts";
+import { seedWorkspaceFromDefault } from "~/pages/workspace/layout/utils/layoutApply.ts";
 
 import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
 
@@ -67,6 +70,7 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; agentI
   const bumpRingNonce = useSetAtom(activeSectionRingNonceAtom);
   const activateAgentPanel = useSetAtom(activateAgentPanelAtom);
   const ensureAgentPanelsPlaced = useSetAtom(ensureAgentPanelsPlacedAtom);
+  const setAgentForWorkspace = useSetAtom(setAgentForWorkspaceAtom);
   const { createRecentAgent } = useAddPanelActions();
 
   // Keep the registry in sync with this workspace's agents.
@@ -108,6 +112,21 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; agentI
   // sync runs from WorkspacePage off this hook's returned `viewedAgentId`.
   useMarkRead(workspaceId, viewedAgentId ?? "");
 
+  // Persist the viewed agent as this workspace's last-viewed agent so re-entry
+  // restores it. Switching agents via a panel tab flips the active panel without
+  // navigating, so the route (and therefore the persisted per-workspace agent id
+  // that WorkspaceSidebar reads on switch, and rootLoader reads on cold start)
+  // would otherwise only ever track navigations — and the re-entry activation
+  // below would snap focus back to the last-routed agent, discarding a tab-click
+  // selection. Only persist an id that belongs to THIS workspace: on the first
+  // commit of a workspace switch the panel-derived id can still name the previous
+  // workspace's agent (the same window the viewedAgentId fallback above guards).
+  useEffect(() => {
+    if (panelAgentId !== null && workspaceAgentIds.includes(panelAgentId)) {
+      setAgentForWorkspace({ wsId: workspaceId, agentId: panelAgentId });
+    }
+  }, [panelAgentId, workspaceAgentIds, workspaceId, setAgentForWorkspace]);
+
   // Switch the layout scope to this workspace, seeding the default on the
   // workspace's first visit (switchActiveWorkspaceAtom only seeds when the snapshot is
   // still empty — a restored snapshot is never clobbered). On first visit the bottom
@@ -118,10 +137,14 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; agentI
     if (isEmptyLayout(store.get(workspaceLayoutFamily(workspaceId)))) {
       const terminalIndex = seedFirstVisitTerminal(store, workspaceId);
       const terminalPanelId = makeTerminalPanelId(workspaceId, terminalIndex);
-      const defaultLayout =
+      const base =
         agentId === undefined
           ? buildAgentlessDefaultLayout(terminalPanelId)
           : buildDefaultWorkspaceLayout({ agentPanelId: makeAgentPanelId(agentId), terminalPanelId });
+      // Compose the default dynamic seeding (agent + terminal above) with whatever
+      // Layout the user set as their new-workspace default (its static panels +
+      // geometry, applied additively). System Default resolves to the plain base.
+      const defaultLayout = seedWorkspaceFromDefault(base, store.get(defaultLayoutAtom));
       switchActiveWorkspace({ workspaceId, defaultLayout });
     } else {
       switchActiveWorkspace({ workspaceId });

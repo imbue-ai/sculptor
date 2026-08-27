@@ -9,6 +9,7 @@ import { atom } from "jotai";
 import { atomFamily, selectAtom } from "jotai/utils";
 
 import { shallowArrayEqual } from "~/common/utils/shallowArrayEqual.ts";
+import type { SavedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import type { PanelId, SectionId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 
 import { activeWorkspaceIdAtom, isActiveSubSectionAtom, panelsInSubSectionAtom } from "./section.ts";
@@ -49,6 +50,17 @@ export const isMaximizedSectionAtom = atomFamily((section: SectionId) =>
 // (e.g. hiding the workspace header). Subscribers re-render only on the
 // null ↔ non-null transition, not when the maximize moves between sections.
 export const isAnySectionMaximizedAtom: Atom<boolean> = atom((get) => get(maximizedSectionAtom) !== null);
+
+// ── Pending Tidy target ─────────────────────────────────────────────────────────
+
+// The Layout a pending Tidy confirmation is scoped to; null = none open. Set right
+// after an apply — by the switcher's explicit Tidy action, or by applyLayoutAtom when
+// the applied Layout's `tidyOnApply` is set — and read by LayoutTidyConfirmation,
+// which lists the static panels that would close (applying silently when none would).
+// Transient so a reload can never strand the confirmation. Lives here rather than with
+// the UI dialog-open flags because the engine's applyLayoutAtom drives it, mirroring
+// maximizedSectionAtom.
+export const layoutTidyTargetAtom: PrimitiveAtom<SavedLayout | null> = atom<SavedLayout | null>(null);
 
 // ── Drag preview ──────────────────────────────────────────────────────────────
 

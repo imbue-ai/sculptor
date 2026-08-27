@@ -45,24 +45,35 @@ if [ -d /app/openhost-agent/skills/openhost-environment ]; then
         "$CLAUDE_CONFIG_DIR/skills/openhost-environment" || true
 fi
 
-# Install/refresh the openhost-preview-switcher frontend plugin into the local
-# plugins dir the backend serves at /plugins/local (see
-# sculptor/frontend/plugins/README.md — it is deliberately not built-in, since it
-# is OpenHost-only). The built copy ships in the frontend dist; it's ours, so
-# overwrite on every boot to track the deployed build. The guard makes this a
-# no-op for images built from branches without the plugin. Best-effort; never
-# fail the boot.
-if [ -d /app/sculptor/frontend/dist/plugins/openhost-preview-switcher ]; then
-    mkdir -p "$SCULPTOR_FOLDER/plugins" || true
-    rm -rf "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
-    cp -r /app/sculptor/frontend/dist/plugins/openhost-preview-switcher \
-        "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
+# Adopt a pre-rename drop-in directory before touching $SCULPTOR_FOLDER/extensions.
+# The backend performs this same rename on first resolve, but only when
+# extensions/ is absent — creating extensions/ here first would strand every
+# drop-in still living under the legacy plugins/ dir. Never clobbers an
+# existing extensions/ dir. Best-effort; never fail the boot.
+if [ ! -e "$SCULPTOR_FOLDER/extensions" ] && [ -d "$SCULPTOR_FOLDER/plugins" ]; then
+    mv "$SCULPTOR_FOLDER/plugins" "$SCULPTOR_FOLDER/extensions" || true
+fi
+
+# Install/refresh the openhost-preview-switcher extension into the local
+# extensions dir the backend serves at /extensions/local (see
+# sculptor/frontend/extensions/README.md — it is deliberately not built-in,
+# since it is OpenHost-only). The built copy ships in the frontend dist; it's
+# ours, so overwrite on every boot to track the deployed build. The guard makes
+# this a no-op for images built from branches without the extension.
+# Best-effort; never fail the boot.
+if [ -d /app/sculptor/frontend/dist/extensions/openhost-preview-switcher ]; then
+    mkdir -p "$SCULPTOR_FOLDER/extensions" || true
+    rm -rf "$SCULPTOR_FOLDER/extensions/openhost-preview-switcher" || true
+    cp -r /app/sculptor/frontend/dist/extensions/openhost-preview-switcher \
+        "$SCULPTOR_FOLDER/extensions/openhost-preview-switcher" || true
 else
-    # Rolled back to an image without the plugin: remove any previously
+    # Rolled back to an image without the extension: remove any previously
     # installed copy rather than keep serving a stale bundle against a host
     # whose import map / SDK may have moved on. Safe — the dir is ours and is
-    # rewritten on every boot anyway.
-    rm -rf "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
+    # rewritten on every boot anyway. Also sweep the legacy location so a
+    # pre-rename install doesn't linger if the legacy dir was never adopted.
+    rm -rf "$SCULPTOR_FOLDER/extensions/openhost-preview-switcher" \
+        "$SCULPTOR_FOLDER/plugins/openhost-preview-switcher" || true
 fi
 
 # Seed the owner's standing-instructions file ONCE, never overwriting their edits.

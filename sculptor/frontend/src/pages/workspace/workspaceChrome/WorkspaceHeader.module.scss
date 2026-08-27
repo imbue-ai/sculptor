@@ -10,6 +10,14 @@
   padding: var(--space-1) var(--space-4);
 }
 
+// Type and truncation come from the Radix <Text size weight truncate>; this
+// only adds the flex-specific min-width:0 so the title can shrink and ellipsize
+// (a flex item's default min-width:auto would otherwise let it push the rest of
+// the bar off the overflow-hidden header).
+.workspaceTitle {
+  min-width: 0;
+}
+
 // A <button>, so neutralize the UA button chrome; the inner spans carry their
 // own colors and the mono font.
 .branchSection {

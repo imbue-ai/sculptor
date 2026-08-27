@@ -192,7 +192,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | Scenario | Status | Existing integration test(s) | Integration tests to add |
 |----------|--------|------------------------------|--------------------------|
 | WS-001 | Partial | test_queued_messages.py::test_queued_message_bar_appears_and_shows_content (editor clears) | Assert the attachments preview clears after sending a message that had an image attached. |
-| WS-002 | Partial | test_queued_messages.py::test_chat_input_disabled_while_message_queued | Assert Send disabled when editor empty and a hover tooltip shows the disabled reason. |
+| WS-002 | Partial | test_queued_messages.py::test_chat_input_disabled_while_message_queued | Assert Send disabled when editor empty and a hover tooltip shows the disabled reason; and that a Pi agent with no authenticated providers replaces Send with a "Go to harness configuration" button that opens Settings → Pi. |
 | WS-005 | Missing | — | Drag files over chat input → "Drop to attach images" overlay; on drop files appear in preview list. |
 | WS-009 | Partial | test_regression_model_selection.py::test_new_agent_inherits_model_from_existing_agent | Open model selector, pick a model; assert it is highlighted and applied to the next sent message. |
 | WS-013 | Missing | — | Shift+Enter inserts a line break and editor grows; sending submits the whole multiline text as one message. |
@@ -258,7 +258,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | CHAT-043 | Partial | test_alpha_ask_user_question.py::test_alpha_auq_pill_dismissed_state | Assert the dimmed-options styling on the dismissed block. |
 | CHAT-044 | Partial | test_alpha_chat_view.py::test_debug_view_displays_blocks | Assert role, id, timestamp, and tool_use/tool_result names per message. |
 | CHAT-045 | Missing | — | Clicking a debug-view timestamp toggles between relative and absolute formats. |
-| CHAT-046 | Partial | test_pi_capability_gating.py::test_pi_model_switcher_offers_pi_models_and_accepts_a_pick; ::test_fresh_pi_agent_switcher_shows_pi_models_without_a_message | Assert the picker is disabled (with the current model) for a terminal agent; that two-or-more providers cascade into per-provider submenus while a single provider stays flat; that a Pi agent with no authenticated providers shows the "Authenticate a provider" prompt; and that a harness-rejected Pi switch leaves the selection unchanged and shows an error toast. |
+| CHAT-046 | Partial | test_pi_capability_gating.py::test_pi_model_switcher_offers_pi_models_and_accepts_a_pick; ::test_fresh_pi_agent_switcher_shows_pi_models_without_a_message | Assert the picker is disabled (with the current model) for a terminal agent; that two-or-more providers cascade into per-provider submenus while a single provider stays flat; that a Pi agent with no authenticated providers shows the picker disabled ("No models available") (including after a model had been selected — the now-unusable selection is dropped) and replaces Send with a "Go to harness configuration" button; and that a harness-rejected Pi switch leaves the selection unchanged and shows an error toast. |
 
 ### MSG
 
@@ -324,7 +324,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | PANEL-051 | Partial | test_custom_actions.py::test_create_group_from_settings; ::test_delete_group_deletes_actions_from_settings; ::test_delete_group_deletes_actions_from_panel | Assert inline group rename (Enter/blur confirms) and Escape-cancel on group create. |
 | PANEL-052 | Missing | — | Drag an action/group → drop indicator + order updates; move action between groups; built-in items not draggable. |
 | PANEL-056 | Partial | test_file_browser.py::test_split_view_toggle_persists_across_panel_reopen; ::test_line_wrap_toggle_persists_across_panel_reopen; test_panel_zones.py::test_inner_vertical_split_height_persists_after_navigation | Assert folder-expansion, scroll position, active-tab, view-mode (tree/flat), and diff-scope restored after switching tabs/files and returning. |
-| PANEL-057 | Partial | test_bundled_linear_plugin.py::test_bundled_linear_plugin_loads_and_renders | Assert the plugin-contributed panel is listed with a "plugin" badge in the Panels list (not just that it renders). |
+| PANEL-057 | Partial | test_bundled_linear_extension.py::test_bundled_linear_extension_loads_and_renders | Assert the extension-contributed panel is listed with an "extension" badge in the Panels list (not just that it renders). |
 
 ### CMDP
 
@@ -388,10 +388,10 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-034 | Partial | test_theme_builder.py::test_theme_builder_navigation; ::test_theme_builder_change_accent_color | Exercise changing appearance mode, primary font, code font, and code theme and verify the UI updates. |
 | SET-035 | Partial | test_theme_builder.py::test_theme_builder_change_accent_color; ::test_theme_builder_reset_to_defaults | Cover custom hex entry, the light/dark hex override toggle, invalid-hex-shown-red, and the Gray/Success/Warning/Info swatches. |
 | SET-036 | Missing | — | Click a radius / scaling / panel-background option and assert the live UI updates. |
-| SET-038 | Partial | test_plugin_loader.py::test_valid_plugin_loads_and_can_be_removed; ::test_plugin_source_can_be_disabled_and_re_enabled | Cover the Refresh rescan of the plugins directory and the displayed directory path. |
+| SET-038 | Partial | test_extension_loader.py::test_valid_extension_loads_and_can_be_removed; ::test_extension_source_can_be_disabled_and_re_enabled | Cover the Refresh rescan of the extensions directory and the displayed directory path. |
 | SET-039 | Partial | test_ci_babysitter.py::test_settings_selector_lists_only_driveable_harnesses | Assert the selector saves with a toast and is disabled when the babysitter is off. |
-| SET-040 | Complete | test_plugins_settings_visibility.py::test_plugins_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
-| SET-041 | Complete | test_plugin_loader.py::test_failed_plugin_can_be_retried | — |
+| SET-040 | Complete | test_extensions_settings_visibility.py::test_extensions_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
+| SET-041 | Complete | test_extension_loader.py::test_failed_extension_can_be_retried | — |
 | DEV-001 | Partial | test_tanstack_devtools_panel.py::test_tanstack_devtools_panel_mounts_with_content (panel mounts only) | Cover header Dock/Float/Close controls, floating drag + resize within viewport, docked resize-from-top-edge + pushes content up, and closing hides it. |
 
 ---
@@ -439,7 +439,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | ADDWS-005 | test_add_workspace_page.py::test_workspace_form_draft_persists_after_navigation; ::test_multiple_new_workspace_tabs_with_independent_drafts |
 | ADDWS-013 | test_worktree_create_happy_path.py::test_worktree_create_with_default_branch_name |
 | ADDWS-015 | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation; ::test_clone_mode_collision_blocks_creation |
-| ADDWS-016 | test_add_workspace_agent_type.py::test_agent_type_select_visible_with_claude_default; ::test_pi_option_gated_behind_pi_agent_flag; test_agent_type_menu.py::test_registered_terminal_agent_appears_in_menu_and_creates |
+| ADDWS-016 | test_add_workspace_agent_type.py::test_agent_type_select_visible_with_claude_default; ::test_pi_option_always_listed; test_agent_type_menu.py::test_registered_terminal_agent_appears_in_menu_and_creates |
 | ADDWS-017 | test_add_workspace_agent_type.py::test_first_agent_type_defaults_to_shared_last_used; test_agent_type_menu.py::test_agent_type_menu_creates_terminal_agent_and_remembers_type |
 | ADDWS-021 | test_worktree_create_happy_path.py::test_worktree_create_with_default_branch_name; test_add_workspace_agent_type.py::test_cmd_enter_in_workspace_name_creates_workspace |
 | ADDWS-022 | test_add_workspace_page.py::test_arrow_down_focuses_name_input_when_nothing_focused; ::test_arrow_up_focuses_name_input_when_nothing_focused |
@@ -502,7 +502,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | WS-040 | test_workspace_banner.py::test_banner_shows_diff_stats; ::test_banner_click_navigates_to_changes_all |
 | WS-041 | test_multi_agent_workspace.py::test_multiple_agent_tabs_shown_for_shared_workspace; ::test_single_agent_shows_one_agent_tab |
 | WS-044 | test_multi_agent_workspace.py::test_create_second_agent_in_existing_workspace |
-| WS-045 | test_agent_type_menu.py::test_agent_type_menu_creates_terminal_agent_and_remembers_type; ::test_agent_type_menu_gates_pi_behind_pi_agent_flag; ::test_registered_terminal_agent_appears_in_menu_and_creates |
+| WS-045 | test_agent_type_menu.py::test_agent_type_menu_creates_terminal_agent_and_remembers_type; ::test_agent_type_menu_lists_pi; ::test_registered_terminal_agent_appears_in_menu_and_creates |
 | WS-047 | test_agent_tab_context_menu.py::test_agent_context_menu_has_rename_and_delete; test_agent_diagnostics_context_menu.py::test_agent_diagnostics_disabled_without_session; ::test_agent_diagnostics_copy_session_id_and_transcript_path; ::test_agent_context_menu_copy_name_and_id |
 | WS-048 | test_agent_tab_context_menu.py::test_agent_context_menu_delete; test_multi_agent_workspace.py::test_workspace_survives_when_other_agents_remain |
 | WS-049 | test_mark_unread.py::test_mark_adjacent_tab_unread; test_read_unread_status.py::test_unread_indicator_when_switching_agents_within_workspace |
@@ -617,7 +617,6 @@ Every scenario an integration test fully covers — it performs the user action 
 | SET-013 | test_panels_settings.py::test_disable_hides_panel; ::test_reset_to_defaults_preserves_shortcuts |
 | SET-014 | test_claude_binary_installation.py::test_settings_claude_cli_section_visible; ::test_settings_mode_selector_persists; ::test_settings_managed_mode_shows_install_button |
 | SET-016 | test_claude_binary_installation.py::test_settings_git_section_visible |
-| SET-017 | test_pi_managed_install.py::test_pi_settings_section_visible_with_pi_agent_disabled |
 | SET-028 | test_telemetry_opt_out.py::test_privacy_settings_telemetry_switch; ::test_onboarding_email_with_telemetry_opt_out; ::test_onboarding_skip_account_setup |
 | SET-037 | test_theme_builder.py::test_theme_builder_component_gallery_button; ::test_theme_builder_reset_to_defaults; test_component_gallery_tab.py::test_component_gallery_opens_as_tab |
 | DEV-002 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (external anchors target=_blank + rel) |

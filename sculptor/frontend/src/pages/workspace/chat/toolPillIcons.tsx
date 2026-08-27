@@ -14,6 +14,7 @@ import {
   Sparkles,
   SquareTerminal,
   TextSearch,
+  Workflow,
   Wrench,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   NotebookEdit: NotebookPen,
   Task: Bot,
   Agent: Bot,
+  Workflow: Workflow,
 };
 
 export const getToolIcon = (toolName: string): LucideIcon => TOOL_ICONS[toolName] ?? Wrench;

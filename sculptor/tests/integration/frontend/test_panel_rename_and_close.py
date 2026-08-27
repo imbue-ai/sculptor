@@ -29,7 +29,7 @@ def test_static_panel_tab_has_no_rename_in_context_menu(sculptor_instance_: Scul
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static No Rename WS")
 
-    # Files is seeded into the (collapsed) left section, so open_panel reveals it there;
+    # Files is seeded into the left section, so open_panel reveals it there;
     # the tab and its affordances live in the left header.
     left = PlaywrightWorkspaceSection(page, "left")
     open_panel(page, "files", "left")
@@ -56,7 +56,7 @@ def test_static_panel_tab_double_click_does_not_rename(sculptor_instance_: Sculp
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static No Dblclick WS")
 
-    # Files is seeded into the (collapsed) left section, so open_panel reveals it there.
+    # Files is seeded into the left section, so open_panel reveals it there.
     left = PlaywrightWorkspaceSection(page, "left")
     open_panel(page, "files", "left")
     files_tab = left.get_panel_tab("files")
@@ -75,7 +75,7 @@ def test_static_panel_close_removes_it_from_header(sculptor_instance_: SculptorI
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static Close WS")
 
-    # Files is seeded into the (collapsed) left section, so open_panel reveals it there.
+    # Files is seeded into the left section, so open_panel reveals it there.
     left = PlaywrightWorkspaceSection(page, "left")
     open_panel(page, "files", "left")
     expect(left.get_panel_tab("files")).to_be_visible()

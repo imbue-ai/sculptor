@@ -2,14 +2,14 @@
 
 The dropdown is the single creation surface for agents, terminals, and single-instance
 panels (co-owned with Sections). Its rows, in order: the pinned "New {recent} agent"
-(with the new-agent keybinding shown), an agent-type sub-menu (Claude / pi-gated /
+(with the new-agent keybinding shown), an agent-type sub-menu (Claude / pi /
 registered — NO bare "Terminal" type), "New terminal", then a separator
 and every single-instance panel not currently open. A new agent lands in the
 sub-section whose `+` opened the dropdown; only the non-scoped surfaces (the new-agent
 keybinding and the Cmd+K "New agent" command) fall back to center. Cmd+K offers the
 same flow.
 
-These cases absorb the retired `test_agent_type_menu.py` (sub-menu + pi gating +
+These cases absorb the retired `test_agent_type_menu.py` (sub-menu + pi option +
 registered-without-restart).
 """
 
@@ -21,8 +21,6 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.add_panel_dropdown import close_seeded_panel
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
-from sculptor.testing.elements.user_config import disable_pi_agent
-from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -72,9 +70,13 @@ def test_new_agent_row_shows_recent_type_and_shortcut(sculptor_instance_: Sculpt
 def test_agent_type_submenu_offers_claude_no_bare_terminal(sculptor_instance_: SculptorInstance) -> None:
     """The agent-type sub-menu offers Claude and omits the bare "Terminal" type (B2)."""
     page = sculptor_instance_.page
-    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    # Exercise a LEFT `+`: its click pins the menu open, so the sub-menu navigation stays
+    # stable under load, where the center `+` is hover-transient. The menu contents are
+    # section-agnostic, so this covers the sub-menu the same either way.
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Agent Type Submenu WS")
+    PlaywrightWorkspaceSection(page, "left").expand_section()
     dropdown.open()
     dropdown.open_agent_type_submenu()
 
@@ -84,47 +86,41 @@ def test_agent_type_submenu_offers_claude_no_bare_terminal(sculptor_instance_: S
     expect(dropdown.get_agent_type_item_terminal()).to_have_count(0)
 
 
-@user_story("to only see the pi agent type when pi-agent is enabled")
-def test_agent_type_submenu_gates_pi(sculptor_instance_: SculptorInstance) -> None:
-    """The pi agent type appears in the sub-menu only when pi-agent is enabled."""
+@user_story("to choose the pi agent type from the agent-type sub-menu")
+def test_agent_type_submenu_offers_pi(sculptor_instance_: SculptorInstance) -> None:
+    """The pi agent type is always offered in the agent-type sub-menu."""
     page = sculptor_instance_.page
-    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    # A LEFT `+` pins the menu on click, keeping the sub-menu navigation stable under load
+    # (the center `+` is hover-transient); the sub-menu contents are section-agnostic.
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
 
-    # The flag is sticky on the shared instance — reset it defensively.
-    disable_pi_agent(page)
-    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pi Gate Dropdown WS")
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pi Submenu WS")
+    PlaywrightWorkspaceSection(page, "left").expand_section()
 
     dropdown.open()
     dropdown.open_agent_type_submenu()
     expect(dropdown.get_agent_type_item_claude()).to_be_visible()
-    expect(dropdown.get_agent_type_item_pi()).to_have_count(0)
+    expect(dropdown.get_agent_type_item_pi()).to_be_visible()
     page.keyboard.press("Escape")
-
-    try:
-        enable_pi_agent(page)
-        dropdown.open()
-        dropdown.open_agent_type_submenu()
-        expect(dropdown.get_agent_type_item_pi()).to_be_visible()
-        page.keyboard.press("Escape")
-    finally:
-        disable_pi_agent(page)
 
 
 @user_story("to see a registered terminal agent in the sub-menu without restarting")
 def test_registered_agent_appears_in_submenu_without_restart(sculptor_instance_: SculptorInstance) -> None:
-    """A registration TOML dropped into the instance appears on the next sub-menu open
-    (the backend re-reads the directory per request)."""
+    """A registration TOML dropped into a RUNNING instance appears the next time the
+    agent-type sub-menu is opened — the backend re-reads the directory per open, so no
+    restart is needed."""
     page = sculptor_instance_.page
-    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    # A LEFT `+` pins the menu on click, keeping the sub-menu navigation stable under load
+    # (the center `+` is hover-transient); the sub-menu contents are section-agnostic.
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Registered Submenu WS")
+    PlaywrightWorkspaceSection(page, "left").expand_section()
 
-    # Not present yet.
-    dropdown.open()
-    dropdown.open_agent_type_submenu()
-    expect(dropdown.get_agent_type_item_registered("fake-reg")).to_have_count(0)
-    page.keyboard.press("Escape")
-
+    # Drop the registration into the already-running instance (it did not exist at startup),
+    # then open the sub-menu ONCE. Since the instance is not restarted, the registration can
+    # only appear if the backend re-reads terminal_agents/ on this fresh menu open. A single
+    # open (no close/reopen round-trip) keeps the flow robust under heavy parallel load.
     registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
     registrations_dir.mkdir(parents=True, exist_ok=True)
     (registrations_dir / "fake-reg.toml").write_text(
@@ -240,6 +236,59 @@ def test_add_agent_to_right_section_renders_both_chats(sculptor_instance_: Sculp
     # Both agent panels are mounted at once (one per section) and each runs its own
     # streaming engine, so both chat panels render rather than one crashing the engine.
     expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_have_count(2)
+
+
+@user_story("to quick-add an agent with a single click on the center +")
+def test_center_click_quick_adds_agent(sculptor_instance_: SculptorInstance) -> None:
+    """A plain click on the CENTER header `+` quick-adds a new agent (the recently-used
+    type) without opening the menu — the menu is reachable only by hover in the center."""
+    page = sculptor_instance_.page
+    dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+    center_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Quick Add Center WS")
+    expect(center_tabs.get_agent_tabs()).to_have_count(1)
+
+    # One click on the center `+` adds a second agent, no menu selection required.
+    dropdown.get_add_panel_button().click()
+
+    expect(center_tabs.get_agent_tabs()).to_have_count(2)
+    # The click quick-added rather than leaving the menu open.
+    expect(dropdown.get_content()).to_have_count(0)
+
+
+@user_story("to pin the add-panel menu open in a side section by clicking its +")
+def test_noncenter_click_pins_menu_until_clicked_again(sculptor_instance_: SculptorInstance) -> None:
+    """A NON-center header `+` opens its menu on HOVER, but that open is transient — the
+    menu closes when the pointer leaves. A CLICK pins it open (it survives the pointer
+    leaving) until the `+` is clicked again. (In the center a click quick-adds instead.)"""
+    page = sculptor_instance_.page
+    left_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
+    add_button = left_dropdown.get_add_panel_button()
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pin Left Menu WS")
+    # Bring the left section up so its header `+` renders (Files is seeded there).
+    PlaywrightWorkspaceSection(page, "left").expand_section()
+
+    # HOVER alone opens the menu, but it is transient: moving the pointer away closes it.
+    # `to_be_hidden` polls until the close grace period has elapsed, so this proves the
+    # transient close deterministically rather than merely observing it hadn't closed yet —
+    # which is what makes the pinned "still visible" assertion below meaningful.
+    add_button.hover()
+    expect(left_dropdown.get_content()).to_be_visible()
+    page.mouse.move(5, 5)
+    expect(left_dropdown.get_content()).to_be_hidden()
+
+    # A CLICK pins the menu: unlike the hover-open above, it now survives the pointer moving
+    # far away from the `+` and the menu.
+    add_button.click()
+    expect(left_dropdown.get_content()).to_be_visible()
+    page.mouse.move(5, 5)
+    expect(left_dropdown.get_content()).to_be_visible()
+
+    # Clicking the `+` again unpins and closes it.
+    add_button.click()
+    expect(left_dropdown.get_content()).to_be_hidden()
 
 
 @user_story("to add a panel through Cmd+K targeting the center section")

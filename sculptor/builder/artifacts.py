@@ -43,6 +43,13 @@ TARGET_TO_PLATFORM_ARCH = {
 
 PLATFORM_ARCH_TO_TARGET = {v: k for (k, v) in TARGET_TO_PLATFORM_ARCH.items()}
 
+# Targets whose build may fail without holding up a release. This mirrors the
+# `allow-failure` entries in build-desktop.yml's build matrix: an arm64 runner
+# preemption should cost that one architecture, not the whole release. Keep the
+# two in sync — a target that is non-blocking in CI but required here silently
+# converts a tolerated build failure into a failed publish.
+NON_BLOCKING_TARGETS: frozenset[Target] = frozenset({Target.LINUX_ARM64})
+
 
 class BuildStage(enum.StrEnum):
     # Built artifacts are keyed by Git SHA, and have not yet been tested.

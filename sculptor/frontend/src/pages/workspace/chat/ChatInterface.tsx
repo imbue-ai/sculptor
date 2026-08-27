@@ -3,7 +3,7 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import {
@@ -15,6 +15,7 @@ import {
   sendWorkspaceAgentMessages,
   TaskStatus,
 } from "~/api";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
@@ -30,6 +31,7 @@ import { QueuedMessages } from "../queuedMessages/QueuedMessages.tsx";
 import { AskUserQuestion } from "./AskUserQuestion";
 import { chatToolDensityAtom } from "./atoms/chat.ts";
 import { useChatAgent } from "./ChatAgentContext.tsx";
+import { ChatContextMenu } from "./ChatContextMenu.tsx";
 import { ChatInput } from "./ChatInput";
 import styles from "./ChatInterface.module.scss";
 import { ChatIntro } from "./ChatIntro.tsx";
@@ -51,8 +53,7 @@ import { useScrollStateMachine } from "./scroll/useScrollStateMachine.ts";
 import { StatusPill } from "./StatusPill.tsx";
 import {
   buildToolResultMap,
-  hasOnlySubagentResults,
-  hasOnlyToolResults,
+  filterRenderableNodes,
   mergeChatAndQueuedMessages,
   omitMessagesAlreadyInChat,
 } from "./transcriptMessages.ts";
@@ -88,6 +89,8 @@ export const ChatInterface = ({
     if (!open) setToast(null);
   }, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Links the scroll container to the overlay scrollbar's `aria-controls`.
+  const scrollContainerId = useId();
 
   // Queued message promotion logic. The agent holds queued messages whenever
   // it is mid-turn — either actively running, or paused on an AskUserQuestion /
@@ -101,6 +104,7 @@ export const ChatInterface = ({
   // `pendingUserQuestion` is null (see below), so the value it sees is unchanged.
   const isAgentBusy =
     (agentStatus === TaskStatus.RUNNING && workingUserMessageId !== null) || pendingUserQuestion !== null;
+  const isMobile = useIsMobile();
   const effectiveQueuedMessages = useMemo(
     () => (isAgentBusy ? omitMessagesAlreadyInChat(queuedChatMessages, chatMessages) : []),
     [chatMessages, isAgentBusy, queuedChatMessages],
@@ -122,10 +126,7 @@ export const ChatInterface = ({
     [effectiveChatMessages],
   );
 
-  const filteredNodes = useMemo(
-    () => messageTree.filter((node) => !hasOnlyToolResults(node.message) && !hasOnlySubagentResults(node.message)),
-    [messageTree],
-  );
+  const filteredNodes = useMemo(() => filterRenderableNodes(messageTree), [messageTree]);
 
   // Build a map from filtered index to the previous filtered node (for isNewCycle detection)
   const prevNodeMap = useMemo(() => {
@@ -174,7 +175,9 @@ export const ChatInterface = ({
 
   // Set true before any programmatic scroll of the chat container so
   // ChatScrollProvider doesn't dismiss popovers on it. Cleared by
-  // useChatAutoScroll.handleScroll after it consumes the scroll event.
+  // useChatAutoScroll.handleScroll in a microtask after the flagged scroll
+  // event, so every listener of that event (including the persistence save
+  // handler) sees the classification.
   const isProgrammaticScrollRef = useRef(false);
 
   // Single owner of scroll state (authority + layout settle + suppression).
@@ -212,7 +215,14 @@ export const ChatInterface = ({
 
   // Scroll position persistence per agent
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useChatScrollPersistence(scrollContainerRef, virtualizer, agentId, filteredMessageRefs, scrollMachine);
+  useChatScrollPersistence(
+    scrollContainerRef,
+    virtualizer,
+    agentId,
+    filteredMessageRefs,
+    scrollMachine,
+    isProgrammaticScrollRef,
+  );
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);
@@ -536,103 +546,114 @@ export const ChatInterface = ({
               navigateToMatch={navigateToMatch}
             />
           )}
-          <div className={styles.scrollArea}>
-            <div
-              ref={scrollContainerRef}
-              className={styles.scrollContainer}
-              data-testid={ElementIds.ALPHA_CHAT_VIEW}
-              role="log"
-              aria-label="Chat messages"
-              tabIndex={0}
-            >
-              <div className={styles.virtualContent} style={{ height: virtualizer.getTotalSize() }}>
-                <div ref={introRef}>
-                  <ChatIntro />
-                </div>
-                {virtualizer.getVirtualItems().map((virtualItem) => {
-                  const node = filteredNodes[virtualItem.index];
-                  const prevNode = prevNodeMap.get(virtualItem.index);
-                  const isLastMessage = virtualItem.index === filteredNodes.length - 1;
-                  const isAssistant = node.message.role === ChatMessageRole.ASSISTANT;
-                  return (
-                    <div
-                      key={node.message.id}
-                      ref={virtualizer.measureElement}
-                      data-index={virtualItem.index}
-                      aria-setsize={filteredNodes.length}
-                      aria-posinset={virtualItem.index + 1}
-                      aria-live={isLastMessage && isAssistant ? "polite" : undefined}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                    >
-                      <MessageNode
-                        node={node}
-                        prevNode={prevNode}
-                        inProgressMessageId={inProgressMessageId}
-                        toolResultMap={toolResultMap}
-                        subagentMetadataMap={subagentMetadataMap}
-                        searchQuery={effectiveSearchQuery}
-                        activeSearchBlockIndex={activeMatchMessageId === node.message.id ? activeBlockIndex : -1}
-                        activeSearchOccurrence={activeMatchMessageId === node.message.id ? activeOccurrenceInBlock : -1}
-                        isLastMessage={virtualItem.index === filteredNodes.length - 1}
-                        isStreaming={isStreaming && isLastMessage && isAssistant}
-                        agentStatus={agentStatus ?? TaskStatus.RUNNING}
-                        onRetryRequest={handleRetryLastUserMessage}
-                        onOpenDiffFile={handleOpenDiffFile}
-                        messageIndex={virtualItem.index}
-                      />
-                    </div>
-                  );
-                })}
-                {/* Bottom sentinel for the smooth-streaming viewport observer.
+          <ChatContextMenu>
+            <div className={styles.scrollArea}>
+              <div
+                ref={scrollContainerRef}
+                id={scrollContainerId}
+                className={styles.scrollContainer}
+                data-testid={ElementIds.ALPHA_CHAT_VIEW}
+                role="log"
+                aria-label="Chat messages"
+                tabIndex={0}
+              >
+                <div className={styles.virtualContent} style={{ height: virtualizer.getTotalSize() }}>
+                  <div ref={introRef}>
+                    <ChatIntro />
+                  </div>
+                  {virtualizer.getVirtualItems().map((virtualItem) => {
+                    const node = filteredNodes[virtualItem.index];
+                    const prevNode = prevNodeMap.get(virtualItem.index);
+                    const isLastMessage = virtualItem.index === filteredNodes.length - 1;
+                    const isAssistant = node.message.role === ChatMessageRole.ASSISTANT;
+                    return (
+                      <div
+                        key={node.message.id}
+                        ref={virtualizer.measureElement}
+                        data-index={virtualItem.index}
+                        aria-setsize={filteredNodes.length}
+                        aria-posinset={virtualItem.index + 1}
+                        aria-live={isLastMessage && isAssistant ? "polite" : undefined}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${virtualItem.start}px)`,
+                        }}
+                      >
+                        <MessageNode
+                          node={node}
+                          prevNode={prevNode}
+                          inProgressMessageId={inProgressMessageId}
+                          toolResultMap={toolResultMap}
+                          subagentMetadataMap={subagentMetadataMap}
+                          searchQuery={effectiveSearchQuery}
+                          activeSearchBlockIndex={activeMatchMessageId === node.message.id ? activeBlockIndex : -1}
+                          activeSearchOccurrence={
+                            activeMatchMessageId === node.message.id ? activeOccurrenceInBlock : -1
+                          }
+                          isLastMessage={virtualItem.index === filteredNodes.length - 1}
+                          isStreaming={isStreaming && isLastMessage && isAssistant}
+                          agentStatus={agentStatus ?? TaskStatus.RUNNING}
+                          onRetryRequest={handleRetryLastUserMessage}
+                          onOpenDiffFile={handleOpenDiffFile}
+                          messageIndex={virtualItem.index}
+                        />
+                      </div>
+                    );
+                  })}
+                  {/* Bottom sentinel for the smooth-streaming viewport observer.
                     useSmoothStreamingViewportObserver watches this element with
                     an IntersectionObserver and disables smooth streaming when
                     it scrolls off-screen. It is pinned to the bottom of the
                     virtual content so it leaves the viewport exactly when the
                     message tail does. */}
-                <div
-                  ref={bottomSentinelRef}
-                  data-testid={ElementIds.ALPHA_CHAT_BOTTOM_SENTINEL}
-                  aria-hidden="true"
-                  className={styles.bottomSentinel}
+                  <div
+                    ref={bottomSentinelRef}
+                    data-testid={ElementIds.ALPHA_CHAT_BOTTOM_SENTINEL}
+                    aria-hidden="true"
+                    className={styles.bottomSentinel}
+                  />
+                </div>
+              </div>
+              <div className={styles.bottomBar}>
+                <JumpToBottomButton
+                  isVisible={isJumpVisible}
+                  label={jumpLabel}
+                  onClick={(): void => {
+                    exitNavigation();
+                    scrollToBottom();
+                  }}
+                  scrollContainerRef={scrollContainerRef}
+                />
+                <StatusPill
+                  agentStatus={agentStatus ?? null}
+                  isAutoCompacting={isAutoCompacting}
+                  isStreaming={isStreaming}
+                  inProgressChatMessage={smoothInProgressChatMessage}
+                  workingUserMessageId={workingUserMessageId}
+                  pendingBackgroundTaskCount={pendingBackgroundTaskCount}
                 />
               </div>
-            </div>
-            <div className={styles.bottomBar}>
-              <JumpToBottomButton
-                isVisible={isJumpVisible}
-                label={jumpLabel}
-                onClick={(): void => {
-                  exitNavigation();
-                  scrollToBottom();
-                }}
-                scrollContainerRef={scrollContainerRef}
-              />
-              <StatusPill
-                agentStatus={agentStatus ?? null}
-                isAutoCompacting={isAutoCompacting}
-                isStreaming={isStreaming}
-                inProgressChatMessage={smoothInProgressChatMessage}
-                workingUserMessageId={workingUserMessageId}
-                pendingBackgroundTaskCount={pendingBackgroundTaskCount}
+              <VerticalOverlayScrollbar
+                scrollRef={scrollContainerRef}
+                scrollContainerId={scrollContainerId}
+                thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
               />
             </div>
-            <VerticalOverlayScrollbar
-              scrollRef={scrollContainerRef}
-              thumbTestId={ElementIds.ALPHA_CHAT_SCROLLBAR_THUMB}
+          </ChatContextMenu>
+          {/* The prompt-navigator rail is a desktop-only companion to the input
+              (↑↓ keyboard nav); mobile has no hardware arrows, so it's hidden
+              there. The queued-messages strip shows on both. */}
+          {!isMobile && (
+            <PromptNavigator
+              userMessages={userMessages}
+              scrollContainerRef={scrollContainerRef}
+              activePromptIndex={activePromptIndex.index}
+              onNavigate={handlePromptNavigate}
             />
-          </div>
-          <PromptNavigator
-            userMessages={userMessages}
-            scrollContainerRef={scrollContainerRef}
-            activePromptIndex={activePromptIndex.index}
-            onNavigate={handlePromptNavigate}
-          />
+          )}
           <QueuedMessages messages={effectiveQueuedMessages} />
           {agentStatus !== TaskStatus.ERROR &&
             (pendingUserQuestion ? (
@@ -653,7 +674,7 @@ export const ChatInterface = ({
                 editorRef={editorRef}
                 agentId={agentId}
                 workspaceId={workspaceID}
-                showPromptNavHint
+                showPromptNavHint={!isMobile}
               />
             ))}
           {agentStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} agentId={agentId} />}

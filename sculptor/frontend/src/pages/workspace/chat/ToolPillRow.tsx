@@ -21,7 +21,14 @@ import styles from "./ToolPillRow.module.scss";
 import { buildPillData } from "./toolPillUtils.ts";
 import { ToolPopover } from "./ToolPopover.tsx";
 
-const POPOVER_STYLE: CSSProperties = { padding: 0, width: 560, maxHeight: 400 };
+const POPOVER_STYLE: CSSProperties = {
+  padding: 0,
+  width: 560,
+  // Cap to the viewport so the popover never overflows a narrow (mobile) screen.
+  // Desktop is unaffected: 560px is far below the cap on any normal window.
+  maxWidth: "calc(100vw - 24px)",
+  maxHeight: 400,
+};
 
 type ToolPillRowProps = {
   blocks: ReadonlyArray<ToolUseBlock | ToolResultBlock>;

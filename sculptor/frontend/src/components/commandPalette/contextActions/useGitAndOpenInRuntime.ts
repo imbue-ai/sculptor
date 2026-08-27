@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { ExternalApp, Workspace } from "../../../api";
 import { WorkspaceInitializationStrategy } from "../../../api";
 import { openPathInExternalApp } from "../../../common/openInApp/items.tsx";
+import { openInReusableTab } from "../../../common/reusableTabTarget.ts";
 import { getBackendCapabilities } from "../../../common/state/atoms/backendCapabilities.ts";
 import { chatActionsAtom } from "../../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../../common/state/atoms/prStatus.ts";
@@ -69,7 +70,7 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
       openMergeRequest: (ws): void => {
         const prStatus = store.get(prStatusAtomFamily(ws.objectId));
         const url = prStatus?.prWebUrl;
-        if (url) window.open(url, "_blank");
+        if (url) openInReusableTab(url);
       },
       openInApp: (ws, app): void => {
         const repoInfo = store.get(repoInfoAtomFamily(ws.projectId));

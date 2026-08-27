@@ -76,9 +76,7 @@ class TestRepoList:
     @respx.mock
     def test_list_empty(self, runner: CliRunner) -> None:
         _mock_session()
-        respx.get("http://localhost:5050/api/v1/projects").mock(
-            return_value=Response(200, json=[])
-        )
+        respx.get("http://localhost:5050/api/v1/projects").mock(return_value=Response(200, json=[]))
 
         result = runner.invoke(app, ["repo", "list"])
 
@@ -88,9 +86,7 @@ class TestRepoList:
     @respx.mock
     def test_list_connection_error(self, runner: CliRunner) -> None:
         _mock_session()
-        respx.get("http://localhost:5050/api/v1/projects").mock(
-            side_effect=ConnectError("Connection refused")
-        )
+        respx.get("http://localhost:5050/api/v1/projects").mock(side_effect=ConnectError("Connection refused"))
 
         result = runner.invoke(app, ["repo", "list"])
 

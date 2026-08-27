@@ -2,7 +2,7 @@ import { CircleHelpIcon, GitBranchIcon, SparklesIcon, UsersIcon } from "lucide-r
 import type { ReactElement } from "react";
 
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
-import { useAgent } from "~/common/state/hooks/useAgentHelpers";
+import { useAgent } from "~/common/state/hooks/useAgent.ts";
 import { useProject } from "~/common/state/hooks/useProjects";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 

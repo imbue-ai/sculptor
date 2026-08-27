@@ -3,7 +3,12 @@ import { useCallback } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { markSwitchStart } from "../perf/workspaceSwitchProfiler.ts";
-import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } from "../state/atoms/workspaces";
+import {
+  asLiveWorkspace,
+  setActiveTabByIdAtom,
+  setAgentForWorkspaceAtom,
+  workspaceAtomFamily,
+} from "../state/atoms/workspaces";
 
 type ImbueNavigationFunctions = {
   navigateToWorkspace: (workspaceID: string) => void;
@@ -83,9 +88,8 @@ export const useImbueLocation = (): ImbueLocationType => {
   const isSettingsRoute = /^\/settings$/.test(pathname);
   // A "workspace route" means we're viewing a specific workspace (or one of
   // its agents). "new" is never parsed as a workspace id — /ws/new is a
-  // reserved path (workspace creation lives in the new-workspace dialog, or
-  // EmptyFirstRunPage when the workspace list is empty), and the rootLoader
-  // redirects draft tabs — which have no URL — to /home.
+  // reserved path (workspace creation lives in the new-workspace dialog), and
+  // the rootLoader redirects draft tabs — which have no URL — to /home.
   const isWorkspaceRoute = /^\/ws\/(?!new\b)[^/]+/.test(pathname);
 
   // Parse the workspace + agent ids from the path. We can't use `useParams`
@@ -136,7 +140,7 @@ export const useWorkspacePageParams = (): WorkspacePageParams => {
 export const useActiveProjectID = (): string | null => {
   const params = useParams<WorkspaceURLParams>();
   const workspaceID = params.workspaceID;
-  const workspace = useAtomValue(workspaceAtomFamily(workspaceID ?? ""));
+  const workspace = asLiveWorkspace(useAtomValue(workspaceAtomFamily(workspaceID ?? "")));
   if (workspace === null) {
     return null;
   }
@@ -156,7 +160,7 @@ export type ImbueParams = {
 
 export const useImbueParams = (): ImbueParams => {
   const params = useParams<WorkspaceURLParams>();
-  const workspace = useAtomValue(workspaceAtomFamily(params.workspaceID ?? ""));
+  const workspace = asLiveWorkspace(useAtomValue(workspaceAtomFamily(params.workspaceID ?? "")));
   return {
     projectID: workspace?.projectId,
     agentId: params.id,

@@ -47,11 +47,10 @@
 // Maximized section: absolutely positioned to fill the workspace page container
 // (every ancestor up to it is static), covering the header and the rest of the grid
 // while the nav rail stays visible. Opaque background so the layout beneath (still
-// mounted) is fully hidden. Uses the app page background — the same backdrop a
-// non-maximized section shows through its transparent body — so maximizing an empty
-// section doesn't shift its background color.
+// mounted) is fully hidden. Fills with AppShell's content-area background
+// (var(--gray-2)) so maximizing an empty section doesn't shift the backdrop color.
 .maximized {
-  background: var(--color-background);
+  background: var(--gray-2);
   inset: 0;
   position: absolute;
   z-index: var(--z-sticky);

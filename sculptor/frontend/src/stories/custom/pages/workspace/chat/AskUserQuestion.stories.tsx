@@ -169,6 +169,49 @@ const MINIMAL_OPTIONS_DATA: AskUserQuestionData = {
   toolUseId: "story-tool-use-4",
 };
 
+const LONG_SCROLLABLE_DATA: AskUserQuestionData = {
+  questions: [
+    {
+      question:
+        "**Bounding a slow upstream fetch.** The dashboard load fans out to every upstream service and blocks on the slowest one, so a single slow dependency stalls the whole page. I want to add a per-request timeout with a cached/partial fallback so the page never hangs. The shared client hands back a pooled connection, so I can't safely bound one request by mutating shared state. Which scope should I take?",
+      header: "SCOPE",
+      options: [
+        {
+          label: "Full (recommended)",
+          description:
+            "Add the timeout + cached fallback, and thread the budget through every downstream call (auth, profile, metrics) so an abandoned request self-terminates. Larger blast radius: adds a timeout param across the client interface + its wrappers + mocks (~12 files).",
+        },
+        {
+          label: "Minimal",
+          description:
+            "Add the timeout + cached fallback at the page boundary only (~6 files). Prevents the hang, but a persistently-slow dependency can still tie up a bounded number of pooled connections until they expire. Leaves connection-level bounding as a follow-up.",
+        },
+        {
+          label: "Shared registry",
+          description:
+            "Reuse an in-flight-request registry so repeated loads share one bounded request instead of each issuing its own. More moving parts, but no per-load connection growth.",
+        },
+        {
+          label: "Config change",
+          description:
+            "Move the timeout into app config so it's tunable per environment without code changes, then apply it at the request boundary.",
+        },
+        {
+          label: "Rely on the client",
+          description:
+            "Lean on the HTTP client's existing timeouts and only add the fallback at the page level. Smallest change; weakest guarantee.",
+        },
+        {
+          label: "Something else",
+          description: "A different approach I'll describe.",
+        },
+      ],
+      multiSelect: false,
+    },
+  ],
+  toolUseId: "story-tool-use-long",
+};
+
 const handleSubmit = (answers: Record<string, string>): void => {
   console.log("Submitted answers:", answers);
 };
@@ -243,5 +286,11 @@ export const NoDismiss: Story = {
 export const MarkdownContent: Story = {
   args: {
     questionData: MARKDOWN_QUESTION_DATA,
+  },
+};
+
+export const LongScrollable: Story = {
+  args: {
+    questionData: LONG_SCROLLABLE_DATA,
   },
 };

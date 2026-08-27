@@ -49,6 +49,7 @@ from sculptor.testing.elements.clipboard import read_intercepted_clipboard
 from sculptor.testing.elements.clipboard import reset_intercepted_clipboard
 from sculptor.testing.elements.diff_viewer import PlaywrightDiffViewerElement
 from sculptor.testing.elements.diff_viewer import ensure_unified_view
+from sculptor.testing.elements.diff_viewer import wait_for_full_content_diff_render
 from sculptor.testing.elements.files_panel import get_files_panel_in
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -667,34 +668,6 @@ def _wait_for_decorated_diff_line(page: Page, text: str) -> None:
             );
         }""",
         arg={"testid": ElementIDs.DIFF_VIEW_UNIFIED, "text": text},
-    )
-
-
-def _wait_for_full_content_diff_render(page: Page, last_hunk_text: str) -> None:
-    """Block until Pierre's full-content render pass paints through ``last_hunk_text``.
-
-    Pierre paints the diff twice: first straight from the diff string (a
-    *partial* diff), then again once ``useFileLines`` resolves and the full
-    old/new file lines reach Pierre — the pass whose hunk rows are looked up
-    by index in those arrays. Only a non-partial diff marks its hunk
-    separators expandable, so a separator carrying ``data-expand-index`` is
-    the signature of that second pass. Its rows then stream in as Shiki
-    tokenises, so additionally wait for the ``div[data-line]`` carrying
-    ``last_hunk_text`` — pass text from the diff's LAST hunk so every hunk's
-    line-array lookups have run by the time this returns. The shadow root is
-    pierced manually because these are Pierre attributes with no Playwright
-    locator equivalent.
-    """
-    page.wait_for_function(
-        """({ testid, text }) => {
-            const view = document.querySelector(`[data-testid="${testid}"]`);
-            const shadow = view?.querySelector("diffs-container")?.shadowRoot;
-            if (!shadow?.querySelector("[data-separator][data-expand-index]")) return false;
-            return [...shadow.querySelectorAll("div[data-line]")].some(
-                (line) => line.textContent.includes(text)
-            );
-        }""",
-        arg={"testid": ElementIDs.DIFF_VIEW_UNIFIED, "text": last_hunk_text},
     )
 
 
@@ -1452,7 +1425,7 @@ def test_all_scope_diff_renders_without_error_for_committed_file(sculptor_instan
         # paints at all. Anchor instead on the full-content pass's signature —
         # an expandable separator — plus the last hunk's final deleted line, so
         # the whole risky pass has run before the captured errors are read.
-        _wait_for_full_content_diff_render(page, "return text[:max_length - 3]")
+        wait_for_full_content_diff_render(page, "return text[:max_length - 3]")
 
         # The crash message names Pierre's renderer: "renderHunks" in older
         # @pierre/diffs releases, "DiffHunksRenderer" in 1.2.x.

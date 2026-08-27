@@ -13,10 +13,11 @@
   min-height: 0;
   overflow: auto;
 
-  // `both` — wide rendered-markdown content (e.g. a large GFM table) makes
-  // this container scroll sideways, and the horizontal bar should be the
-  // same thin bar as the vertical one.
-  @include thin-scrollbar(both);
+  // Suppress the native scrollbar: a styled `::-webkit-scrollbar` renders
+  // nothing at rest under macOS overlay-scrollbar mode (it only flashes during
+  // an active scroll), so a long file shows no scroll indicator. The paired
+  // VerticalOverlayScrollbar draws a persistent DOM-based vertical bar instead.
+  @include hidden-scrollbar;
 }
 
 // Layout for the rendered-markdown view. GFM features need a few extra rules
@@ -26,6 +27,11 @@
 // border / padding / background — fine for inline code but turns a
 // multi-line fenced block into a single weirdly-styled inline blob.
 .markdownBody {
+  // Inset the rendered markdown from the scroll container's edges. Lives here
+  // rather than a Radix `p` prop so this container can be a plain <div> that
+  // reconciles with the code view's <div> across file switches (see the JSX).
+  padding: var(--space-4);
+
   table {
     border-collapse: collapse;
     margin: 0.75em 0;

@@ -38,16 +38,54 @@ does not apply — use normal `pnpm run dev` / `just frontend` there instead.
   with its own backend) are not supported on one origin: every backend would set
   the same session cookie on the same origin, and they collide.
 
+## What surrounds a preview (already wired — don't rebuild it)
+
+- **Switchboard + down-page:** `/proxy/` (no port) serves a self-contained page
+  (`openhost-preview-fallback.html`, repo root) that scans the band from the
+  browser and links to live previews. nginx serves the SAME page when a
+  `/proxy/<port>/` target is dead, with a way back and an auto-reload poll that
+  returns to the preview once its server is back.
+- **Identity meta:** each preview's index.html carries
+  `<meta name="sculptor-preview" content="<branch>@<sha>[*]">` (`*` = dirty
+  tree), injected per request by `previewIdentity` in
+  `sculptor/frontend/vite.base.config.ts` under `SCULPTOR_OPENHOST_PROXY`. A
+  tree with no `.git` reports the frontend dir it serves from instead — e.g.
+  `/app/sculptor/frontend` for a preview of the deploy image, which ships no
+  git history. The switchboard and the switcher extension show this label.
+- **Preview-switcher pill:** the `openhost-preview-switcher` extension
+  (`sculptor/frontend/extensions/`, auto-installed at boot by `openhost-run.sh`)
+  renders a bottom-left pill in the deployed app listing live previews in
+  51000-51099, and an amber badge with a way back when ON a preview. Switching
+  preserves the `#/` route.
+- **HMR keepalive:** the dev server sends a no-op custom HMR event to every
+  client every 25s (`previewHmrKeepalive` in
+  `sculptor/frontend/vite.base.config.ts`, also `SCULPTOR_OPENHOST_PROXY`-gated).
+  Without it the idle HMR websocket gets killed by the edge and Vite
+  hard-reloads the page about once a minute (and on every return from the
+  background). If "random reloads" ever reappear, check the keepalive before
+  suspecting app code.
+
 ## Run a preview
 
-Pick a free port in 51000-59999, preferring the 51000-51099 range: the
-`/proxy/` switchboard page (openhost-preview-fallback.html) quick-scans that
-range on load, so previews there are found without a full-band scan. Launch it
-**DETACHED** — do NOT use a tracked background task; this Sculptor will not
-release your turn to the user while one is alive:
+Use a port in the 51000-51099 band. The preview-switcher pill in the
+deployed app only auto-discovers that range (and the `/proxy/` switchboard page,
+openhost-preview-fallback.html, quick-scans it on load), so a preview there shows
+up without a full-band scan. A higher port (51100-59999) still works, but it will
+**not** appear in the pill — you'd reach it only via the switchboard's full-band
+scan or a direct `/proxy/<port>/` URL, so don't reach for a random high port. The
+zero-friction way to get a valid one is to let the script pick: run
+`launch-preview.sh` with **no argument** and it auto-selects a free 51000-51099
+port (printed to the log).
+
+Launch it **DETACHED** — do NOT use a tracked background task; this Sculptor will
+not release your turn to the user while one is alive:
 
     cd <frontend-dir>
     setsid bash launch-preview.sh 51042 >/tmp/vite-51042.log 2>&1 </dev/null &
+
+(or `setsid bash launch-preview.sh >/tmp/vite-preview.log 2>&1 </dev/null &` with
+no port to auto-pick a free 510xx one — then read the chosen port and the
+`ready in` line from the log.)
 
 `<frontend-dir>` is either:
 - **`/app/sculptor/frontend`** — preview the deployed UI as-is (its `node_modules`
@@ -56,9 +94,11 @@ release your turn to the user while one is alive:
   worktree has no `node_modules`, so run `pnpm install` there once first (slow),
   then launch.
 
-`launch-preview.sh <port>` sets `SCULPTOR_FRONTEND_PORT` + `SCULPTOR_OPENHOST_PROXY`
-and runs `pnpm run dev -- --base=/proxy/<port>/` (base is a native Vite flag; the
-env var only drives the OpenHost wss/HMR override). First start pre-bundles deps
+`launch-preview.sh [port]` sets `SCULPTOR_FRONTEND_PORT` + `SCULPTOR_OPENHOST_PROXY`
+and runs `pnpm run dev` — the `/proxy/<port>/` base AND the OpenHost wss/HMR
+override are both derived from those env vars in `vite.base.config.ts`, so do NOT
+pass `--base` yourself (pnpm forwards a stray `--` that Vite reads as
+end-of-options and silently drops the flag). First start pre-bundles deps
 (~tens of seconds) — watch
 `/tmp/vite-<port>.log` for `ready in`. Then open, on any logged-in browser:
 

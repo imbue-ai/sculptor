@@ -25,9 +25,8 @@ from sculptor.testing.utils import get_playwright_modifier_key
 
 
 def _layout(sculptor_instance: SculptorInstance) -> PlaywrightProjectLayoutPage:
-    # Every palette open path (sidebar Cmd+K link, keyboard shortcut) no-ops
-    # while the workspace list is still loading, and ensure_workspace_exists's
-    # momentary first-run probe misreads that window as "workspaces exist".
+    # ensure_workspace_exists's momentary empty-state probe misreads the
+    # still-loading window as "workspaces exist" and would skip its create.
     # Wait for the list before any test drives the palette.
     wait_for_workspace_list_loaded(sculptor_instance.page)
     return PlaywrightProjectLayoutPage(page=sculptor_instance.page)
@@ -156,8 +155,8 @@ def test_command_palette_keyboard_suppressed_when_overlay_open(sculptor_instance
     page = sculptor_instance_.page
     mod = get_playwright_modifier_key()
     layout = _layout(sculptor_instance_)
-    # Cmd+/ (help) and Cmd+K are suppressed in the empty first-run state, so
-    # create a workspace before exercising them.
+    # With zero workspaces Home auto-opens the new-workspace dialog, which
+    # suppresses global shortcuts while it is open — create a workspace first.
     layout.ensure_workspace_exists()
     blur_active_element(page)
 
@@ -378,7 +377,7 @@ def test_command_palette_show_panel_is_jump_only(sculptor_instance_: SculptorIns
     task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cmd+K Show Panel WS")
     left = PlaywrightWorkspaceSection(page, "left")
 
-    # First run: reveals the Files panel (seeded into the collapsed left section).
+    # First run: reveals the Files panel (seeded, open in the left section).
     palette = task_page.open_command_palette()
     palette.type_query("Show Files")
     palette.select_by_command_id("view.toggle_panel.files")
@@ -395,6 +394,32 @@ def test_command_palette_show_panel_is_jump_only(sculptor_instance_: SculptorIns
     expect(palette).not_to_be_visible()
     expect(left.get_panel_tab("files")).to_be_visible()
     expect(task_page.get_file_browser()).to_be_visible()
+
+
+@user_story("to have the palette close after I toggle a section from Cmd+K")
+def test_command_palette_section_toggle_closes_palette(sculptor_instance_: SculptorInstance) -> None:
+    # Regression lock for the view.toggle_{left,right,bottom}_panel commands: unlike
+    # the jump-only "Show X" panel reveals, the section toggles act on chrome behind
+    # the palette, so the palette must CLOSE to reveal the result. The right section
+    # starts collapsed; toggling it from Cmd+K opens it and dismisses the palette.
+    # Not @release-marked: start_task_and_wait_for_ready selects the Fake Claude model,
+    # which is gated off in packaged-release runs.
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Cmd+K Toggle Section WS")
+    right = PlaywrightWorkspaceSection(page, "right")
+
+    # Force the precondition rather than trusting the default layout: the right section
+    # must be collapsed so the toggle command below OPENS it. The command is a raw
+    # toggle, so an already-expanded section would collapse and invert the final assertion.
+    right.collapse_section()
+    expect(right.get_header()).to_have_count(0)
+
+    palette = task_page.open_command_palette()
+    palette.type_query("Toggle right section")
+    expect(palette.get_item_by_command_id("view.toggle_right_panel")).to_be_visible()
+    palette.select_by_command_id("view.toggle_right_panel")
+    expect(palette).not_to_be_visible()
+    expect(right.get_header()).to_be_visible()
 
 
 @user_story("to create and land on a new agent via the palette's Add panel flow")
@@ -424,6 +449,42 @@ def test_command_palette_add_panel_agent_create_navigates(sculptor_instance_: Sc
     expect(palette).not_to_be_visible()
     expect(tabs).to_have_count(2)
     expect(page).not_to_have_url(url_before)
+
+
+@user_story("to rename the current agent from the command palette")
+def test_command_palette_agent_rename_starts_inline_edit(sculptor_instance_: SculptorInstance) -> None:
+    # Regression lock for the palette → inline-rename focus handoff: running the
+    # agent "Rename" command must leave the tab's rename input mounted AND focused
+    # after the palette closes. The palette suppresses its close-time focus restore
+    # while a rename is pending — without that, the restore focuses whatever held
+    # focus before the palette opened, and the resulting blur cancels the rename
+    # instantly. An empty prompt creates a single waiting agent with no LLM run.
+    # Not @release-marked: the helper selects the Fake Claude model, which is
+    # gated off in packaged-release runs.
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt="", workspace_name="Cmd+K Agent Rename WS")
+
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    tabs = panel_tabs.get_panel_tabs()
+    expect(tabs).to_have_count(1)
+    task_id = task_page.get_task_id()
+
+    palette = task_page.open_command_palette()
+    # "Agent actions..." pushes the agent.actions sub-page listing the current
+    # agent's actions; the per-action command ids embed the agent's task id.
+    palette.select_by_command_id("agents.actions.open")
+    palette.select_by_command_id(f"agents.action.{task_id}.rename")
+
+    expect(palette).not_to_be_visible()
+    rename_input = panel_tabs.get_inline_rename_input()
+    expect(rename_input).to_be_visible()
+    # Focus is the load-bearing assertion: a blur cancels the rename, and a bare
+    # visibility check could pass transiently even if focus were stolen.
+    expect(rename_input).to_be_focused()
+    rename_input.fill("Palette Renamed Agent")
+    rename_input.press("Enter")
+    expect(rename_input).not_to_be_visible()
+    expect(tabs.first).to_contain_text("Palette Renamed Agent")
 
 
 @user_story("to create a new agent in the current workspace from the command palette")

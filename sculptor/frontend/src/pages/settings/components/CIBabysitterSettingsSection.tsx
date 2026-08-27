@@ -4,14 +4,15 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { type CiBabysitterConfig, ElementIds, UserConfigField } from "../../../api";
+import { formatRegisteredAgentLabel } from "../../../common/state/atoms/agentTabs.ts";
 import {
   ciBabysitterAgentAtom,
   ciBabysitterMergeConflictPromptAtom,
   ciBabysitterPipelineFailedPromptAtom,
   ciBabysitterRetryCapAtom,
   isCiBabysitterEnabledAtom,
-  isPiAgentEnabledAtom,
 } from "../../../common/state/atoms/userConfig.ts";
+import { INSTALL_PI_LABEL, usePiAgentOption } from "../../../common/state/hooks/usePiAgentOption.ts";
 import { useTerminalAgentRegistrations } from "../../../common/state/hooks/useTerminalAgentRegistrations.ts";
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
@@ -60,8 +61,8 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
   const pipelineFailedPrompt = useAtomValue(ciBabysitterPipelineFailedPromptAtom);
   const mergeConflictPrompt = useAtomValue(ciBabysitterMergeConflictPromptAtom);
   const agent = useAtomValue(ciBabysitterAgentAtom);
-  const isPiEnabled = useAtomValue(isPiAgentEnabledAtom);
   const { registrations, refetch } = useTerminalAgentRegistrations();
+  const { isPiAvailable, openPiSettings } = usePiAgentOption();
 
   // Local draft of the retry cap input, resynced during render whenever the
   // committed atom value changes (e.g. another tab edits it or a blur rejects).
@@ -122,7 +123,16 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
       >
         <Select.Root
           value={agentChoiceToSelectValue(agent)}
-          onValueChange={(value) => void commit({ agent: selectValueToAgentChoice(value) })}
+          onValueChange={(value) => {
+            // The pi item reads "Install Pi" while no usable pi is resolved;
+            // choosing it routes to Settings → Pi instead of pinning a
+            // babysitter harness that cannot launch.
+            if (value === "pi" && !isPiAvailable) {
+              openPiSettings();
+              return;
+            }
+            void commit({ agent: selectValueToAgentChoice(value) });
+          }}
           onOpenChange={(open) => {
             if (open) {
               void refetch();
@@ -134,13 +144,13 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
           <Select.Content>
             <Select.Item value="mru">Most recently used</Select.Item>
             <Select.Item value="claude">Claude</Select.Item>
-            {isPiEnabled && <Select.Item value="pi">Pi</Select.Item>}
+            <Select.Item value="pi">{isPiAvailable ? "Pi" : INSTALL_PI_LABEL}</Select.Item>
             {driveableRegistrations.map((registration) => (
               <Select.Item
                 key={registration.registrationId}
                 value={`${REGISTERED_VALUE_PREFIX}${registration.registrationId}`}
               >
-                {registration.displayName}
+                {formatRegisteredAgentLabel(registration.displayName)}
               </Select.Item>
             ))}
           </Select.Content>

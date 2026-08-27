@@ -18,6 +18,16 @@
   transition: background-color var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);
   width: 100%;
 
+  // iOS Safari auto-zooms a focused input whose font-size is < 16px, and in
+  // standalone (home-screen) mode the user can't pinch back out. Use 16px on the
+  // mobile surface so focusing the search field never zooms. Gated on
+  // html.mobileUx — the app's single mobile/desktop verdict, never set in the
+  // Electron renderer (see index.css / useLayoutMode.ts).
+  :global(html.mobileUx) & {
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- iOS auto-zoom threshold is an absolute 16px; font-size tokens scale with --scaling and aren't guaranteed >= 16px
+    font-size: 16px;
+  }
+
   &::placeholder {
     color: var(--ws-search-placeholder-color);
     transition: color var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);

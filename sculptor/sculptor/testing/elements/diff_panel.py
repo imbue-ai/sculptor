@@ -36,9 +36,6 @@ class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
     def get_unified_diff_views(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_VIEW_UNIFIED)
 
-    def get_split_view_toggle(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.DIFF_SPLIT_VIEW_TOGGLE)
-
     def get_split_view(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_VIEW_SPLIT)
 
@@ -82,20 +79,6 @@ class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
 
     def get_copy_file_path_menu_item(self) -> Locator:
         return self._page.get_by_test_id("copy-path")
-
-    def ensure_unified_mode(self) -> None:
-        split_toggle = self.get_split_view_toggle()
-        expect(split_toggle).to_be_visible()
-        if split_toggle.get_attribute("data-state") == "split":
-            split_toggle.click()
-        expect(split_toggle).to_have_attribute("data-state", "unified")
-
-    def ensure_split_mode(self) -> None:
-        split_toggle = self.get_split_view_toggle()
-        expect(split_toggle).to_be_visible()
-        if split_toggle.get_attribute("data-state") != "split":
-            split_toggle.click()
-        expect(split_toggle).to_have_attribute("data-state", "split")
 
     def expect_shows_file(self, file_name: str) -> None:
         """Assert the single viewer is open and rendering ``file_name``'s content.

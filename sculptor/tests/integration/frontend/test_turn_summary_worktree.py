@@ -42,9 +42,9 @@ def _start_worktree_task(page: Page, prompt: str) -> PlaywrightTaskPage:
     expect(branch_input).to_be_visible()
     expect(branch_input).not_to_have_value("")
 
-    # Clear the empty-first-run prompt prefill (`/sculptor:help`) so the first agent is
-    # created promptless — otherwise it runs an extra turn with the default model and the
-    # message-count assertions below count those extra messages.
+    # Keep the first agent promptless — a prefilled prompt (e.g. the first-run
+    # onboarding text) would run an extra turn on the default model and the
+    # message-count assertions below would count those extra messages.
     add_workspace_page.get_task_input().fill("")
 
     add_workspace_page.submit_and_wait_for_chat_panel()

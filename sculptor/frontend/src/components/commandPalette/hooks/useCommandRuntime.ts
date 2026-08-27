@@ -20,6 +20,7 @@ import { useOpenSettings } from "../../../common/state/hooks/useOpenSettings.ts"
 import { useUserConfig } from "../../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../../common/theme/appearanceModes.ts";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/utils/elementIds.ts";
+import { layoutsSwitcherOpenAtom, saveLayoutDialogRequestAtom } from "../../layouts/layoutUiAtoms.ts";
 import { newWorkspaceDialogAtom } from "../../newWorkspace/newWorkspaceAtoms.ts";
 import { type CommandActionId, commandActionsAtom } from "../utils/commandActions.ts";
 import type { AppStore, CommandRuntime } from "../utils/runtime.ts";
@@ -113,6 +114,8 @@ export const useCommandRuntime = (): CommandRuntime => {
   // Write through the already-captured `store` rather than pulling in another
   // useSetAtom hook for this single write.
   const openNewWorkspaceDialog = useEvent((): void => store.set(newWorkspaceDialogAtom, { open: true }));
+  const openLayoutsDialog = useEvent((): void => store.set(layoutsSwitcherOpenAtom, true));
+  const openSaveLayoutDialog = useEvent((): void => store.set(saveLayoutDialogRequestAtom, { mode: "create" }));
 
   const uiToggleHelpDialog = useEvent((): void => toggleHelpDialog());
   const uiToggleDevPanel = useEvent((): void => toggleDevPanel());
@@ -171,6 +174,8 @@ export const useCommandRuntime = (): CommandRuntime => {
       store,
       navigate: { toHome, toSettings, toWorkspace, toAgent },
       openNewWorkspaceDialog,
+      openLayoutsDialog,
+      openSaveLayoutDialog,
       ui: {
         toggleHelpDialog: uiToggleHelpDialog,
         toggleDevPanel: uiToggleDevPanel,
@@ -201,6 +206,8 @@ export const useCommandRuntime = (): CommandRuntime => {
       toWorkspace,
       toAgent,
       openNewWorkspaceDialog,
+      openLayoutsDialog,
+      openSaveLayoutDialog,
       uiToggleHelpDialog,
       uiToggleDevPanel,
       uiToggleLeftPanel,

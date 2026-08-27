@@ -19,7 +19,7 @@ from sculptor.testing.elements.clipboard import install_clipboard_interceptor
 from sculptor.testing.elements.clipboard import read_intercepted_clipboard
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import soft_reload_page
+from sculptor.testing.playwright_utils import open_new_workspace_form
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -51,9 +51,11 @@ def test_copy_branch_name_copies_workspace_branch(sculptor_instance_: SculptorIn
     # Switch back to the default branch so the project repo is on a different branch
     sculptor_instance_.repo.checkout_branch("testing")
 
-    # Soft-reload so the branch selector picks up the newly created branch
-    # (direct page reload causes ERR_INSUFFICIENT_RESOURCES on CI)
-    soft_reload_page(page)
+    # Bring up the new-workspace form (per-test cleanup deletes all workspaces
+    # and dismisses the first-run offer, so nothing is open yet). The form
+    # re-sources the repo's branches on every open, so the branch created
+    # above is selectable without reloading the SPA.
+    open_new_workspace_form(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_ws_page.get_submit_button()).to_be_visible()
 

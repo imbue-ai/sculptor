@@ -36,7 +36,7 @@ describe("remoteReposQueryKey", () => {
     expect(remoteReposQueryKey("github", "foo", 5)).not.toEqual(remoteReposQueryKey("github", "foo", 50));
   });
 
-  it("nests under the reserved sculptor prefix so plugin caches can't collide", () => {
+  it("nests under the reserved sculptor prefix so extension caches can't collide", () => {
     const key = remoteReposQueryKey("github", "", 5);
     expect(key[0]).toBe(SCULPTOR_QUERY_KEY_PREFIX);
     expect(key[1]).toBe("remoteRepos");

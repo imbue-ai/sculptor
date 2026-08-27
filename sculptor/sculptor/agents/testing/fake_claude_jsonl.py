@@ -2,21 +2,100 @@
 
 import itertools
 import json
+import os
+import secrets
 from collections.abc import Sequence
+from pathlib import Path
+
+from sculptor.agents.default.claude_code_sdk.harness import compute_claude_jsonl_directory
 
 _id_counter = itertools.count(1)
+# Process-unique suffix mixed into every generated id so multiple FakeClaude
+# subprocess invocations within a single test run don't collide on, e.g.,
+# ``msg_fakeclaude_001`` (the module-level counter resets each subprocess).
+# Real Claude assigns globally-unique ids; downstream consumers (the
+# SavedAgentMessage path, message-history dedup, etc.) treat colliding
+# upstream ids as duplicates, which can manifest as the assistant message
+# silently failing to land on subsequent turns. See SCU-1324.
+_PROCESS_NONCE = f"{os.getpid():d}{secrets.token_hex(2)}"
 
 _LAST_SESSION_ID: str | None = None
 
 
 def generate_id(prefix: str = "msg") -> str:
-    """Return a unique ID string like 'msg_fakeclaude_001'."""
-    return f"{prefix}_fakeclaude_{next(_id_counter):03d}"
+    """Return a unique ID string like 'msg_fakeclaude_<nonce>_001'."""
+    return f"{prefix}_fakeclaude_{_PROCESS_NONCE}_{next(_id_counter):03d}"
 
 
 def get_last_session_id() -> str | None:
     """Return the session id from the most recent make_init_message call."""
     return _LAST_SESSION_ID
+
+
+def session_transcript_path(session_id: str) -> Path:
+    """Path of the on-disk session JSONL for ``session_id``.
+
+    Mirrors ``ClaudeCodeHarness.get_jsonl_path``: the CLI is launched with the
+    working directory as its CWD, so the transcript lands under the slugged
+    projects tree that ``compute_claude_jsonl_directory`` derives from HOME and
+    that CWD. Read HOME/CWD at call time so a test that pins ``$HOME`` gets the
+    path it expects.
+    """
+    resolved_cwd = Path(os.path.realpath(os.getcwd()))
+    return compute_claude_jsonl_directory(Path.home(), resolved_cwd) / f"{session_id}.jsonl"
+
+
+def append_transcript_entry(session_id: str, entry: dict) -> None:
+    """Append one JSONL entry to ``session_id``'s on-disk transcript.
+
+    Creating the projects directory on first write mirrors the real CLI, which
+    materializes the transcript lazily once a turn actually runs — so a session
+    that emits nothing (immediate EOF) leaves no file behind.
+    """
+    path = session_transcript_path(session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as transcript:
+        transcript.write(json.dumps(entry) + "\n")
+
+
+def make_plain_user_transcript_entry(session_id: str, content: str) -> dict:
+    """Transcript entry for a turn-starting user frame (a plain user message).
+
+    The top-level ``sessionId`` (camelCase, matching the real CLI's on-disk
+    shape) is what ``is_session_id_valid`` scans for, so writing this per turn
+    also keeps the session resumable.
+    """
+    return {
+        "type": "user",
+        "sessionId": session_id,
+        "message": {"role": "user", "content": content},
+    }
+
+
+def make_queued_command_attachment_entry(session_id: str, prompt: str) -> dict:
+    """Transcript entry for a frame absorbed mid-cycle (the steering shape).
+
+    The real CLI records a frame that arrives while a turn is in flight as a
+    ``queued_command`` attachment rather than a plain user message; this is the
+    on-disk marker that distinguishes steering from a turn-starting follow-up.
+    ``commandMode: "prompt"`` matches the real CLI's attachment shape (a queued
+    plain prompt, as opposed to a queued slash command).
+    """
+    return {
+        "type": "attachment",
+        "sessionId": session_id,
+        "attachment": {"type": "queued_command", "prompt": prompt, "commandMode": "prompt"},
+    }
+
+
+def make_user_frame_echo(content: str) -> dict:
+    """Stdout echo of an accepted user frame (the ``--replay-user-messages`` shape).
+
+    The real CLI, launched with ``--replay-user-messages``, re-emits each
+    accepted frame as a ``type:"user"`` event whose message content is a plain
+    string — the same shape the wrapper writes on stdin.
+    """
+    return {"type": "user", "message": {"role": "user", "content": content}}
 
 
 def make_init_message(session_id: str) -> dict:
@@ -49,9 +128,14 @@ def make_task_started_message(
     tool_use_id: str,
     description: str = "",
     task_type: str = "local_bash",
+    workflow_name: str | None = None,
 ) -> dict:
-    """Return a dict for a system/task_started message."""
-    return {
+    """Return a dict for a system/task_started message.
+
+    ``workflow_name`` is only present on the wire for Workflow tasks
+    (task_type="local_workflow").
+    """
+    msg: dict = {
         "type": "system",
         "subtype": "task_started",
         "task_id": task_id,
@@ -59,6 +143,87 @@ def make_task_started_message(
         "description": description,
         "task_type": task_type,
     }
+    if workflow_name is not None:
+        msg["workflow_name"] = workflow_name
+    return msg
+
+
+def make_task_progress_message(
+    task_id: str,
+    tool_use_id: str,
+    description: str = "",
+    total_tokens: int = 0,
+    tool_uses: int = 0,
+    duration_ms: int = 0,
+    last_tool_name: str | None = None,
+    workflow_progress: list[dict] | None = None,
+) -> dict:
+    """Return a dict for a system/task_progress message.
+
+    ``workflow_progress`` mirrors the real CLI: a delta of
+    workflow_phase/workflow_agent entries (camelCase keys) whose state
+    changed since the previous payload, omitted entirely on pure token-tick
+    batches.
+    """
+    msg: dict = {
+        "type": "system",
+        "subtype": "task_progress",
+        "task_id": task_id,
+        "tool_use_id": tool_use_id,
+        "description": description,
+        "usage": {"total_tokens": total_tokens, "tool_uses": tool_uses, "duration_ms": duration_ms},
+    }
+    if last_tool_name is not None:
+        msg["last_tool_name"] = last_tool_name
+    if workflow_progress is not None:
+        msg["workflow_progress"] = workflow_progress
+    return msg
+
+
+def make_workflow_phase_entry(index: int, title: str, kind: str = "") -> dict:
+    """Return a workflow_phase entry for a workflow_progress tree."""
+    return {"type": "workflow_phase", "index": index, "title": title, "kind": kind}
+
+
+def make_workflow_agent_entry(
+    index: int,
+    label: str,
+    phase_index: int = 0,
+    phase_title: str = "",
+    state: str = "start",
+    model: str = "fake-claude",
+    tokens: int | None = None,
+    tool_calls: int | None = None,
+    duration_ms: int | None = None,
+    last_tool_summary: str | None = None,
+    result_preview: str | None = None,
+    error: str | None = None,
+    prompt_preview: str = "",
+) -> dict:
+    """Return a workflow_agent entry for a workflow_progress tree (camelCase wire keys)."""
+    entry: dict = {
+        "type": "workflow_agent",
+        "index": index,
+        "label": label,
+        "phaseIndex": phase_index,
+        "phaseTitle": phase_title,
+        "state": state,
+        "model": model,
+        "promptPreview": prompt_preview,
+    }
+    if tokens is not None:
+        entry["tokens"] = tokens
+    if tool_calls is not None:
+        entry["toolCalls"] = tool_calls
+    if duration_ms is not None:
+        entry["durationMs"] = duration_ms
+    if last_tool_summary is not None:
+        entry["lastToolSummary"] = last_tool_summary
+    if result_preview is not None:
+        entry["resultPreview"] = result_preview
+    if error is not None:
+        entry["error"] = error
+    return entry
 
 
 def make_task_notification_message(

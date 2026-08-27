@@ -1,19 +1,20 @@
 """Integration tests for the new-workspace modal.
 
-The new-workspace dialog is the sanctioned create surface. It is
-opened from three entry points — the Cmd/Meta+T shortcut, the Cmd+K
-"New workspace" command, and a repo group's "+" in the sidebar — while the plain
-sidebar new-workspace button DIRECT-CREATES (reusing the MRU settings + a fresh
-auto branch) and only opens the dialog as a fallback when there is no MRU yet.
+The new-workspace dialog is the sanctioned create surface. It is opened from
+the Cmd/Meta+T shortcut, the Cmd+K "New workspace" command, and the sidebar's
+New Workspace nav button, and Home auto-opens it while the workspace list is
+empty. The per-repo "+" in the sidebar repo groups instead DIRECT-CREATES
+(reusing the MRU settings + a fresh auto branch), only falling back to the
+dialog when the create fails.
 
 These tests cover the dialog's open paths, the form (title + prompt +
 context pill + keep-open + create), Cmd+Enter create, the keep-open
 reset-but-retain behaviour, prompt-less create, the agent-type
 picker, post-create focus (the chat input holds focus; a terminal first agent
 lands in the terminal panel instead), and the ``focus_input`` keybinding. They
-run against the non-empty state (a pre-existing workspace), so the modal — not
-the empty first-run page — is what opens; the empty-page first-create path is
-covered in test_empty_first_run.py.
+run against the non-empty state (a pre-existing workspace), so the opens are
+plain (no onboarding prefill); the first-run auto-open path is covered in
+test_empty_first_run.py.
 """
 
 from playwright.sync_api import Page
@@ -23,8 +24,6 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
-from sculptor.testing.elements.user_config import disable_pi_agent
-from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import blur_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -36,10 +35,9 @@ from sculptor.testing.utils import get_playwright_modifier_key
 def _seed_one_workspace(page: Page) -> None:
     """Create one workspace so the app is past the empty first-run state.
 
-    The dialog's entry points (Cmd/Meta+T, Cmd+K, the repo "+") are only live
-    once a workspace exists — in the empty state the global shortcuts and command
-    palette are disabled. This also persists the MRU settings that the
-    sidebar button's direct-create reuses.
+    With a workspace in place, Home no longer auto-opens the dialog, so each
+    entry point under test performs a plain open (no onboarding prefill). This
+    also persists the MRU settings that the repo "+" direct-create reuses.
 
     Uses the helper's auto-unique workspace name (no fixed name): the shared instance
     deletes workspaces between tests but their git branches linger, so a fixed seed
@@ -207,16 +205,12 @@ def test_keep_open_resets_but_retains(sculptor_instance_: SculptorInstance) -> N
 def test_agent_type_picker_defaults_to_claude(sculptor_instance_: SculptorInstance) -> None:
     """The agent-type select defaults to Claude and lists the available types.
 
-    The form's first-agent picker reuses the old page's options: Claude (default)
-    and Terminal are always offered; pi is gated behind the experimental
-    pi-agent flag. (The "no bare Terminal agent type" rule applies to the panel-tab
-    add-dropdown, not to this first-agent select — verified against the rendered
-    form, which DOES offer Terminal here.)
+    The form's first-agent picker reuses the old page's options: Claude (default),
+    pi, and Terminal are all offered. (The "no bare Terminal agent type" rule
+    applies to the panel-tab add-dropdown, not to this first-agent select —
+    verified against the rendered form, which DOES offer Terminal here.)
     """
     page = sculptor_instance_.page
-    # The pi flag is sticky on the shared instance — reset it defensively so the
-    # default-off assertion holds.
-    disable_pi_agent(page)
     _seed_one_workspace(page)
 
     dialog = PlaywrightNewWorkspaceDialog(page)
@@ -228,25 +222,8 @@ def test_agent_type_picker_defaults_to_claude(sculptor_instance_: SculptorInstan
     dialog.get_agent_type_select().click()
     expect(dialog.get_agent_type_option_claude()).to_be_visible()
     expect(dialog.get_agent_type_option_terminal()).to_be_visible()
-    # pi is hidden while the flag is off.
-    expect(dialog.get_agent_type_option_pi()).to_have_count(0)
-
-
-@user_story("to see the pi agent type in the dialog only when pi-agent is enabled")
-def test_agent_type_picker_gates_pi(sculptor_instance_: SculptorInstance) -> None:
-    """The pi option appears in the agent-type select only when pi-agent is enabled."""
-    page = sculptor_instance_.page
-    _seed_one_workspace(page)
-
-    try:
-        enable_pi_agent(page)
-        dialog = PlaywrightNewWorkspaceDialog(page)
-        dialog.open_via_shortcut()
-        dialog.get_agent_type_select().click()
-        expect(dialog.get_agent_type_option_pi()).to_be_visible()
-        page.keyboard.press("Escape")
-    finally:
-        disable_pi_agent(page)
+    # pi is always offered.
+    expect(dialog.get_agent_type_option_pi()).to_be_visible()
 
 
 @user_story("to start typing in the chat immediately after creating a workspace")

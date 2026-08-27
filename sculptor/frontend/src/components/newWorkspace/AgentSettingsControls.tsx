@@ -1,14 +1,13 @@
 import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { ListChecks } from "lucide-react";
-import { type ReactElement, useCallback } from "react";
+import type { ReactElement } from "react";
 
 import { type EffortLevel, ElementIds, type LlmModel } from "~/api";
-import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 import { getModelCapabilities } from "~/common/utils/modelCapabilities.ts";
 import { EffortSelector } from "~/components/EffortSelector.tsx";
 import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
-import { SettingsSection } from "~/pages/settings/sections.ts";
+import { VoiceEntryButton } from "~/components/VoiceEntryButton.tsx";
 
 type AgentSettingsControlsProps = {
   model: LlmModel;
@@ -19,27 +18,28 @@ type AgentSettingsControlsProps = {
   onFastModeToggle: () => void;
   isPlanMode: boolean;
   onPlanModeToggle: () => void;
-  /**
-   * Hide the plan-mode toggle when the active harness can't honor a
-   * mid-turn interactive backchannel (pi). Defaults to `true` so callsites
-   * without an agent yet (e.g. the new-workspace modal) show it.
-   */
-  canEnterPlanMode?: boolean;
-  /**
-   * Gate the fast-mode toggle on harness support in addition to the
-   * model's own `supportsFastMode` capability. Defaults to `true`.
-   */
-  canUseFastMode?: boolean;
+  /** Receives each dictated voice segment so the creation prompt draft can append
+   *  it (with smart spacing) through its own state. */
+  onAppendTranscript: (text: string) => void;
+  /** Interim transcription (non-empty) of the utterance being spoken. */
+  onPreviewChange?: (preview: string) => void;
+  /** The utterance produced no final; discard the shown preview. */
+  onPreviewDiscard?: () => void;
+  /** Fires when voice takes/releases ownership of the prompt textarea. */
+  onCaptureLockChange?: (locked: boolean) => void;
 };
 
 /**
- * The right-side toolbar block of agent settings — plan mode, fast mode
- * (when the model supports it), thinking effort, model. Lives standalone
- * so the new-workspace modal can render the same controls beneath its
- * prompt textarea without duplicating ChatInput's wiring. The fast-mode
- * toggle is gated on `getModelCapabilities(model).supportsFastMode`
- * here (rather than at every callsite) so consumers only have to pass
- * the selected model.
+ * The right-side toolbar block of a Claude first agent's per-prompt settings —
+ * plan mode, fast mode (when the model supports it), thinking effort, and model.
+ * This block is Claude-only: the new-workspace modal renders it beneath its
+ * prompt textarea for a Claude first agent. The other harnesses don't consume
+ * these controls at create — pi drives its own backend-sourced model picker in
+ * the modal (a separate block), and terminal/registered agents have no model —
+ * so the modal chooses the block by agent type rather than gating these controls
+ * one by one. The fast-mode toggle is gated on
+ * `getModelCapabilities(model).supportsFastMode` here (rather than at every
+ * callsite) so consumers only have to pass the selected model.
  *
  * ChatInput renders a parallel copy of this toolbar block that adds
  * capability-gated disabled states and a backend-model selector it needs in
@@ -55,38 +55,38 @@ export const AgentSettingsControls = ({
   onFastModeToggle,
   isPlanMode,
   onPlanModeToggle,
-  canEnterPlanMode = true,
-  canUseFastMode = true,
+  onAppendTranscript,
+  onPreviewChange,
+  onPreviewDiscard,
+  onCaptureLockChange,
 }: AgentSettingsControlsProps): ReactElement => {
   const { supportsFastMode: doesSupportFastMode } = getModelCapabilities(model);
-  const { navigateToGlobalSettings } = useImbueNavigate();
-  // ModelSelector's no-providers CTA (pi with an empty backend catalog) sends
-  // the user to the pi login flow under Settings -> Pi, matching ChatInput.
-  const handleAuthenticate = useCallback((): void => {
-    navigateToGlobalSettings(SettingsSection.PI);
-  }, [navigateToGlobalSettings]);
   return (
     <Flex align="center" flexShrink="0">
-      {canEnterPlanMode && (
-        <Tooltip content={isPlanMode ? "Leave plan mode" : "Enter plan mode"}>
-          <IconButton
-            variant="ghost"
-            size="3"
-            onClick={onPlanModeToggle}
-            aria-label="Toggle plan first mode"
-            data-testid={ElementIds.PLAN_MODE_TOGGLE}
-            data-active={isPlanMode}
-            style={isPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }}
-          >
-            <ListChecks size={16} />
-          </IconButton>
-        </Tooltip>
-      )}
-      {doesSupportFastMode && canUseFastMode && <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} />}
+      <Tooltip content={isPlanMode ? "Leave plan mode" : "Enter plan mode"}>
+        <IconButton
+          variant="ghost"
+          size="3"
+          onClick={onPlanModeToggle}
+          aria-label="Toggle plan first mode"
+          data-testid={ElementIds.PLAN_MODE_TOGGLE}
+          data-active={isPlanMode}
+          style={isPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }}
+        >
+          <ListChecks size={16} />
+        </IconButton>
+      </Tooltip>
+      {doesSupportFastMode && <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} />}
       <EffortSelector effort={effort} onEffortChange={onEffortChange} />
       <Flex pr="1">
-        <ModelSelector model={model} onModelChange={onModelChange} onAuthenticate={handleAuthenticate} />
+        <ModelSelector model={model} onModelChange={onModelChange} />
       </Flex>
+      <VoiceEntryButton
+        onAppendTranscript={onAppendTranscript}
+        onPreviewChange={onPreviewChange}
+        onPreviewDiscard={onPreviewDiscard}
+        onCaptureLockChange={onCaptureLockChange}
+      />
     </Flex>
   );
 };

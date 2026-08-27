@@ -15,8 +15,12 @@ export const ConfigLoader = ({ children }: ConfigLoaderProps): ReactElement => {
   const { loadConfig } = useUserConfig();
 
   useEffect(() => {
-    // Fire-and-forget on mount; loadConfig logs its own failures internally.
-    void loadConfig().catch(() => {});
+    // Fire-and-forget on mount. loadConfig also logs failures at its call to the
+    // server, but log again here so the fire-and-forget site is not a silent sink
+    // and the message records that the app renders on with default settings.
+    void loadConfig().catch((error) => {
+      console.error("Failed to load user config on mount; continuing with default settings until it loads.", error);
+    });
   }, [loadConfig]);
 
   return <>{children}</>;

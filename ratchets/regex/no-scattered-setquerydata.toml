@@ -1,0 +1,15 @@
+[rule]
+id = "no-scattered-setquerydata"
+description = "Direct query-cache write outside the sanctioned writer modules. The cache has exactly two kinds of writers: the WS bridge (queryClient.ts syncTasksToQueryCache) for authoritative state, and the mutation hooks in src/common/state/mutations/ for optimistic updates with version-checked rollback. A setQueryData scattered elsewhere bypasses the sync-version bookkeeping (its writes can be clobbered by or clobber rollbacks) and re-creates the dual-write drift this architecture removed. Add or extend a mutation hook instead; see the state-ownership rules in docs/development/review/sculptor.md."
+severity = "warning"
+
+[match]
+pattern = "\\.setQueryData\\("
+languages = ["typescript"]
+include = ["sculptor/frontend/src/**/*.ts", "sculptor/frontend/src/**/*.tsx"]
+exclude = [
+    "sculptor/frontend/src/**/*.test.ts",
+    "sculptor/frontend/src/**/*.test.tsx",
+    "sculptor/frontend/src/common/queryClient.ts",
+    "sculptor/frontend/src/common/state/mutations/**",
+]

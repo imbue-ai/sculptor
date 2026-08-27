@@ -145,6 +145,22 @@ def test_target_falls_back_to_local_excluding_own_branch(
     assert "wsbranch" not in target_infos[0].target_branches
 
 
+def test_get_current_branch_returns_cached_value_and_none_for_unknown(
+    base_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    worktree = tmp_path / "ws"
+    _add_worktree(base_repo, worktree, "wsbranch")
+    workspace = _FakeWorkspace(WorkspaceID(), ProjectID())
+    poller = _build_poller([workspace], {workspace.object_id: worktree}, test_root_concurrency_group)
+
+    assert poller.get_current_branch(workspace.object_id) is None  # Nothing scanned yet.
+
+    poller._scan_once()
+
+    assert poller.get_current_branch(workspace.object_id) == "wsbranch"
+    assert poller.get_current_branch(WorkspaceID()) is None
+
+
 def test_branch_change_emits_and_refreshes_diff(
     base_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:

@@ -27,8 +27,9 @@ import {
   type UserConfigExport,
 } from "vite";
 
-import { bundledPlugins } from "./vite-plugins/bundled-plugins.ts";
-import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
+import { bundledExtensions } from "./vite-plugins/bundled-extensions.ts";
+import { extensionRuntimeStubs } from "./vite-plugins/extension-runtime-stubs.ts";
+import { voiceRuntimeAssets } from "./vite-plugins/voice-runtime-assets.ts";
 
 /**
  * Exclude ``@xterm/xterm`` from the bundle and serve it as a standalone
@@ -87,8 +88,9 @@ export function externalizeXterm(root: string): Plugin {
 /** Plugins shared by the web and Electron-renderer builds. */
 export const sharedPlugins = (root: string): Array<Plugin> => [
   externalizeXterm(root),
-  pluginRuntimeStubs(),
-  bundledPlugins(),
+  voiceRuntimeAssets(root),
+  extensionRuntimeStubs(),
+  bundledExtensions(),
   react(),
 ];
 
@@ -150,7 +152,7 @@ export const sharedDefine = (
  * factory, so each entry config only declares what actually differs.
  */
 export interface FrontendConfigOptions {
-  /** Frontend dir; drives `root`, the `~` alias, SCSS load paths, and plugin file copies. */
+  /** Frontend dir; drives `root`, the `~` alias, SCSS load paths, and extension file copies. */
   root: string;
   /** Dev-server port used when SCULPTOR_FRONTEND_PORT is unset (5174 web, 5173 renderer). */
   defaultFrontendPort: number;
@@ -178,7 +180,7 @@ export interface FrontendConfigOptions {
 /**
  * OpenHost preview identity: inject `<meta name="sculptor-preview">` into
  * index.html so the /proxy/ switchboard (openhost-preview-fallback.html) and
- * the openhost-preview-switcher plugin can label this preview. A dev server has
+ * the openhost-preview-switcher extension can label this preview. A dev server has
  * no "build time" to report; instead branch/sha/dirty are read fresh from the
  * working tree on each index.html request. HMR patches modules without
  * refetching index.html, so a loaded page keeps the identity it loaded with —
@@ -219,7 +221,36 @@ function previewIdentity(root: string): Plugin {
   };
 }
 
-/** Dev-only proxy server forwarding `/api`, `/ws`, and `/plugins/local` to the backend. */
+/**
+ * OpenHost preview HMR keepalive: periodically send a no-op custom event to
+ * every connected HMR client so the websocket never looks idle. The HMR socket
+ * carries traffic only on file edits, so during normal browsing an
+ * intermediary's idle timeout (the OpenHost edge in front of the nginx /proxy
+ * route) can silently kill it — and Vite's client answers any lost connection
+ * with a full location.reload() once the server responds again, which on a
+ * phone shows up as the page "randomly" hard-reloading about once a minute
+ * (and on every return from the background, where the frozen page stops
+ * generating traffic but the socket can survive if packets keep flowing).
+ * Clients ignore custom events they have no listener for, so this is
+ * invisible to the app.
+ */
+function previewHmrKeepalive(): Plugin {
+  const KEEPALIVE_INTERVAL_MS = 25_000; // safely under common 60s idle timeouts
+  return {
+    name: "sculptor:preview-hmr-keepalive",
+    apply: "serve",
+    configureServer(server): void {
+      const interval = setInterval(() => {
+        server.ws.send({ type: "custom", event: "sculptor:preview-keepalive" });
+      }, KEEPALIVE_INTERVAL_MS);
+      // Don't let the timer hold the process; stop it with the server.
+      interval.unref();
+      server.httpServer?.on("close", () => clearInterval(interval));
+    },
+  };
+}
+
+/** Dev-only proxy server forwarding `/api`, `/ws`, and `/extensions/local` to the backend. */
 function devServer(env: Record<string, string>, fePort: number): import("vite").ServerOptions {
   const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
   const apiTarget = env.SCULPTOR_CUSTOM_BACKEND_URL || `http://127.0.0.1:${apiPort}`;
@@ -241,13 +272,13 @@ function devServer(env: Record<string, string>, fePort: number): import("vite").
         ws: true,
         rewriteWsOrigin: true,
       },
-      // Local/dev plugins are served by the backend's `/plugins/local` static
+      // Local/dev extensions are served by the backend's `/extensions/local` static
       // mount; in production the backend serves the SPA too (same origin), but in
       // dev the SPA is on Vite, so forward this prefix to the backend or the
-      // plugin loader's manifest fetch hits Vite's SPA fallback (HTML, not JSON).
-      // Only `/plugins/local` — builtin plugins (`/plugins/<id>`) are Vite public
-      // assets and must keep being served by Vite.
-      "/plugins/local": {
+      // extension loader's manifest fetch hits Vite's SPA fallback (HTML, not JSON).
+      // Only `/extensions/local` — builtin extensions (`/extensions/<id>`) are Vite
+      // public assets and must keep being served by Vite.
+      "/extensions/local": {
         target: apiTarget,
         changeOrigin: true,
       },
@@ -278,12 +309,28 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
     const config: UserConfig = {
       root: opts.root,
       base: openhostProxyBase ?? opts.base ?? "/",
+      // The ASR worker dynamically imports its (large) speech runtime, which
+      // makes the worker build code-split — unsupported by the default "iife"
+      // worker format. Module workers are fine everywhere Sculptor runs.
+      worker: { format: "es" },
       optimizeDeps: sharedOptimizeDeps,
       define: sharedDefine(env, {
         apiUrlBaseExpr: opts.apiUrlBase(env),
         sentryRelease: opts.sentryRelease(env),
       }),
       build: { sourcemap: true, ...opts.build },
+      // ``keepNames`` preserves ``function.name`` (and ``class.name``) through
+      // esbuild's minification. This keeps component names readable in three
+      // places that otherwise see mangled identifiers: the perf harness's
+      // React-commit attribution (sculptor/tests/perf/), production Sentry /
+      // PostHog error stacks, and React DevTools against a shipped build.
+      //
+      // Cost: ~+80 KB gzipped across all built JS (~+2.5%), ~+69 KB of it on
+      // the main entry chunk. No runtime cost — it only preserves name
+      // strings, nothing that executes. Deemed an acceptable standing cost
+      // for always-on name attribution; revisit if a first-load size budget
+      // makes the entry-chunk delta matter. (SCU-1294)
+      esbuild: { keepNames: true },
       clearScreen: false,
       envPrefix: "SCULPTOR_",
       resolve: sharedResolve(opts.root),
@@ -291,7 +338,7 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
       plugins: [
         ...sharedPlugins(opts.root),
         ...(opts.extraPlugins ?? []),
-        ...(openhostProxyBase ? [previewIdentity(opts.root)] : []),
+        ...(openhostProxyBase ? [previewIdentity(opts.root), previewHmrKeepalive()] : []),
       ],
     };
 

@@ -121,7 +121,9 @@ export const useBrowserWebview = (
       const pendingUrl = pendingNavigationUrlRef.current;
       if (pendingUrl !== null) {
         pendingNavigationUrlRef.current = null;
-        webview.loadURL(pendingUrl).catch(() => {});
+        webview.loadURL(pendingUrl).catch((error) => {
+          console.warn("Failed to load pending URL in browser webview.", error);
+        });
       }
     };
 
@@ -153,7 +155,9 @@ export const useBrowserWebview = (
     if (!api?.onBrowserPanelOpenInPanel || !api.removeBrowserPanelOpenInPanelListener) return;
     const listener = api.onBrowserPanelOpenInPanel((payload) => {
       if (payload.webContentsId !== webContentsId) return;
-      webviewRef.current?.loadURL(payload.url).catch(() => {});
+      webviewRef.current?.loadURL(payload.url).catch((error) => {
+        console.warn("Failed to load forwarded URL in browser webview.", error);
+      });
     });
     return (): void => {
       api.removeBrowserPanelOpenInPanelListener?.(listener);
@@ -185,7 +189,9 @@ export const useBrowserWebview = (
       pendingNavigationUrlRef.current = url;
       return;
     }
-    webview.loadURL(url).catch(() => {});
+    webview.loadURL(url).catch((error) => {
+      console.warn("Failed to navigate browser webview.", error);
+    });
   }, []);
 
   return {

@@ -12,8 +12,9 @@ registrations.
 
 Sculptor installs these two files into `<sculptor folder>/terminal_agents/`
 (`~/.sculptor/` for the app, `<repo>/.dev_sculptor/` when running from
-source) the first time the backend starts, so "Claude CLI" appears in the
-`+` menu's type list and in the new-workspace agent picker out of the box.
+source) the first time the backend starts, so "Claude" (marked "in terminal"
+in the pickers) appears in the `+` menu's type list and in the new-workspace
+agent picker out of the box.
 
 The installed copy is **yours**:
 

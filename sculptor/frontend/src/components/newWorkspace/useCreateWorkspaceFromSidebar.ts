@@ -3,8 +3,9 @@ import { useCallback, useState } from "react";
 
 import { getCurrentBranch, previewBranchName, WorkspaceInitializationStrategy } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { createWorkspaceErrorToastAtom, ToastType } from "~/common/state/atoms/toasts.ts";
-import { defaultModelAtom, isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { defaultModelAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import {
@@ -37,7 +38,7 @@ type UseCreateWorkspaceFromSidebarReturn = {
 export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarReturn => {
   // State and hooks
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
-  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
+  const isPiAvailable = useAtomValue(isPiAvailableAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
   const setModalState = useSetAtom(newWorkspaceDialogAtom);
   const setCreateWorkspaceErrorToast = useSetAtom(createWorkspaceErrorToastAtom);
@@ -52,9 +53,14 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
       // repo — a source branch remembered from another repo may not exist here.
       const sameRepoSettings = lastSettings?.projectId === projectId ? lastSettings : null;
       const mode = lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE;
-      // The shared pi-disabled fallback, mirroring the dialog's seeding. A bare
-      // "terminal" stays: it is a legitimate first-agent choice here.
-      const agentType: StoredAgentType = resolveStoredAgentType(lastSettings?.agentType ?? "claude", isPiAgentEnabled);
+      // Normalize the remembered type, mirroring the dialog's seeding. A bare
+      // "terminal" stays: it is a legitimate first-agent choice here. This
+      // direct-create has no picker to steer to Settings, so a remembered "pi"
+      // with no usable binary falls back to Claude rather than launching a pi
+      // that cannot start.
+      const seedAgentType = lastSettings?.agentType ?? "claude";
+      const agentType: StoredAgentType =
+        seedAgentType === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seedAgentType);
 
       setIsPreparing(true);
       let sourceBranch = sameRepoSettings?.sourceBranch ?? "";
@@ -113,7 +119,7 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
     },
     [
       lastSettings,
-      isPiAgentEnabled,
+      isPiAvailable,
       defaultModel,
       registrations,
       createWorkspace,

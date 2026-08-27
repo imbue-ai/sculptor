@@ -5,7 +5,7 @@
 // the user moves between them (no tear-down, no top-bar/tab-strip).
 //
 // It mounts the app's cross-cutting chrome — the unified data stream, command palette,
-// keyboard shortcuts, plugins, dialogs, and toasts. Nothing here is workspace-specific,
+// keyboard shortcuts, extensions, dialogs, and toasts. Nothing here is workspace-specific,
 // so the same shell backs Home and Settings.
 
 import { Flex } from "@radix-ui/themes";
@@ -16,6 +16,8 @@ import { Outlet } from "react-router-dom";
 
 import type { AtomToastAtom } from "~/app/AtomToast.tsx";
 import { AtomToast } from "~/app/AtomToast.tsx";
+import { AutoUpdateToasts } from "~/app/AutoUpdateToasts.tsx";
+import { useAutoUpdateListener } from "~/app/hooks/useAutoUpdateListener.ts";
 import { useGlobalKeyboardShortcuts } from "~/app/hooks/useGlobalKeyboardShortcuts.ts";
 import { useWorkspaceCycleShortcuts } from "~/app/hooks/useWorkspaceCycleShortcuts.ts";
 import { KeyboardShortcutsDialog } from "~/app/KeyboardShortcutsDialog.tsx";
@@ -25,6 +27,7 @@ import { NotificationToasts } from "~/app/NotificationToasts.tsx";
 import { RepoPathDialog } from "~/app/RepoPathDialog.tsx";
 import { WarningStatusBanner } from "~/app/WarningStatusBanner.tsx";
 import { useActiveProjectID } from "~/common/hooks/navigation.ts";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { useSyncActiveTabFromRoute } from "~/common/hooks/useSyncActiveTabFromRoute.ts";
 import { backendStatusAtom } from "~/common/state/atoms/backend.ts";
 import {
@@ -42,10 +45,13 @@ import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
 import { CommandPalette } from "~/components/commandPalette";
 import { CommandRegistrations } from "~/components/commandPalette/CommandRegistrations.tsx";
+import { LayoutsDialog } from "~/components/layouts/LayoutsDialog.tsx";
+import { LayoutTidyConfirmation } from "~/components/layouts/LayoutTidyConfirmation.tsx";
+import { SaveLayoutDialog } from "~/components/layouts/SaveLayoutDialog.tsx";
 import { NewWorkspaceDialog } from "~/components/newWorkspace/NewWorkspaceDialog.tsx";
+import { ExtensionLoader } from "~/extensions/ExtensionLoader.tsx";
+import { ExtensionOverlays } from "~/extensions/ExtensionOverlays.tsx";
 import { sidebarCollapsedAtom } from "~/pages/workspace/layout/atoms/sidebar.ts";
-import { PluginLoader } from "~/plugins/PluginLoader.tsx";
-import { PluginOverlays } from "~/plugins/PluginOverlays.tsx";
 
 // Error toasts linger longer than the default so the user can read and act on the
 // failure before it auto-dismisses.
@@ -71,6 +77,7 @@ export const AppShell = (): ReactElement => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const backendStatus = useAtomValue(backendStatusAtom);
+  const isMobile = useIsMobile();
 
   // Internal state
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState<boolean>(false);
@@ -80,6 +87,7 @@ export const AppShell = (): ReactElement => {
   const currentProject = useProject(projectID ?? "");
 
   useUnifiedStream();
+  useAutoUpdateListener();
   useGlobalKeyboardShortcuts();
   // Workspace cycling lives at the shell level (not the workspace-only shortcut set) so
   // Meta+] / Meta+[ and the palette's Next/Previous workspace rows work from Home and
@@ -90,13 +98,18 @@ export const AppShell = (): ReactElement => {
   // JSX and rendering logic
   const hasBackendStopped = backendStatus.status === "unresponsive";
   const hasHealthWarningOnBackend = backendStatus.status === "warning";
+  const isBackendReconnecting = backendStatus.status === "reconnecting";
   const isProjectPathInaccessible = currentProject !== null && currentProject.isPathAccessible === false;
 
   return (
     <>
       <Flex direction="row" height="var(--app-height)" width="100vw" position="relative" overflow="hidden">
-        {/* Global chrome: the sidebar rail (or the collapsed expand toggle). */}
-        {isSidebarCollapsed ? <CollapsedSidebarToggle /> : <WorkspaceSidebar />}
+        {/* Global chrome: the sidebar rail (or the collapsed expand toggle).
+            Suppressed on mobile — the single-column pages carry their own
+            headers, and workspace/agent navigation goes through the mobile
+            WorkspaceDrawer instead of the rail. The rest of the shell (unified
+            stream, toasts, dialogs, extensions) is layout-independent and stays. */}
+        {!isMobile && (isSidebarCollapsed ? <CollapsedSidebarToggle /> : <WorkspaceSidebar />)}
 
         <Flex
           direction="column"
@@ -107,8 +120,8 @@ export const AppShell = (): ReactElement => {
           overflow="hidden"
           style={{ background: "var(--gray-2)" }}
         >
-          <PluginLoader />
-          <PluginOverlays />
+          <ExtensionLoader />
+          <ExtensionOverlays />
           <Outlet />
           {isProjectPathInaccessible && currentProject !== null && (
             <WarningStatusBanner
@@ -117,6 +130,7 @@ export const AppShell = (): ReactElement => {
               onLinkClick={() => setIsRepoPathDialogOpen(true)}
             />
           )}
+          {isBackendReconnecting && <WarningStatusBanner tone="warning" message={backendStatus.payload.message} />}
           {(hasBackendStopped || hasHealthWarningOnBackend) && (
             <WarningStatusBanner message={backendStatus.payload.message} />
           )}
@@ -127,12 +141,16 @@ export const AppShell = (): ReactElement => {
       <CommandPalette />
       <KeyboardShortcutsDialog />
       <NewWorkspaceDialog />
+      <LayoutsDialog />
+      <SaveLayoutDialog />
+      <LayoutTidyConfirmation />
       <RepoPathDialog
         isOpen={isRepoPathDialogOpen}
         project={currentProject}
         onClose={() => setIsRepoPathDialogOpen(false)}
       />
       <NotificationToasts />
+      <AutoUpdateToasts />
       {APP_TOASTS.map(({ key, toastAtom, duration }) => (
         <AtomToast key={key} toastAtom={toastAtom} duration={duration} />
       ))}

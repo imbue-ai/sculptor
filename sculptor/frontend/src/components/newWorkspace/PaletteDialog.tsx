@@ -2,6 +2,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import type { ReactElement, ReactNode } from "react";
 
+import { ElementIds } from "~/api";
+
 import styles from "./PaletteDialog.module.scss";
 
 type PaletteDialogProps = {
@@ -27,7 +29,7 @@ export const PaletteDialog = ({ open, onOpenChange, title, testId, children }: P
       <VisuallyHidden>
         <Dialog.Title>{title}</Dialog.Title>
       </VisuallyHidden>
-      <Dialog.Overlay className={styles.overlay} />
+      <Dialog.Overlay className={styles.overlay} data-testid={ElementIds.PALETTE_DIALOG_OVERLAY} />
       {/* The visually-hidden title supplies the accessible name; opt out of
           Radix's Description requirement rather than adding an empty one. */}
       <Dialog.Content className={styles.content} data-testid={testId} aria-describedby={undefined}>

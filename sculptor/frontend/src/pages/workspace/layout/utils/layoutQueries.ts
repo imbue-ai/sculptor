@@ -12,8 +12,10 @@ import type { PanelId, SectionId, SubSectionId } from "~/pages/workspace/layout/
 import { isSecondary, SECTION_IDS, toSecondary, toSection } from "~/pages/workspace/layout/types/section.ts";
 
 // Center is always expanded and is never in the collapsed set; the other sections
-// are collapsed unless explicitly flagged expanded.
-export const isSectionExpanded = (layout: WorkspaceLayoutState, section: SectionId): boolean => {
+// are collapsed unless explicitly flagged expanded. Typed against just the
+// `expanded` map so pure reducers (e.g. layoutApply) can use it on a
+// CapturedLayout's geometry without re-implementing the rule.
+export const isSectionExpanded = (layout: Pick<WorkspaceLayoutState, "expanded">, section: SectionId): boolean => {
   return section === "center" ? true : (layout.expanded[section] ?? false);
 };
 
@@ -61,7 +63,7 @@ export const listSubSections = (
 
 export type AddPanelLocation = { subSection: SubSectionId; label: string };
 
-const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
+export const SECTION_LABELS: Readonly<Record<SectionId, string>> = {
   left: "Left",
   center: "Center",
   right: "Right",
@@ -87,10 +89,11 @@ export type AvailableStaticPanel = {
   id: PanelId;
   displayName: string;
   icon: PanelDefinition["icon"];
+  description?: string;
 };
 
 // Single-instance static panels not currently open anywhere — the re-add list.
-// Sourced from the live registry (not STATIC_PANEL_METADATA) so plugin-contributed
+// Sourced from the live registry (not STATIC_PANEL_METADATA) so extension-contributed
 // panels — also kind "static" — are offered too; the multi-instance agent/terminal
 // panels are excluded by the kind filter.
 export const listAvailableStaticPanels = (
@@ -100,5 +103,10 @@ export const listAvailableStaticPanels = (
   const openPanelIds = new Set<PanelId>(Object.keys(placement));
   return registry
     .filter((definition) => definition.kind === "static" && !openPanelIds.has(definition.id))
-    .map((definition) => ({ id: definition.id, displayName: definition.displayName, icon: definition.icon }));
+    .map((definition) => ({
+      id: definition.id,
+      displayName: definition.displayName,
+      icon: definition.icon,
+      description: definition.description,
+    }));
 };

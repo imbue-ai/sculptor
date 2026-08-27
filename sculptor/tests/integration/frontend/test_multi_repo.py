@@ -390,3 +390,32 @@ def test_adding_duplicate_repo_shows_error(sculptor_instance_: SculptorInstance)
     validation_dialog = settings_page.get_git_init_dialog()
     expect(validation_dialog).to_be_visible()
     expect(validation_dialog).to_contain_text("already")
+
+
+@user_story("to see a repo I add from the sidebar appear even before it has any workspaces")
+def test_added_repo_without_workspaces_appears_in_sidebar(
+    sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
+) -> None:
+    """A repo added while other workspaces exist shows immediately in the sidebar.
+
+    The sidebar repo groups are seeded from projects (not just workspaces), so a
+    repo with no workspaces renders as its own group with a "No workspaces yet"
+    hint instead of staying invisible until its first workspace is created. This
+    also exercises the sidebar "Add repo" button as the add entry point.
+    """
+    page = sculptor_instance_.page
+
+    # Leave the first-run state by creating a workspace, so the sidebar is in its
+    # normal (non-empty) form rather than the empty first-run page.
+    start_task_and_wait_for_ready(page, prompt="hello", workspace_name="First Workspace")
+
+    empty_repo = test_repo_factory_.create_repo(name="empty_sidebar_repo", branch="main")
+
+    # Add the second repo from the sidebar's "Add repo" button.
+    sidebar = get_workspace_sidebar(page)
+    sidebar.open_add_repo_dialog().add_local_repo(str(empty_repo.base_path.resolve()))
+
+    # Both repos now have a sidebar group; the just-added one carries the hint.
+    expect(sidebar.get_repo_groups()).to_have_count(2)
+    expect(sidebar.get_repo_group_by_name("empty_sidebar_repo")).to_be_visible()
+    expect(sidebar.get_no_workspaces_hint()).to_have_count(1)
