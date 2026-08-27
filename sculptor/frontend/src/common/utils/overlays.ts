@@ -61,3 +61,23 @@ export const isDismissibleOverlayOpen = (ignoreDialog?: Element | null): boolean
 
   return false;
 };
+
+/**
+ * Check whether FOCUS is currently inside a dismissible overlay (dialog, menu,
+ * popover, or select). When a Radix overlay is open it traps focus, so
+ * checking the active element is a reliable way to detect this without
+ * fragile DOM scanning.
+ *
+ * This is deliberately narrower than `isDismissibleOverlayOpen`: a popper that
+ * Radix keeps mounted after closing (`data-state="closed"`, e.g. a just-used
+ * dropdown menu) no longer traps focus, so it does not suppress shortcuts here
+ * even though the DOM walker above still sees its `role="menu"` node. The
+ * registry keybindings (useKeybindingHandler) gate on this focus check; the
+ * walker serves handlers that must yield to any open overlay regardless of
+ * where focus is (global shortcut dispatchers, form-owned chords).
+ */
+export const isFocusInDismissibleOverlay = (): boolean => {
+  const active = document.activeElement;
+  if (!active || active === document.body) return false;
+  return active.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]') != null;
+};
