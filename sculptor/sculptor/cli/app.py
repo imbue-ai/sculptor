@@ -63,7 +63,7 @@ def resolve_and_publish_backend_port(port_option: int | None) -> int:
     it (for logging config) before the --port option is applied. This must
     remain the last startup write to os.environ that settings care about.
     """
-    port = port_option or get_settings().BACKEND_PORT
+    port = port_option if port_option is not None else get_settings().BACKEND_PORT
     os.environ["SCULPTOR_API_PORT"] = str(port)
     get_settings.cache_clear()
     return port

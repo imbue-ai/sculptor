@@ -42,3 +42,16 @@ def test_default_port_comes_from_settings_and_is_republished(
     assert port == 6060
     assert os.environ["SCULPTOR_API_PORT"] == "6060"
     assert get_settings().BACKEND_PORT == 6060
+
+
+def test_explicit_port_zero_is_respected_not_treated_as_unset(
+    fresh_settings_cache: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SCULPTOR_API_PORT", raising=False)
+    assert get_settings().BACKEND_PORT == DEFAULT_BACKEND_PORT
+
+    port = resolve_and_publish_backend_port(0)
+
+    assert port == 0
+    assert os.environ["SCULPTOR_API_PORT"] == "0"
+    assert get_settings().BACKEND_PORT == 0
