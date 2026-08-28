@@ -5,7 +5,7 @@ import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { WorkspaceDrawer } from "~/components/mobile/WorkspaceDrawer.tsx";
 
-import { ChatPanelContent } from "../chatAlpha/ChatPanelContent.tsx";
+import { ChatPanelContent } from "../chat/ChatPanelContent.tsx";
 import { AgentSheet } from "./AgentSheet.tsx";
 import { AgentSwitcher } from "./AgentSwitcher.tsx";
 import { ChangesPill } from "./ChangesPill.tsx";

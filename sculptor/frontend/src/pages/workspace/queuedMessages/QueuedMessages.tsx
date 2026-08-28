@@ -7,7 +7,7 @@ import { LlmModel, sendWorkspaceAgentMessages } from "../../../api";
 import { attachedFilesAtomFamily } from "../../../common/state/atoms/attachedFiles.ts";
 import { promptDraftAtomFamily } from "../../../common/state/atoms/promptDrafts.ts";
 import { useAgentModel } from "../../../common/state/hooks/useAgentHelpers.ts";
-import { useChatAgent } from "../chatAlpha/ChatAgentContext.tsx";
+import { useChatAgent } from "../chat/ChatAgentContext.tsx";
 import { type EditConflictData, QueuedMessageBar } from "./QueuedMessageBar.tsx";
 import { UndoQueuedMessageDialog } from "./UndoQueuedMessageDialog.tsx";
 

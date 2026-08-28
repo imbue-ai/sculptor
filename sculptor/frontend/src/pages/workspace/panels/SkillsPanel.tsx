@@ -36,7 +36,7 @@ const FILTERABLE_TYPES: ReadonlyArray<SkillType> = ["builtin", "sculptor", "cust
 // from the bottom of "Custom" lands on the first "Sculptor" chip.
 const TYPE_ORDER: Record<SkillType, number> = { custom: 0, sculptor: 1, builtin: 2 };
 
-// Popover hover timing — mirrors AlphaPromptNavigator so the dot-rail and the
+// Popover hover timing — mirrors PromptNavigator so the dot-rail and the
 // skills panel feel consistent. A deliberate cold-open delay so a quick skim
 // down the list doesn't fan popovers out, a snappy close, and zero-delay
 // hand-off when the popover is already visible (cumulative-hover semantics

@@ -21,7 +21,7 @@
   width: 100%;
 }
 
-/* Chat fills the remaining space. AlphaChatInterface sizes itself via flex and
+/* Chat fills the remaining space. ChatInterface sizes itself via flex and
    requires a min-height:0 parent (the spike confirmed this contract). */
 .chatArea {
   display: flex;

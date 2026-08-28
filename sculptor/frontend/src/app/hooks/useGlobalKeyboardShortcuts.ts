@@ -18,7 +18,7 @@ import { CHAT_INPUT_ELEMENT_ID } from "../../common/utils/elementIds.ts";
 import { isDismissibleOverlayOpen } from "../../common/utils/overlays.ts";
 import { useCommandPalette } from "../../components/commandPalette";
 import { newWorkspaceDialogAtom } from "../../components/newWorkspace/newWorkspaceAtoms.ts";
-import { chatToolDensityAtom } from "../../pages/workspace/chatAlpha/atoms/chatAlpha.ts";
+import { chatToolDensityAtom } from "../../pages/workspace/chat/atoms/chat.ts";
 
 export const useGlobalKeyboardShortcuts = (): void => {
   const store = useStore();

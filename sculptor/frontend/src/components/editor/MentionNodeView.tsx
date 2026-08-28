@@ -5,7 +5,7 @@ import { NodeViewWrapper } from "@tiptap/react";
 import type { ReactElement } from "react";
 import { useCallback, useSyncExternalStore } from "react";
 
-import { disambiguateFileNames } from "~/pages/workspace/chatAlpha/chipRowUtils.ts";
+import { disambiguateFileNames } from "~/pages/workspace/chat/chipRowUtils.ts";
 
 import type { SkillType } from "../../common/utils/skillBadge";
 import type { EntityType } from "../EntityMentionSuggestion";

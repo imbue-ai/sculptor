@@ -1,0 +1,103 @@
+.row {
+  position: relative;
+  width: 100%;
+}
+
+.gutterIcon {
+  align-items: center;
+  color: var(--gray-a7);
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  left: calc(-16px - var(--space-2));
+  position: absolute;
+  top: 0;
+  width: 16px;
+}
+
+.pill {
+  align-items: center;
+  appearance: none;
+  background-color: var(--accent-a2);
+  border: 1px solid var(--accent-a3);
+  border-radius: var(--radius-1);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  gap: var(--space-1);
+  height: 28px;
+  max-width: 100%;
+  min-width: 0;
+  outline: none;
+  overflow: hidden;
+  padding: 0 var(--space-2);
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-default);
+  white-space: nowrap;
+  width: 100%;
+}
+
+.pillPrompt {
+  color: var(--gray-a12);
+  flex: 1;
+  margin-right: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill:hover,
+.pillOpen {
+  background-color: var(--accent-a3);
+
+  .pillPrompt {
+    color: var(--gray-12);
+  }
+}
+
+.pillDuration {
+  color: var(--gray-a10);
+  flex-shrink: 0;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+  color: var(--gray-a10);
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.trigger {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+// Wraps the pill so the hover hit-area extends slightly past the visible
+// button. Mirrors `.pillHoverZone` in ToolPillRow — the cushion of
+// padding gives the cursor a forgiving target on its way toward the
+// popover. Block layout matches the pill's full-width sizing.
+.pillHoverZone {
+  display: block;
+  padding: var(--space-1) 0;
+}
+
+.popoverContent {
+  /* Override Radix popover entrance animation to prevent layout shift on open */
+  animation: none !important;
+  border-radius: var(--radius-1) !important;
+  max-height: 480px;
+  padding: 0;
+  width: 560px;
+}

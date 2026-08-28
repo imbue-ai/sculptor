@@ -50,7 +50,7 @@ const generateDocumentWithMentions = (
   return paragraphs;
 };
 
-// --- AlphaMarkdownBlock path simulation ---
+// --- ChatMarkdownBlock path simulation ---
 //
 // In the real code, renderEntityMentions is called inside each component
 // override (p, li, h1-h6, etc.). It receives React children and calls
@@ -145,7 +145,7 @@ const tiptapFastCheckThenDocScan = (contentHasMention: boolean, nodes: ReadonlyA
   return totalReplacements;
 };
 
-describe("AlphaMarkdownBlock: no mentions (typical case)", () => {
+describe("ChatMarkdownBlock: no mentions (typical case)", () => {
   const small = generateDocument(10, 50);
   const medium = generateDocument(100, 100);
   const large = generateDocument(500, 200);
@@ -181,7 +181,7 @@ describe("AlphaMarkdownBlock: no mentions (typical case)", () => {
   });
 });
 
-describe("AlphaMarkdownBlock: with mentions", () => {
+describe("ChatMarkdownBlock: with mentions", () => {
   const sparse = generateDocumentWithMentions(100, 100, 1);
   const dense = generateDocumentWithMentions(100, 50, 5);
 
