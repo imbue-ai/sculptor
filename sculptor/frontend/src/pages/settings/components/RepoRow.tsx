@@ -4,9 +4,9 @@ import type { FocusEvent, ReactElement } from "react";
 import { useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { DEFAULT_WORKSPACE_SETUP_COMMAND } from "~/common/setupDefaults";
+import { useOnMountIf } from "~/common/hooks/useOnMountIf";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
-import { useOnMountIf } from "~/common/useOnMountIf";
+import { DEFAULT_WORKSPACE_SETUP_COMMAND } from "~/common/utils/setupDefaults";
 
 import styles from "./RepoRow.module.scss";
 

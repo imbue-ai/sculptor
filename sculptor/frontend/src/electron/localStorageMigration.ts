@@ -37,7 +37,7 @@ type MigrationStore = {
  * userData partition that holds the old data). Must run before the main window
  * loads sculptor://app. Never throws; the app starts regardless.
  */
-export async function migrateLocalStorageToAppScheme(store: MigrationStore): Promise<void> {
+export const migrateLocalStorageToAppScheme = async (store: MigrationStore): Promise<void> => {
   if (store.get(DONE_KEY) === true) return;
 
   const attempts = (store.get(ATTEMPTS_KEY) as number | undefined) ?? 0;
@@ -90,4 +90,4 @@ export async function migrateLocalStorageToAppScheme(store: MigrationStore): Pro
     if (!win.isDestroyed()) win.destroy();
     if (tmpDir !== null) fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-}
+};

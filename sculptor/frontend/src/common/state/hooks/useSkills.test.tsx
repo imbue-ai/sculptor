@@ -4,8 +4,8 @@ import type { ReactElement, ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BUILTIN_SKILLS } from "~/common/builtinSkills";
-import { queryClient } from "~/common/queryClient";
+import { queryClient } from "~/common/state/queryClient";
+import { BUILTIN_SKILLS } from "~/common/utils/builtinSkills";
 
 import { useSkills } from "./useSkills";
 

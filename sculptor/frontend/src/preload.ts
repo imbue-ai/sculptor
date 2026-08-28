@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer, webFrame } from "electron";
 
+import type { AnyBackendStatus, AutoUpdateStatus, UpdateChannel } from "./common/types/backend.ts";
+import type { CustomBackendSettings, SculptorDevInfo } from "./electron/bridge.ts";
 import type { ZoomCommand } from "./electron/constants.ts";
 import {
   AUTO_UPDATE_CHECK_CHANNEL_NAME,
@@ -26,13 +28,6 @@ import {
   TEST_READ_CLIPBOARD_PNG_CHANNEL_NAME,
   ZOOM_COMMAND_CHANNEL_NAME,
 } from "./electron/constants.ts";
-import type {
-  AnyBackendStatus,
-  AutoUpdateStatus,
-  CustomBackendSettings,
-  SculptorDevInfo,
-  UpdateChannel,
-} from "./shared/types.ts";
 
 const isInPytest = !!process.env.PYTEST_CURRENT_TEST;
 

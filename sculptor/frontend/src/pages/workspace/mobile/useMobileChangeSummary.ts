@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
-import { parseDiff } from "~/components/DiffUtils.ts";
+import { parseDiff } from "~/pages/workspace/utils/diff.ts";
 
 export type MobileFileStatus = "M" | "A" | "D";
 
@@ -25,11 +25,11 @@ export type MobileChangeSummary = {
 
 const EMPTY: MobileChangeSummary = { hasChanges: false, filesChanged: 0, added: 0, removed: 0, files: [] };
 
-function splitPath(path: string): { fileName: string; dirPath: string } {
+const splitPath = (path: string): { fileName: string; dirPath: string } => {
   const idx = path.lastIndexOf("/");
   if (idx === -1) return { fileName: path, dirPath: "" };
   return { fileName: path.slice(idx + 1), dirPath: path.slice(0, idx + 1) };
-}
+};
 
 /**
  * Shared change summary for the mobile shell — the changes pill, the ⋮ menu's

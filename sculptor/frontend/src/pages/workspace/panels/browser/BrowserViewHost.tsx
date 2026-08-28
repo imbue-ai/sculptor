@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useEffect } from "react";
 
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces";
-import { isElectron } from "~/electron/utils";
+import { isElectron } from "~/electron/platform";
 
 import { browserViewRegistryAtom } from "./browserViewRegistry";
 import { BrowserViewSlot } from "./BrowserViewSlot";

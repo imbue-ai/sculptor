@@ -3,8 +3,8 @@ import { useCallback } from "react";
 
 import type { DiffArtifact } from "../../../api";
 import { DiffStatus, getWorkspaceDiff } from "../../../api";
-import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
-import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import type { BackendQueryKeyResult, BackendQueryResult } from "../queryClient.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
 import { useWorkspace } from "./useWorkspace";
 
 type UseWorkspaceDiffResult = BackendQueryResult<DiffArtifact | null | undefined> & {

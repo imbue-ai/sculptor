@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { UserConfig } from "~/api";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
-import type { SavedLayout } from "~/components/sections/persistence/types.ts";
-import { SAVED_LAYOUT_VERSION } from "~/components/sections/persistence/types.ts";
-import { savedLayoutsAtom } from "~/components/sections/savedLayoutAtoms.ts";
-import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID } from "~/components/sections/systemDefaultLayout.ts";
+import { savedLayoutsAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
+import type { SavedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { SAVED_LAYOUT_VERSION } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import {
   allNamedBindingsAtom,
@@ -15,13 +15,13 @@ import {
   layoutShortcutBindingsAtom,
 } from "./layoutShortcuts.ts";
 
-function makeLayout(id: string): SavedLayout {
+const makeLayout = (id: string): SavedLayout => {
   return { id, name: id, version: SAVED_LAYOUT_VERSION, captured: SYSTEM_DEFAULT_LAYOUT.captured };
-}
+};
 
-function withKeybindings(bindings: Record<string, string | null>): UserConfig {
+const withKeybindings = (bindings: Record<string, string | null>): UserConfig => {
   return { keybindings: bindings } as unknown as UserConfig;
-}
+};
 
 beforeEach(() => {
   localStorage.clear();

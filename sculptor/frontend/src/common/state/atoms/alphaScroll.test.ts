@@ -14,7 +14,7 @@ const position = (overrides?: Partial<AlphaScrollPosition>): AlphaScrollPosition
 
 // The atomFamily caches its atoms for the module's lifetime, and `getOnInit`
 // reads localStorage when the atom is *created*. Each test therefore uses a
-// unique taskId, so the atom creation happens inside the test — after that
+// unique agentId, so the atom creation happens inside the test — after that
 // test's localStorage setup — matching what a real app start does (fresh
 // module, storage already populated).
 describe("alphaScrollPositionAtomFamily", () => {
@@ -27,7 +27,7 @@ describe("alphaScrollPositionAtomFamily", () => {
     expect(store.get(alphaScrollPositionAtomFamily("fresh-task"))).toBeNull();
   });
 
-  it("persists writes to localStorage under the task-keyed key", () => {
+  it("persists writes to localStorage under the agent-keyed key", () => {
     const store = createStore();
     const saved = position();
 
@@ -48,7 +48,7 @@ describe("alphaScrollPositionAtomFamily", () => {
     expect(store.get(alphaScrollPositionAtomFamily("restart-task"))).toEqual(saved);
   });
 
-  it("keeps positions isolated per task", () => {
+  it("keeps positions isolated per agent", () => {
     const store = createStore();
     const first = position();
     const second = position({ firstVisibleMessageId: "msg-7", pixelOffset: 3, distanceFromBottom: 0 });

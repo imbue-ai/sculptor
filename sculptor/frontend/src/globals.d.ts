@@ -1,7 +1,7 @@
 import type { Terminal as XTerm } from "@xterm/xterm";
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
-import type { SculptorElectronAPI } from "./shared/types.ts";
+import type { SculptorElectronAPI } from "./electron/bridge.ts";
 
 type WebviewHTMLAttributes = HTMLAttributes<HTMLElement> & {
   src?: string;

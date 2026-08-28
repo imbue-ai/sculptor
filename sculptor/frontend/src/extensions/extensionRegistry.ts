@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import type { ComponentType } from "react";
 
-import type { ExtensionManifest, ExtensionPanelDefinition } from "./types.ts";
+import type { ExtensionManifest, ExtensionPanelDefinition } from "./contract.ts";
 
 /**
  * The pre-rename ("sculptor-plugin…") localStorage key behind each persisted

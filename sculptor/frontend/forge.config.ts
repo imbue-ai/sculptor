@@ -20,7 +20,7 @@ const appleApiIssuer = process.env.APPLE_API_ISSUER ?? "";
 const IS_NOTARIZING_AND_SIGNING = !process.env.SKIP_NOTARIZE_AND_SIGN;
 
 // Helper to run a tool and show stderr on failure
-async function run(cmd: string, args: Array<string>): Promise<boolean> {
+const run = async (cmd: string, args: Array<string>): Promise<boolean> => {
   const { promisify } = await import("node:util");
   const { execFile } = await import("node:child_process");
   const execFileP = promisify(execFile);
@@ -37,7 +37,7 @@ async function run(cmd: string, args: Array<string>): Promise<boolean> {
     );
     return false;
   }
-}
+};
 
 let config = {
   // Configuration for the Electron packager that creates the final app bundle

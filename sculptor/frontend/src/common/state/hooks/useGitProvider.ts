@@ -1,4 +1,4 @@
-import type { ProjectID } from "../../Types.ts";
+import type { ProjectID } from "../ids.ts";
 import { useRepoInfo } from "./useRepoInfo.ts";
 
 export type GitProvider = "github" | null;

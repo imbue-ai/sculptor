@@ -11,15 +11,15 @@
 import { useEffect, useRef } from "react";
 
 import type { CodingAgentTaskView } from "../../../api";
-import { queryClient, taskQueryKey } from "../../queryClient.ts";
 import { clearUnreadOverride, isUnreadOverrideActive } from "../atoms/unreadOverrides";
 import { useMarkReadMutation } from "../mutations";
-import { useTask } from "./useTask";
+import { agentQueryKey, queryClient } from "../queryClient.ts";
+import { useAgent } from "./useAgent";
 
 const DEBOUNCE_MS = 1000;
 
 export const useMarkRead = (workspaceID: string, agentID: string): void => {
-  const task = useTask(agentID);
+  const agent = useAgent(agentID);
   const { mutate: markReadMutate } = useMarkReadMutation();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while a debounced mark-read is scheduled but hasn't fired yet, so the
@@ -33,10 +33,10 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
     markReadMutate({ workspaceId: workspaceID, agentId: agentID });
   };
 
-  // Read the latest task from the cache (not the rendered `task`): the
+  // Read the latest agent from the cache (not the rendered `agent`): the
   // decision must reflect updates that arrived after this closure was created.
   const isExplicitlyUnread = (): boolean => {
-    const latest = queryClient.getQueryData<CodingAgentTaskView | null>(taskQueryKey(agentID));
+    const latest = queryClient.getQueryData<CodingAgentTaskView | null>(agentQueryKey(agentID));
     return !!latest && isUnreadOverrideActive(agentID, latest);
   };
 
@@ -45,7 +45,7 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
   // A fresh activation is the user seeing the agent again, so it also ends any
   // explicit "Mark as unread" (see unreadOverrides.ts).
   useEffect(() => {
-    if (task) {
+    if (agent) {
       clearUnreadOverride(agentID);
       markRead();
     }
@@ -65,12 +65,12 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
         }
       }
     };
-    // Only run on mount and when agentID changes, not on every task update
+    // Only run on mount and when agentID changes, not on every agent update
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentID]);
 
   // Re-fire (debounced) when updatedAt changes while the hook is active
-  const updatedAt = task?.updatedAt;
+  const updatedAt = agent?.updatedAt;
   const isInitialMount = useRef(true);
   useEffect(() => {
     if (isInitialMount.current) {
@@ -78,7 +78,7 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
       return;
     }
 
-    if (!task || !updatedAt) {
+    if (!agent || !updatedAt) {
       return;
     }
 

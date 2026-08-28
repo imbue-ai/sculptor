@@ -10,7 +10,7 @@ import { ActionDialog } from "./ActionDialog";
 
 // Mock the Editor component since TipTap requires a real browser DOM.
 // The mock renders a simple textarea that mirrors the Editor's interface.
-vi.mock("~/components/Editor", () => ({
+vi.mock("~/components/editor/Editor", () => ({
   Editor: ({
     tagName,
     placeholder,

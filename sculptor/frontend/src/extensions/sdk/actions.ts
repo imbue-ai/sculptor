@@ -1,5 +1,5 @@
 /**
- * Imperative host actions extensions can call. Unlike the hooks in `hooks.ts`,
+ * Imperative host actions extensions can call. Unlike the SDK's React hooks,
  * these are plain functions, callable from event handlers or anywhere outside
  * a React render. The generated SDK runtime stub (served at
  * `/extension-runtime/sculptor-extension-sdk.js`) re-exports them from the

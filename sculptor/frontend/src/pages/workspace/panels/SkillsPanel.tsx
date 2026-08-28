@@ -7,17 +7,17 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 
 import { ElementIds } from "~/api";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
+import { useAgentSupportsSkills } from "~/common/state/hooks/useAgentHelpers";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
 import { useSkills } from "~/common/state/hooks/useSkills";
-import { useTaskSupportsSkills } from "~/common/state/hooks/useTaskHelpers";
+import type { SkillType } from "~/common/utils/skillBadge";
 import { PanelHeader } from "~/components/panels/PanelHeader";
-import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
-import { draggedPanelIdAtom } from "~/components/sections/transientAtoms.ts";
-import type { SkillType } from "~/components/skillBadge";
 import { SkillChip } from "~/components/skills/SkillChip";
 import { SkillHoverContent } from "~/components/skills/SkillHoverContent";
 import { TooltipIconButton } from "~/components/TooltipIconButton";
-import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms";
+import { openFileViewTabAtom } from "~/pages/workspace/diffPanel/atoms/diffPanel";
+import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { draggedPanelIdAtom } from "~/pages/workspace/layout/atoms/transient.ts";
 
 import styles from "./SkillsPanel.module.scss";
 import { SkillsSearch } from "./SkillsSearch";
@@ -87,13 +87,13 @@ export const SkillsPanel = (): ReactElement => {
   // land in), and the route's agent id goes stale when a different center
   // tab is activated.
   const workspaceID = useAtomValue(activeWorkspaceIdAtom) ?? "";
-  const taskID = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
+  const agentId = useAtomValue(activeChatAgentIdAtomFamily(workspaceID));
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   // A harness that doesn't support skills collapses the panel to an empty
   // state so the user sees a clear signal instead of stale skill content.
-  // `?? true` keeps the panel populated before the task's capabilities have
+  // `?? true` keeps the panel populated before the agent's capabilities have
   // loaded.
-  const canRenderSkills = useTaskSupportsSkills(taskID ?? "") ?? true;
+  const canRenderSkills = useAgentSupportsSkills(agentId ?? "") ?? true;
   const skills = useMemo(() => (canRenderSkills ? rawSkills : []), [canRenderSkills, rawSkills]);
 
   const [search, setSearch] = useState("");

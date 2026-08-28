@@ -129,15 +129,15 @@ describe("parseSdkValueExports", () => {
   it("collects value re-exports and drops type-only ones", () => {
     const source = [
       'export { PanelHeader } from "./components.ts";',
-      'export { useExtensionSetting, useWorkspaceBranch, useWorkspaceId, useWorkspaceTasks } from "./hooks.ts";',
+      'export { useExtensionSetting, useWorkspaceBranch, useWorkspaceId, useWorkspaceAgents } from "./hooks.ts";',
       'export type { CodingAgentTaskView } from "~/api";',
     ].join("\n");
     expect(parseSdkValueExports(source)).toEqual([
       "PanelHeader",
       "useExtensionSetting",
+      "useWorkspaceAgents",
       "useWorkspaceBranch",
       "useWorkspaceId",
-      "useWorkspaceTasks",
     ]);
   });
 
@@ -245,7 +245,7 @@ describe("collectStubs (real installed namespaces)", () => {
     "tanstack-react-query.js": ["useQuery", "useMutation", "useQueryClient", "useInfiniteQuery"],
     "radix-themes.js": ["Flex", "Box", "Text", "Button", "Card", "Dialog"],
     "lucide-react.js": ["Coins", "Hash", "Activity"],
-    "sculptor-extension-sdk.js": ["PanelHeader", "useExtensionSetting", "useWorkspaceTasks"],
+    "sculptor-extension-sdk.js": ["PanelHeader", "useExtensionSetting", "useWorkspaceAgents"],
   };
 
   it("re-exports the well-known bindings of every module", async () => {

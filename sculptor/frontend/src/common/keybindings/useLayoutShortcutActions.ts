@@ -7,7 +7,7 @@ import { useStore } from "jotai";
 import { useCallback } from "react";
 
 import { UserConfigField } from "~/api";
-import { chordsEqual } from "~/common/ShortcutUtils.ts";
+import { chordsEqual } from "~/common/keybindings/matching.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 
@@ -16,7 +16,7 @@ import { allNamedBindingsAtom, layoutShortcutBindingId, type NamedBinding } from
 // Set (or, with null, clear) a Layout's shortcut. Clearing removes the key entirely
 // rather than storing an explicit-null override, since layout bindings have no
 // default to override — so the dict never accumulates dead entries.
-export function useSetLayoutShortcut(): (layoutId: string, chord: string | null) => Promise<void> {
+export const useSetLayoutShortcut = (): ((layoutId: string, chord: string | null) => Promise<void>) => {
   const { updateField } = useUserConfig();
   const store = useStore();
   return useCallback(
@@ -35,7 +35,7 @@ export function useSetLayoutShortcut(): (layoutId: string, chord: string | null)
     },
     [updateField, store],
   );
-}
+};
 
 // Find an existing binding (static or per-layout) that a recorded chord would
 // collide with, ignoring the Layout currently being edited. Returns null when the
@@ -44,7 +44,10 @@ export function useSetLayoutShortcut(): (layoutId: string, chord: string | null)
 //
 // Takes the LAYOUT id being edited (or undefined when creating a new Layout) and
 // resolves the namespaced `layout.apply.<id>` binding id itself.
-export function useLayoutBindingConflict(): (chord: string, selfLayoutId: string | undefined) => NamedBinding | null {
+export const useLayoutBindingConflict = (): ((
+  chord: string,
+  selfLayoutId: string | undefined,
+) => NamedBinding | null) => {
   const store = useStore();
   return useCallback(
     (chord: string, selfLayoutId: string | undefined): NamedBinding | null => {
@@ -62,4 +65,4 @@ export function useLayoutBindingConflict(): (chord: string, selfLayoutId: string
     },
     [store],
   );
-}
+};

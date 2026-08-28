@@ -15,8 +15,8 @@ export type AlphaScrollPosition = {
 const STORAGE_KEY_PREFIX = "sculptor-alpha-scroll:";
 
 /**
- * Cap on how many tasks keep a persisted scroll position. Positions are ~100
- * bytes each, so the cap is about hygiene, not quota: without it every task
+ * Cap on how many agents keep a persisted scroll position. Positions are ~100
+ * bytes each, so the cap is about hygiene, not quota: without it every agent
  * ever visited would leave a localStorage key behind forever. Oldest-saved
  * entries are evicted first.
  */
@@ -55,7 +55,7 @@ const prunePersistedPositions = (justWrittenKey: string): void => {
 // reader re-lands at the *live* tail via the signed distance, a scrolled-up
 // reader re-anchors to a stable message id with a distance fallback),
 // concurrent tabs by last-writer-wins — the same policy as the other
-// task-keyed localStorage state (prompt drafts, draft agent settings) — and
+// agent-keyed localStorage state (prompt drafts, draft agent settings) — and
 // unbounded key growth by the LRU prune above. `getOnInit` makes the saved
 // value available on the very first read, which the pre-paint mount restore
 // depends on.
@@ -68,8 +68,8 @@ const alphaScrollStorage = createJSONStorage<AlphaScrollPosition | null>(() => (
   removeItem: (key: string): void => localStorage.removeItem(key),
 }));
 
-export const alphaScrollPositionAtomFamily = atomFamily((taskId: string) =>
-  atomWithStorage<AlphaScrollPosition | null>(`${STORAGE_KEY_PREFIX}${taskId}`, null, alphaScrollStorage, {
+export const alphaScrollPositionAtomFamily = atomFamily((agentId: string) =>
+  atomWithStorage<AlphaScrollPosition | null>(`${STORAGE_KEY_PREFIX}${agentId}`, null, alphaScrollStorage, {
     getOnInit: true,
   }),
 );

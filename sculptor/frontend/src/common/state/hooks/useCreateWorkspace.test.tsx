@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as ApiModule from "~/api";
 import { createWorkspaceAgent, createWorkspaceV2, EffortLevel, LlmModel, WorkspaceInitializationStrategy } from "~/api";
-import type * as NavigateUtilsModule from "~/common/NavigateUtils.ts";
+import type * as NavigationModule from "~/common/hooks/navigation.ts";
 import { encodeRegisteredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 
@@ -22,8 +22,8 @@ vi.mock("~/api", async (importOriginal) => ({
 
 const navigateToWorkspace = vi.fn();
 const navigateToAgent = vi.fn();
-vi.mock("~/common/NavigateUtils.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof NavigateUtilsModule>()),
+vi.mock("~/common/hooks/navigation.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof NavigationModule>()),
   useImbueNavigate: (): Record<string, unknown> => ({ navigateToWorkspace, navigateToAgent }),
 }));
 

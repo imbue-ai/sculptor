@@ -3,13 +3,12 @@ import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 
-import { removeWorkspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
+import { ToastType } from "~/common/state/atoms/toasts.ts";
+import { removeWorkspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { removeWorkspaceAgentActionState } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { deleteWorkspace } from "../../../api";
-import { ToastType } from "../../../components/Toast.tsx";
-import { HTTPException } from "../../Errors.ts";
-import { queryClient, recentWorkspacesQueryKey } from "../../queryClient.ts";
+import { HTTPException } from "../../utils/errors.ts";
 import { workspaceDeleteErrorToastAtom } from "../atoms/toasts";
 import type { WorkspaceDeleteContext } from "../atoms/workspaces";
 import {
@@ -18,6 +17,7 @@ import {
   rollbackDeleteWorkspaceAtom,
 } from "../atoms/workspaces";
 import { MUTATION_SETTLE_TIMEOUT_MS } from "../mutations";
+import { queryClient, recentWorkspacesQueryKey } from "../queryClient.ts";
 
 type UseOptimisticWorkspaceDeleteInputs = {
   onNavigateAfterDelete: (workspaceId: string) => void;

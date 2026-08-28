@@ -10,8 +10,8 @@
 import {
   registerAgentPanelComponent,
   registerTerminalPanelComponent,
-} from "~/components/sections/registry/dynamicPanels.tsx";
-import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
+} from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
+import { registerPanelComponent } from "~/pages/workspace/layout/registry/panelRegistry.ts";
 
 import { ActionsPanelForShell } from "./ActionsPanel.tsx";
 import { AgentPanel } from "./AgentPanel.tsx";

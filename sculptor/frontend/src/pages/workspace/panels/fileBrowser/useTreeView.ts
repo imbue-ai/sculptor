@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import type { TreeNode } from "./types.ts";
-import type { FlatRowEntry } from "./utils.ts";
-import { collectAllFolderPaths, collectDescendantFolderPaths, getAncestorPaths } from "./utils.ts";
+import type { TreeNode } from "./types/fileBrowser.ts";
+import type { FlatRowEntry } from "./utils/fileTree.ts";
+import { collectAllFolderPaths, collectDescendantFolderPaths, getAncestorPaths } from "./utils/fileTree.ts";
 
 type UseAgentFileTrackingParams = {
   activeFilePath: string | undefined;

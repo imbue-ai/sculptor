@@ -1,6 +1,6 @@
 import { atom } from "jotai";
 
-import type { RequestID } from "../../Types.ts";
+import type { RequestID } from "../ids.ts";
 
 export type RequestAcknowledgment = {
   requestId: RequestID;

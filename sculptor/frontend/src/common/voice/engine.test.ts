@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 
-import type { VoiceEngine, VoiceEngineEvents, VoiceEngineState } from "./types.ts";
+import type { VoiceEngine, VoiceEngineEvents, VoiceEngineState } from "./engineContract.ts";
 
 // Hoisted mocks stay stable across the per-test `vi.resetModules()`, so the
 // engine's module-level caches reset while these keep their identity.
@@ -15,8 +15,8 @@ const h = vi.hoisted(() => ({
   getSessionToken: vi.fn(),
 }));
 
-vi.mock("~/apiClient.ts", () => ({ baseUrl: "https://backend.test" }));
-vi.mock("~/common/Auth.ts", () => ({
+vi.mock("~/common/apiClient.ts", () => ({ baseUrl: "https://backend.test" }));
+vi.mock("~/common/utils/sessionToken.ts", () => ({
   SESSION_TOKEN_HEADER_NAME: "x-session-token",
   getSessionToken: h.getSessionToken,
 }));

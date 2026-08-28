@@ -4,6 +4,7 @@ Use consistent patterns. Use tools to enforce consistency. See [linting](./linti
 
 For specific frontend/backend style guides, see the following:
 - [frontend style guide](style/frontend.md)
+- [frontend file structure](style/frontend_structure.md)
 - [backend style guide](style/backend.md).
 
 ## Comments

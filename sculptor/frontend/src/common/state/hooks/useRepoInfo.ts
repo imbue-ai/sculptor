@@ -3,8 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { RepoInfo } from "../../../api";
 import { getCurrentBranch, getRepoInfo } from "../../../api";
-import type { ProjectID } from "../../Types";
 import { repoInfoAtomFamily } from "../atoms/repoInfo.ts";
+import type { ProjectID } from "../ids";
 
 const RETRY_INTERVAL_MS = 3_000;
 const MAX_RETRIES = 10;

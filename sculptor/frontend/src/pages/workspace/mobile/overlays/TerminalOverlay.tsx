@@ -3,7 +3,7 @@ import { ChevronLeft, Ellipsis } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";

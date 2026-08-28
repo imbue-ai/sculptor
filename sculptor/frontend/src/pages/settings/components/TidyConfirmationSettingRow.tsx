@@ -8,7 +8,7 @@ import { useAtom } from "jotai";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import { tidyConfirmationSuppressedAtom } from "~/components/sections/savedLayoutAtoms.ts";
+import { tidyConfirmationSuppressedAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
 
 import { SettingRow } from "./SettingRow.tsx";
 

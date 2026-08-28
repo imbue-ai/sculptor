@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { CapturedLayout } from "~/components/sections/persistence/types.ts";
-import { DEFAULT_SECTION_SIZES } from "~/components/sections/persistence/types.ts";
+import type { CapturedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { DEFAULT_SECTION_SIZES } from "~/pages/workspace/layout/persistence/snapshot.ts";
 
 import { describeLayout } from "./layoutSummary.ts";
 
-function captured(overrides: Partial<CapturedLayout>): CapturedLayout {
+const captured = (overrides: Partial<CapturedLayout>): CapturedLayout => {
   return {
     placement: {},
     order: {},
@@ -17,7 +17,7 @@ function captured(overrides: Partial<CapturedLayout>): CapturedLayout {
     activeSubSection: null,
     ...overrides,
   };
-}
+};
 
 // Title-case the id for a readable stub name (files → Files).
 const nameOf = (id: string): string => id.charAt(0).toUpperCase() + id.slice(1);

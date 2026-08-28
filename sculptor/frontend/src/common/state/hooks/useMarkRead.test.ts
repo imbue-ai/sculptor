@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
 import type { CodingAgentTaskView } from "../../../api";
-import { queryClient as sharedQueryClient, taskQueryKey } from "../../queryClient.ts";
 import { resetUnreadOverridesForTesting, setUnreadOverride } from "../atoms/unreadOverrides";
+import { agentQueryKey, queryClient as sharedQueryClient } from "../queryClient.ts";
 import { useMarkRead } from "./useMarkRead";
 
 // Capture calls to the mark-read/mark-unread endpoints without hitting the network.
@@ -18,13 +18,13 @@ vi.mock("../../../api", async () => {
   return { ...actual, markWorkspaceAgentRead: mockMarkRead, markWorkspaceAgentUnread: mockMarkUnread };
 });
 
-const makeTask = (updatedAt: string, lastReadAt: string | null, id = "agent-1"): CodingAgentTaskView =>
+const makeAgent = (updatedAt: string, lastReadAt: string | null, id = "agent-1"): CodingAgentTaskView =>
   ({ id, status: "READY", updatedAt, lastReadAt }) as unknown as CodingAgentTaskView;
 
-// The hook reads tasks from the query cache (useTask); tests seed and update
+// The hook reads agents from the query cache (useAgent); tests seed and update
 // the cache the same way the WS bridge does.
-const seedTask = (task: CodingAgentTaskView): void => {
-  sharedQueryClient.setQueryData(taskQueryKey(task.id as string), task);
+const seedAgent = (agent: CodingAgentTaskView): void => {
+  sharedQueryClient.setQueryData(agentQueryKey(agent.id as string), agent);
 };
 
 const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
@@ -40,9 +40,9 @@ const flushMicrotasks = async (): Promise<void> => {
 // Query-cache notifications are delivered via setTimeout(0) (TanStack's
 // notifyManager), so a cache write only reaches the hook on the next macrotask
 // — unlike the synchronous Jotai notify this hook previously relied on.
-const writeTaskAndNotify = async (task: CodingAgentTaskView): Promise<void> => {
+const writeAgentAndNotify = async (agent: CodingAgentTaskView): Promise<void> => {
   await act(async () => {
-    seedTask(task);
+    seedAgent(agent);
     await flushMicrotasks();
   });
 };
@@ -54,7 +54,7 @@ beforeEach(() => {
   // Unread overrides live in a module-level map (not React state), so they
   // leak across tests without an explicit reset.
   resetUnreadOverridesForTesting();
-  // Clear the shared queryClient cache between tests so tasks don't leak.
+  // Clear the shared queryClient cache between tests so agents don't leak.
   sharedQueryClient.removeQueries({ queryKey: ["sculptor"] });
 });
 
@@ -64,7 +64,7 @@ afterEach(() => {
 
 describe("useMarkRead", () => {
   it("flushes a pending debounced read when the agent is left mid-debounce", async () => {
-    seedTask(makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
+    seedAgent(makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
     const { unmount } = renderMarkRead();
     // The mount fires markRead via useEffect → .mutate() which schedules on a
     // microtask. Flush microtasks so the mock is recorded before this assertion.
@@ -73,7 +73,7 @@ describe("useMarkRead", () => {
     mockMarkRead.mockClear();
 
     // A new update arrives while viewing — schedules a debounced read.
-    await writeTaskAndNotify(makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
+    await writeAgentAndNotify(makeAgent("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
 
     // Leaving the agent before the debounce fires must flush the pending read.
     act(() => {
@@ -88,7 +88,7 @@ describe("useMarkRead", () => {
   });
 
   it("does not flush when there is no pending read", async () => {
-    seedTask(makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
+    seedAgent(makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
     const { unmount } = renderMarkRead();
     await flushMicrotasks();
     expect(mockMarkRead).toHaveBeenCalledTimes(1);
@@ -103,18 +103,18 @@ describe("useMarkRead", () => {
   });
 
   it("does not flush when the user marked the agent unread while a read was pending", async () => {
-    seedTask(makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
+    seedAgent(makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z"));
     const { unmount } = renderMarkRead();
     await flushMicrotasks();
     mockMarkRead.mockClear();
 
     // A new update schedules a debounced read...
-    await writeTaskAndNotify(makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
+    await writeAgentAndNotify(makeAgent("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z"));
     // ...then the user explicitly marks it unread. The mark-unread mutation
     // records the override AND clears lastReadAt optimistically.
-    const task = sharedQueryClient.getQueryData<CodingAgentTaskView>(taskQueryKey("agent-1"))!;
-    setUnreadOverride("agent-1", task);
-    await writeTaskAndNotify({ ...task, lastReadAt: null });
+    const agent = sharedQueryClient.getQueryData<CodingAgentTaskView>(agentQueryKey("agent-1"))!;
+    setUnreadOverride("agent-1", agent);
+    await writeAgentAndNotify({ ...agent, lastReadAt: null });
 
     act(() => {
       unmount();
@@ -125,8 +125,8 @@ describe("useMarkRead", () => {
   });
 
   it("preserves an explicit mark-unread on the agent being left when switching agents", async () => {
-    seedTask(makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
-    seedTask(makeTask("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-y"));
+    seedAgent(makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
+    seedAgent(makeAgent("2024-01-01T00:00:05.000Z", "2024-01-01T00:00:01.000Z", "agent-y"));
     const { rerender } = renderHook(({ agentId }: { agentId: string }) => useMarkRead("ws-1", agentId), {
       wrapper,
       initialProps: { agentId: "agent-x" },
@@ -136,10 +136,10 @@ describe("useMarkRead", () => {
 
     // agent-x gets an update (schedules a debounced read), then the user marks
     // agent-x unread before the debounce fires (recording its unread override).
-    await writeTaskAndNotify(makeTask("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
-    const task = sharedQueryClient.getQueryData<CodingAgentTaskView>(taskQueryKey("agent-x"))!;
-    setUnreadOverride("agent-x", task);
-    await writeTaskAndNotify({ ...task, lastReadAt: null });
+    await writeAgentAndNotify(makeAgent("2024-01-01T00:00:06.000Z", "2024-01-01T00:00:01.000Z", "agent-x"));
+    const agent = sharedQueryClient.getQueryData<CodingAgentTaskView>(agentQueryKey("agent-x"))!;
+    setUnreadOverride("agent-x", agent);
+    await writeAgentAndNotify({ ...agent, lastReadAt: null });
 
     // Switching to agent-y must consult agent-x's state (it is explicitly
     // unread), not agent-y's, so the flush must not re-mark agent-x read.

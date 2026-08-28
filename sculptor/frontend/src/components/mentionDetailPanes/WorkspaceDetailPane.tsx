@@ -20,7 +20,7 @@ const agentCountMeta = (count: number): string => {
 /**
  * Detail pane for a `+[workspace:id|name]` chip. Reads the composite
  * `workspaceDetailAtomFamily` so a single subscription pulls the
- * workspace, parent project, and its non-deleted tasks.
+ * workspace, parent project, and its non-deleted agents.
  */
 export const WorkspaceDetailPane = ({ workspaceId, entityDisplayName }: WorkspaceDetailPaneProps): ReactElement => {
   const detail = useAtomValue(workspaceDetailAtomFamily(workspaceId));

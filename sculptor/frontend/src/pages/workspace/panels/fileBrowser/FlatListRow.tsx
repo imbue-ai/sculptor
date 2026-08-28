@@ -5,8 +5,8 @@ import { memo, type ReactElement } from "react";
 import { ElementIds } from "~/api";
 
 import styles from "./FileTree.module.scss";
-import type { FlatFileEntry } from "./types.ts";
-import { STATUS_COLOR_STYLES, truncateMiddlePath } from "./utils.ts";
+import type { FlatFileEntry } from "./types/fileBrowser.ts";
+import { STATUS_COLOR_STYLES, truncateMiddlePath } from "./utils/rowDisplay.ts";
 
 type FlatListRowProps = {
   entry: FlatFileEntry;

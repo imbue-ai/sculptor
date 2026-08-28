@@ -5,7 +5,7 @@
 
 import type { ReactElement } from "react";
 
-import type { CapturedLayout } from "~/components/sections/persistence/types.ts";
+import type { CapturedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
 
 type LayoutWireframeIconProps = {
   captured: CapturedLayout;

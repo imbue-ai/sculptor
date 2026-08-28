@@ -3,13 +3,14 @@ import { atom } from "jotai";
 import { atomFamily, atomWithStorage, createJSONStorage, selectAtom } from "jotai/utils";
 import { isEqual } from "lodash";
 
+import { ToastType } from "~/common/state/atoms/toasts.ts";
+
 import type { Workspace } from "../../../api";
 import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../../../api";
-import type { WorkspaceDotStatus } from "../../../components/statusDot/statusUtils.ts";
-import { computeWorkspaceDotStatus } from "../../../components/statusDot/statusUtils.ts";
-import { ToastType } from "../../../components/Toast.tsx";
-import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../../queryClient.ts";
-import { tasksArrayAtom } from "./tasks.ts";
+import type { WorkspaceDotStatus } from "../../utils/statusDot.ts";
+import { computeWorkspaceDotStatus } from "../../utils/statusDot.ts";
+import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../queryClient.ts";
+import { agentsArrayAtom } from "./agents.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
 import { getAgentDotStatusWithUnreadOverride } from "./unreadOverrides.ts";
 import { viewedAgentIdAtom } from "./viewedAgent.ts";
@@ -65,7 +66,7 @@ export const workspaceIdsAtom = atom<ReadonlyArray<string> | undefined>(undefine
 export const hasEverHadWorkspacesAtom = atom<boolean>(false);
 
 // Monotonic count of authoritative (WS) writes per workspace, mirroring the
-// task sync versions in queryClient.ts. The delete mutation captures the
+// agent sync versions in queryClient.ts. The delete mutation captures the
 // version at apply time and rolls back in onError only if it is unchanged:
 // a frame that landed while the request was in flight holds server truth
 // (whether or not the mutation committed) and a snapshot restore would
@@ -133,30 +134,30 @@ const areWorkspaceDotStatusesEqual = (a: WorkspaceDotStatus, b: WorkspaceDotStat
   a.hasUnread === b.hasUnread;
 
 /**
- * The aggregated status-dot state of one workspace's agent tasks.
- * `tasksArrayAtom` rebuilds its array on EVERY per-task update (streaming
+ * The aggregated status-dot state of one workspace's agents.
+ * `agentsArrayAtom` rebuilds its array on EVERY per-agent update (streaming
  * ticks included), so the slice is equality-guarded: subscribers — one
  * sidebar workspace row each — re-render only when their workspace's
  * aggregate flags actually flip.
  */
 export const workspaceDotStatusAtomFamily = atomFamily((workspaceId: string) =>
   selectAtom(
-    // Pair the tasks with the viewed agent id so the aggregate re-derives when
+    // Pair the agents with the viewed agent id so the aggregate re-derives when
     // either changes. viewedAgentIdAtom resolves to a primitive, so layout
     // writes that don't change WHICH agent is viewed never reach the selector,
     // and the equality guard below still stops propagation unless a flag flips.
-    atom((get) => ({ tasks: get(tasksArrayAtom), viewedAgentId: get(viewedAgentIdAtom) })),
-    ({ tasks, viewedAgentId }): WorkspaceDotStatus =>
+    atom((get) => ({ agents: get(agentsArrayAtom), viewedAgentId: get(viewedAgentIdAtom) })),
+    ({ agents, viewedAgentId }): WorkspaceDotStatus =>
       computeWorkspaceDotStatus(
-        (tasks ?? []).filter((task) => task.workspaceId === workspaceId),
-        // Override-aware per-task resolution so a manual "Mark as unread"
+        (agents ?? []).filter((agent) => agent.workspaceId === workspaceId),
+        // Override-aware per-agent resolution so a manual "Mark as unread"
         // lights the workspace row exactly like the agent's panel tab. The
-        // viewed agent — necessarily one of the ACTIVE workspace's tasks, so
+        // viewed agent — necessarily one of the ACTIVE workspace's agents, so
         // the id match scopes it for free — counts as focused: its content is
         // on screen, so it must not light the row as unread while the debounced
         // mark-read lags (an explicit mark-unread override still wins inside
         // the helper).
-        (task) => getAgentDotStatusWithUnreadOverride(task.id, task, task.id === viewedAgentId),
+        (agent) => getAgentDotStatusWithUnreadOverride(agent.id, agent, agent.id === viewedAgentId),
       ),
     areWorkspaceDotStatusesEqual,
   ),
@@ -555,7 +556,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     bumpWorkspaceSyncVersion(incoming.objectId);
 
     if (incoming.isDeleted) {
-      // Mirror task deletion pattern: remove from IDs and tombstone the atom.
+      // Mirror the agent deletion pattern: remove from IDs and tombstone the atom.
       // A Tombstone (not null) so consumers holding a stale reference — a
       // pulled Home row awaiting its refetch — still classify it as deleting.
       currentWorkspaceIds.delete(incoming.objectId);

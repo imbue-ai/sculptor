@@ -4,17 +4,16 @@ import { useCallback, useState } from "react";
 
 import type { EffortLevel, LlmModel, ModelOption, TerminalAgentRegistration } from "~/api";
 import { createWorkspaceAgent, createWorkspaceV2, WorkspaceInitializationStrategy } from "~/api";
-import { HTTPException } from "~/common/Errors.ts";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 import {
   encodeRegisteredAgentType,
   resolveEffectiveAgentType,
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
-import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { createAgentErrorToastAtom, ToastType } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
-import { ToastType } from "~/components/Toast.tsx";
 
 /** Everything the create flow needs from its caller's form state. */
 type CreateWorkspaceArgs = {
@@ -185,7 +184,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
             // Optimistically record the chosen harness as the most-recently-used type so the
             // add-panel "New {recent} agent" row reflects it immediately. The backend persists
             // it on create too, but there is no live user-config push — without this the
-            // surfaces lag until a reload. Mirrors the add-panel path (addPanelCore.createAgentInLocation).
+            // surfaces lag until a reload. Mirrors the add-panel path (addPanel.createAgentInLocation).
             setUserConfig((prev) => (prev ? { ...prev, lastUsedAgentType: effectiveAgentTypeValue } : prev));
 
             posthog.capture("workspace.created", {

@@ -25,7 +25,7 @@ type FakeStorage = {
 
 // Minimal Storage stand-in: items in a Map, getItem/setItem only (the surface
 // applyMigratedEntries uses), plus a snapshot for assertions.
-function makeStorage(initial: Record<string, string> = {}): FakeStorage {
+const makeStorage = (initial: Record<string, string> = {}): FakeStorage => {
   const map = new Map<string, string>(Object.entries(initial));
   return {
     getItem: (key: string): string | null => (map.has(key) ? (map.get(key) as string) : null),
@@ -34,7 +34,7 @@ function makeStorage(initial: Record<string, string> = {}): FakeStorage {
     },
     snapshot: (): Record<string, string> => Object.fromEntries(map),
   };
-}
+};
 
 describe("selectMigratableEntries", () => {
   it("keeps app keys across the various ad-hoc prefixes", () => {

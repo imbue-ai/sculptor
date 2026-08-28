@@ -2,18 +2,18 @@ import { createStore } from "jotai";
 import { describe, expect, it } from "vitest";
 
 import type { CodingAgentTaskView, Project, Workspace } from "../../../api";
+import { agentAtomFamily, agentIdsAtom } from "./agents";
 import { agentDetailAtomFamily, repositoryDetailAtomFamily, workspaceDetailAtomFamily } from "./mentionDetails";
 import { projectAtomFamily, projectIdsAtom } from "./projects";
-import { taskAtomFamily, taskIdsAtom } from "./tasks";
 import { workspaceAtomFamily, workspaceIdsAtom } from "./workspaces";
 
-const makeTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
+const makeAgent = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
   ({
     id: "task-1",
     projectId: "proj-1",
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
-    taskStatus: "RUNNING",
+    agentStatus: "RUNNING",
     isAutoCompacting: false,
     artifactNames: [],
     initialPrompt: "Test prompt",
@@ -52,11 +52,11 @@ const makeProject = (overrides: Partial<Project> = {}): Project =>
     ...overrides,
   }) as unknown as Project;
 
-// Seed a task into its atom family AND into the task-ids list so the derived
-// `tasksArrayAtom` picks it up.
-const seedTask = (store: ReturnType<typeof createStore>, task: CodingAgentTaskView): void => {
-  store.set(taskAtomFamily(task.id), task);
-  store.set(taskIdsAtom, [...(store.get(taskIdsAtom) ?? []), task.id]);
+// Seed an agent into its atom family AND into the agent-ids list so the derived
+// `agentsArrayAtom` picks it up.
+const seedAgent = (store: ReturnType<typeof createStore>, agent: CodingAgentTaskView): void => {
+  store.set(agentAtomFamily(agent.id), agent);
+  store.set(agentIdsAtom, [...(store.get(agentIdsAtom) ?? []), agent.id]);
 };
 
 const seedWorkspace = (store: ReturnType<typeof createStore>, workspace: Workspace): void => {
@@ -70,43 +70,43 @@ const seedProject = (store: ReturnType<typeof createStore>, project: Project): v
 };
 
 describe("agentDetailAtomFamily", () => {
-  it("returns null when no task is registered for the id", () => {
+  it("returns null when no agent is registered for the id", () => {
     const store = createStore();
     expect(store.get(agentDetailAtomFamily("unknown-id"))).toBeNull();
   });
 
-  it("returns null when the task atom is explicitly null (deleted)", () => {
+  it("returns null when the agent atom is explicitly null (deleted)", () => {
     const store = createStore();
-    store.set(taskAtomFamily("task-1"), null);
+    store.set(agentAtomFamily("task-1"), null);
     expect(store.get(agentDetailAtomFamily("task-1"))).toBeNull();
   });
 
-  it("composes task, status, and parent workspace into a single shape", () => {
+  it("composes agent, status, and parent workspace into a single shape", () => {
     const store = createStore();
     seedWorkspace(store, makeWorkspace({ objectId: "ws-1", description: "Parent WS" }));
-    seedTask(store, makeTask({ id: "task-1", status: "READY", workspaceId: "ws-1" }));
+    seedAgent(store, makeAgent({ id: "task-1", status: "READY", workspaceId: "ws-1" }));
 
     const detail = store.get(agentDetailAtomFamily("task-1"));
     expect(detail).not.toBeNull();
-    expect(detail?.task.id).toBe("task-1");
+    expect(detail?.agent.id).toBe("task-1");
     expect(detail?.status).toBe("READY");
     expect(detail?.workspace?.description).toBe("Parent WS");
   });
 
-  it("handles a task with no workspaceId (workspace field is null)", () => {
+  it("handles an agent with no workspaceId (workspace field is null)", () => {
     const store = createStore();
-    seedTask(store, makeTask({ id: "task-1", workspaceId: null }));
+    seedAgent(store, makeAgent({ id: "task-1", workspaceId: null }));
 
     const detail = store.get(agentDetailAtomFamily("task-1"));
     expect(detail?.workspace).toBeNull();
   });
 
-  it("reacts to status changes on the task atom", () => {
+  it("reacts to status changes on the agent atom", () => {
     const store = createStore();
-    seedTask(store, makeTask({ id: "task-1", status: "RUNNING" }));
+    seedAgent(store, makeAgent({ id: "task-1", status: "RUNNING" }));
     expect(store.get(agentDetailAtomFamily("task-1"))?.status).toBe("RUNNING");
 
-    store.set(taskAtomFamily("task-1"), makeTask({ id: "task-1", status: "READY" }));
+    store.set(agentAtomFamily("task-1"), makeAgent({ id: "task-1", status: "READY" }));
     expect(store.get(agentDetailAtomFamily("task-1"))?.status).toBe("READY");
   });
 });
@@ -117,23 +117,23 @@ describe("workspaceDetailAtomFamily", () => {
     expect(store.get(workspaceDetailAtomFamily("unknown"))).toBeNull();
   });
 
-  it("counts non-deleted tasks whose workspaceId matches", () => {
+  it("counts non-deleted agents whose workspaceId matches", () => {
     const store = createStore();
     seedWorkspace(store, makeWorkspace({ objectId: "ws-1" }));
-    seedTask(store, makeTask({ id: "t1", workspaceId: "ws-1" }));
-    seedTask(store, makeTask({ id: "t2", workspaceId: "ws-1" }));
-    seedTask(store, makeTask({ id: "t3", workspaceId: "ws-2" }));
+    seedAgent(store, makeAgent({ id: "t1", workspaceId: "ws-1" }));
+    seedAgent(store, makeAgent({ id: "t2", workspaceId: "ws-1" }));
+    seedAgent(store, makeAgent({ id: "t3", workspaceId: "ws-2" }));
 
     const detail = store.get(workspaceDetailAtomFamily("ws-1"));
     expect(detail?.agentCount).toBe(2);
-    expect(detail?.agents.map((t) => t.id).sort()).toEqual(["t1", "t2"]);
+    expect(detail?.agents.map((agent) => agent.id).sort()).toEqual(["t1", "t2"]);
   });
 
   it("caps the agents preview at 3 but reports the full count", () => {
     const store = createStore();
     seedWorkspace(store, makeWorkspace({ objectId: "ws-1" }));
     for (let i = 0; i < 5; i++) {
-      seedTask(store, makeTask({ id: `t${i}`, workspaceId: "ws-1" }));
+      seedAgent(store, makeAgent({ id: `t${i}`, workspaceId: "ws-1" }));
     }
 
     const detail = store.get(workspaceDetailAtomFamily("ws-1"));
@@ -150,12 +150,12 @@ describe("workspaceDetailAtomFamily", () => {
     expect(detail?.project?.name).toBe("Core");
   });
 
-  it("reacts when a new task is added to the workspace", () => {
+  it("reacts when a new agent is added to the workspace", () => {
     const store = createStore();
     seedWorkspace(store, makeWorkspace({ objectId: "ws-1" }));
     expect(store.get(workspaceDetailAtomFamily("ws-1"))?.agentCount).toBe(0);
 
-    seedTask(store, makeTask({ id: "t1", workspaceId: "ws-1" }));
+    seedAgent(store, makeAgent({ id: "t1", workspaceId: "ws-1" }));
     expect(store.get(workspaceDetailAtomFamily("ws-1"))?.agentCount).toBe(1);
   });
 });

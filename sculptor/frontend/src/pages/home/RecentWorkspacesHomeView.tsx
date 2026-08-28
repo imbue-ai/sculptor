@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useRef } from "react";
 
 import { useWorkspaceNavigation } from "../../common/state/hooks/useWorkspaceNavigation.ts";
-import { RecentWorkspaces } from "../add-workspace/components/RecentWorkspaces.tsx";
+import { RecentWorkspaces } from "../addWorkspace/components/RecentWorkspaces.tsx";
 import styles from "./RecentWorkspacesHomeView.module.scss";
 
 /**

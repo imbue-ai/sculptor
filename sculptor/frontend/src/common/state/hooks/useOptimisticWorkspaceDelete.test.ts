@@ -7,8 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as api from "../../../api";
 import type { Workspace } from "../../../api";
-import { HTTPException } from "../../Errors.ts";
-import { queryClient } from "../../queryClient.ts";
+import { HTTPException } from "../../utils/errors.ts";
 import { workspaceDeleteErrorToastAtom } from "../atoms/toasts";
 import {
   asLiveWorkspace,
@@ -18,6 +17,7 @@ import {
   workspaceAtomFamily,
 } from "../atoms/workspaces";
 import { MUTATION_SETTLE_TIMEOUT_MS } from "../mutations";
+import { queryClient } from "../queryClient.ts";
 import { useOptimisticWorkspaceDelete } from "./useOptimisticWorkspaceDelete";
 
 // Mock the delete endpoint so we can force failures and inspect retry targets.

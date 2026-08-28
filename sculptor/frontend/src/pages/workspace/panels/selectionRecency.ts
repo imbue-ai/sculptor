@@ -4,8 +4,8 @@
 // Whichever was activated last drives the panel's embedded viewer, so a local
 // click still takes effect after an agent open and vice-versa.
 
-import type { DiffTab } from "~/pages/workspace/components/diffPanel/types.ts";
-import type { DiffSelection } from "~/pages/workspace/components/diffViewer/types.ts";
+import type { DiffTab } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
+import type { DiffSelection } from "~/pages/workspace/diffViewer/types/diffViewer.ts";
 
 type ReconcileParams<TLocal extends { at: number }> = {
   /** The panel's own click selection, or null when nothing was clicked. */
@@ -27,17 +27,17 @@ type ReconcileParams<TLocal extends { at: number }> = {
  * agent-opened diff must not clear the Files panel's open file, and vice-versa.
  * Ties go to the local click.
  */
-export function reconcileSelectionByRecency<TLocal extends { at: number }>({
+export const reconcileSelectionByRecency = <TLocal extends { at: number }>({
   local,
   tab,
   tabKind,
   toSelection,
   fromTab,
-}: ReconcileParams<TLocal>): DiffSelection | null {
+}: ReconcileParams<TLocal>): DiffSelection | null => {
   const tabViewedAt = tab !== null && tab.kind === tabKind ? tab.viewedAt : null;
   const isLocalNewer = local !== null && (tabViewedAt === null || local.at >= tabViewedAt);
   if (local !== null && isLocalNewer) {
     return toSelection(local);
   }
   return fromTab(tab);
-}
+};

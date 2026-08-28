@@ -28,16 +28,16 @@ beforeEach(() => {
 });
 
 describe("unread override lifecycle", () => {
-  it("is inactive for a task that was never marked", () => {
+  it("is inactive for an agent that was never marked", () => {
     expect(isUnreadOverrideActive("task-1", idle(UPDATED_AT))).toBe(false);
   });
 
-  it("is active while the task's updatedAt matches the value recorded at mark time", () => {
+  it("is active while the agent's updatedAt matches the value recorded at mark time", () => {
     setUnreadOverride("task-1", idle(UPDATED_AT));
     expect(isUnreadOverrideActive("task-1", idle(UPDATED_AT))).toBe(true);
   });
 
-  it("expires when an idle-marked task's updatedAt advances (a new agent turn)", () => {
+  it("expires when an idle-marked agent's updatedAt advances (a new agent turn)", () => {
     setUnreadOverride("task-1", idle(UPDATED_AT));
     expect(isUnreadOverrideActive("task-1", idle(LATER_UPDATED_AT))).toBe(false);
   });
@@ -64,7 +64,7 @@ describe("unread override lifecycle", () => {
     expect(isUnreadOverrideActive("task-1", idle(UPDATED_AT))).toBe(false);
   });
 
-  it("tracks each task independently", () => {
+  it("tracks each agent independently", () => {
     setUnreadOverride("task-1", idle(UPDATED_AT));
     setUnreadOverride("task-2", idle(UPDATED_AT));
     clearUnreadOverride("task-1");
@@ -76,13 +76,13 @@ describe("unread override lifecycle", () => {
 describe("getAgentDotStatusWithUnreadOverride", () => {
   it("upgrades read to unread while the override is active", () => {
     setUnreadOverride("task-1", idle(UPDATED_AT));
-    const task = { status: TaskStatus.READY, updatedAt: UPDATED_AT, lastReadAt: LATER_UPDATED_AT };
-    expect(getAgentDotStatusWithUnreadOverride("task-1", task)).toBe("unread");
+    const agent = { status: TaskStatus.READY, updatedAt: UPDATED_AT, lastReadAt: LATER_UPDATED_AT };
+    expect(getAgentDotStatusWithUnreadOverride("task-1", agent)).toBe("unread");
   });
 
   it("keeps activity dots (running) over the override", () => {
     setUnreadOverride("task-1", running(UPDATED_AT));
-    const task = { status: TaskStatus.RUNNING, updatedAt: LATER_UPDATED_AT, lastReadAt: null };
-    expect(getAgentDotStatusWithUnreadOverride("task-1", task)).toBe("running");
+    const agent = { status: TaskStatus.RUNNING, updatedAt: LATER_UPDATED_AT, lastReadAt: null };
+    expect(getAgentDotStatusWithUnreadOverride("task-1", agent)).toBe("running");
   });
 });

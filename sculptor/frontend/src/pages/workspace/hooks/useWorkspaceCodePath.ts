@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 
 import { WorkspaceInitializationStrategy } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { repoInfoAtomFamily } from "~/common/state/atoms/repoInfo.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 

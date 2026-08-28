@@ -47,6 +47,17 @@ Config: `sculptor/frontend/eslint.config.ts`. Key rules enforced:
 - **Type generics** must match pattern `^T[A-Z]?` (e.g. `TRequest`, `TFoo`)
 - **`type` over `interface`** — enforced via `consistent-type-definitions`
 - **`@ts-expect-error` over `@ts-ignore`** — must include a description
+- **File and folder naming** (`eslint-plugin-check-file`) — directories under
+  `src/` must be camelCase (only `__tests__` is exempt), and the generic
+  basenames `utils.ts`/`helpers.ts`/`hooks.ts`/`atoms.ts`/`types.ts`/`misc.ts`
+  are blocked in favor of topic-named files
+- **Import layering** (`import/no-restricted-paths`) — enforces the directory
+  boundaries in `docs/development/style/frontend_structure.md`: `common/` never
+  imports `components/`/`pages/`/`app/`/`electron/`, `components/` never imports
+  `pages/`/`app/`, one page never imports another page, and `electron/` never
+  imports renderer UI. The zone definitions and the temporary `except` allowlist
+  live in the `import/no-restricted-paths` block of `eslint.config.ts`; the
+  `~/` path alias resolves via `eslint-import-resolver-typescript`
 
 ### Frontend (stylelint)
 

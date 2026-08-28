@@ -2,9 +2,9 @@ import { useSetAtom } from "jotai";
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 
-import { useImbueLocation } from "~/common/NavigateUtils.ts";
+import { useImbueLocation } from "~/common/hooks/navigation.ts";
 import { setActiveTabByIdAtom, setAgentForWorkspaceAtom } from "~/common/state/atoms/workspaces.ts";
-import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
+import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/common/utils/workspaceTabIds.ts";
 
 /**
  * Mirror the current URL into `tabsAtom`: update `activeIndex` to the matching

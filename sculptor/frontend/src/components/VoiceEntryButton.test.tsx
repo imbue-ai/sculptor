@@ -7,7 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import type { DependenciesStatus, DependencyInfo } from "~/api";
 import { ElementIds } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
-import type { VoiceEngine, VoiceEngineEvents } from "~/common/voice/types.ts";
+import type { VoiceEngine, VoiceEngineEvents } from "~/common/voice/engineContract.ts";
 
 import { VoiceEntryButton } from "./VoiceEntryButton.tsx";
 

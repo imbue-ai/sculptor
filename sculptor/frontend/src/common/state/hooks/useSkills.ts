@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
-import { BUILTIN_SKILLS } from "~/common/builtinSkills";
-import { useWorkspacePageParams } from "~/common/NavigateUtils";
+import { useWorkspacePageParams } from "~/common/hooks/navigation";
+import { BUILTIN_SKILLS } from "~/common/utils/builtinSkills";
 
 import type { SkillEntry } from "./useWorkspaceSkills";
 import { useWorkspaceSkills } from "./useWorkspaceSkills";

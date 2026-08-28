@@ -19,7 +19,7 @@ export type CommitGraph = {
  * Walk the first-parent chain from commits[0] to identify the main line,
  * then assign remaining commits to the merge that brought them in.
  */
-export function buildCommitGraph(commits: Array<CommitInfo>): CommitGraph {
+export const buildCommitGraph = (commits: Array<CommitInfo>): CommitGraph => {
   if (commits.length === 0) {
     return { mainLine: [], sideBranches: new Map() };
   }
@@ -63,4 +63,4 @@ export function buildCommitGraph(commits: Array<CommitInfo>): CommitGraph {
   }
 
   return { mainLine, sideBranches };
-}
+};

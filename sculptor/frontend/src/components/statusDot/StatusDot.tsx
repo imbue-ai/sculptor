@@ -3,8 +3,8 @@ import type { ReactElement } from "react";
 
 import { BlandCircle, PulsingCircle } from "~/components/PulsingCircle.tsx";
 
+import type { AgentDotStatus, WorkspaceDotStatus } from "../../common/utils/statusDot";
 import styles from "./StatusDot.module.scss";
-import type { AgentDotStatus, WorkspaceDotStatus } from "./statusUtils";
 
 type AgentStatusDotProps = {
   status: AgentDotStatus;

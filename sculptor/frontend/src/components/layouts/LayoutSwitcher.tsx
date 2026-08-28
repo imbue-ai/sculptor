@@ -13,28 +13,33 @@ import type { ReactElement } from "react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { useKeybinding } from "~/common/keybindings";
+import { formatShortcutForDisplay } from "~/common/keybindings/format.ts";
 import { layoutShortcutBindingsAtom } from "~/common/keybindings/layoutShortcuts.ts";
+import { shouldHandleKeybinding } from "~/common/keybindings/matching.ts";
+import { useKeybinding } from "~/common/keybindings/useKeybinding.ts";
 import { useSetLayoutShortcut } from "~/common/keybindings/useLayoutShortcutActions.ts";
-import { formatShortcutForDisplay, shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
 import type { AccentColor } from "~/common/state/atoms/themeBuilder";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
-import { applyLayoutAtom, deleteLayoutAtom, setDefaultLayoutAtom } from "~/components/sections/layoutActions.ts";
-import type { SavedLayout } from "~/components/sections/persistence/types.ts";
-import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
+import { ShortcutHint } from "~/components/ShortcutHint.tsx";
 import {
   appliedLayoutIdAtom,
   defaultLayoutIdAtom,
   layoutMruAtom,
   resolvedLayoutsAtom,
-} from "~/components/sections/savedLayoutAtoms.ts";
-import type { PanelId } from "~/components/sections/sectionTypes.ts";
-import { isSystemLayoutId } from "~/components/sections/systemDefaultLayout.ts";
-import { ShortcutHint } from "~/components/ShortcutHint.tsx";
+} from "~/pages/workspace/layout/atoms/savedLayout.ts";
+import {
+  applyLayoutAtom,
+  deleteLayoutAtom,
+  setDefaultLayoutAtom,
+} from "~/pages/workspace/layout/atoms/savedLayoutActions.ts";
+import type { SavedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
+import type { PanelId } from "~/pages/workspace/layout/types/section.ts";
+import { isSystemLayoutId } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import { layoutSummary } from "./layoutSummary.ts";
 import styles from "./LayoutSwitcher.module.scss";
-import { layoutsSwitcherOpenAtom, saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
+import { layoutsSwitcherOpenAtom, saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
 import { LayoutWireframeIcon } from "./LayoutWireframeIcon.tsx";
 import { initialHighlightIndex, orderLayoutsByMru } from "./switcherOrder.ts";
 
@@ -62,7 +67,7 @@ type LayoutMenuItem = {
   run: () => void;
 };
 
-function markerFor(layout: SavedLayout, defaultLayoutId: string, appliedLayoutId: string | undefined): RowMarker {
+const markerFor = (layout: SavedLayout, defaultLayoutId: string, appliedLayoutId: string | undefined): RowMarker => {
   if (layout.id === defaultLayoutId) {
     return "default";
   }
@@ -71,7 +76,7 @@ function markerFor(layout: SavedLayout, defaultLayoutId: string, appliedLayoutId
     return "current";
   }
   return null;
-}
+};
 
 export const LayoutSwitcher = (): ReactElement => {
   // Atoms
@@ -82,7 +87,7 @@ export const LayoutSwitcher = (): ReactElement => {
   const registry = useAtomValue(panelRegistryAtom);
 
   const setOpen = useSetAtom(layoutsSwitcherOpenAtom);
-  const setSaveRequest = useSetAtom(saveLayoutModalRequestAtom);
+  const setSaveRequest = useSetAtom(saveLayoutDialogRequestAtom);
   const applyLayout = useSetAtom(applyLayoutAtom);
   const setDefaultLayout = useSetAtom(setDefaultLayoutAtom);
   const deleteLayout = useSetAtom(deleteLayoutAtom);

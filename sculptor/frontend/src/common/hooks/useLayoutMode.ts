@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import { isElectron } from "~/electron/utils.ts";
+import { isElectron } from "~/electron/platform.ts";
 
 /**
  * useLayoutMode — the single source of truth for "mobile vs desktop".
@@ -59,7 +59,7 @@ type PlatformInfo = {
 };
 
 // Platform detection — static, computed once.
-function detectPlatform(): PlatformInfo {
+const detectPlatform = (): PlatformInfo => {
   if (typeof navigator === "undefined" || typeof window === "undefined") {
     return { platform: "other", isTouch: false, isPhone: false };
   }
@@ -91,7 +91,7 @@ function detectPlatform(): PlatformInfo {
     return { platform: "ios", isTouch, isPhone: false };
   }
   return { platform: "other", isTouch, isPhone: false };
-}
+};
 
 const platformInfo: PlatformInfo = detectPlatform();
 
@@ -100,39 +100,39 @@ const platformInfo: PlatformInfo = detectPlatform();
 const isElectronRenderer = isElectron();
 
 let mediaQueryList: MediaQueryList | null = null;
-function getMediaQueryList(): MediaQueryList | null {
+const getMediaQueryList = (): MediaQueryList | null => {
   if (mediaQueryList === null && typeof window !== "undefined" && typeof window.matchMedia === "function") {
     mediaQueryList = window.matchMedia(NARROW_QUERY);
   }
   return mediaQueryList;
-}
+};
 
-function computeIsMobile(): boolean {
+const computeIsMobile = (): boolean => {
   // The desktop app never flips to the mobile layout (see the module doc).
   if (isElectronRenderer) return false;
   const mql = getMediaQueryList();
   const isNarrow = mql !== null ? mql.matches : false;
   return isNarrow || platformInfo.isPhone;
-}
+};
 
 /**
  * Mirror the verdict onto `<html>` so stylesheets key off `html.mobileUx`
  * instead of their own media queries (see the module doc). Kept in lockstep
  * with `cachedState` by the two call sites: module init and the flip handler.
  */
-function syncMobileUxClass(isMobile: boolean): void {
+const syncMobileUxClass = (isMobile: boolean): void => {
   if (typeof document === "undefined") return;
   document.documentElement.classList.toggle("mobileUx", isMobile);
-}
+};
 
-function buildState(isMobile: boolean): LayoutState {
+const buildState = (isMobile: boolean): LayoutState => {
   return Object.freeze({
     mode: isMobile ? "mobile" : "desktop",
     isMobile,
     platform: platformInfo.platform,
     isTouch: platformInfo.isTouch,
   });
-}
+};
 
 // Cached snapshot — replaced only on a true mode flip so consumers don't
 // re-render on every resize.
@@ -142,16 +142,16 @@ const listeners = new Set<() => void>();
 // <html> before any mobile-gated rule could matter.
 syncMobileUxClass(cachedState.isMobile);
 
-function handleChange(): void {
+const handleChange = (): void => {
   const isNextMobile = computeIsMobile();
   if (isNextMobile !== cachedState.isMobile) {
     cachedState = buildState(isNextMobile);
     syncMobileUxClass(isNextMobile);
     for (const listener of listeners) listener();
   }
-}
+};
 
-function subscribe(onStoreChange: () => void): () => void {
+const subscribe = (onStoreChange: () => void): (() => void) => {
   // The Electron verdict is static — no flip is possible, so don't wire the
   // media-query listener at all.
   const mql = isElectronRenderer ? null : getMediaQueryList();
@@ -165,18 +165,18 @@ function subscribe(onStoreChange: () => void): () => void {
       mql.removeEventListener("change", handleChange);
     }
   };
-}
+};
 
-function getSnapshot(): LayoutState {
+const getSnapshot = (): LayoutState => {
   return cachedState;
-}
+};
 
 /** Full layout state: mode / isMobile / platform / isTouch. */
-export function useLayoutMode(): LayoutState {
+export const useLayoutMode = (): LayoutState => {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-}
+};
 
 /** Convenience hook for the common "am I mobile?" check (re-renders only on flip). */
-export function useIsMobile(): boolean {
+export const useIsMobile = (): boolean => {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).isMobile;
-}
+};

@@ -1,7 +1,24 @@
 import { atom } from "jotai";
 import type { ReactNode } from "react";
 
-import type { ToastType } from "../../../components/Toast.tsx";
+// Toast visual variant + content shape. These live in common/state (rather than
+// beside the <Toast> component) so state modules that raise toasts can name the
+// type vocabulary without common/ importing up into components/.
+export const ToastType = {
+  DEFAULT: "default",
+  SUCCESS: "success",
+  ERROR: "error",
+  WARNING: "warning",
+  ERROR_PROMINENT: "errorProminent",
+} as const;
+
+export type ToastType = (typeof ToastType)[keyof typeof ToastType];
+
+export type ToastContent = {
+  title: string;
+  description?: ReactNode;
+  type?: ToastType;
+};
 
 export type ErrorToastData = {
   title: string;

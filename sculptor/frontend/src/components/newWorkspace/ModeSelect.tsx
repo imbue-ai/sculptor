@@ -20,7 +20,7 @@ const MODE_LABELS: Record<WorkspaceInitializationStrategy, string> = {
 };
 
 /**
- * The worktree/clone/in-place mode picker. Extracted from the add-workspace
+ * The worktree/clone/in-place mode picker. Extracted from the addWorkspace
  * page's inline JSX. Worktree is always available; clone and in-place are opt-in.
  *
  * The selector hides itself when worktree is the only reachable mode, so a user

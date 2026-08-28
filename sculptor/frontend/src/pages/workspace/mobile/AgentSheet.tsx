@@ -5,20 +5,20 @@ import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
 import { type CodingAgentTaskView, ElementIds } from "~/api";
-import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
-import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
-import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
+import { useImbueNavigate, useWorkspacePageParams } from "~/common/hooks/navigation.ts";
+import { useLongPress } from "~/common/hooks/useLongPress.ts";
+import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
+import { useOptimisticAgentDelete } from "~/common/state/hooks/useOptimisticAgentDelete.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
-import { useTaskRenameMutation } from "~/common/state/mutations";
+import { useAgentRenameMutation } from "~/common/state/mutations";
+import { formatRelativeTime } from "~/common/utils/formatRelativeTime.ts";
+import { type AgentDotStatus, getAgentDotStatus } from "~/common/utils/statusDot.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { AgentStatusDot } from "~/components/statusDot/StatusDot.tsx";
-import { type AgentDotStatus, getAgentDotStatus } from "~/components/statusDot/statusUtils.ts";
 
 import styles from "./AgentSheet.module.scss";
 import { useCreateAgent } from "./useCreateAgent.ts";
-import { useLongPress } from "./useLongPress.ts";
 
 type AgentSheetProps = {
   isOpen: boolean;
@@ -58,7 +58,7 @@ const AgentRow = ({
   const dotStatus = getAgentDotStatus(agent.status, agent.lastReadAt, agent.updatedAt);
   // The shared optimistic rename (same mutation the desktop sidebar uses):
   // the new title shows immediately and rolls back if the request fails.
-  const renameMutation = useTaskRenameMutation(workspaceID);
+  const renameMutation = useAgentRenameMutation(workspaceID);
   const [isRenaming, setIsRenaming] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { handlers: longPress, consumeClick } = useLongPress(() => setIsMenuOpen(true));
@@ -157,21 +157,21 @@ export const AgentSheet = ({ isOpen, onClose }: AgentSheetProps): ReactElement =
   const { workspaceID, agentID } = useWorkspacePageParams();
   const { navigateToAgent } = useImbueNavigate();
   const workspace = useWorkspace(workspaceID);
-  const tasks = useAtomValue(tasksArrayAtom);
+  const allAgents = useAtomValue(agentsArrayAtom);
   const { createAgent } = useCreateAgent();
 
   const agents = useMemo(
     () =>
-      (tasks ?? [])
+      (allAgents ?? [])
         .filter((t) => t.workspaceId === workspaceID && !t.isDeleted)
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [tasks, workspaceID],
+    [allAgents, workspaceID],
   );
 
   const workspaceName = workspace?.description?.trim() || "this workspace";
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
-  const { execute: executeDelete } = useOptimisticTaskDelete({
+  const { execute: executeDelete } = useOptimisticAgentDelete({
     workspaceId: workspaceID ?? "",
     onNavigateAfterDelete: (deletedId: string): void => {
       // If the currently-viewed agent was deleted, hop to another one in the

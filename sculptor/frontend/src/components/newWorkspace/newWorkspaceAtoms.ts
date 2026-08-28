@@ -19,7 +19,7 @@ import { hasEverHadWorkspacesAtom, workspacesArrayAtom } from "~/common/state/at
  * keep-open mode). Transient — the modal is ephemeral, so this resets on
  * reload.
  */
-export type NewWorkspaceModalState = {
+export type NewWorkspaceDialogState = {
   open: boolean;
   presetProjectId?: string;
   initialTitle?: string;
@@ -28,7 +28,7 @@ export type NewWorkspaceModalState = {
   onWorkspaceCreated?: (workspaceId: string) => void;
 };
 
-export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom<NewWorkspaceModalState>({
+export const newWorkspaceDialogAtom: PrimitiveAtom<NewWorkspaceDialogState> = atom<NewWorkspaceDialogState>({
   open: false,
 });
 
@@ -62,7 +62,7 @@ export const newWorkspaceDraftAtom: PrimitiveAtom<NewWorkspaceDraft | undefined>
  * unseeded), but retains the repo + agent type. Persisted so the preference
  * survives reloads.
  */
-export const keepNewWorkspaceModalOpenAtom: WritableAtom<boolean, [boolean], void> = atomWithStorage<boolean>(
+export const keepNewWorkspaceDialogOpenAtom: WritableAtom<boolean, [boolean], void> = atomWithStorage<boolean>(
   "sculptor-keep-new-workspace-modal-open",
   false,
   undefined,

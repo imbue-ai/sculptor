@@ -8,11 +8,22 @@ import {
   type ExtensionSnapshot,
   getLocalExtensions,
 } from "~/api";
-import { baseUrl } from "~/apiClient.ts";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
+import { baseUrl } from "~/common/apiClient.ts";
+import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 import { BUILTIN_HOME_VIEW_ID } from "~/pages/home/homeViews.ts";
 
+import type {
+  ExtensionHostApi,
+  ExtensionLoadError,
+  ExtensionManifest,
+  ExtensionModule,
+  ExtensionPanelDefinition,
+  HomeViewDefinition,
+  LoadedExtension,
+  OverlayDefinition,
+  WorkspaceWidgetDefinition,
+} from "./contract.ts";
 import { ExtensionContext } from "./ExtensionContext.tsx";
 import { ExtensionErrorBoundary } from "./ExtensionErrorBoundary.tsx";
 import {
@@ -30,17 +41,6 @@ import {
 } from "./extensionRegistry.ts";
 import { installHostRuntime } from "./hostRuntime.ts";
 import { getRendererIdentity } from "./rendererIdentity.ts";
-import type {
-  ExtensionHostApi,
-  ExtensionLoadError,
-  ExtensionManifest,
-  ExtensionModule,
-  ExtensionPanelDefinition,
-  HomeViewDefinition,
-  LoadedExtension,
-  OverlayDefinition,
-  WorkspaceWidgetDefinition,
-} from "./types.ts";
 import { WorkspaceExtensionContext } from "./WorkspaceContext.tsx";
 
 type JotaiStore = ReturnType<typeof createStore>;

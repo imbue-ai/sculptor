@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Workspace } from "~/api";
 import { updateWorkspacesAtom, workspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
-import { renderWithProviders } from "~/common/testUtils.tsx";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { HOME_PROMPT_PREFILL } from "~/components/newWorkspace/homePromptPrefill.ts";
-import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { newWorkspaceDialogAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 import { HomePage } from "./HomePage.tsx";
 
@@ -43,7 +43,7 @@ describe("HomePage first-run auto-open", () => {
     store.set(updateWorkspacesAtom, []);
     renderWithProviders(<HomePage />, { store });
 
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: true, initialPrompt: HOME_PROMPT_PREFILL });
+    expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: true, initialPrompt: HOME_PROMPT_PREFILL });
   });
 
   it("does not offer while the workspace list is still loading", () => {
@@ -51,7 +51,7 @@ describe("HomePage first-run auto-open", () => {
     expect(store.get(workspaceIdsAtom)).toBeUndefined();
     renderWithProviders(<HomePage />, { store });
 
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
+    expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: false });
   });
 
   it("does not offer when workspaces exist", () => {
@@ -59,7 +59,7 @@ describe("HomePage first-run auto-open", () => {
     store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "w1" })]);
     renderWithProviders(<HomePage />, { store });
 
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
+    expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: false });
   });
 
   it("does not offer after the last workspace is deleted mid-session", () => {
@@ -73,7 +73,7 @@ describe("HomePage first-run auto-open", () => {
     act(() => {
       store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "w1", isDeleted: true })]);
     });
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: false });
+    expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: false });
   });
 
   it("never clobbers a dialog the user already opened", () => {
@@ -82,12 +82,12 @@ describe("HomePage first-run auto-open", () => {
     // replacing it would drop the preset repo, remount the form, and discard
     // anything the user typed.
     const store = createStore();
-    store.set(newWorkspaceModalAtom, { open: true, presetProjectId: "p1" });
+    store.set(newWorkspaceDialogAtom, { open: true, presetProjectId: "p1" });
     renderWithProviders(<HomePage />, { store });
 
     act(() => {
       store.set(updateWorkspacesAtom, []);
     });
-    expect(store.get(newWorkspaceModalAtom)).toEqual({ open: true, presetProjectId: "p1" });
+    expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: true, presetProjectId: "p1" });
   });
 });

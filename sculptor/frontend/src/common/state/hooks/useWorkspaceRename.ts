@@ -2,9 +2,8 @@ import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 
 import { updateWorkspace } from "~/api";
-import { workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { ToastType, workspaceRenameErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { asLiveWorkspace, workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import { ToastType } from "~/components/Toast.tsx";
 
 /**
  * Optimistically rename a workspace: show the new name immediately and let the

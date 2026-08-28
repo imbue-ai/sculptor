@@ -2,8 +2,9 @@ import { type ButtonProps, IconButton, Tooltip, type TooltipProps } from "@radix
 import type { PropsWithChildren, ReactElement, ReactNode } from "react";
 import { forwardRef } from "react";
 
-import type { PropsWithClassName } from "../common/Types.ts";
-import { neutral } from "../common/Utils.ts";
+import { neutral } from "../common/theme/neutralColor.ts";
+
+type PropsWithClassName<TProps = unknown> = TProps & { className?: string };
 
 type TooltipIconProps = {
   icon?: ReactElement;

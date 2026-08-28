@@ -9,26 +9,26 @@
 import type { Atom } from "jotai";
 import { atom } from "jotai";
 
-import { resolvedLayoutsAtom } from "~/components/sections/savedLayoutAtoms.ts";
+import { resolvedLayoutsAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
 
 import { userConfigAtom } from "../state/atoms/userConfig.ts";
-import { keybindingsAtom } from "./atoms.ts";
+import { keybindingsAtom } from "./resolvedBindings.ts";
 
 // Namespaced userConfig.keybindings key for a Layout's "apply" shortcut. Mirrors the
 // `layouts.switch.<id>` command-palette id convention.
 const LAYOUT_SHORTCUT_PREFIX = "layout.apply.";
 
-export function layoutShortcutBindingId(layoutId: string): string {
+export const layoutShortcutBindingId = (layoutId: string): string => {
   return `${LAYOUT_SHORTCUT_PREFIX}${layoutId}`;
-}
+};
 
-export function isLayoutShortcutBindingId(id: string): boolean {
+export const isLayoutShortcutBindingId = (id: string): boolean => {
   return id.startsWith(LAYOUT_SHORTCUT_PREFIX);
-}
+};
 
-export function layoutIdFromShortcutBindingId(id: string): string | null {
+export const layoutIdFromShortcutBindingId = (id: string): string | null => {
   return isLayoutShortcutBindingId(id) ? id.slice(LAYOUT_SHORTCUT_PREFIX.length) : null;
-}
+};
 
 // A resolved per-layout binding, shaped like the static ResolvedKeybinding the
 // settings rows render, but with a string id and the synthetic "layouts" category
@@ -46,9 +46,9 @@ export type LayoutKeybinding = {
 
 // Resolve a Layout's binding from the raw userConfig.keybindings overrides:
 // missing or empty means unbound (the single place that coercion lives).
-function resolveLayoutBinding(overrides: Record<string, string | null>, layoutId: string): string | null {
+const resolveLayoutBinding = (overrides: Record<string, string | null>, layoutId: string): string | null => {
   return overrides[layoutShortcutBindingId(layoutId)] || null;
-}
+};
 
 // One resolved binding per selectable Layout (System Default included), in
 // resolvedLayoutsAtom order.

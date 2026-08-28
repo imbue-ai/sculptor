@@ -1,5 +1,5 @@
 import type { RendererIdentity } from "~/api";
-import { isElectron } from "~/electron/utils.ts";
+import { isElectron } from "~/electron/platform.ts";
 
 /**
  * sessionStorage key holding this page load's renderer id. Scoped to the tab/

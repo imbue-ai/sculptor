@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { ElementIds } from "~/api";
-import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate, useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
 

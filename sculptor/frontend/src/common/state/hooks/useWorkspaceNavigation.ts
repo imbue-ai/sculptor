@@ -2,7 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 
 import type { RecentWorkspaceResponse } from "../../../api";
-import { useImbueLocation, useImbueNavigate } from "../../NavigateUtils.ts";
+import { useImbueLocation, useImbueNavigate } from "../../hooks/navigation.ts";
 import { agentIdsByWorkspaceAtom, convertHomeTabToWorkspaceAtom, openWorkspaceTabAtom } from "../atoms/workspaces.ts";
 
 type WorkspaceNavigationResult = {

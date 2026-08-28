@@ -4,17 +4,18 @@ import type { ReactElement } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds, type PrStatusInfo } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { openInReusableTab } from "~/common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
-import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
-import { DiffScopePicker } from "~/pages/workspace/components/diffPanel/DiffScopePicker.tsx";
-import type { DiffScope } from "~/pages/workspace/components/diffPanel/types.ts";
-import { changesScopeAtomFamily } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
+import { useGitAndOpenInRuntime } from "~/components/commandPalette/contextActions/useGitAndOpenInRuntime.ts";
+import { DiffScopePicker } from "~/pages/workspace/diffPanel/DiffScopePicker.tsx";
+import type { DiffScope } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
+import { changesScopeAtomFamily } from "~/pages/workspace/panels/fileBrowser/atoms/fileBrowser.ts";
+import { useFileStatusMap, usePerFileDiffMap } from "~/pages/workspace/panels/fileBrowser/fileDiffMaps.ts";
 import { FlatListRow } from "~/pages/workspace/panels/fileBrowser/FlatListRow.tsx";
-import { useFileStatusMap, useFileTree, usePerFileDiffMap } from "~/pages/workspace/panels/fileBrowser/hooks.ts";
-import { getChangedFiles } from "~/pages/workspace/panels/fileBrowser/utils.ts";
+import { useFileTree } from "~/pages/workspace/panels/fileBrowser/useFileTree.ts";
+import { getChangedFiles } from "~/pages/workspace/panels/fileBrowser/utils/fileTree.ts";
 
 import styles from "./ChangesPill.module.scss";
 

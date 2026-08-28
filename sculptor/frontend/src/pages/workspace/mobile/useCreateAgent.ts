@@ -3,8 +3,8 @@ import { posthog } from "posthog-js";
 import { useCallback, useState } from "react";
 
 import { createWorkspaceAgent, type LlmModel } from "~/api";
-import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { useImbueNavigate, useWorkspacePageParams } from "~/common/hooks/navigation.ts";
+import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 
 /**
  * Creates a new agent in the current workspace — inheriting the currently-viewed
@@ -16,7 +16,7 @@ import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 export const useCreateAgent = (): { createAgent: () => Promise<void>; isCreating: boolean } => {
   const { workspaceID, agentID } = useWorkspacePageParams();
   const { navigateToAgent } = useImbueNavigate();
-  const tasks = useAtomValue(tasksArrayAtom);
+  const agents = useAtomValue(agentsArrayAtom);
   const [isCreating, setIsCreating] = useState(false);
 
   const createAgent = useCallback(async (): Promise<void> => {
@@ -24,7 +24,7 @@ export const useCreateAgent = (): { createAgent: () => Promise<void>; isCreating
     setIsCreating(true);
     try {
       // Inherit the current agent's model so the new agent starts the same.
-      const currentAgent = agentID ? (tasks ?? []).find((t) => t.id === agentID) : undefined;
+      const currentAgent = agentID ? (agents ?? []).find((t) => t.id === agentID) : undefined;
       const model = currentAgent?.model as LlmModel | undefined;
       const response = await createWorkspaceAgent({ path: { workspace_id: workspaceID }, body: { model } });
       if (response.data) {
@@ -36,7 +36,7 @@ export const useCreateAgent = (): { createAgent: () => Promise<void>; isCreating
     } finally {
       setIsCreating(false);
     }
-  }, [isCreating, agentID, tasks, workspaceID, navigateToAgent]);
+  }, [isCreating, agentID, agents, workspaceID, navigateToAgent]);
 
   return { createAgent, isCreating };
 };

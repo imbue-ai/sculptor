@@ -4,13 +4,14 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds, UserConfigField } from "~/api";
-import { CATEGORY_DISPLAY_NAMES, CATEGORY_ORDER, type ResolvedKeybinding } from "~/common/keybindings";
-import { keybindingsAtom } from "~/common/keybindings/atoms.ts";
+import { formatShortcutForDisplay } from "~/common/keybindings/format.ts";
 import { allNamedBindingsAtom, dynamicLayoutKeybindingsAtom } from "~/common/keybindings/layoutShortcuts.ts";
-import { chordsEqual, formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
+import { chordsEqual } from "~/common/keybindings/matching.ts";
+import { CATEGORY_DISPLAY_NAMES, CATEGORY_ORDER, type ResolvedKeybinding } from "~/common/keybindings/model.ts";
+import { keybindingsAtom } from "~/common/keybindings/resolvedBindings.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { HotkeyChip } from "~/components/HotkeyChip.tsx";
 
-import { HotkeyChip } from "./HotkeyChip.tsx";
 import { SettingRow } from "./SettingRow.tsx";
 import { SectionTitle, SettingsSectionLayout } from "./SettingsSection.tsx";
 

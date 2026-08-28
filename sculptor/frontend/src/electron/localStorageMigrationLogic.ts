@@ -39,10 +39,10 @@ type WritableStorage = {
  * self-contained — reference only its parameters and JS globals, never a
  * module-scope binding (toString() does not capture closures).
  */
-export function selectMigratableEntries(
+export const selectMigratableEntries = (
   entries: Array<[string, string]>,
   denyPrefixes: Array<string>,
-): Record<string, string> {
+): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const [key, value] of entries) {
     const lower = key.toLowerCase();
@@ -51,7 +51,7 @@ export function selectMigratableEntries(
     }
   }
   return out;
-}
+};
 
 /**
  * Write each entry only when its key is absent (non-clobber), so a user who
@@ -59,7 +59,7 @@ export function selectMigratableEntries(
  *
  * Same serialization contract as selectMigratableEntries — keep self-contained.
  */
-export function applyMigratedEntries(storage: WritableStorage, data: Record<string, string>): number {
+export const applyMigratedEntries = (storage: WritableStorage, data: Record<string, string>): number => {
   let written = 0;
   for (const key of Object.keys(data)) {
     if (storage.getItem(key) === null) {
@@ -68,7 +68,7 @@ export function applyMigratedEntries(storage: WritableStorage, data: Record<stri
     }
   }
   return written;
-}
+};
 
 // Read all localStorage in the page, minus SDK keys, as a JSON string. Built
 // from the function source so it cannot drift from the unit-tested logic.

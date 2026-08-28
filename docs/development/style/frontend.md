@@ -452,6 +452,67 @@ See [our python style guide](./backend.md) for general naming conventions. Below
   <MyComponent onUserSelected={handleUserSelected} />
   ```
 
+### Components
+
+* Name a component for **what the user sees**, not the circumstance it was built
+  for. A component that renders the sidebar's empty state is `SidebarEmptyState`,
+  even if it was written for the first-run flow.
+* A component identifier must read unambiguously **outside its own directory** —
+  it appears in JSX far from home, in devtools, and in stack traces. Keep the
+  context prefix even though the file path repeats it: `FileTreeRow`, not
+  `TreeRow`, even inside `fileBrowser/`. (Plumbing files are the opposite —
+  `atoms/selection.ts` — because they are imported by path and used locally.)
+* The file is named after its exported component: `FileTreeRow.tsx`.
+
+Suffixes are a fixed vocabulary — each one means exactly one thing:
+
+| Suffix | Means | Example |
+| --- | --- | --- |
+| `Page` | routed, owns a URL | `WorkspacePage` |
+| `Panel` | a registered workspace panel, nothing else | `FilesPanel` |
+| `Layout` | reusable scaffold that arranges children | `ExplorerLayout` |
+| `View` | self-contained display region inside a page or panel | `PierreDiffView` |
+| `Section` | titled region of a page or form | `AppearanceSection` |
+| `Block` | one unit in the chat transcript | `AlphaCodeBlock` |
+| `Dialog` | anything modal (do not use `Modal`) | `DeleteConfirmationDialog` |
+| `Row` / `Item` / `Card` / `Bar` / `List` | what they say | `WorkspaceRow` |
+| `EmptyState` | the nothing-here render of a region | `SidebarEmptyState` |
+| `Provider` | context provider | `PanelDndProvider` |
+
+Banned suffixes: `Core`, `Manager`, `Wrapper`, `Container`, `Helper` — "does
+stuff" words that mean the thing needs a real name.
+
+### Atoms
+
+Read/write is visible at the call site:
+
+* Readable atoms are noun phrases ending in `Atom`: `maximizedSectionAtom`.
+* Atom families end in `AtomFamily`, or `Atom` when the family is the natural
+  reading: `taskAtomFamily`, `isDropTargetAtom`.
+* Write-only atoms are verb phrases ending in `Atom`: `openPanelAtom`,
+  `updateTasksAtom`.
+
+### Domain vocabulary
+
+Canonical product nouns and their names in code. When naming anything, use these
+terms — naming drift starts where the vocabulary is improvised.
+
+| Term | Meaning | In code |
+| --- | --- | --- |
+| **agent** | one coding-agent run inside a workspace | `agent*` in hand-written code. The wire calls an agent run a task (`CodingAgentTaskView`, `taskId`); that vocabulary stays inside generated `api/` and the reducers that consume wire frames. |
+| **task** | an item in an agent's plan — the task graph in the agent tasks panel | `task*`, only ever this meaning |
+| **workspace** | an isolated working copy (branch + container) holding agents and terminals | `workspace*` |
+| **project** | a repository registered with Sculptor | `project*`; `repo` refers to the underlying git repository itself |
+| **panel** | a registered view that opens in a sub-section (Files, Changes, Terminal, one per agent) | `panel*`, `PanelId` |
+| **section** | one of the workspace layout regions: left, center, right, bottom | `SectionId` |
+| **sub-section** | a split within a section holding a row of panel tabs | `SubSectionId` |
+| **panel tab / workspace tab** | a panel tab selects a panel within a sub-section; a workspace tab is the sidebar entry for an open workspace | qualify `tab` wherever both could be meant |
+| **action** | a runnable command on a workspace (built-in or custom) | `action*` |
+| **skill** | a reusable instruction set available to agents | `skill*` |
+| **mention** | an @-reference in chat input to a file, skill, or entity | `mention*` |
+| **plugin** | a runtime-loaded frontend extension | `plugin*` |
+| **keybinding** | a named shortcut, identified by a `KeybindingId` | `keybinding*` |
+
 ## Comments
 
 Comments can quickly become outdated, leading to confusion rather than clarity. See [Comments](../style_guide.md#comments) for the repo-wide rule (write for a future reader, present-tense rationale, no change-narration). Comment when the reasoning isn't obvious from the code alone — e.g. config files, workarounds.
@@ -460,7 +521,7 @@ Comments can quickly become outdated, leading to confusion rather than clarity. 
 
 ### State management
 
-**State ownership (the rule everything below follows):** every server fact has exactly one written store. A second store may hold that fact only as a derived projection with a single writer (a mirror), never via dual-writes at call sites. Every optimistic write must name its healing mechanism: "the WS delivers the authoritative value" is valid only for *success* (the server changed, so a delta frame arrives) — failure paths must roll back everything `onMutate` touched, and a rollback must yield to any authoritative write that interleaved. Push-fed cache keys neutralize fetch-cache policy (`queryFn: skipToken`, pinned `gcTime`). One operation, one implementation. The review rules in [`docs/development/review/sculptor.md`](../review/sculptor.md) (`no_dual_store_writes` and neighbors) spell out what reviewers reject; the canonical implementations live in `src/common/state/mutations/` and `src/common/state/hooks/useTaskQueryMirror.ts`.
+**State ownership (the rule everything below follows):** every server fact has exactly one written store. A second store may hold that fact only as a derived projection with a single writer (a mirror), never via dual-writes at call sites. Every optimistic write must name its healing mechanism: "the WS delivers the authoritative value" is valid only for *success* (the server changed, so a delta frame arrives) — failure paths must roll back everything `onMutate` touched, and a rollback must yield to any authoritative write that interleaved. Push-fed cache keys neutralize fetch-cache policy (`queryFn: skipToken`, pinned `gcTime`). One operation, one implementation. The review rules in [`docs/development/review/sculptor.md`](../review/sculptor.md) (`no_dual_store_writes` and neighbors) spell out what reviewers reject; the canonical implementations live in `src/common/state/mutations/` and `src/common/state/hooks/useAgentQueryMirror.ts`.
 
 We use [Jotai](https://jotai.org/) for managing our persistent, shared, or global state — chosen for its small API and bottom-up atom composition. Read the [Jotai docs](https://jotai.org/docs) if you're unfamiliar with it.
 
@@ -469,18 +530,18 @@ General guidelines:
 * Use `useState` if that state exists only within a component.
 * Avoid accessing more state than necessary. For example, if you only need the `userId` create an atom like the following `atom<string>((get) => get(userAtom)!.userId);` to only access the information you need and prevent unnecessary re-renders.
 
-### WebSocket-fed TanStack Query state (agent tasks)
+### WebSocket-fed TanStack Query state (agents)
 
-Agent-task state lives in the TanStack Query cache as a **push-fed store**, not a fetch cache. The flow is single-writer, one direction:
+Agent state lives in the TanStack Query cache as a **push-fed store**, not a fetch cache. The flow is single-writer, one direction:
 
 ```
-WS stream ──▶ syncTasksToQueryCache ──▶ query cache ──▶ useTask / useTaskIds
-mutations ──▶ optimistic setQueryData ──┘        └──▶ useTaskQueryMirror ──▶ legacy Jotai atoms
+WS stream ──▶ syncAgentsToQueryCache ──▶ query cache ──▶ useAgent / useAgentIds
+mutations ──▶ optimistic setQueryData ──┘        └──▶ useAgentQueryMirror ──▶ legacy Jotai atoms
 ```
 
-* The WS bridge (`syncTasksToQueryCache` in `queryClient.ts`) is the only writer of authoritative state; it also bumps a per-task **sync version** that mutations use for rollback.
-* Because nothing ever fetches, cache behaviors must be explicitly neutralized: subscription hooks use `queryFn: skipToken` (never a no-op queryFn — it fakes a successful fetch), and the task keys are pinned with `gcTime: Infinity` (the stream sends deltas; an evicted entry would never come back until the task next changes).
-* Legacy Jotai readers are served by `useTaskQueryMirror`, the one place that writes the Jotai task atoms. Never write `taskAtomFamily`/`taskIdsAtom` directly.
+* The WS bridge (`syncAgentsToQueryCache` in `queryClient.ts`) is the only writer of authoritative state; it also bumps a per-agent **sync version** that mutations use for rollback.
+* Because nothing ever fetches, cache behaviors must be explicitly neutralized: subscription hooks use `queryFn: skipToken` (never a no-op queryFn — it fakes a successful fetch), and the agent keys are pinned with `gcTime: Infinity` (the stream sends deltas; an evicted entry would never come back until the agent next changes).
+* Legacy Jotai readers are served by `useAgentQueryMirror`, the one place that writes the Jotai agent atoms. Never write `agentAtomFamily`/`agentIdsAtom` directly.
 
 Server-mutating operations (POST/PUT/PATCH/DELETE) that optimistically update the UI use `useMutation`, with the shared helpers in `src/common/state/mutations/`:
 
@@ -490,21 +551,21 @@ export const useMyRenameMutation = (workspaceId: string) =>
     mutationFn: (vars: { agentId: string; newTitle: string }) =>
       myApiCall({ path: { workspace_id: workspaceId, agent_id: vars.agentId }, body: { title: vars.newTitle } }),
     // Snapshot the entry + sync version, apply the optimistic update.
-    onMutate: (vars) => applyOptimisticTaskUpdate(vars.agentId, (prev) => ({ ...prev, title: vars.newTitle })),
-    // Restore the snapshot — unless a WS frame wrote the task while the
+    onMutate: (vars) => applyOptimisticAgentUpdate(vars.agentId, (prev) => ({ ...prev, title: vars.newTitle })),
+    // Restore the snapshot — unless a WS frame wrote the agent while the
     // request was in flight (the frame is authoritative and must win).
     onError: (_e, vars, ctx) => {
-      rollbackOptimisticTaskUpdate(vars.agentId, ctx);
+      rollbackOptimisticAgentUpdate(vars.agentId, ctx);
     },
-    // No onSuccess — a successful mutation changes the task server-side, so
+    // No onSuccess — a successful mutation changes the agent server-side, so
     // the WS stream delivers the authoritative value.
   });
 ```
 
 Key rules:
-* Use `applyOptimisticTaskUpdate` / `rollbackOptimisticTaskUpdate` rather than hand-rolling snapshots: the version check is what stops a failed request's stale snapshot from clobbering a newer WS frame.
+* Use `applyOptimisticAgentUpdate` / `rollbackOptimisticAgentUpdate` rather than hand-rolling snapshots: the version check is what stops a failed request's stale snapshot from clobbering a newer WS frame.
 * A rollback must undo *everything* `onMutate` did — if the update records side state (e.g. the unread override), the error path clears it too.
-* Never write the cache in `onSuccess`, and don't expect the WS to correct a *failed* mutation: the stream only sends changed tasks, so a failure with no rollback leaves the optimistic value on screen forever.
+* Never write the cache in `onSuccess`, and don't expect the WS to correct a *failed* mutation: the stream only sends changed agents, so a failure with no rollback leaves the optimistic value on screen forever.
 * See `src/common/state/mutations/` for the canonical implementations.
 
 ### Hooks
@@ -728,28 +789,7 @@ const Box = (props: { width: number; height: number }): ReactElement => {
 
 ## Source Organization
 
-When importing, always use absolute imports. This should be configured by default in our editors
+When importing, always use absolute imports. This should be configured by default in our editors.
 
-**File structure example:**
-```text
-src/
-  App.tsx
-  index.css <--- global styles, the only CSS file in the project
-  [other top level app junk]
-  pages/
-    branch/ <--- each page should have its own folder
-      BranchPage.tsx
-      CommitListSection.tsx
-      CommitListSection.module.scss <--- name module files with the same name as the component
-      ... <--- for now, keep this folder as flat as possible (we'll need to revisit this when it gets really long)
-    debug/
-      DebugPage.tsx
-  components/ <--- global reusable components that can be used anywhere
-     CustomDatePicker.tsx
-     editor/
-       Editor.tsx
-       ...
-  common/ <--- general gotcha for all utils, helpers, w/e
-    utils.ts
-    ...
-```
+Where files live, how features are laid out internally, and how the tree grows is
+its own document: [frontend_structure.md](frontend_structure.md).

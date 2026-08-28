@@ -11,19 +11,19 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
-import type { SavedLayout } from "~/components/sections/persistence/types.ts";
-import { EMPTY_WORKSPACE_LAYOUT, SAVED_LAYOUT_VERSION } from "~/components/sections/persistence/types.ts";
-import { appliedLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "~/components/sections/savedLayoutAtoms.ts";
-import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
-import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID } from "~/components/sections/systemDefaultLayout.ts";
-import type * as ElectronUtils from "~/electron/utils.ts";
+import type * as ElectronUtils from "~/electron/platform.ts";
+import { appliedLayoutIdAtom, layoutMruAtom, savedLayoutsAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import type { SavedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { EMPTY_WORKSPACE_LAYOUT, SAVED_LAYOUT_VERSION } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { SYSTEM_DEFAULT_LAYOUT, SYSTEM_DEFAULT_LAYOUT_ID } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import { LayoutSwitcher } from "./LayoutSwitcher.tsx";
-import { layoutsSwitcherOpenAtom, saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
+import { layoutsSwitcherOpenAtom, saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
 
 // Force the platform modifier to Cmd so a "Meta+…" binding matches a metaKey press
 // regardless of the host OS the suite runs on (jsdom reports no platform).
-vi.mock("~/electron/utils.ts", async (importOriginal) => {
+vi.mock("~/electron/platform.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof ElectronUtils>();
   return { ...actual, isMac: (): boolean => true };
 });
@@ -36,9 +36,9 @@ const withStore = (store: Store, children: ReactNode): ReactElement => (
   </Provider>
 );
 
-function makeLayout(id: string, name: string): SavedLayout {
+const makeLayout = (id: string, name: string): SavedLayout => {
   return { id, name, version: SAVED_LAYOUT_VERSION, captured: SYSTEM_DEFAULT_LAYOUT.captured };
-}
+};
 
 // Three uniquely-named user layouts so a "zeta" query isolates them from the built-in
 // System Default + presets (whose names share no substring with "zeta").
@@ -50,18 +50,18 @@ const ZETA_LAYOUTS: ReadonlyArray<SavedLayout> = [
 
 // A store hydrated for the active workspace with the switcher open, so applying a
 // layout has an appliedLayoutId/MRU to write and `close()` has a flag to flip.
-function makeStore(saved: ReadonlyArray<SavedLayout> = ZETA_LAYOUTS): Store {
+const makeStore = (saved: ReadonlyArray<SavedLayout> = ZETA_LAYOUTS): Store => {
   const store = createStore();
   store.set(activeWorkspaceIdAtom, "ws-1");
   store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT });
   store.set(savedLayoutsAtom, saved);
   store.set(layoutsSwitcherOpenAtom, true);
   return store;
-}
+};
 
 // Fire a raw window-level keydown, the way the OS delivers one to the capture-phase
 // listener. Dispatched on document.body so window's capture handler runs first.
-function press(key: string, modifiers: { meta?: boolean; shift?: boolean } = {}): void {
+const press = (key: string, modifiers: { meta?: boolean; shift?: boolean } = {}): void => {
   act(() => {
     document.body.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -73,9 +73,9 @@ function press(key: string, modifiers: { meta?: boolean; shift?: boolean } = {})
       }),
     );
   });
-}
+};
 
-function setQuery(value: string): void {
+const setQuery = (value: string): void => {
   const input = screen.getByTestId(ElementIds.LAYOUTS_SWITCHER_SEARCH_INPUT);
   act(() => {
     // React tracks the value on the input node, so set it through the native setter
@@ -84,7 +84,7 @@ function setQuery(value: string): void {
     setter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-}
+};
 
 const rowIds = (): Array<string> =>
   screen.getAllByTestId(ElementIds.LAYOUTS_SWITCHER_ROW).map((row) => row.getAttribute("data-layout-id") ?? "");
@@ -174,7 +174,7 @@ describe("LayoutSwitcher keyboard machine", () => {
 
     press("s", { meta: true });
 
-    expect(store.get(saveLayoutModalRequestAtom)).toEqual({ mode: "create" });
+    expect(store.get(saveLayoutDialogRequestAtom)).toEqual({ mode: "create" });
     expect(store.get(layoutsSwitcherOpenAtom)).toBe(false);
   });
 });

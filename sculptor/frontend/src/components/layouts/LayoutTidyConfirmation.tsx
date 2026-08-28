@@ -17,17 +17,17 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { ConfirmationDialog } from "~/components/ConfirmationDialog.tsx";
-import { tidyToLayoutAtom } from "~/components/sections/layoutActions.ts";
-import { computeTidyClosure } from "~/components/sections/layoutApply.ts";
-import { tidyConfirmationSuppressedAtom } from "~/components/sections/savedLayoutAtoms.ts";
-import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
-import type { SectionId } from "~/components/sections/sectionTypes.ts";
-import { isSystemLayoutId } from "~/components/sections/systemDefaultLayout.ts";
-import { layoutTidyTargetAtom } from "~/components/sections/transientAtoms.ts";
+import { tidyConfirmationSuppressedAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
+import { tidyToLayoutAtom } from "~/pages/workspace/layout/atoms/savedLayoutActions.ts";
+import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { layoutTidyTargetAtom } from "~/pages/workspace/layout/atoms/transient.ts";
+import type { SectionId } from "~/pages/workspace/layout/types/section.ts";
+import { computeTidyClosure } from "~/pages/workspace/layout/utils/layoutApply.ts";
+import { isSystemLayoutId } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import { LayoutPreview } from "./LayoutPreview.tsx";
 import styles from "./LayoutTidyConfirmation.module.scss";
-import { saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
+import { saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
 
 // The tidy dialog shows the live workspace, so name the agent/terminal homes plainly
 // (the save dialog's "default" framing is about seeding and doesn't apply here).
@@ -38,7 +38,7 @@ export const LayoutTidyConfirmation = (): ReactElement | undefined => {
   const layout = useAtomValue(workspaceLayoutAtom);
   const tidyToLayout = useSetAtom(tidyToLayoutAtom);
   const setTidyConfirmationSuppressed = useSetAtom(tidyConfirmationSuppressedAtom);
-  const setSaveRequest = useSetAtom(saveLayoutModalRequestAtom);
+  const setSaveRequest = useSetAtom(saveLayoutDialogRequestAtom);
 
   const [shouldSuppress, setShouldSuppress] = useState<boolean>(false);
   // Reset the checkbox for each fresh confirmation so it never carries a stale tick

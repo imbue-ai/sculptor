@@ -66,7 +66,7 @@ The task migration (`SCU-1120`) is the template. For each surface
 segment, …):
 
 1. Decide the fact's canonical store. If legacy readers need a second
-   store, feed it from one mirror (see `useTaskQueryMirror.ts`), never from
+   store, feed it from one mirror (see `useAgentQueryMirror.ts`), never from
    call sites.
 2. Move the mutation to a `useMutation` hook using the shared helpers in
    `src/common/state/mutations/` — snapshot + sync-version in `onMutate`,
@@ -99,21 +99,21 @@ test. None is a swallowed rejection; the frozen budget documents them:
 - `RepoSegment.tsx` — **exempt** (error message on failure, no optimistic
   write).
 - `useOptimisticTaskDelete.ts` — handled with CAS rollback; consolidated
-  behind `useDeleteTaskMutation` so all cache writes live in
+  behind `useDeleteAgentMutation` so all cache writes live in
   `state/mutations/`.
 
 ## Known burn-down items
 
 - ~~`useOptimisticTaskDelete.ts` `setQueryData` writes~~ — done: delete
-  cache writes live behind `useDeleteTaskMutation`;
+  cache writes live behind `useDeleteAgentMutation`;
   `no-scattered-setquerydata` budget is `0`.
 - ~~Per-field task selector reads in components~~ — done: the
-  `useTaskHelpers` hooks read the query cache via `select`; only the
+  `useAgentHelpers` hooks read the query cache via `select`; only the
   selector atom families still consumed by Jotai atom graphs remain.
 - `useOptimisticWorkspaceDelete.ts` — add an interleave check to the
   rollback (V3 above); consider a `workspaceSyncVersion` bumped by
   `updateWorkspacesAtom`.
-- The Jotai task atoms + `useTaskQueryMirror` — the terminal item, blocked
+- The Jotai agent atoms + `useAgentQueryMirror` — the terminal item, blocked
   on the remaining Jotai readers, which are no longer components but
   **atom graphs and the extension SDK**:
   - `state/atoms/workspaces.ts`, `state/atoms/mentionDetails.ts`,

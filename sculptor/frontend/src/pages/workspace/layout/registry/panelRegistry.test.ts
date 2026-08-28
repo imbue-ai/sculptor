@@ -1,0 +1,317 @@
+import { createStore } from "jotai";
+import { Puzzle } from "lucide-react";
+import type { ComponentType } from "react";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { TaskStatus } from "~/api";
+import { agentIdsAtom } from "~/common/state/atoms/agents.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
+
+import type { DynamicAgentInput } from "./dynamicPanels.tsx";
+import { deriveDynamicPanels } from "./dynamicPanels.tsx";
+import {
+  activePanelComponentInSubSectionAtom,
+  buildExtensionPanelDefinitions,
+  buildStaticPanelDefinitions,
+  isMultiInstanceKind,
+  isSubSectionPanelLoadingAtom,
+  panelRegistriesEqual,
+  panelRegistryAtom,
+  registerPanelComponent,
+  resolvedActivePanelIdInSubSectionAtom,
+} from "./panelRegistry.ts";
+
+// A minimal agent input with the fields the status dot + diagnostics derivation reads.
+const makeAgent = (overrides: Partial<DynamicAgentInput> & Pick<DynamicAgentInput, "agentId">): DynamicAgentInput => ({
+  displayName: "Agent 1",
+  status: TaskStatus.READY,
+  lastReadAt: "2024-01-01T00:00:00Z",
+  updatedAt: "2024-01-01T00:00:00Z",
+  ...overrides,
+});
+
+beforeEach(() => {
+  localStorage.clear();
+});
+
+describe("static panel registry", () => {
+  it("contains the eight static panels with correct default sections", () => {
+    const defs = buildStaticPanelDefinitions();
+    expect(defs.map((d) => d.id)).toEqual([
+      "files",
+      "changes",
+      "commits",
+      "review-all",
+      "actions",
+      "skills",
+      "browser",
+      "notes",
+    ]);
+    const byId = Object.fromEntries(defs.map((d) => [d.id, d]));
+    expect(byId.files.defaultSection).toBe("left");
+    expect(byId.changes.defaultSection).toBe("left");
+    expect(byId.commits.defaultSection).toBe("left");
+    expect(byId.actions.defaultSection).toBe("right");
+    expect(byId.skills.defaultSection).toBe("right");
+    expect(byId.notes.defaultSection).toBe("right");
+    expect(byId["review-all"].defaultSection).toBeUndefined();
+    expect(byId.browser.defaultSection).toBeUndefined();
+    expect(defs.every((d) => d.kind === "static")).toBe(true);
+  });
+
+  it("has no enable/disable flags on a definition", () => {
+    const def = buildStaticPanelDefinitions()[0];
+    expect(def).not.toHaveProperty("enabled");
+    expect(def).not.toHaveProperty("defaultEnabled");
+    expect(def).not.toHaveProperty("isBuiltin");
+  });
+
+  it("marks only agent/terminal as multi-instance", () => {
+    expect(isMultiInstanceKind("static")).toBe(false);
+    expect(isMultiInstanceKind("agent")).toBe(true);
+    expect(isMultiInstanceKind("terminal")).toBe(true);
+  });
+});
+
+describe("dynamic panel derivation", () => {
+  it("derives agent/terminal definitions with the right ids and defaults", () => {
+    const defs = deriveDynamicPanels(
+      [makeAgent({ agentId: "t1", displayName: "Agent 1" })],
+      [{ workspaceId: "ws1", index: 0, displayName: "Terminal 1" }],
+    );
+    expect(defs.map((d) => d.id)).toEqual(["agent:t1", "terminal:ws1:0"]);
+    expect(defs[0].kind).toBe("agent");
+    expect(defs[0].defaultSection).toBe("center");
+    expect(defs[1].kind).toBe("terminal");
+    expect(defs[1].defaultSection).toBe("bottom");
+  });
+
+  it("gives an agent a status dot and a Diagnostics submenu of copy actions", () => {
+    const [agentDef] = deriveDynamicPanels(
+      [makeAgent({ agentId: "t1", displayName: "Agent 1", diagnostics: { sessionId: null } })],
+      [],
+    );
+    // READY with lastReadAt == updatedAt derives the calm "read" dot.
+    expect(agentDef.dotStatus).toBe("read");
+    // The id / session / transcript copy actions live in the Diagnostics submenu, not
+    // at the top level (which carries Mark-as-unread + Copy agent name).
+    const diagnostics = (agentDef.contextMenuActions ?? []).find(
+      (item) => item.kind === "submenu" && item.label === "Diagnostics",
+    );
+    if (diagnostics?.kind !== "submenu") {
+      throw new Error("expected a Diagnostics submenu");
+    }
+    const diagnosticLabels = diagnostics.items.map((item) => item.label);
+    expect(diagnosticLabels).toContain("Copy agent id");
+    expect(diagnosticLabels).toContain("Copy Claude session id");
+    // Session id action is disabled until a session exists.
+    const copySession = diagnostics.items.find((item) => item.label === "Copy Claude session id");
+    expect(copySession?.disabled).toBe(true);
+  });
+
+  it("wires the agent close button to the supplied delete callback", () => {
+    let didRequestClose = false;
+    const [agentDef] = deriveDynamicPanels(
+      [makeAgent({ agentId: "t1", onRequestClose: () => (didRequestClose = true) })],
+      [],
+    );
+    agentDef.onRequestClose?.();
+    expect(didRequestClose).toBe(true);
+  });
+
+  it("caches the component reference per id across registry rebuilds", () => {
+    const first = deriveDynamicPanels([makeAgent({ agentId: "stable", displayName: "x" })], []);
+    const second = deriveDynamicPanels([makeAgent({ agentId: "stable", displayName: "x renamed" })], []);
+    expect(first[0].component).toBe(second[0].component);
+  });
+
+  it("evicts the cached component when its agent disappears", () => {
+    const first = deriveDynamicPanels([makeAgent({ agentId: "evict-me", displayName: "x" })], []);
+    deriveDynamicPanels([makeAgent({ agentId: "other", displayName: "y" })], []);
+    const recreated = deriveDynamicPanels([makeAgent({ agentId: "evict-me", displayName: "x" })], []);
+    expect(first[0].component).not.toBe(recreated[0].component);
+  });
+});
+
+describe("panelRegistriesEqual", () => {
+  it("treats a rebuilt registry with unchanged inputs as equal despite fresh objects", () => {
+    const terminal = { workspaceId: "ws1", index: 0, displayName: "Terminal 1" };
+    const first = deriveDynamicPanels([makeAgent({ agentId: "t1" })], [terminal]);
+    // A rebuild produces new definition objects and new callback closures; only the
+    // render-relevant fields are compared, so the registries still count as equal.
+    const second = deriveDynamicPanels([makeAgent({ agentId: "t1" })], [terminal]);
+    expect(second).not.toBe(first);
+    expect(second[0].contextMenuActions).not.toBe(first[0].contextMenuActions);
+    expect(panelRegistriesEqual(first, second)).toBe(true);
+  });
+
+  it("detects a dot-status change", () => {
+    const before = deriveDynamicPanels([makeAgent({ agentId: "t1" })], []);
+    const after = deriveDynamicPanels([makeAgent({ agentId: "t1", status: TaskStatus.RUNNING })], []);
+    expect(panelRegistriesEqual(before, after)).toBe(false);
+  });
+
+  it("detects a rename", () => {
+    const before = deriveDynamicPanels([makeAgent({ agentId: "t1", displayName: "Agent 1" })], []);
+    const after = deriveDynamicPanels([makeAgent({ agentId: "t1", displayName: "Renamed" })], []);
+    expect(panelRegistriesEqual(before, after)).toBe(false);
+  });
+
+  it("detects an added panel", () => {
+    const before = deriveDynamicPanels([makeAgent({ agentId: "t1" })], []);
+    const after = deriveDynamicPanels([makeAgent({ agentId: "t1" }), makeAgent({ agentId: "t2" })], []);
+    expect(panelRegistriesEqual(before, after)).toBe(false);
+  });
+});
+
+describe("activePanelComponentInSubSectionAtom", () => {
+  it("resolves the active panel's component and is stable per id", () => {
+    const filesComponent: ComponentType = () => null;
+    registerPanelComponent("files", filesComponent);
+
+    const store = createStore();
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    store.set(activeWorkspaceIdAtom, "ws-join");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { files: "left" },
+      order: { left: ["files"] },
+      activePanel: { left: "files" },
+      expanded: { left: true },
+    });
+
+    const resolved = store.get(activePanelComponentInSubSectionAtom("left"));
+    expect(resolved).toBe(filesComponent);
+    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(resolved);
+  });
+});
+
+describe("resolvedActivePanelIdInSubSectionAtom", () => {
+  const EXTENSION_PANEL_ID = "extension:linear-issue:issues";
+  const extensionComponent: ComponentType = () => null;
+  const extensionDefinitions = buildExtensionPanelDefinitions([
+    { id: EXTENSION_PANEL_ID, displayName: "Issues", icon: Puzzle, component: extensionComponent },
+  ]);
+
+  // A layout whose persisted active panel in "left" is the extension panel, with "files"
+  // also open — the state left behind when an extension unloads (or has not loaded yet)
+  // while its panel is the active tab.
+  const seedStore = (workspaceId: string): ReturnType<typeof createStore> => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, workspaceId);
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { [EXTENSION_PANEL_ID]: "left", files: "left" },
+      order: { left: [EXTENSION_PANEL_ID, "files"] },
+      activePanel: { left: EXTENSION_PANEL_ID },
+      expanded: { left: true },
+    });
+    return store;
+  };
+
+  it("falls back to the first open registered panel when the active id is unregistered", () => {
+    const filesComponent: ComponentType = () => null;
+    registerPanelComponent("files", filesComponent);
+    const store = seedStore("ws-unregistered-active");
+    // Static panels only: the extension panel named by the layout has no definition.
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe("files");
+    // The body renders the same resolved id the header highlights.
+    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(filesComponent);
+  });
+
+  it("resolves to undefined when no open panel is registered", () => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-none-registered");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { [EXTENSION_PANEL_ID]: "left" },
+      order: { left: [EXTENSION_PANEL_ID] },
+      activePanel: { left: EXTENSION_PANEL_ID },
+      expanded: { left: true },
+    });
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBeUndefined();
+    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBeUndefined();
+  });
+
+  it("self-heals back to the persisted active id when its definition (re)registers", () => {
+    registerPanelComponent("files", () => null);
+    const store = seedStore("ws-self-heal");
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe("files");
+
+    // The extension (re)loads: its definitions join the registry and — because the
+    // fallback never pruned the layout — the persisted active id wins again.
+    store.set(panelRegistryAtom, [...buildStaticPanelDefinitions(), ...extensionDefinitions]);
+    expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe(EXTENSION_PANEL_ID);
+    expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(extensionComponent);
+    expect(store.get(workspaceLayoutAtom).activePanel.left).toBe(EXTENSION_PANEL_ID);
+  });
+});
+
+describe("isSubSectionPanelLoadingAtom", () => {
+  // A layout whose center names an agent panel — the reload state where the
+  // layout is restored from localStorage but the agent panel isn't registered
+  // yet because the agent snapshot hasn't arrived.
+  const seedWithAgentPanel = (): ReturnType<typeof createStore> => {
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-agent-loading");
+    store.set(workspaceLayoutAtom, {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { "agent:t1": "center" },
+      order: { center: ["agent:t1"] },
+      activePanel: { center: "agent:t1" },
+      expanded: { center: true },
+    });
+    return store;
+  };
+
+  it("reports loading when a placed agent panel is unresolved and agents haven't loaded", () => {
+    const store = seedWithAgentPanel();
+    // `agentIdsAtom` left at its `undefined` default (agent snapshot in flight),
+    // registry empty (the agent panel has no definition yet).
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+
+    expect(store.get(activePanelComponentInSubSectionAtom("center"))).toBeUndefined();
+    expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(true);
+  });
+
+  it("reports NOT loading once the agent snapshot has arrived, even if still unresolved", () => {
+    const store = seedWithAgentPanel();
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    // The first agent frame lands (agentless: an empty array is still "loaded").
+    store.set(agentIdsAtom, []);
+
+    // Component is still unresolved, but the section is now genuinely empty — the
+    // empty-state launcher should show, not the loading placeholder.
+    expect(store.get(activePanelComponentInSubSectionAtom("center"))).toBeUndefined();
+    expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(false);
+  });
+
+  it("reports NOT loading once the agent panel resolves to a component", () => {
+    const store = seedWithAgentPanel();
+    // The agent panel registers (its component becomes resolvable).
+    store.set(panelRegistryAtom, [
+      ...buildStaticPanelDefinitions(),
+      ...deriveDynamicPanels([makeAgent({ agentId: "t1" })], []),
+    ]);
+
+    expect(store.get(activePanelComponentInSubSectionAtom("center"))).toBeDefined();
+    expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(false);
+  });
+
+  it("reports NOT loading for a genuinely empty sub-section while agents load", () => {
+    // No panel placed in center; the load window must not paint a loading
+    // placeholder over an empty section (it would flash then clear to the launcher).
+    const store = createStore();
+    store.set(activeWorkspaceIdAtom, "ws-empty-center");
+    store.set(workspaceLayoutAtom, EMPTY_WORKSPACE_LAYOUT);
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+
+    expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(false);
+  });
+});

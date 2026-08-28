@@ -3,9 +3,9 @@ import { ChevronLeft, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 
-import { CombinedDiffView } from "../../components/diffPanel/CombinedDiffView.tsx";
+import { CombinedDiffView } from "../../diffPanel/CombinedDiffView.tsx";
 import { useMobileChangeSummary } from "../useMobileChangeSummary.ts";
 import styles from "./Overlay.module.scss";
 

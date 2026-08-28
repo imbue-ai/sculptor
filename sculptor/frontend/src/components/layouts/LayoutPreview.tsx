@@ -8,13 +8,13 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
-import { openPanelsInSubSection, SECTION_LABELS } from "~/components/sections/layoutQueries.ts";
-import type { CapturedLayout, WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { isMultiInstancePanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
-import { workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
-import type { PanelId, SectionId } from "~/components/sections/sectionTypes.ts";
-import { toSecondary } from "~/components/sections/sectionTypes.ts";
+import { workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import type { CapturedLayout, WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { isMultiInstancePanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
+import { panelRegistryAtom } from "~/pages/workspace/layout/registry/panelRegistry.ts";
+import type { PanelId, SectionId } from "~/pages/workspace/layout/types/section.ts";
+import { toSecondary } from "~/pages/workspace/layout/types/section.ts";
+import { openPanelsInSubSection, SECTION_LABELS } from "~/pages/workspace/layout/utils/layoutQueries.ts";
 
 import styles from "./LayoutPreview.module.scss";
 

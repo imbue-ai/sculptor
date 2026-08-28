@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { getSkills } from "../../../api";
-import type { SkillType } from "../../../components/skillBadge";
-import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
-import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import type { SkillType } from "../../utils/skillBadge";
+import type { BackendQueryKeyResult, BackendQueryResult } from "../queryClient.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
 
 /**
  * A skill entry as exposed to consumers. The hook never produces `type:

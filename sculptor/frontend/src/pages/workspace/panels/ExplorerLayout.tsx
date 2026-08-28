@@ -4,15 +4,15 @@ import type { ReactElement, ReactNode } from "react";
 import { useCallback, useRef } from "react";
 
 import { ElementIds } from "~/api";
-import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
+import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import {
   EXPLORER_LIST_MAX_WIDTH_PX,
   EXPLORER_LIST_MIN_WIDTH_PX,
   explorerListWidthAtom,
   explorerSidebarHiddenAtom,
-} from "~/components/sections/sectionAtoms.ts";
-import type { PanelId } from "~/components/sections/sectionTypes.ts";
-import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
+} from "~/pages/workspace/layout/atoms/section.ts";
+import { ResizeHandle } from "~/pages/workspace/layout/ResizeHandle.tsx";
+import type { PanelId } from "~/pages/workspace/layout/types/section.ts";
 
 import styles from "./ExplorerLayout.module.scss";
 

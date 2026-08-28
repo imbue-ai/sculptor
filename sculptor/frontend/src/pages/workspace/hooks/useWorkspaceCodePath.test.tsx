@@ -9,7 +9,7 @@ import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
 
 import { useWorkspaceCodePath } from "./useWorkspaceCodePath";
 
-vi.mock("~/common/NavigateUtils.ts", () => ({
+vi.mock("~/common/hooks/navigation.ts", () => ({
   useWorkspacePageParams: (): { workspaceID: string } => ({ workspaceID: "ws-from-url" }),
 }));
 

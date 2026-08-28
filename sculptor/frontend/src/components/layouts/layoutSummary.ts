@@ -4,10 +4,10 @@
 // appear). Pure — the caller supplies a panel-id → display-name resolver from the
 // live registry.
 
-import type { CapturedLayout, SavedLayout } from "~/components/sections/persistence/types.ts";
-import type { PanelId, SectionId } from "~/components/sections/sectionTypes.ts";
-import { SECTION_IDS, toSecondary, toSection } from "~/components/sections/sectionTypes.ts";
-import { SYSTEM_LAYOUT_SUMMARIES } from "~/components/sections/systemDefaultLayout.ts";
+import type { CapturedLayout, SavedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import type { PanelId, SectionId } from "~/pages/workspace/layout/types/section.ts";
+import { SECTION_IDS, toSecondary, toSection } from "~/pages/workspace/layout/types/section.ts";
+import { SYSTEM_LAYOUT_SUMMARIES } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 // "below" reads better than "bottom" for the bottom section; the rest are literal.
 const SECTION_WORD: Readonly<Record<SectionId, string>> = {
@@ -17,7 +17,7 @@ const SECTION_WORD: Readonly<Record<SectionId, string>> = {
   bottom: "below",
 };
 
-function joinNames(names: ReadonlyArray<string>): string {
+const joinNames = (names: ReadonlyArray<string>): string => {
   if (names.length <= 1) {
     return names.join("");
   }
@@ -26,11 +26,11 @@ function joinNames(names: ReadonlyArray<string>): string {
     return `${names[0]} & ${names[1]}`;
   }
   return `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
-}
+};
 
 // The declared static panels placed in a section (primary then secondary), in
 // captured tab order, with any placed-but-unordered ids appended.
-function staticPanelsInSection(captured: CapturedLayout, section: SectionId): Array<PanelId> {
+const staticPanelsInSection = (captured: CapturedLayout, section: SectionId): Array<PanelId> => {
   const ids: Array<PanelId> = [];
   for (const subSection of [section, toSecondary(section)]) {
     for (const id of captured.order[subSection] ?? []) {
@@ -47,9 +47,9 @@ function staticPanelsInSection(captured: CapturedLayout, section: SectionId): Ar
     }
   }
   return ids;
-}
+};
 
-export function describeLayout(captured: CapturedLayout, getPanelName: (id: PanelId) => string): string {
+export const describeLayout = (captured: CapturedLayout, getPanelName: (id: PanelId) => string): string => {
   const parts: Array<string> = [];
   for (const section of SECTION_IDS) {
     const names = staticPanelsInSection(captured, section).map(getPanelName);
@@ -59,12 +59,12 @@ export function describeLayout(captured: CapturedLayout, getPanelName: (id: Pane
   }
   // No tool panels means the layout is just the agent's space.
   return parts.length === 0 ? "Just the agent, full width" : parts.join(" · ");
-}
+};
 
 // The summary any surface shows for a layout: the fixed one-liner for built-ins
 // (presets carry little or no static content, so a derived summary would read
 // empty), the derived panel summary for the user's own layouts. The single place
 // that rule lives, so the switcher and the command palette can't drift.
-export function layoutSummary(layout: SavedLayout, getPanelName: (id: PanelId) => string): string {
+export const layoutSummary = (layout: SavedLayout, getPanelName: (id: PanelId) => string): string => {
   return SYSTEM_LAYOUT_SUMMARIES[layout.id] ?? describeLayout(layout.captured, getPanelName);
-}
+};

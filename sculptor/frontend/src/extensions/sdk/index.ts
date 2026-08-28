@@ -3,11 +3,11 @@
  * authors target. Changes here are breaking changes to the extension API
  * and must bump the SDK major version.
  */
-import type { ExtensionHostApi, ExtensionManifest, ExtensionPanelDefinition } from "../types.ts";
+import type { ExtensionHostApi, ExtensionManifest, ExtensionPanelDefinition } from "../contract.ts";
 
 export { openExternal } from "./actions.ts";
 export { Markdown, PanelHeader } from "./components.ts";
-export type { CurrentWorkspace, NewWorkspaceModalOptions, WorkspaceView } from "./hooks.ts";
+export type { CurrentWorkspace, NewWorkspaceModalOptions, WorkspaceView } from "./hostHooks.ts";
 export {
   useCurrentWorkspace,
   useExtensionSetting,
@@ -18,9 +18,10 @@ export {
   usePluginSettings,
   useSetExtensionSetting,
   useSetPluginSetting,
+  useWorkspaceAgents,
   useWorkspaces,
   useWorkspaceTasks,
-} from "./hooks.ts";
+} from "./hostHooks.ts";
 export type { CodingAgentTaskView } from "~/api";
 // The contract an extension's `activate(api)` targets. Re-exported as types so
 // extensions reference the host's real definitions instead of hand-redeclaring
@@ -31,7 +32,7 @@ export type {
   HomeViewDefinition,
   OverlayDefinition,
   WorkspaceWidgetDefinition,
-} from "../types.ts";
+} from "../contract.ts";
 export type { ExtensionPanelDefinition };
 
 /**

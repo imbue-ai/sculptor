@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { SavedLayout } from "~/components/sections/persistence/types.ts";
-import { SAVED_LAYOUT_VERSION } from "~/components/sections/persistence/types.ts";
-import { SYSTEM_DEFAULT_LAYOUT } from "~/components/sections/systemDefaultLayout.ts";
+import type { SavedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { SAVED_LAYOUT_VERSION } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { SYSTEM_DEFAULT_LAYOUT } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import { initialHighlightIndex, orderLayoutsByMru } from "./switcherOrder.ts";
 
-function layout(id: string): SavedLayout {
+const layout = (id: string): SavedLayout => {
   return { id, name: id, version: SAVED_LAYOUT_VERSION, captured: SYSTEM_DEFAULT_LAYOUT.captured };
-}
+};
 
 const candidates = [layout("system-default"), layout("focused"), layout("review"), layout("debugging")];
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ElementIds } from "~/api";
 
-import { agentWebviewStateAtomFamily, browserPanelStateAtomFamily } from "./atoms";
+import { agentWebviewStateAtomFamily, browserPanelStateAtomFamily } from "./atoms/browser";
 import {
   browserViewPlacementAtomFamily,
   browserViewStatusAtomFamily,

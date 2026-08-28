@@ -9,8 +9,8 @@ import {
   EXPLORER_LIST_MIN_WIDTH_PX,
   explorerListWidthAtom,
   explorerSidebarHiddenAtom,
-} from "~/components/sections/sectionAtoms.ts";
-import type { PanelId } from "~/components/sections/sectionTypes.ts";
+} from "~/pages/workspace/layout/atoms/section.ts";
+import type { PanelId } from "~/pages/workspace/layout/types/section.ts";
 
 import { ExplorerLayout } from "./ExplorerLayout";
 

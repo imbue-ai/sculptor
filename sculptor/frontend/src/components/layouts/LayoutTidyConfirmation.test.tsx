@@ -6,16 +6,20 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ElementIds } from "~/api";
-import type { CapturedLayout, SavedLayout, WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { EMPTY_WORKSPACE_LAYOUT, SAVED_LAYOUT_VERSION } from "~/components/sections/persistence/types.ts";
-import { tidyConfirmationSuppressedAtom } from "~/components/sections/savedLayoutAtoms.ts";
-import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
-import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
-import { SYSTEM_DEFAULT_LAYOUT } from "~/components/sections/systemDefaultLayout.ts";
-import { layoutTidyTargetAtom } from "~/components/sections/transientAtoms.ts";
+import { tidyConfirmationSuppressedAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
+import { layoutTidyTargetAtom } from "~/pages/workspace/layout/atoms/transient.ts";
+import type {
+  CapturedLayout,
+  SavedLayout,
+  WorkspaceLayoutState,
+} from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { EMPTY_WORKSPACE_LAYOUT, SAVED_LAYOUT_VERSION } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
+import { SYSTEM_DEFAULT_LAYOUT } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import { LayoutTidyConfirmation } from "./LayoutTidyConfirmation.tsx";
-import { saveLayoutModalRequestAtom } from "./layoutUiAtoms.ts";
+import { saveLayoutDialogRequestAtom } from "./layoutUiAtoms.ts";
 
 // Dynamic (multi-instance) panels: the tidy closure never includes these, so they
 // stand in as the agent/terminal that must survive a tidy.
@@ -33,28 +37,28 @@ const withStore = (store: Store, children: ReactNode): ReactElement => (
 // A store hydrated for the ACTIVE workspace: the tidy target reads its captured
 // panels, and computeTidyClosure diffs them against the live workspace layout — so
 // both the workspace arrangement and the pending target have to be seeded.
-function storeWith(layout: Partial<WorkspaceLayoutState>, target: SavedLayout | null, workspaceId = "ws-1"): Store {
+const storeWith = (layout: Partial<WorkspaceLayoutState>, target: SavedLayout | null, workspaceId = "ws-1"): Store => {
   const store = createStore();
   store.set(activeWorkspaceIdAtom, workspaceId);
   store.set(workspaceLayoutAtom, { ...EMPTY_WORKSPACE_LAYOUT, ...layout });
   store.set(layoutTidyTargetAtom, target);
   return store;
-}
+};
 
 // A CapturedLayout that declares exactly `panelIds` as its statics. The tidy closure
 // is (open statics) − (declared), so a target's declared set is all that shapes it;
 // the sub-section values are arbitrary because computeTidyClosure reads only the keys.
-function capturedDeclaring(panelIds: ReadonlyArray<PanelId>): CapturedLayout {
+const capturedDeclaring = (panelIds: ReadonlyArray<PanelId>): CapturedLayout => {
   const placement: Partial<Record<PanelId, SubSectionId>> = {};
   for (const id of panelIds) {
     placement[id] = "left";
   }
   return { ...SYSTEM_DEFAULT_LAYOUT.captured, placement, order: {}, activePanel: {} };
-}
+};
 
-function makeUserLayout(id: string, declares: ReadonlyArray<PanelId>): SavedLayout {
+const makeUserLayout = (id: string, declares: ReadonlyArray<PanelId>): SavedLayout => {
   return { id, name: `Layout ${id}`, version: SAVED_LAYOUT_VERSION, captured: capturedDeclaring(declares) };
-}
+};
 
 beforeEach(() => {
   localStorage.clear();
@@ -236,7 +240,7 @@ describe("LayoutTidyConfirmation", () => {
     render(withStore(store, <LayoutTidyConfirmation />));
     await user.click(screen.getByTestId(ElementIds.LAYOUT_TIDY_EDIT_LINK));
 
-    expect(store.get(saveLayoutModalRequestAtom)).toEqual({ mode: "edit", layout: target });
+    expect(store.get(saveLayoutDialogRequestAtom)).toEqual({ mode: "edit", layout: target });
     expect(store.get(layoutTidyTargetAtom)).toBeNull();
   });
 });

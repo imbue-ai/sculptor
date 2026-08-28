@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 
-import { formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
+import { formatShortcutForDisplay } from "~/common/keybindings/format.ts";
 
 /**
  * Render a keybinding hint as a single <kbd> with the platform-formatted

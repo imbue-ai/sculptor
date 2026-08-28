@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { TerminalAgentRegistration } from "~/api";
 import { listTerminalAgentRegistrations } from "~/api";
 
-import type { BackendQueryResult } from "../../queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import type { BackendQueryResult } from "../queryClient.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
 
 const TERMINAL_AGENT_REGISTRATIONS_QUERY_KEY = [SCULPTOR_QUERY_KEY_PREFIX, "terminal-agent-registrations"] as const;
 

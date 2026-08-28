@@ -83,7 +83,7 @@ export type OverlayDefinition = {
  *
  * Like a panel (and unlike an app-global overlay) it is mounted inside the
  * host's `WorkspaceExtensionContext`, so the workspace SDK hooks
- * (`useCurrentWorkspace`, `useWorkspaceTasks`, per-workspace `useExtensionSetting`
+ * (`useCurrentWorkspace`, `useWorkspaceAgents`, per-workspace `useExtensionSetting`
  * keys) resolve to the workspace it is rendered for.
  */
 export type WorkspaceWidgetDefinition = {
@@ -159,7 +159,7 @@ export type ExtensionHostApi = {
 	registerHomeView: (view: HomeViewDefinition) => () => void;
 };
 /**
- * Imperative host actions extensions can call. Unlike the hooks in `hooks.ts`,
+ * Imperative host actions extensions can call. Unlike the SDK's React hooks,
  * these are plain functions, callable from event handlers or anywhere outside
  * a React render. The generated SDK runtime stub (served at
  * `/extension-runtime/sculptor-extension-sdk.js`) re-exports them from the
@@ -591,7 +591,7 @@ export declare const useWorkspaces: () => ReadonlyArray<WorkspaceView> | undefin
  * The selector should be pure over the workspace (no external closure state):
  * its identity may change between renders, but its logic must not.
  */
-export declare function useCurrentWorkspace<T = WorkspaceView | null>(selector?: (workspace: WorkspaceView | null) => T, equalityFn?: (a: T, b: T) => boolean): T;
+export declare const useCurrentWorkspace: <T = WorkspaceView | null>(selector?: (workspace: WorkspaceView | null) => T, equalityFn?: (a: T, b: T) => boolean) => T;
 /**
  * Returns a function that navigates to a workspace by id — the host's own
  * workspace-open behavior: it opens (or converts the home tab into) the
@@ -670,9 +670,11 @@ export declare const usePluginSettings: (keys: ReadonlyArray<string>) => Readonl
 /** @deprecated Use {@link useSetExtensionSetting}. Kept for extensions compiled against the pre-rename SDK. */
 export declare const useSetPluginSetting: () => ((key: string, value: string) => void);
 /**
- * All non-deleted tasks for the workspace the extension is mounted in. Returns
- * `undefined` until the host's task stream has produced its first batch.
+ * All non-deleted agents for the workspace the extension is mounted in. Returns
+ * `undefined` until the host's agent stream has produced its first batch.
  */
+export declare const useWorkspaceAgents: () => ReadonlyArray<CodingAgentTaskView> | undefined;
+/** @deprecated Use {@link useWorkspaceAgents}; kept as an alias for the prior name. */
 export declare const useWorkspaceTasks: () => ReadonlyArray<CodingAgentTaskView> | undefined;
 /**
  * @deprecated Use {@link ExtensionPanelDefinition}. Kept as an alias so existing

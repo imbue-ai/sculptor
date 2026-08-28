@@ -5,7 +5,7 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ModelOption } from "~/api";
-import { queryClient } from "~/common/queryClient";
+import { queryClient } from "~/common/state/queryClient";
 
 import { usePiModels } from "./usePiModels";
 

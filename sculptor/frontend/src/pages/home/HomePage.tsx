@@ -2,17 +2,17 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import { WorkspaceDrawer } from "~/components/mobile/WorkspaceDrawer.tsx";
 import { HOME_PROMPT_PREFILL } from "~/components/newWorkspace/homePromptPrefill.ts";
 import {
-  newWorkspaceModalAtom,
+  newWorkspaceDialogAtom,
   shouldOfferFirstRunWorkspaceAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { extensionHomeViewsAtom } from "~/extensions/extensionRegistry.ts";
 
 import { useIsMobile } from "../../common/hooks/useLayoutMode.ts";
 import { useWorkspaceNavigation } from "../../common/state/hooks/useWorkspaceNavigation.ts";
-import { RecentWorkspaces } from "../add-workspace/components/RecentWorkspaces.tsx";
-import { WorkspaceDrawer } from "../workspace/mobile/WorkspaceDrawer.tsx";
+import { RecentWorkspaces } from "../addWorkspace/components/RecentWorkspaces.tsx";
 import styles from "./HomePage.module.scss";
 import { BUILTIN_HOME_VIEW_ID, effectiveHomeViewIdAtom, homeViewOptionsAtom } from "./homeViews.ts";
 import { HomeViewSwitcher } from "./HomeViewSwitcher.tsx";
@@ -33,7 +33,7 @@ export const HomePage = (): ReactElement => {
   const effectiveId = useAtomValue(effectiveHomeViewIdAtom);
   const extensionHomeViews = useAtomValue(extensionHomeViewsAtom);
   const shouldOfferFirstRunWorkspace = useAtomValue(shouldOfferFirstRunWorkspaceAtom);
-  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
+  const setNewWorkspaceDialog = useSetAtom(newWorkspaceDialogAtom);
 
   // First-run create affordance: on a boot with no workspaces, Home's default
   // state is the create dialog itself — an ordinary modal open, dismiss and
@@ -51,9 +51,9 @@ export const HomePage = (): ReactElement => {
   // preset repo — remounting the form and discarding anything typed.
   useEffect(() => {
     if (shouldOfferFirstRunWorkspace) {
-      setNewWorkspaceModal((prev) => (prev.open ? prev : { open: true, initialPrompt: HOME_PROMPT_PREFILL }));
+      setNewWorkspaceDialog((prev) => (prev.open ? prev : { open: true, initialPrompt: HOME_PROMPT_PREFILL }));
     }
-  }, [shouldOfferFirstRunWorkspace, setNewWorkspaceModal]);
+  }, [shouldOfferFirstRunWorkspace, setNewWorkspaceDialog]);
 
   // On mobile the global chrome (sidebar rail) is suppressed (see AppShell):
   // Home carries its own header with a ☰ that opens the same drawer

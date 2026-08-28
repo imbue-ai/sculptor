@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { ElementIds } from "~/api";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 
 import styles from "./MobileSettingsHeader.module.scss";
 

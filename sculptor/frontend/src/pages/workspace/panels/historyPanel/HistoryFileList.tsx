@@ -3,14 +3,14 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { TreeRow } from "~/pages/workspace/panels/fileBrowser/TreeRow.tsx";
-import type { FileStatus, TreeNode, ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import type { FileStatus, TreeNode, ViewMode } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 import {
   collectAllFolderPaths,
   compactSingleChildFolders,
   computeFolderChangeCounts,
   flattenVisibleTreeWithDepth,
   sortTreeNodes,
-} from "~/pages/workspace/panels/fileBrowser/utils.ts";
+} from "~/pages/workspace/panels/fileBrowser/utils/fileTree.ts";
 
 type HistoryFile = {
   path: string;

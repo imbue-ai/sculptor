@@ -8,11 +8,11 @@ import type { DependenciesStatus, ModelOption, Project } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
-import { renderWithProviders } from "~/common/testUtils.tsx";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { SettingsSection } from "~/pages/settings/sections.ts";
 
 import {
-  keepNewWorkspaceModalOpenAtom,
+  keepNewWorkspaceDialogOpenAtom,
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDraftAtom,
 } from "./newWorkspaceAtoms.ts";
@@ -134,7 +134,7 @@ const renderForm = (
   // seeds. Pre-populate the store so the tests see the app's real conditions.
   store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
   if (options.keepOpen) {
-    store.set(keepNewWorkspaceModalOpenAtom, true);
+    store.set(keepNewWorkspaceDialogOpenAtom, true);
   }
   return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} {...props} />, { store });
 };
@@ -169,7 +169,7 @@ describe("NewWorkspaceForm", () => {
   });
 
   // vitest runs with `globals: false`, so RTL's automatic post-test cleanup
-  // isn't registered — do it explicitly. keepNewWorkspaceModalOpenAtom persists
+  // isn't registered — do it explicitly. keepNewWorkspaceDialogOpenAtom persists
   // to localStorage, so wipe that too.
   afterEach(() => {
     cleanup();

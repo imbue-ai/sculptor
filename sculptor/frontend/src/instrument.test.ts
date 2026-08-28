@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { setTelemetryEnabled } from "~/common/Telemetry.ts";
+import { setTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
 
 import { filterSentryEventByTelemetryConsent } from "./instrument.ts";
 

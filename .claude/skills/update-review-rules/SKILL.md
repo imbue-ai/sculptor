@@ -10,9 +10,11 @@ description: |
 
 Add a new issue type to one of Sculptor's review-rule docs to prevent a class of issues from recurring.
 
-The three review-rule docs:
+The review-rule docs:
 - **`docs/development/review/react.md`** — generic React rules that would apply in any React codebase: effects, state, refs, render purity, performance, props, lists.
 - **`docs/development/review/sculptor.md`** — Sculptor-specific frontend conventions: backend data hooks (WS-pushed atoms, HTTP-pulled TanStack queries), Jotai atom usage, component-level invariants tied to our codebase.
+- **`docs/development/review/design.md`** — design quality judgments a linter can't make: Radix-first component usage, correct token selection, reuse of shared components, consistent UI copy.
+- **`docs/development/review/file_structure.md`** — file placement, feature layout, and naming: code located with its feature, kind-directory anatomy, helper/subfeature thresholds, component naming and domain vocabulary.
 - **`docs/development/review/integration_tests.md`** — Sculptor integration test rules: Playwright assertion patterns, test isolation, POM usage, flaky-pattern avoidance.
 
 ## Input
@@ -25,13 +27,15 @@ The user provides a description of the problem — this could be:
 
 ## Steps
 
-1. Read all three review docs (`docs/development/review/react.md`, `docs/development/review/sculptor.md`, `docs/development/review/integration_tests.md`) to understand the existing rules, their format, and their naming conventions.
+1. Read all the review docs listed above to understand the existing rules, their format, and their naming conventions.
 2. Decide which file the new rule belongs in:
    - If the rule is about Playwright tests, integration test patterns, or test isolation/structure → `integration_tests.md`.
+   - If the rule is about visual/design quality: design-system usage, tokens, component reuse, UI copy → `design.md`.
+   - If the rule is about where files live, when files/directories are warranted, or how things are named → `file_structure.md`.
    - If the rule references Sculptor-specific frontend hooks, atoms, file paths, or our data-flow conventions (e.g. `useUnifiedStream`, `BackendQueryResult`, `workspaceAtomFamily`) → `sculptor.md`.
    - If the rule is purely about React's framework primitives and would apply in any React codebase → `react.md`.
    - When in doubt for frontend rules, prefer `sculptor.md` over `react.md`; revisit if the rule turns out to be more generic than expected.
-3. Determine whether an existing rule already covers the issue (check all three docs). If it does, tell the user which rule covers it and ask if they'd like to refine that rule instead. Do not add a duplicate.
+3. Determine whether an existing rule already covers the issue (check all the docs). If it does, tell the user which rule covers it and ask if they'd like to refine that rule instead. Do not add a duplicate.
 4. Draft a new rule following the exact format of existing rules in the chosen file.
 
    For `react.md` and `sculptor.md` (flat list, `## rule_name` headings):

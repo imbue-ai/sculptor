@@ -1,6 +1,7 @@
 import type { HTMLProps, PropsWithChildren, ReactElement } from "react";
 
-import { mergeClasses, optional } from "../common/Utils.ts";
+import { mergeClasses } from "../common/utils/classNames.ts";
+import { optional } from "../common/utils/optional.ts";
 import styles from "./Code.module.scss";
 
 export const Code = (

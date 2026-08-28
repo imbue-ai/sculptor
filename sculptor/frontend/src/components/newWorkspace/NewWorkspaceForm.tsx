@@ -12,8 +12,6 @@ import {
   ModelCatalogState,
   WorkspaceInitializationStrategy,
 } from "~/api";
-import { hasNoUsableModel } from "~/common/modelConstants.ts";
-import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import {
   lastUsedAgentTypeAtom,
   resolveEffectiveAgentType,
@@ -21,32 +19,35 @@ import {
 } from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { usePiModels } from "~/common/state/hooks/usePiModels.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { hasNoUsableModel } from "~/common/utils/modelConstants.ts";
+import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
 import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
-import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
-import { BranchSelector } from "~/components/BranchSelector.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
+import { AgentSettingsControls } from "~/components/newWorkspace/AgentSettingsControls.tsx";
 import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";
 import { BranchNameField } from "~/components/newWorkspace/BranchNameField.tsx";
+import { BranchSelector } from "~/components/newWorkspace/BranchSelector.tsx";
 import { useBranchNamePreview } from "~/components/newWorkspace/hooks/useBranchNamePreview.ts";
 import { ModeSelect } from "~/components/newWorkspace/ModeSelect.tsx";
 import type { NewWorkspaceDraft } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import {
-  keepNewWorkspaceModalOpenAtom,
+  keepNewWorkspaceDialogOpenAtom,
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDraftAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
-import { RepoSelector } from "~/components/RepoSelector.tsx";
-import { resolveStoredAgentType } from "~/components/sections/addPanelCore.ts";
-import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
-import { getMetaKey, isModifierPressed } from "~/electron/utils.ts";
+import { RepoSelector } from "~/components/newWorkspace/RepoSelector.tsx";
+import { Toast } from "~/components/Toast.tsx";
+import { getMetaKey, isModifierPressed } from "~/electron/platform.ts";
 import { SettingsSection } from "~/pages/settings/sections.ts";
+import { resolveStoredAgentType } from "~/pages/workspace/layout/atoms/addPanel.ts";
 
 import styles from "./NewWorkspaceForm.module.scss";
 
@@ -121,7 +122,7 @@ export const NewWorkspaceForm = ({
   const defaultModel = useAtomValue(defaultModelAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
-  const [isKeepOpen, setIsKeepOpen] = useAtom(keepNewWorkspaceModalOpenAtom);
+  const [isKeepOpen, setIsKeepOpen] = useAtom(keepNewWorkspaceDialogOpenAtom);
   // The session draft: read by the seed initializers below, rewritten by the
   // unmount stash whenever the dialog closes, cleared by a successful create.
   const [draft, setDraft] = useAtom(newWorkspaceDraftAtom);

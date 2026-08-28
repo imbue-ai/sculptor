@@ -1,0 +1,121 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook, type RenderHookResult } from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
+import { createElement, useRef } from "react";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import type { CodingAgentTaskView, ModelOption } from "../../../api";
+import { ModelCatalogState } from "../../../api";
+import { queryClient, syncAgentsToQueryCache } from "../queryClient.ts";
+import { useAgentAvailableModels, useAgentStatusField } from "./useAgentHelpers.ts";
+
+const createMockAgent = (overrides: Partial<CodingAgentTaskView> = {}): CodingAgentTaskView =>
+  ({
+    id: "task-1",
+    status: "RUNNING",
+    goal: "Test goal",
+    model: "CLAUDE_4_SONNET",
+    availableModels: [],
+    isDeleted: false,
+    harnessCapabilities: {},
+    ...overrides,
+  }) as unknown as CodingAgentTaskView;
+
+const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
+  createElement(QueryClientProvider, { client: queryClient }, children);
+
+// TanStack delivers observer notifications on a macrotask (its notifyManager
+// batches via setTimeout(0)), so a cache write reaches the hook only on the next
+// tick — flush one inside `act` before asserting.
+const flushNotifications = async (): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+};
+
+const writeAgentsAndFlush = async (agents: Record<string, CodingAgentTaskView>): Promise<void> => {
+  await act(async () => {
+    syncAgentsToQueryCache(agents);
+    await flushNotifications();
+  });
+};
+
+// Render the hook while counting how many times its host re-renders — the
+// fine-grained-subscription assertion is "this count stays put when an unrelated
+// field changes and ticks up when the selected field changes".
+const renderCountingStatus = (agentId: string): RenderHookResult<{ status: unknown; renders: number }, unknown> =>
+  renderHook(
+    () => {
+      const renders = useRef(0);
+      renders.current += 1;
+      return { status: useAgentStatusField(agentId), renders: renders.current };
+    },
+    { wrapper },
+  );
+
+beforeEach(() => {
+  queryClient.removeQueries({ queryKey: ["sculptor"] });
+});
+
+describe("useAgentStatusField", () => {
+  it("returns undefined for an unknown agent id", () => {
+    const { result } = renderHook(() => useAgentStatusField("unknown-task"), { wrapper });
+
+    expect(result.current).toBeUndefined();
+  });
+
+  it("does not re-render when an unrelated agent field changes", async () => {
+    const agent = createMockAgent({ id: "task-1", status: "RUNNING", goal: "before" });
+    await writeAgentsAndFlush({ "task-1": agent });
+
+    const { result } = renderCountingStatus("task-1");
+    const rendersAfterSeed = result.current.renders;
+    expect(result.current.status).toBe("RUNNING");
+
+    // Same status, different goal: the select result is unchanged, so structural
+    // sharing must suppress the re-render.
+    await writeAgentsAndFlush({ "task-1": { ...agent, goal: "after" } as CodingAgentTaskView });
+
+    expect(result.current.renders).toBe(rendersAfterSeed);
+    expect(result.current.status).toBe("RUNNING");
+  });
+
+  it("re-renders when the status changes", async () => {
+    const agent = createMockAgent({ id: "task-1", status: "RUNNING" });
+    await writeAgentsAndFlush({ "task-1": agent });
+
+    const { result } = renderCountingStatus("task-1");
+    const rendersAfterSeed = result.current.renders;
+
+    await writeAgentsAndFlush({ "task-1": { ...agent, status: "WAITING" } as CodingAgentTaskView });
+
+    expect(result.current.renders).toBeGreaterThan(rendersAfterSeed);
+    expect(result.current.status).toBe("WAITING");
+  });
+});
+
+describe("useAgentAvailableModels", () => {
+  it("returns the stable NOT_FETCHED_YET sentinel while the catalog is absent", async () => {
+    // Catalog not fetched yet: availableModels is absent, so the select must fall
+    // back to NOT_FETCHED_YET (a stable primitive) rather than an empty array —
+    // distinguishing "not fetched" from "fetched, empty" is what lets the switcher
+    // show a loading state instead of flashing the empty state at startup.
+    const agent = createMockAgent({ id: "task-1", availableModels: undefined, status: "RUNNING" });
+    await writeAgentsAndFlush({ "task-1": agent });
+
+    const seen: Array<ReadonlyArray<ModelOption> | ModelCatalogState> = [];
+    renderHook(
+      () => {
+        seen.push(useAgentAvailableModels("task-1"));
+        return null;
+      },
+      { wrapper },
+    );
+
+    await writeAgentsAndFlush({ "task-1": { ...agent, status: "WAITING" } as CodingAgentTaskView });
+
+    // Every observed value is the same sentinel (both the absent-data coalesce
+    // and the select fallback yield NOT_FETCHED_YET).
+    const first = seen[0];
+    expect(first).toBe(ModelCatalogState.NOT_FETCHED_YET);
+    seen.forEach((value) => expect(value).toBe(first));
+  });
+});

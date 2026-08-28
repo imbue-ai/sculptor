@@ -18,7 +18,7 @@ const TRACE_TO_PREFIX = "--trace-to=";
 const SCULPTOR_TRACE_TO_PREFIX = "--sculptor=--trace-to=";
 
 // Hard cap on the in-memory pending-event buffer; see the matching constant
-// in common/tracing.ts for the rationale. Electron main produces fewer
+// in common/perf/tracing.ts for the rationale. Electron main produces fewer
 // events than the renderer, but we still need the cap so a flush loop
 // against a dead backend cannot grow this list unboundedly.
 const MAX_PENDING_EVENTS = 20_000;

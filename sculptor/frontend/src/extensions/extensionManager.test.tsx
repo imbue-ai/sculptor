@@ -4,6 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ExtensionCommandUiAction } from "~/api";
 
+import type {
+  ExtensionHostApi,
+  ExtensionLoadError,
+  ExtensionManifest,
+  ExtensionPanelDefinition,
+  LoadedExtension,
+} from "./contract.ts";
 import { ExtensionManager, type LocalExtensionRef, resolveEntryUrl, validateManifest } from "./extensionManager.tsx";
 import {
   extensionDisabledSourcesAtom,
@@ -14,13 +21,6 @@ import {
   extensionSourceStatesAtom,
   extensionWorkspaceWidgetsAtom,
 } from "./extensionRegistry.ts";
-import type {
-  ExtensionHostApi,
-  ExtensionLoadError,
-  ExtensionManifest,
-  ExtensionPanelDefinition,
-  LoadedExtension,
-} from "./types.ts";
 
 const manifestFor = (id: string): ExtensionManifest => ({
   id,

@@ -6,9 +6,10 @@ import { Download, GripVertical, Plus, Upload } from "lucide-react";
 import type { ReactElement } from "react";
 import { useRef, useState } from "react";
 
-import { HTTPException } from "~/common/Errors.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useCustomActions } from "~/common/state/hooks/useCustomActions.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 import type { ActionFormData } from "~/components/actions/ActionDialog.tsx";
 import { ActionDialog } from "~/components/actions/ActionDialog.tsx";
 import { DeleteActionDialog } from "~/components/actions/DeleteActionDialog.tsx";
@@ -16,8 +17,6 @@ import { DeleteGroupDialog } from "~/components/actions/DeleteGroupDialog.tsx";
 
 import type { CustomAction, CustomActionGroup, CustomActionsConfig } from "../../../api";
 import { ElementIds } from "../../../api";
-import type { ToastContent } from "../../../components/Toast.tsx";
-import { ToastType } from "../../../components/Toast.tsx";
 import { ActionGroupSection } from "./ActionGroupSection.tsx";
 import { ActionSettingsRow } from "./ActionSettingsRow.tsx";
 import styles from "./ActionsSettingsSection.module.scss";

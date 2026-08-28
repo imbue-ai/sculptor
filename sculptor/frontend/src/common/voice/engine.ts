@@ -29,13 +29,13 @@
 
 import type { MicVAD } from "@ricky0123/vad-web";
 
-import { baseUrl } from "~/apiClient.ts";
-import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "~/common/Auth.ts";
+import { baseUrl } from "~/common/apiClient.ts";
+import { getSessionToken, SESSION_TOKEN_HEADER_NAME } from "~/common/utils/sessionToken.ts";
 
 import { type AsrClient, createAsrClient } from "./asrClient.ts";
+import type { VoiceEngine, VoiceEngineEvents, VoiceEngineState, VoiceErrorKind } from "./engineContract.ts";
 import { withVoiceModelFetchAuth } from "./fetchAuth.ts";
 import { StreamingTurn } from "./streamingTurn.ts";
-import type { VoiceEngine, VoiceEngineEvents, VoiceEngineState, VoiceErrorKind } from "./types.ts";
 
 const VAD_WORKLET_FILE = "vad.worklet.bundle.min.js";
 

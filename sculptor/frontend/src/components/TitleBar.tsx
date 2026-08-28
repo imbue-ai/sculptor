@@ -1,7 +1,7 @@
 import { Flex } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
-import { getTitleBarLeftPadding } from "../electron/utils.ts";
+import { getTitleBarLeftPadding } from "../electron/platform.ts";
 import styles from "./TitleBar.module.scss";
 
 type TitleBarProps = {

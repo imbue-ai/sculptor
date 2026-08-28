@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ChatMessage, CodingAgentTaskView, HarnessCapabilities } from "~/api";
 import { LlmModel, TaskStatus } from "~/api";
-import { getEmptyTaskDetailState, taskDetailAtomFamily } from "~/common/state/atoms/taskDetails.ts";
-import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks.ts";
+import { agentDetailStateAtomFamily, getEmptyAgentDetailState } from "~/common/state/atoms/agentDetails.ts";
+import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
-import type { WorkspaceLayoutState } from "~/components/sections/persistence/types.ts";
-import { EMPTY_WORKSPACE_LAYOUT } from "~/components/sections/persistence/types.ts";
-import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
+import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
+import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 
 import {
   activeAgentIdAtomFamily,
@@ -53,14 +53,14 @@ const DEFAULT_HARNESS_CAPABILITIES: HarnessCapabilities = {
 };
 
 // A partial harnessCapabilities override is merged over the all-true default, so a
-// terminal task can flip one capability (e.g. supportsChatInterface) without
+// terminal agent can flip one capability (e.g. supportsChatInterface) without
 // restating the whole shape. Typing the default as HarnessCapabilities also forces
 // this fixture to be updated when a new capability field is added.
-type MockTaskOverrides = Partial<Omit<CodingAgentTaskView, "harnessCapabilities">> & {
+type MockAgentOverrides = Partial<Omit<CodingAgentTaskView, "harnessCapabilities">> & {
   harnessCapabilities?: Partial<HarnessCapabilities>;
 };
 
-const createMockTask = ({ harnessCapabilities, ...overrides }: MockTaskOverrides = {}): CodingAgentTaskView =>
+const createMockAgent = ({ harnessCapabilities, ...overrides }: MockAgentOverrides = {}): CodingAgentTaskView =>
   ({
     id: "task-1",
     projectId: "proj-1",
@@ -81,9 +81,9 @@ const createMockTask = ({ harnessCapabilities, ...overrides }: MockTaskOverrides
 
 type StoreType = ReturnType<typeof createStore>;
 
-const seedTask = (store: StoreType, task: CodingAgentTaskView): void => {
-  store.set(taskAtomFamily(task.id), task);
-  store.set(taskIdsAtom, [...(store.get(taskIdsAtom) ?? []), task.id]);
+const seedAgent = (store: StoreType, agent: CodingAgentTaskView): void => {
+  store.set(agentAtomFamily(agent.id), agent);
+  store.set(agentIdsAtom, [...(store.get(agentIdsAtom) ?? []), agent.id]);
 };
 
 const seedLayout = (store: StoreType, layout: Partial<WorkspaceLayoutState>, workspaceId: string = WS): void => {
@@ -111,8 +111,8 @@ afterEach(() => {
 describe("activeChatAgentIdAtomFamily", () => {
   it("prefers the agent panel that is its sub-section's active tab", () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "agent-a" }));
-    seedTask(store, createMockTask({ id: "agent-b" }));
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
+    seedAgent(store, createMockAgent({ id: "agent-b" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center", [makeAgentPanelId("agent-b")]: "right" },
       order: { center: [makeAgentPanelId("agent-a")], right: [makeAgentPanelId("agent-b")] },
@@ -125,7 +125,7 @@ describe("activeChatAgentIdAtomFamily", () => {
 
   it("falls back to an open but inactive agent panel when no chat is the active tab", () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "agent-a" }));
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center", changes: "center" },
       order: { center: [makeAgentPanelId("agent-a"), "changes"] },
@@ -138,14 +138,14 @@ describe("activeChatAgentIdAtomFamily", () => {
 
   it("skips terminal agents: composer-targeted features address the chat hidden behind them", () => {
     const store = createStore();
-    seedTask(
+    seedAgent(
       store,
-      createMockTask({
+      createMockAgent({
         id: "terminal-agent",
         harnessCapabilities: { supportsChatInterface: false },
       }),
     );
-    seedTask(store, createMockTask({ id: "chat-agent" }));
+    seedAgent(store, createMockAgent({ id: "chat-agent" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("terminal-agent")]: "center", [makeAgentPanelId("chat-agent")]: "center" },
       order: { center: [makeAgentPanelId("terminal-agent"), makeAgentPanelId("chat-agent")] },
@@ -155,9 +155,9 @@ describe("activeChatAgentIdAtomFamily", () => {
     expect(store.get(activeChatAgentIdAtomFamily(WS))).toBe("chat-agent");
   });
 
-  it("ignores stale layout entries for unloaded agents and falls back to the workspace's tasks", () => {
+  it("ignores stale layout entries for unloaded agents and falls back to the workspace's agents", () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "live-agent" }));
+    seedAgent(store, createMockAgent({ id: "live-agent" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("deleted-agent")]: "center" },
       order: { center: [makeAgentPanelId("deleted-agent")] },
@@ -167,9 +167,9 @@ describe("activeChatAgentIdAtomFamily", () => {
     expect(store.get(activeChatAgentIdAtomFamily(WS))).toBe("live-agent");
   });
 
-  it("does not resolve tasks from a different workspace", () => {
+  it("does not resolve agents from a different workspace", () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "other-ws-agent", workspaceId: WS_OTHER }));
+    seedAgent(store, createMockAgent({ id: "other-ws-agent", workspaceId: WS_OTHER }));
     seedLayout(store, {});
 
     expect(store.get(activeChatAgentIdAtomFamily(WS))).toBeUndefined();
@@ -179,8 +179,8 @@ describe("activeChatAgentIdAtomFamily", () => {
 // Two chats visible at once: agent-a is the active center tab, agent-b the
 // active right tab. Center-first resolution alone picks agent-a.
 const seedTwoVisibleChats = (store: StoreType): void => {
-  seedTask(store, createMockTask({ id: "agent-a" }));
-  seedTask(store, createMockTask({ id: "agent-b" }));
+  seedAgent(store, createMockAgent({ id: "agent-a" }));
+  seedAgent(store, createMockAgent({ id: "agent-b" }));
   seedLayout(store, {
     placement: { [makeAgentPanelId("agent-a")]: "center", [makeAgentPanelId("agent-b")]: "right" },
     order: { center: [makeAgentPanelId("agent-a")], right: [makeAgentPanelId("agent-b")] },
@@ -213,10 +213,10 @@ describe("lastFocusedChatAgentAtomFamily resolution", () => {
     expect(store.get(activeChatAgentIdAtomFamily(WS))).toBe("agent-a");
   });
 
-  it("falls back to the layout resolution when the focused agent's task is deleted", () => {
+  it("falls back to the layout resolution when the focused agent is deleted", () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "agent-a" }));
-    // agent-b's panel is still in the (stale) layout, but its task never loads.
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
+    // agent-b's panel is still in the (stale) layout, but its agent never loads.
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center", [makeAgentPanelId("agent-b")]: "right" },
       activePanel: { center: makeAgentPanelId("agent-a"), right: makeAgentPanelId("agent-b") },
@@ -229,7 +229,7 @@ describe("lastFocusedChatAgentAtomFamily resolution", () => {
   it("keeps focus tracking isolated per workspace", () => {
     const store = createStore();
     seedTwoVisibleChats(store);
-    seedTask(store, createMockTask({ id: "agent-c", workspaceId: WS_OTHER }));
+    seedAgent(store, createMockAgent({ id: "agent-c", workspaceId: WS_OTHER }));
     seedLayout(
       store,
       {
@@ -255,13 +255,13 @@ describe("canCommitAtomFamily", () => {
 
   it("is false while the target agent has a queued message", () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "agent-a" }));
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center" },
       activePanel: { center: makeAgentPanelId("agent-a") },
     });
-    store.set(taskDetailAtomFamily("agent-a"), {
-      ...getEmptyTaskDetailState(),
+    store.set(agentDetailStateAtomFamily("agent-a"), {
+      ...getEmptyAgentDetailState(),
       queuedChatMessages: [{ id: "queued-1" } as ChatMessage],
     });
 
@@ -270,7 +270,7 @@ describe("canCommitAtomFamily", () => {
 
   it("is true when a target agent resolves and nothing is queued", () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "agent-a" }));
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center" },
       activePanel: { center: makeAgentPanelId("agent-a") },
@@ -283,7 +283,7 @@ describe("canCommitAtomFamily", () => {
 describe("commitActionAtomFamily", () => {
   it("sends the message to the resolved agent with its model", async () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "agent-a", model: LlmModel.CLAUDE_4_SONNET }));
+    seedAgent(store, createMockAgent({ id: "agent-a", model: LlmModel.CLAUDE_4_SONNET }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center" },
       activePanel: { center: makeAgentPanelId("agent-a") },
@@ -323,7 +323,7 @@ describe("commitActionAtomFamily", () => {
 
   it("surfaces a toast when the chat-route send fails", async () => {
     const store = createStore();
-    seedTask(store, createMockTask({ id: "agent-a" }));
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center" },
       activePanel: { center: makeAgentPanelId("agent-a") },
@@ -342,11 +342,11 @@ describe("commitActionAtomFamily", () => {
 // center tab with a chat agent open (but hidden) behind it. Whether the
 // terminal can take automated prompts is per-registration
 // (`accepts_automated_prompts`), so each test picks its own capability/status.
-const seedVisibleTerminalWithHiddenChat = (store: StoreType, terminalOverrides: MockTaskOverrides): void => {
-  seedTask(store, createMockTask({ id: "chat-agent" }));
-  seedTask(
+const seedVisibleTerminalWithHiddenChat = (store: StoreType, terminalOverrides: MockAgentOverrides): void => {
+  seedAgent(store, createMockAgent({ id: "chat-agent" }));
+  seedAgent(
     store,
-    createMockTask({
+    createMockAgent({
       id: "terminal-agent",
       harnessCapabilities: { supportsChatInterface: false },
       status: TaskStatus.READY,

@@ -5,10 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UserConfig } from "~/api";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
-import type { SavedLayout } from "~/components/sections/persistence/types.ts";
-import { SAVED_LAYOUT_VERSION } from "~/components/sections/persistence/types.ts";
-import { savedLayoutsAtom } from "~/components/sections/savedLayoutAtoms.ts";
-import { SYSTEM_DEFAULT_LAYOUT } from "~/components/sections/systemDefaultLayout.ts";
+import { savedLayoutsAtom } from "~/pages/workspace/layout/atoms/savedLayout.ts";
+import type { SavedLayout } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { SAVED_LAYOUT_VERSION } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { SYSTEM_DEFAULT_LAYOUT } from "~/pages/workspace/layout/utils/systemDefaultLayout.ts";
 
 import { layoutShortcutBindingId, type NamedBinding } from "./layoutShortcuts.ts";
 import { useLayoutBindingConflict, useSetLayoutShortcut } from "./useLayoutShortcutActions.ts";
@@ -27,13 +27,13 @@ vi.mock("~/api/sdk.gen", async (importOriginal) => {
   };
 });
 
-function makeLayout(id: string): SavedLayout {
+const makeLayout = (id: string): SavedLayout => {
   return { id, name: id, version: SAVED_LAYOUT_VERSION, captured: SYSTEM_DEFAULT_LAYOUT.captured };
-}
+};
 
-function withKeybindings(bindings: Record<string, string | null>): UserConfig {
+const withKeybindings = (bindings: Record<string, string | null>): UserConfig => {
   return { keybindings: bindings } as unknown as UserConfig;
-}
+};
 
 const wrapperFor =
   (store: ReturnType<typeof createStore>) =>
@@ -52,15 +52,17 @@ afterEach(() => {
 });
 
 describe("useSetLayoutShortcut", () => {
-  function renderSetShortcut(config: UserConfig | null): {
+  const renderSetShortcut = (
+    config: UserConfig | null,
+  ): {
     store: ReturnType<typeof createStore>;
     setShortcut: (layoutId: string, chord: string | null) => Promise<void>;
-  } {
+  } => {
     const store = createStore();
     store.set(userConfigAtom, config);
     const { result } = renderHook(() => useSetLayoutShortcut(), { wrapper: wrapperFor(store) });
     return { store, setShortcut: result.current };
-  }
+  };
 
   it("writes a chord under the layout's binding id, preserving other bindings", async () => {
     const { store, setShortcut } = renderSetShortcut(withKeybindings({ [layoutShortcutBindingId("b")]: "Alt+2" }));
@@ -102,16 +104,16 @@ describe("useSetLayoutShortcut", () => {
 });
 
 describe("useLayoutBindingConflict", () => {
-  function renderConflict(
+  const renderConflict = (
     config: UserConfig | null,
     layouts: ReadonlyArray<SavedLayout>,
-  ): (chord: string, selfLayoutId: string | undefined) => NamedBinding | null {
+  ): ((chord: string, selfLayoutId: string | undefined) => NamedBinding | null) => {
     const store = createStore();
     store.set(userConfigAtom, config);
     store.set(savedLayoutsAtom, layouts);
     const { result } = renderHook(() => useLayoutBindingConflict(), { wrapper: wrapperFor(store) });
     return result.current;
-  }
+  };
 
   it("detects a conflict with a static built-in binding", () => {
     const findConflict = renderConflict(null, []);

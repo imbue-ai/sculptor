@@ -2,13 +2,13 @@ import type { PrimitiveAtom } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 
 import type { EffortLevel, LlmModel } from "../../../api";
-import type { TaskID } from "../../Types.ts";
+import type { AgentID } from "../ids.ts";
 
 /**
- * Per-task fast-mode, effort, and model preference, persisted to localStorage
+ * Per-agent fast-mode, effort, and model preference, persisted to localStorage
  * so it survives reloads, Electron relaunches after sleep, and hot-reloads.
  *
- * `null` means "not yet initialized for this task" — the ChatInput mount
+ * `null` means "not yet initialized for this agent" — the ChatInput mount
  * effect seeds the user's current default once `userConfig` is loaded.
  *
  * `getOnInit: true` reads the stored value synchronously when the atom is
@@ -21,28 +21,28 @@ import type { TaskID } from "../../Types.ts";
  * a reload regardless of when ChatInput mounts.
  */
 
-const fastModeStorageKey = (taskId: TaskID): string => `sculptor-fast-mode-${taskId}`;
-const effortStorageKey = (taskId: TaskID): string => `sculptor-effort-${taskId}`;
-const modelStorageKey = (taskId: TaskID): string => `sculptor-model-${taskId}`;
+const fastModeStorageKey = (agentId: AgentID): string => `sculptor-fast-mode-${agentId}`;
+const effortStorageKey = (agentId: AgentID): string => `sculptor-effort-${agentId}`;
+const modelStorageKey = (agentId: AgentID): string => `sculptor-model-${agentId}`;
 
-export const fastModeAtomFamily = atomFamily<TaskID, PrimitiveAtom<boolean | null>>((taskId) =>
-  atomWithStorage<boolean | null>(fastModeStorageKey(taskId), null, undefined, { getOnInit: true }),
+export const fastModeAtomFamily = atomFamily<AgentID, PrimitiveAtom<boolean | null>>((agentId) =>
+  atomWithStorage<boolean | null>(fastModeStorageKey(agentId), null, undefined, { getOnInit: true }),
 );
 
-export const effortAtomFamily = atomFamily<TaskID, PrimitiveAtom<EffortLevel | null>>((taskId) =>
-  atomWithStorage<EffortLevel | null>(effortStorageKey(taskId), null, undefined, { getOnInit: true }),
+export const effortAtomFamily = atomFamily<AgentID, PrimitiveAtom<EffortLevel | null>>((agentId) =>
+  atomWithStorage<EffortLevel | null>(effortStorageKey(agentId), null, undefined, { getOnInit: true }),
 );
 
-export const modelAtomFamily = atomFamily<TaskID, PrimitiveAtom<LlmModel | null>>((taskId) =>
-  atomWithStorage<LlmModel | null>(modelStorageKey(taskId), null, undefined, { getOnInit: true }),
+export const modelAtomFamily = atomFamily<AgentID, PrimitiveAtom<LlmModel | null>>((agentId) =>
+  atomWithStorage<LlmModel | null>(modelStorageKey(agentId), null, undefined, { getOnInit: true }),
 );
 
-/** Drop per-task stored preferences when a task is deleted. */
-export const removeTaskSettings = (taskId: TaskID): void => {
-  localStorage.removeItem(fastModeStorageKey(taskId));
-  localStorage.removeItem(effortStorageKey(taskId));
-  localStorage.removeItem(modelStorageKey(taskId));
-  fastModeAtomFamily.remove(taskId);
-  effortAtomFamily.remove(taskId);
-  modelAtomFamily.remove(taskId);
+/** Drop per-agent stored preferences when an agent is deleted. */
+export const removeAgentSettings = (agentId: AgentID): void => {
+  localStorage.removeItem(fastModeStorageKey(agentId));
+  localStorage.removeItem(effortStorageKey(agentId));
+  localStorage.removeItem(modelStorageKey(agentId));
+  fastModeAtomFamily.remove(agentId);
+  effortAtomFamily.remove(agentId);
+  modelAtomFamily.remove(agentId);
 };

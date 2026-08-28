@@ -4,8 +4,8 @@ import type { PointerEvent as ReactPointerEvent, ReactElement } from "react";
 import { useCallback, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
-import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { useImbueNavigate, useWorkspacePageParams } from "~/common/hooks/navigation.ts";
+import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 
 import styles from "./AgentSwitcher.module.scss";
 
@@ -28,7 +28,7 @@ const DRAG_CAP = 40; // px the name is allowed to follow the finger
 export const AgentSwitcher = ({ onOpenSheet }: AgentSwitcherProps): ReactElement | null => {
   const { workspaceID, agentID } = useWorkspacePageParams();
   const { navigateToAgent } = useImbueNavigate();
-  const tasks = useAtomValue(tasksArrayAtom);
+  const allAgents = useAtomValue(agentsArrayAtom);
 
   const nameRef = useRef<HTMLSpanElement>(null);
   const startXRef = useRef<number | null>(null);
@@ -36,10 +36,10 @@ export const AgentSwitcher = ({ onOpenSheet }: AgentSwitcherProps): ReactElement
 
   const agents = useMemo(
     () =>
-      (tasks ?? [])
+      (allAgents ?? [])
         .filter((t) => t.workspaceId === workspaceID && !t.isDeleted)
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [tasks, workspaceID],
+    [allAgents, workspaceID],
   );
 
   const index = agents.findIndex((a) => a.id === agentID);
