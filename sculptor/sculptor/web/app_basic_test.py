@@ -1497,15 +1497,11 @@ def test_create_registered_agent_with_unknown_or_deleted_registration_fails(
     assert "fleeting" in response.json()["detail"]
 
 
-# Workspace setup rerun.
-
-
 def test_setup_rerun_conflicts_when_setup_command_is_cleared(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
-    """A user-cleared ("") setup command blocks reruns with a 409, matching the
-    endpoint's other precondition conflicts (environment not ready, already
-    running)."""
+    """A user-cleared ("") setup command blocks a rerun with a 409, consistent
+    with the endpoint's other precondition conflicts rather than a 400."""
     user_session = authenticate_anonymous(test_services, RequestID())
     with user_session.open_transaction(test_services) as transaction:
         workspace = _create_workspace(transaction, test_services, test_project)

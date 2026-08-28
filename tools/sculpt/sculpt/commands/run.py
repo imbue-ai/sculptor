@@ -125,8 +125,6 @@ def run_cmd(
         cli_error("Validation error", detail=str(ws_result), json_output=json_output)
 
     if ws_result is None:
-        # Hand-raised errors (400/409) are not parsed by the generated client;
-        # surface their detail from the raw body.
         detail = extract_error_detail(ws_response.content)
         cli_error(
             "Failed to create workspace",
@@ -162,9 +160,6 @@ def run_cmd(
         cli_error("Validation error", detail=str(agent_result), json_output=json_output)
 
     if agent_result is None:
-        # Same shape as the workspace create above: hand-raised errors (e.g.
-        # the testing-model gate, a prompt sent to a terminal agent) return
-        # 400 with a string detail the generated client does not parse.
         detail = extract_error_detail(agent_response.content)
         cli_error(
             "Failed to create agent",

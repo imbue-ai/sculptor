@@ -32,8 +32,6 @@ def test_from_dict_parses_list_detail() -> None:
 
 
 def test_from_dict_tolerates_object_detail() -> None:
-    # A hand-raised `detail` object must surface its content rather than
-    # crash the client.
     result = HTTPValidationError.from_dict({"detail": {"error": "environment not ready"}})
 
     assert "environment not ready" in str(result)
