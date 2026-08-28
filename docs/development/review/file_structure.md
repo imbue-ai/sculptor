@@ -215,16 +215,20 @@ the glossary, add it there in the same PR rather than improvising locally.
 
 ---
 
-## `story_mirror_maintained`
+## `story_colocated`
 
-**Question:** If a component moved or was renamed, did its Storybook story move
-to the mirrored path in the same change?
+**Question:** Does a component's Storybook story sit beside the component — and,
+if the component moved or was renamed, did its story move in the same change?
 
-Stories live centrally in `stories/`, mirroring `src/` paths. The mirror is
-only useful while it's true, and nothing mechanical checks it — the review does.
+Stories colocate with source, like tests: `Component.stories.tsx` beside
+`Component.tsx`. The lone exception is `stories/radix/`, the central catalog of
+Radix primitives, whose stories render library components that have no source
+file to sit beside. Nothing mechanical checks colocation — the review does.
 
 **What to look for:**
-- A moved or renamed component whose story still sits at the old mirrored path
-- A new story whose path doesn't mirror its component's location
+- A moved or renamed component whose story stayed behind at the old path
+- A new story parked centrally instead of beside the component it renders
+- A new shared presentational component that ships without a story
 
-**Fix:** Move the story to the mirrored path in the same PR.
+**Fix:** Move the story next to its component in the same PR; give a new shared
+presentational component a colocated story.

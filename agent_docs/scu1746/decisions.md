@@ -82,8 +82,8 @@ principles didn't fully determine. Flip any of them and I'll rework.
   inferability test.
 - Backend rename of wire `task` vocabulary (would let the frontend drop the
   last `task_id` field names at the API seam).
-- `stories/custom/.../chatAlpha/fixtures/{scenarios,messageBuilders}.ts` have
-  zero importers (they only reference each other) — likely dead fixtures.
+- `pages/workspace/chat/fixtures/{scenarios,messageBuilders}.ts` have zero
+  importers (they only reference each other) — likely dead fixtures.
 - `storybook build` is broken independently of this pass: `.storybook/main.ts`
   uses `__dirname` under ESM (Storybook v10) and dies while loading presets.
   Worth its own ticket if Storybook builds are expected to work.
