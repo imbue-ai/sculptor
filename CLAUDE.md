@@ -12,16 +12,6 @@ convention read the same content. Edit CLAUDE.md and .claude/, not the aliases.
 - When the task is ambiguous, pause and ask the user how to proceed before taking action.
 - When the user expects you to check with them before proceeding, wait for their explicit confirmation. Do not continue with the task until they confirm.
 
-# Transparency: Signing Off as Claude
-
-When posting any message, comment, or content to services outside the local machine — including GitHub, GitLab, Slack, Linear, email, or any other external system — always sign off so it is transparent that the message was written by an agent rather than a person. End every such message with the following on its own final line:
-
-```
-(Sent by Claude)
-```
-
-This applies to MR/PR descriptions and comments, issue comments, Slack messages, Linear comments, and any other communication sent to a service outside this machine. It does NOT apply to code, commit messages (which use the existing `Co-authored-by` trailer), or local files.
-
 # Public Visibility: Commit Messages and PR Descriptions
 
 Treat every commit message and every MR/PR title and description as **permanently, world-readable**. This is a public repo, so write them for an outside reader who has no access to any private context, and never include anything private.
