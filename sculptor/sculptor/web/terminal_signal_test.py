@@ -179,7 +179,7 @@ def test_session_id_rejects_unsafe_values(
         body["sessionId"] = bad_session_id
     response = _post_signal(client, task, body)
 
-    assert response.status_code == 422
+    assert response.status_code == 400
     assert _current_state(services, task.object_id).terminal_session_id is None
 
 
