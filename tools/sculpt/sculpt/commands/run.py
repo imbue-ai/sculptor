@@ -128,7 +128,7 @@ def run_cmd(
         detail = extract_error_detail(ws_response.content)
         cli_error(
             "Failed to create workspace",
-            detail=detail or f"No response from server (status {ws_response.status_code})",
+            detail=detail or f"Unexpected response from server (status {ws_response.status_code})",
             json_output=json_output,
         )
 
@@ -163,7 +163,7 @@ def run_cmd(
         detail = extract_error_detail(agent_response.content)
         cli_error(
             "Failed to create agent",
-            detail=detail or f"No response from server (status {agent_response.status_code})",
+            detail=detail or f"Unexpected response from server (status {agent_response.status_code})",
             json_output=json_output,
         )
 

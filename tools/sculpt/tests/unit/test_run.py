@@ -354,6 +354,49 @@ class TestRun:
         assert result.exit_code == 1
 
     @respx.mock
+    def test_run_workspace_creation_surfaces_hand_raised_detail(self, runner: CliRunner) -> None:
+        """A hand-raised 400/409 carries a plain-string `detail` the generated
+        client does not parse. sculpt run surfaces it instead of the misleading
+        "No response from server" fallback (the server did respond)."""
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(
+                400,
+                json={"detail": "Testing model is only available when integration testing is enabled"},
+            )
+        )
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 1
+        output = result.output + (result.stderr or "")
+        assert "Testing model is only available when integration testing is enabled" in output
+        assert "No response from server" not in output
+
+    @respx.mock
+    def test_run_agent_creation_surfaces_hand_raised_detail(self, runner: CliRunner) -> None:
+        """The agent-create path surfaces a hand-raised 400 `detail` the same way
+        the workspace-create path does."""
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        respx.post("http://localhost:5050/api/v1/workspaces/ws_newrun123/agents").mock(
+            return_value=Response(400, json={"detail": "terminal agents do not take an initial prompt"})
+        )
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 1
+        output = result.output + (result.stderr or "")
+        assert "terminal agents do not take an initial prompt" in output
+        assert "No response from server" not in output
+
+    @respx.mock
     def test_run_connection_error(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_initialize_project()
