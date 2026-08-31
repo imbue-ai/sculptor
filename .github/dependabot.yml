@@ -1,0 +1,34 @@
+# Dependabot version-update configuration.
+#
+# Complements the repo's Dependabot security alerts by opening routine update
+# PRs so dependencies don't drift far enough behind to accumulate a backlog of
+# vulnerabilities. Kept deliberately low-noise: runs weekly and groups all
+# minor/patch bumps per ecosystem into a single PR, while major bumps (more
+# likely to need code changes) arrive as individual PRs for separate review.
+#
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+version: 2
+updates:
+  # Frontend JavaScript/TypeScript dependencies (pnpm workspace).
+  - package-ecosystem: "npm"
+    directory: "/sculptor/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Python dependencies (uv workspace; root uv.lock covers the members).
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      python-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
