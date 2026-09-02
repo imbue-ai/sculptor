@@ -87,6 +87,13 @@ type EditorProps = {
   // opt out of the default `max-height: 500px` cap meant for the chat
   // input, where the editor grows with content.
   scrollAreaClassName?: string;
+  // Stretch the editable surface to fill the scroll area's height so the whole
+  // area is a click/focus target, not just the text's first line. Meant for
+  // hosts that stretch the Editor to fill a tall flex column (e.g. the Notes
+  // panel); without it the contenteditable only spans its content and clicks
+  // below it land on non-editable wrapper divs. Off by default so the
+  // content-sized hosts (chat input, action dialog) are unaffected.
+  fillHeight?: boolean;
   disabled?: boolean;
   autoFocus?: boolean;
   footer?: ReactElement | undefined;
@@ -121,6 +128,7 @@ export const Editor = ({
   onKeyDown,
   wrapperClassName,
   scrollAreaClassName,
+  fillHeight = false,
   autoFocus = true,
   disabled = false,
   footer,
@@ -406,7 +414,7 @@ export const Editor = ({
 
   return (
     <div className={mergeClasses(wrapperClassName ?? styles.editorWrapper, optional(disabled, styles.disabled))}>
-      <div className={mergeClasses(styles.scrollArea, scrollAreaClassName)}>
+      <div className={mergeClasses(styles.scrollArea, scrollAreaClassName, optional(fillHeight, styles.fill))}>
         <EditorContent editor={editor} />
       </div>
       {footer && <div className={styles.footer}>{footer}</div>}
