@@ -240,14 +240,10 @@ _CLAUDE_MANIFEST_FETCH_TIMEOUT_SECONDS = 30.0
 # the existing service -> managed_tools edge, which would be an import cycle. The
 # service re-imports this constant for its status / version-range logic.
 CLAUDE_VERSION_RANGE = VersionRange(
-    # Floor is 2.1.202: earlier releases mishandle a session resume that carries
-    # `stopped` background-task notifications (left over from tasks killed by a
-    # prior interrupt). The CLI can deliver such a notification so that the user
-    # turn being awaited never emits its own terminating `result`, which wedges
-    # the chat in a perpetual "streaming" state. The resume-of-background-tasks
-    # path was reworked in 2.1.198; 2.1.202 is the earliest release validated
-    # against this failure. Do not lower this without re-validating that case.
-    min_version="2.1.202",
+    # Keep the floor at recommended: an in-range managed binary is never upgraded to
+    # recommended (auto-install and the "up to date" status both gate on range, not
+    # recommended), so a lower floor strands old installs.
+    min_version="2.1.258",
     max_version="2.99.99",
     # Recommended is the latest validated release; bumped to 2.1.258 to pull in
     # Claude Fable 5.1 (`claude-fable-5-1`), which earlier CLIs do not recognize.
