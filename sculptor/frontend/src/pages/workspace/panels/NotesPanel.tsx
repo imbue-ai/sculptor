@@ -66,8 +66,7 @@ export const NotesPanel = (): ReactElement => {
         value={notes}
         onChange={setNotes}
         autoFocus={false}
-        // Fill the panel so the whole area is a click target, not just the
-        // first line — clicking anywhere in the panel begins editing.
+        // Fill the panel so the whole area is a click target, not just the first line.
         fillHeight
         wrapperClassName={styles.editorWrapper}
         scrollAreaClassName={styles.scrollArea}
