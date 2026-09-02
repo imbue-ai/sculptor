@@ -158,7 +158,10 @@ Follow-ups this skill does **not** do:
   `gh release edit <tag> --notes-file <file>`. Do **not** sign a published product
   changelog `(Sent by Claude)` — CLAUDE.md's transparency rule targets PR, issue,
   and chat messages, not user-facing release copy.
-- **`update-help-docs`** for the release (run it from the release branch).
+- **`update-help-docs`** — **optional / deprecated.** The help docs
+  (`docs/help/`) are no longer actively maintained, so refreshing them is no
+  longer part of the promotion follow-up. Skip it by default; only run it (from
+  the release branch) if you specifically want to update a page.
 - **Linear** hygiene for the tickets that shipped.
 - Slack needs nothing: the pipeline posts to `#sculptor-release` automatically on
   a successful publish.
