@@ -571,9 +571,12 @@
             "type": "string"
           },
           "LLMModel": {
+            "description": "Built-in (Claude-harness) model identities.\n\nAppend-only: every value is persisted (chat messages carry ``model_name``,\nworkspaces carry ``default_model``), so a value may be RETIRED from the picker\nbut never renamed or deleted \u2014 old rows must always deserialize. The\nuser-facing catalog is curated separately (frontend ``PRODUCTION_MODELS`` +\n``web/derived.py``), not by this enum's membership. Each member's name matches\nthe real model; ``MODEL_SHORTNAME_MAP`` maps it to the exact ``--model`` id.\n\nPer-release runbook (surface the newest generation, drop the oldest):\n  1. Add explicit members here named after the real model, and map each to its\n     exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).\n  2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),\n     prepend to ``PRODUCTION_MODELS``, and add to ``derived.py``'s streaming list.\n  3. Point the product default at the new member (``userConfig.ts``\n     ``defaultModelAtom`` and ``web/derived.py``'s fallback).\n  4. Drop the oldest generation from the picker (remove from ``PRODUCTION_MODELS``\n     / ``derived`` lists only \u2014 keep its enum value here for load-compat).\n  5. Regenerate the API types + extension SDK + frozen schema, and bump the\n     managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.",
             "enum": [
               "CLAUDE-4-OPUS",
               "CLAUDE-4-OPUS-200K",
+              "CLAUDE-5-OPUS",
+              "CLAUDE-5-OPUS-200K",
               "CLAUDE-4-8-OPUS",
               "CLAUDE-4-8-OPUS-200K",
               "CLAUDE-4-7-OPUS",
@@ -584,6 +587,7 @@
               "CLAUDE-4-SONNET-200K",
               "CLAUDE-4-HAIKU",
               "CLAUDE-FABLE-5",
+              "CLAUDE-FABLE-5-1",
               "FAKE_CLAUDE",
               "FAKE_CLAUDE_2"
             ],
@@ -2011,9 +2015,12 @@
             ]
           },
           "LLMModel": {
+            "description": "Built-in (Claude-harness) model identities.\n\nAppend-only: every value is persisted (chat messages carry ``model_name``,\nworkspaces carry ``default_model``), so a value may be RETIRED from the picker\nbut never renamed or deleted \u2014 old rows must always deserialize. The\nuser-facing catalog is curated separately (frontend ``PRODUCTION_MODELS`` +\n``web/derived.py``), not by this enum's membership. Each member's name matches\nthe real model; ``MODEL_SHORTNAME_MAP`` maps it to the exact ``--model`` id.\n\nPer-release runbook (surface the newest generation, drop the oldest):\n  1. Add explicit members here named after the real model, and map each to its\n     exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).\n  2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),\n     prepend to ``PRODUCTION_MODELS``, and add to ``derived.py``'s streaming list.\n  3. Point the product default at the new member (``userConfig.ts``\n     ``defaultModelAtom`` and ``web/derived.py``'s fallback).\n  4. Drop the oldest generation from the picker (remove from ``PRODUCTION_MODELS``\n     / ``derived`` lists only \u2014 keep its enum value here for load-compat).\n  5. Regenerate the API types + extension SDK + frozen schema, and bump the\n     managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.",
             "enum": [
               "CLAUDE-4-OPUS",
               "CLAUDE-4-OPUS-200K",
+              "CLAUDE-5-OPUS",
+              "CLAUDE-5-OPUS-200K",
               "CLAUDE-4-8-OPUS",
               "CLAUDE-4-8-OPUS-200K",
               "CLAUDE-4-7-OPUS",
@@ -2024,6 +2031,7 @@
               "CLAUDE-4-SONNET-200K",
               "CLAUDE-4-HAIKU",
               "CLAUDE-FABLE-5",
+              "CLAUDE-FABLE-5-1",
               "FAKE_CLAUDE",
               "FAKE_CLAUDE_2"
             ],
@@ -2977,9 +2985,12 @@
             "type": "object"
           },
           "LLMModel": {
+            "description": "Built-in (Claude-harness) model identities.\n\nAppend-only: every value is persisted (chat messages carry ``model_name``,\nworkspaces carry ``default_model``), so a value may be RETIRED from the picker\nbut never renamed or deleted \u2014 old rows must always deserialize. The\nuser-facing catalog is curated separately (frontend ``PRODUCTION_MODELS`` +\n``web/derived.py``), not by this enum's membership. Each member's name matches\nthe real model; ``MODEL_SHORTNAME_MAP`` maps it to the exact ``--model`` id.\n\nPer-release runbook (surface the newest generation, drop the oldest):\n  1. Add explicit members here named after the real model, and map each to its\n     exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).\n  2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),\n     prepend to ``PRODUCTION_MODELS``, and add to ``derived.py``'s streaming list.\n  3. Point the product default at the new member (``userConfig.ts``\n     ``defaultModelAtom`` and ``web/derived.py``'s fallback).\n  4. Drop the oldest generation from the picker (remove from ``PRODUCTION_MODELS``\n     / ``derived`` lists only \u2014 keep its enum value here for load-compat).\n  5. Regenerate the API types + extension SDK + frozen schema, and bump the\n     managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.",
             "enum": [
               "CLAUDE-4-OPUS",
               "CLAUDE-4-OPUS-200K",
+              "CLAUDE-5-OPUS",
+              "CLAUDE-5-OPUS-200K",
               "CLAUDE-4-8-OPUS",
               "CLAUDE-4-8-OPUS-200K",
               "CLAUDE-4-7-OPUS",
@@ -2990,6 +3001,7 @@
               "CLAUDE-4-SONNET-200K",
               "CLAUDE-4-HAIKU",
               "CLAUDE-FABLE-5",
+              "CLAUDE-FABLE-5-1",
               "FAKE_CLAUDE",
               "FAKE_CLAUDE_2"
             ],

@@ -418,14 +418,12 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             if isinstance(message, ChatInputUserMessage) and message.model_name is not None:
                 return message.model_name
         # Fall back to the model selected at agent creation time, then to the
-        # product default. Fable is currently disabled with an indefinite
-        # timeline, so the default falls back to the 1M-context Opus
-        # (CLAUDE_4_OPUS, shown as "Opus 5 (1M)"; SCU-1576); Fable stays available
-        # in the switcher for if/when it returns.
+        # product default: the pinned 1M-context Opus (CLAUDE_5_OPUS). Fable stays
+        # available in the switcher but is not the default (SCU-1576).
         input_data = self.task.input_data
         if isinstance(input_data, AgentTaskInputsV2) and input_data.default_model is not None:
             return input_data.default_model
-        return LLMModel.CLAUDE_4_OPUS
+        return LLMModel.CLAUDE_5_OPUS
 
     @computed_field
     @property
@@ -484,6 +482,8 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             LLMModel.CLAUDE_4_SONNET_200K,
             LLMModel.CLAUDE_4_OPUS,
             LLMModel.CLAUDE_4_OPUS_200K,
+            LLMModel.CLAUDE_5_OPUS,
+            LLMModel.CLAUDE_5_OPUS_200K,
             LLMModel.CLAUDE_4_8_OPUS,
             LLMModel.CLAUDE_4_8_OPUS_200K,
             LLMModel.CLAUDE_4_7_OPUS,
@@ -492,6 +492,7 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             LLMModel.CLAUDE_4_6_OPUS_200K,
             LLMModel.CLAUDE_4_HAIKU,
             LLMModel.CLAUDE_FABLE_5,
+            LLMModel.CLAUDE_FABLE_5_1,
             LLMModel.FAKE_CLAUDE,
             LLMModel.FAKE_CLAUDE_2,
         )
