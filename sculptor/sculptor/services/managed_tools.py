@@ -68,15 +68,15 @@ PI_PIN = PiPin(
     platforms={
         "darwin-arm64": PlatformPin(
             asset="pi-darwin-arm64.tar.gz",
-            sha256="4406ed227c486f2e3c16cf14f793dc3ad46b5d01bf69135a2424cffa58a9a34b",
+            sha256="c68e3ac4d05b4e282aaab2e6c76f161d3e9e68f19a22e38913cbfaadb6c800f0",
         ),
         "darwin-x64": PlatformPin(
             asset="pi-darwin-x64.tar.gz",
-            sha256="892b3f385ae6779299c07a25d9280183897fcf755f7226f6b36c70d268f321be",
+            sha256="7a042d6413065421387001a4986190a1a03186c95a695f4dee0bdc76e60de8f7",
         ),
         "linux-x64": PlatformPin(
             asset="pi-linux-x64.tar.gz",
-            sha256="ab6604f6c3f3d050783e7abbbdd1f79b775b20f3969833ce9721740685d01e13",
+            sha256="c2f3c3e6a1850bd87654cc3ca8811013272397c3d042a4e2a64c43ee1b423972",
         ),
     },
 )
@@ -249,9 +249,9 @@ CLAUDE_VERSION_RANGE = VersionRange(
     # against this failure. Do not lower this without re-validating that case.
     min_version="2.1.202",
     max_version="2.99.99",
-    # Recommended is the latest validated release; bumped to pull in Claude
-    # Opus 5 support (SCU-1841).
-    recommended_version="2.1.222",
+    # Recommended is the latest validated release; bumped to 2.1.258 to pull in
+    # Claude Fable 5.1 (`claude-fable-5-1`), which earlier CLIs do not recognize.
+    recommended_version="2.1.258",
     # Blocked versions create background tool invocations that are missing events
     # describing them.
     blocked_versions=(BlockedVersionRange(min_version="2.1.101", max_version="2.1.101"),),

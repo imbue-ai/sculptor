@@ -442,6 +442,8 @@ export type HarnessCapabilities = {
 declare const LlmModel: {
 	readonly CLAUDE_4_OPUS: "CLAUDE-4-OPUS";
 	readonly CLAUDE_4_OPUS_200K: "CLAUDE-4-OPUS-200K";
+	readonly CLAUDE_5_OPUS: "CLAUDE-5-OPUS";
+	readonly CLAUDE_5_OPUS_200K: "CLAUDE-5-OPUS-200K";
 	readonly CLAUDE_4_8_OPUS: "CLAUDE-4-8-OPUS";
 	readonly CLAUDE_4_8_OPUS_200K: "CLAUDE-4-8-OPUS-200K";
 	readonly CLAUDE_4_7_OPUS: "CLAUDE-4-7-OPUS";
@@ -452,11 +454,33 @@ declare const LlmModel: {
 	readonly CLAUDE_4_SONNET_200K: "CLAUDE-4-SONNET-200K";
 	readonly CLAUDE_4_HAIKU: "CLAUDE-4-HAIKU";
 	readonly CLAUDE_FABLE_5: "CLAUDE-FABLE-5";
+	readonly CLAUDE_FABLE_5_1: "CLAUDE-FABLE-5-1";
 	readonly FAKE_CLAUDE: "FAKE_CLAUDE";
 	readonly FAKE_CLAUDE_2: "FAKE_CLAUDE_2";
 };
 /**
  * LLMModel
+ *
+ * Built-in (Claude-harness) model identities.
+ *
+ * Append-only: every value is persisted (chat messages carry ``model_name``,
+ * workspaces carry ``default_model``), so a value may be RETIRED from the picker
+ * but never renamed or deleted — old rows must always deserialize. The
+ * user-facing catalog is curated separately (frontend ``PRODUCTION_MODELS`` +
+ * ``web/derived.py``), not by this enum's membership. Each member's name matches
+ * the real model; ``MODEL_SHORTNAME_MAP`` maps it to the exact ``--model`` id.
+ *
+ * Per-release runbook (surface the newest generation, drop the oldest):
+ * 1. Add explicit members here named after the real model, and map each to its
+ * exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).
+ * 2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),
+ * prepend to ``PRODUCTION_MODELS``, and add to ``derived.py``'s streaming list.
+ * 3. Point the product default at the new member (``userConfig.ts``
+ * ``defaultModelAtom`` and ``web/derived.py``'s fallback).
+ * 4. Drop the oldest generation from the picker (remove from ``PRODUCTION_MODELS``
+ * / ``derived`` lists only — keep its enum value here for load-compat).
+ * 5. Regenerate the API types + extension SDK + frozen schema, and bump the
+ * managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.
  */
 export type LlmModel = typeof LlmModel[keyof typeof LlmModel];
 declare const ModelCatalogState: {

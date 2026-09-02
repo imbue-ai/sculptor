@@ -17,7 +17,7 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 # The chat-panel model selector renders the model's short name; "Opus 5 (1M)" is
-# the short name for CLAUDE_4_OPUS, the 1M-context Opus (see frontend
+# the short name for CLAUDE_5_OPUS, the pinned 1M-context Opus 5 (see frontend
 # modelConstants.ts). The plain "Opus 5" short name is the 200K variant.
 OPUS_MODEL_NAME = "Opus 5 (1M)"
 

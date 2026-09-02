@@ -27,6 +27,15 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFileAttachments: true,
     supportsFastMode: true,
   },
+  // Pinned Opus 5 — fast mode supported.
+  [LlmModel.CLAUDE_5_OPUS]: {
+    supportsFileAttachments: true,
+    supportsFastMode: true,
+  },
+  [LlmModel.CLAUDE_5_OPUS_200K]: {
+    supportsFileAttachments: true,
+    supportsFastMode: true,
+  },
   // Pinned Opus 4.8 — fast mode supported (SCU-1841), same as the rolling entry.
   [LlmModel.CLAUDE_4_8_OPUS]: {
     supportsFileAttachments: true,
@@ -57,6 +66,10 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFastMode: false,
   },
   [LlmModel.CLAUDE_FABLE_5]: {
+    supportsFileAttachments: true,
+    supportsFastMode: false,
+  },
+  [LlmModel.CLAUDE_FABLE_5_1]: {
     supportsFileAttachments: true,
     supportsFastMode: false,
   },

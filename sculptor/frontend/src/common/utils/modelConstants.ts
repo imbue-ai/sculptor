@@ -13,8 +13,14 @@ export const hasNoUsableModel = (
 ): boolean => sourcesBackendModels && Array.isArray(backendModels) && backendModels.length === 0;
 
 const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
-  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus 5 (1M)", long: "Claude 5 Opus (1M)" },
-  [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus 5", long: "Claude 5 Opus" },
+  // Retired rolling "latest Opus" alias — kept for load-compat and the internal
+  // auto-latest fallback, not shown in the picker. Labeled honestly so a lingering
+  // selection doesn't masquerade as a pinned version.
+  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (latest, 1M)", long: "Claude Opus (latest, 1M)" },
+  [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
+  // Pinned Opus generations.
+  [LlmModel.CLAUDE_5_OPUS]: { short: "Opus 5 (1M)", long: "Claude 5 Opus (1M)" },
+  [LlmModel.CLAUDE_5_OPUS_200K]: { short: "Opus 5", long: "Claude 5 Opus" },
   [LlmModel.CLAUDE_4_8_OPUS]: { short: "Opus 4.8 (1M)", long: "Claude 4.8 Opus (1M)" },
   [LlmModel.CLAUDE_4_8_OPUS_200K]: { short: "Opus 4.8", long: "Claude 4.8 Opus" },
   [LlmModel.CLAUDE_4_7_OPUS]: { short: "Opus 4.7 (1M)", long: "Claude 4.7 Opus (1M)" },
@@ -24,7 +30,8 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   [LlmModel.CLAUDE_4_SONNET]: { short: "Sonnet (1M)", long: "Claude 4.6 Sonnet (1M)" },
   [LlmModel.CLAUDE_4_SONNET_200K]: { short: "Sonnet", long: "Claude 4.6 Sonnet" },
   [LlmModel.CLAUDE_4_HAIKU]: { short: "Haiku", long: "Claude 4.5 Haiku" },
-  [LlmModel.CLAUDE_FABLE_5]: { short: "Fable", long: "Fable" },
+  [LlmModel.CLAUDE_FABLE_5]: { short: "Fable 5", long: "Fable 5" },
+  [LlmModel.CLAUDE_FABLE_5_1]: { short: "Fable 5.1", long: "Fable 5.1" },
   [LlmModel.FAKE_CLAUDE]: { short: "Fake Claude", long: "Fake Claude" },
   [LlmModel.FAKE_CLAUDE_2]: { short: "Fake Claude 2", long: "Fake Claude 2" },
 } as const;
@@ -34,15 +41,14 @@ export const getModelLongName = (model: LlmModel): string => modelNames[model]?.
 
 // Models offered in production model pickers (desktop selector + mobile `+` menu).
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
+  LlmModel.CLAUDE_FABLE_5_1,
   LlmModel.CLAUDE_FABLE_5,
-  LlmModel.CLAUDE_4_OPUS_200K,
-  LlmModel.CLAUDE_4_OPUS,
+  LlmModel.CLAUDE_5_OPUS_200K,
+  LlmModel.CLAUDE_5_OPUS,
   LlmModel.CLAUDE_4_8_OPUS_200K,
   LlmModel.CLAUDE_4_8_OPUS,
   LlmModel.CLAUDE_4_7_OPUS_200K,
   LlmModel.CLAUDE_4_7_OPUS,
-  LlmModel.CLAUDE_4_6_OPUS_200K,
-  LlmModel.CLAUDE_4_6_OPUS,
   LlmModel.CLAUDE_4_SONNET_200K,
   LlmModel.CLAUDE_4_SONNET,
   LlmModel.CLAUDE_4_HAIKU,
