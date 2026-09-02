@@ -88,11 +88,9 @@ type EditorProps = {
   // input, where the editor grows with content.
   scrollAreaClassName?: string;
   // Stretch the editable surface to fill the scroll area's height so the whole
-  // area is a click/focus target, not just the text's first line. Meant for
-  // hosts that stretch the Editor to fill a tall flex column (e.g. the Notes
-  // panel); without it the contenteditable only spans its content and clicks
-  // below it land on non-editable wrapper divs. Off by default so the
-  // content-sized hosts (chat input, action dialog) are unaffected.
+  // area is a click/focus target, not just the text's first line. For a host
+  // that stretches the Editor to fill a tall flex column (e.g. the Notes
+  // panel); off by default so content-sized hosts are unaffected.
   fillHeight?: boolean;
   disabled?: boolean;
   autoFocus?: boolean;
