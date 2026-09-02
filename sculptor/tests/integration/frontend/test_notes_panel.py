@@ -7,6 +7,7 @@ These tests cover opening it and that notes content is scoped per-workspace.
 
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.notes_panel import get_notes_panel
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -26,6 +27,22 @@ def test_open_notes_panel_renders_editor(sculptor_instance_: SculptorInstance) -
     expect(notes).to_be_visible()
     editor = notes.get_editor()
     expect(editor).to_be_visible()
+
+    # The whole panel must be a click target, not just the first text line:
+    # clicking well below the placeholder must begin editing (focus the
+    # editor). Previously the contenteditable was only ~one line tall at the
+    # top of the panel, so a real click lower down landed on non-editable
+    # wrapper divs and did nothing. Assert focus (rather than typed text) so
+    # the check is purely about where the click lands, independent of any
+    # editor text-insertion path.
+    panel_box = page.get_by_test_id(ElementIDs.NOTES_PANEL).bounding_box()
+    assert panel_box is not None
+    page.mouse.click(
+        panel_box["x"] + panel_box["width"] / 2,
+        panel_box["y"] + panel_box["height"] - 40,
+    )
+    expect(editor).to_be_focused()
+
     type_into_tiptap(page, editor, "a quick note")
     expect(editor).to_contain_text("a quick note")
 
