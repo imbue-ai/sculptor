@@ -321,3 +321,14 @@ Append dated, specific learnings here. Keep them short.
   merged branch also deleted an unrelated stale branch from the remote (harmless
   in that instance — already merged — but not intended). Push a specific deletion
   with `jj git push -b <bookmark>` instead, or check what is pending first.
+- **2026-09-01 — verify all three auto-update manifests, not just linux-x64
+  (promoting 0.46.0).** Step 5 lists only `slim/AppImage/x64/latest-linux.yml`,
+  which leaves macOS and arm64-linux unchecked. Verify all three channels:
+  `slim/AppImage/x64/latest-linux.yml`,
+  `slim/AppImage/arm64/latest-linux-arm64.yml`, and
+  `slim/zip/darwin/arm64/latest-mac.yml`. The mac manifest lives under
+  `zip/darwin/arm64/` (matching the publish paths in
+  `sculptor/builder/artifacts.py`), **not** `dmg/` — guessing a `dmg/…` path
+  returns a spurious "not found" on a perfectly good release. 0.46.0 was
+  otherwise textbook: a clean, fully-green build (arm64 included) that parked at
+  the gate ~42 min after the tag push.

@@ -15,7 +15,13 @@ description: |
 
 # Update Sculptor Help Docs
 
-> **Note: docs live in this repo at `docs/help/`.** The Sculptor help docs are maintained here, alongside the code. This skill edits the markdown and images under `docs/help/` in the current checkout.
+> **⚠️ Deprecated / optional — the help docs are no longer actively maintained.**
+> Refreshing `docs/help/` is **not** a required release step and is no longer part
+> of the promote-release follow-up. This skill still works if you deliberately
+> want to update a specific page, but treat any run as optional — don't run it
+> just because a release went out.
+
+> **Note: docs live in this repo at `docs/help/`.** The Sculptor help docs live here, alongside the code. This skill edits the markdown and images under `docs/help/` in the current checkout.
 >
 > **Publishing:** `/sculptor:help` fetches the docs live from `imbue-ai/sculptor` on GitHub, so edits you make here go live to users once they land on `main` there. Editing `docs/help/` in a local checkout does not by itself change what `/sculptor:help` returns.
 
