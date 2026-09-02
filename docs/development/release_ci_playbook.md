@@ -322,8 +322,9 @@ Append dated, specific learnings here. Keep them short.
   in that instance — already merged — but not intended). Push a specific deletion
   with `jj git push -b <bookmark>` instead, or check what is pending first.
 - **2026-09-01 — verify all three auto-update manifests, not just linux-x64
-  (promoting 0.46.0).** Step 5 lists only `slim/AppImage/x64/latest-linux.yml`,
-  which leaves macOS and arm64-linux unchecked. Verify all three channels:
+  (promoting 0.46.0).** The `promote-release` skill's Step 5 lists only
+  `slim/AppImage/x64/latest-linux.yml`, which leaves macOS and arm64-linux
+  unchecked. Verify all three channels:
   `slim/AppImage/x64/latest-linux.yml`,
   `slim/AppImage/arm64/latest-linux-arm64.yml`, and
   `slim/zip/darwin/arm64/latest-mac.yml`. The mac manifest lives under
