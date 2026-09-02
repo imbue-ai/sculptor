@@ -26,6 +26,19 @@ def test_open_notes_panel_renders_editor(sculptor_instance_: SculptorInstance) -
     expect(notes).to_be_visible()
     editor = notes.get_editor()
     expect(editor).to_be_visible()
+
+    # The whole panel must be a click target, not just the first text line:
+    # clicking well below the placeholder must begin editing. Assert focus
+    # (rather than typed text) so the check is purely about where the click
+    # lands, independent of any editor text-insertion path.
+    panel_box = notes.bounding_box()
+    assert panel_box is not None
+    page.mouse.click(
+        panel_box["x"] + panel_box["width"] / 2,
+        panel_box["y"] + panel_box["height"] - 40,
+    )
+    expect(editor).to_be_focused()
+
     type_into_tiptap(page, editor, "a quick note")
     expect(editor).to_contain_text("a quick note")
 

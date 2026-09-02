@@ -22,6 +22,29 @@
   @include thin-scrollbar;
 }
 
+// Opt-in (via the Editor's `fillHeight` prop): make the editable surface fill a
+// stretched host so the whole area is a click/focus target, not just the first
+// line. TipTap nests the contenteditable inside a class-less EditorContent
+// wrapper, so make the scroll area a flex column and let both the wrapper and
+// the contenteditable grow to fill it. `flex-shrink: 0` keeps a long note
+// growing past the panel (the scroll area scrolls) instead of being squeezed
+// to fit.
+.fill {
+  display: flex;
+  flex-direction: column;
+
+  > * {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+  }
+
+  // stylelint-disable-next-line selector-class-pattern -- ProseMirror library class
+  :global(.ProseMirror) {
+    flex: 1 0 auto;
+  }
+}
+
 .disabled {
   background: var(--gray-3);
   border-color: var(--gray-6);
