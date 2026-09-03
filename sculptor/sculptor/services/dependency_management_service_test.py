@@ -55,6 +55,7 @@ def _make_user_config(
     instance_id: str = "inst-1",
     claude_binary_mode: str = "MANAGED",
     dependency_paths: DependencyPaths | None = None,
+    env_var_override_enabled: bool = False,
 ) -> UserConfig:
     # Build unified dependency_paths.claude from mode + optional custom path.
     # pi is pinned to the bare "pi" (CUSTOM/PATH) so these Claude-focused tests are
@@ -71,6 +72,7 @@ def _make_user_config(
         organization_id=organization_id,
         instance_id=instance_id,
         dependency_paths=dep_paths,
+        env_var_override_enabled=env_var_override_enabled,
     )
 
 
@@ -1063,7 +1065,157 @@ class TestCheckAuthenticated:
         mock_cg.run_process_to_completion.assert_called_once_with(
             ["/usr/bin/claude", "auth", "status"],
             timeout=3.0,
+            env=None,
         )
+
+    @patch("sculptor.services.dependency_management_service.get_sculptor_folder")
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("shutil.which", return_value="/usr/bin/claude")
+    def test_global_env_file_credential_reaches_probe(
+        self,
+        mock_which: MagicMock,
+        mock_config: MagicMock,
+        mock_sculptor_folder: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """A credential set only in ``~/.sculptor/.env`` must reach the probe.
+
+        Agents get those values merged into their environment, but the backend's
+        own ``os.environ`` never does, so without the overlay Sculptor reports
+        the tool unauthenticated while the agent it launches is authenticated.
+        """
+        mock_config.return_value = _make_user_config(claude_binary_mode="claude")
+        mock_sculptor_folder.return_value = tmp_path
+        (tmp_path / ".env").write_text("CLAUDE_CODE_OAUTH_TOKEN=token-from-env-file\n")
+
+        mock_cg = MagicMock()
+        mock_cg.run_process_to_completion.return_value = FinishedProcess(
+            stdout="",
+            stderr="",
+            returncode=0,
+            command=("test",),
+            is_output_already_logged=False,
+        )
+
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
+
+        assert service.check_authenticated(Dependency.CLAUDE) is True
+        probe_env = mock_cg.run_process_to_completion.call_args.kwargs["env"]
+        assert probe_env is not None
+        assert probe_env["CLAUDE_CODE_OAUTH_TOKEN"] == "token-from-env-file"
+
+    @pytest.mark.parametrize(
+        "override_enabled,expected",
+        [(False, "from-os-environ"), (True, "from-env-file")],
+    )
+    @patch("sculptor.services.dependency_management_service.get_sculptor_folder")
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("shutil.which", return_value="/usr/bin/claude")
+    def test_probe_precedence_matches_the_agent_environment(
+        self,
+        mock_which: MagicMock,
+        mock_config: MagicMock,
+        mock_sculptor_folder: MagicMock,
+        override_enabled: bool,
+        expected: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Collisions must resolve the way ``LocalEnvironment.run_process`` does.
+
+        Otherwise the probe could read a different credential than the agent it
+        is meant to be reporting on.
+        """
+        mock_config.return_value = _make_user_config(
+            claude_binary_mode="claude", env_var_override_enabled=override_enabled
+        )
+        mock_sculptor_folder.return_value = tmp_path
+        (tmp_path / ".env").write_text("SCTEST_PROBE_TOKEN=from-env-file\n")
+        monkeypatch.setenv("SCTEST_PROBE_TOKEN", "from-os-environ")
+
+        mock_cg = MagicMock()
+        mock_cg.run_process_to_completion.return_value = FinishedProcess(
+            stdout="",
+            stderr="",
+            returncode=0,
+            command=("test",),
+            is_output_already_logged=False,
+        )
+
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
+
+        assert service.check_authenticated(Dependency.CLAUDE) is True
+        probe_env = mock_cg.run_process_to_completion.call_args.kwargs["env"]
+        assert probe_env is not None
+        assert probe_env["SCTEST_PROBE_TOKEN"] == expected
+
+    @patch("sculptor.services.dependency_management_service.get_sculptor_folder")
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("shutil.which", return_value="/usr/bin/gh")
+    def test_env_file_overlay_also_applies_to_gh(
+        self,
+        mock_which: MagicMock,
+        mock_config: MagicMock,
+        mock_sculptor_folder: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """``gh`` has the same split-brain problem as claude, so it gets the overlay too."""
+        mock_config.return_value = _make_user_config()
+        mock_sculptor_folder.return_value = tmp_path
+        (tmp_path / ".env").write_text("GH_TOKEN=gh-token-from-env-file\n")
+
+        mock_cg = MagicMock()
+        mock_cg.run_process_to_completion.return_value = FinishedProcess(
+            stdout="",
+            stderr="",
+            returncode=0,
+            command=("test",),
+            is_output_already_logged=False,
+        )
+
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
+
+        assert service.check_authenticated(Dependency.GH) is True
+        probe_env = mock_cg.run_process_to_completion.call_args.kwargs["env"]
+        assert probe_env is not None
+        assert probe_env["GH_TOKEN"] == "gh-token-from-env-file"
+
+    @patch("sculptor.services.dependency_management_service.get_sculptor_folder")
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("shutil.which", return_value="/usr/bin/claude")
+    def test_unreadable_env_file_still_probes(
+        self,
+        mock_which: MagicMock,
+        mock_config: MagicMock,
+        mock_sculptor_folder: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """A broken ``.env`` must degrade to the inherited environment.
+
+        ``check_authenticated`` runs on every status snapshot, so an unreadable
+        file must not take the whole status read down with it.
+        """
+        mock_config.return_value = _make_user_config(claude_binary_mode="claude")
+        mock_sculptor_folder.return_value = tmp_path
+        env_file = tmp_path / ".env"
+        env_file.write_text("CLAUDE_CODE_OAUTH_TOKEN=unreachable\n")
+        env_file.chmod(0o000)
+
+        mock_cg = MagicMock()
+        mock_cg.run_process_to_completion.return_value = FinishedProcess(
+            stdout="",
+            stderr="",
+            returncode=0,
+            command=("test",),
+            is_output_already_logged=False,
+        )
+
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
+        try:
+            assert service.check_authenticated(Dependency.CLAUDE) is True
+            assert mock_cg.run_process_to_completion.call_args.kwargs["env"] is None
+        finally:
+            env_file.chmod(0o600)
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("shutil.which", return_value="/usr/bin/claude")

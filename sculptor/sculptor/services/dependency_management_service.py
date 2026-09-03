@@ -43,7 +43,9 @@ from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.voice_models import VOICE_MODELS_PIN
 from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
 from sculptor.services.voice_models import find_voice_model_file
+from sculptor.services.workspace_service.environment_manager.env_file_parser import parse_env_file
 from sculptor.utils.build import get_internal_folder
+from sculptor.utils.build import get_sculptor_folder
 from sculptor.web.data_types import AuthResult
 from sculptor.web.data_types import AuthStartResult
 from sculptor.web.data_types import BinaryMode
@@ -850,6 +852,36 @@ class DependencyManagementService(Service):
                 logger.opt(exception=True).warning("Failed to check installed version of {}", tool.value)
         return results
 
+    def _build_auth_probe_env(self) -> dict[str, str] | None:
+        """Environment for the ``auth status`` probe, overlaying ``~/.sculptor/.env``.
+
+        Agents get the user's ``.env`` values merged into their environment (see
+        ``LocalEnvironment.run_process``), but the backend's own ``os.environ``
+        never does. A credential configured only there — a
+        ``CLAUDE_CODE_OAUTH_TOKEN``, a ``GH_TOKEN``, or a ``CLAUDE_CONFIG_DIR``
+        pointing at the store that holds one — would otherwise be invisible
+        here, so Sculptor would report the tool unauthenticated while the agent
+        it launches is authenticated.
+
+        Only the global file applies: the probe is project-agnostic, so there is
+        no per-project ``.sculptor/.env`` to resolve. Precedence mirrors
+        ``LocalEnvironment.run_process`` so the probe sees what the agent will.
+        Returns None when the file contributes nothing, leaving the probe to
+        inherit ``os.environ`` directly.
+        """
+        try:
+            env_file_vars = parse_env_file(get_sculptor_folder() / ".env")
+        except OSError:
+            # Status snapshots call this on every read; an unreadable .env
+            # should degrade to the plain inherited environment, not break them.
+            logger.opt(exception=True).debug("Could not read global .env for the auth probe")
+            return None
+        if not env_file_vars:
+            return None
+        if get_user_config_instance().env_var_override_enabled:
+            return {**os.environ, **env_file_vars}
+        return {**env_file_vars, **os.environ}
+
     def check_authenticated(self, tool: Dependency) -> bool | None:
         """Check whether a dependency is authenticated.
 
@@ -874,6 +906,7 @@ class DependencyManagementService(Service):
             self.concurrency_group.run_process_to_completion(
                 [binary, "auth", "status"],
                 timeout=3.0,
+                env=self._build_auth_probe_env(),
             )
             return True
         except ProcessTimeoutError:
