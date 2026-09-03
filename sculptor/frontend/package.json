@@ -156,7 +156,7 @@
     "cross-env": "10.1.0",
     "depcheck": "1.4.7",
     "dts-bundle-generator": "9.5.1",
-    "electron": "42.4.1",
+    "electron": "44.0.0",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
     "eslint-import-resolver-typescript": "4.4.5",
