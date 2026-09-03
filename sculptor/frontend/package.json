@@ -47,7 +47,7 @@
     "@floating-ui/dom": "1.7.6",
     "@fontsource-variable/inter": "5.2.8",
     "@fontsource-variable/jetbrains-mono": "5.2.8",
-    "@huggingface/transformers": "3.8.1",
+    "@huggingface/transformers": "4.2.0",
     "@pierre/diffs": "1.2.11",
     "@radix-ui/colors": "3.0.0",
     "@radix-ui/react-dialog": "1.1.17",
