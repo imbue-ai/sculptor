@@ -106,7 +106,7 @@ dev = [
     # 1.60 <-> Electron 42) for connect_over_cdp; bump together with Electron.
     # Keep the frontend package.json "playwright" devDependency on the same pin.
     "playwright==1.60.0",
-    "pyrefly>=1.0.0",
+    "pyrefly>=1.2.0",
     "pytest-asyncio",
     "pytest-mock",
     "pytest-performancetotal==1.0.0",
