@@ -100,8 +100,8 @@ no-lines-before = ["future"]
 [dependency-groups]
 dev = [
     "ipdb>=0.13.13",
-    "pyrefly>=1.0.0",
+    "pyrefly>=1.2.0",
     "pytest-xdist>=3.8.0",
     # Ruff uses minor versions to signal breaking changes until 1.0.0 is reached.
-    "ruff~=0.15.17",
+    "ruff~=0.16.5",
 ]
