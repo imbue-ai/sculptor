@@ -1078,12 +1078,7 @@ class TestCheckAuthenticated:
         mock_sculptor_folder: MagicMock,
         tmp_path: Path,
     ) -> None:
-        """A credential set only in ``~/.sculptor/.env`` must reach the probe.
-
-        Agents get those values merged into their environment, but the backend's
-        own ``os.environ`` never does, so without the overlay Sculptor reports
-        the tool unauthenticated while the agent it launches is authenticated.
-        """
+        """A credential set only in ``~/.sculptor/.env`` must reach the probe."""
         mock_config.return_value = _make_user_config(claude_binary_mode="claude")
         mock_sculptor_folder.return_value = tmp_path
         (tmp_path / ".env").write_text("CLAUDE_CODE_OAUTH_TOKEN=token-from-env-file\n")
@@ -1121,11 +1116,8 @@ class TestCheckAuthenticated:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Collisions must resolve the way ``LocalEnvironment.run_process`` does.
-
-        Otherwise the probe could read a different credential than the agent it
-        is meant to be reporting on.
-        """
+        """Collisions must resolve as ``LocalEnvironment.run_process`` does, or the
+        probe reads a different credential than the agent it reports on."""
         mock_config.return_value = _make_user_config(
             claude_binary_mode="claude", env_var_override_enabled=override_enabled
         )

@@ -857,17 +857,15 @@ class DependencyManagementService(Service):
 
         Agents get the user's ``.env`` values merged into their environment (see
         ``LocalEnvironment.run_process``), but the backend's own ``os.environ``
-        never does. A credential configured only there — a
-        ``CLAUDE_CODE_OAUTH_TOKEN``, a ``GH_TOKEN``, or a ``CLAUDE_CONFIG_DIR``
-        pointing at the store that holds one — would otherwise be invisible
-        here, so Sculptor would report the tool unauthenticated while the agent
-        it launches is authenticated.
+        never does, so a credential configured only there — a token, or a
+        ``CLAUDE_CONFIG_DIR`` pointing at the store holding one — would leave
+        Sculptor reporting the tool unauthenticated while the agent it launches
+        is authenticated.
 
         Only the global file applies: the probe is project-agnostic, so there is
         no per-project ``.sculptor/.env`` to resolve. Precedence mirrors
-        ``LocalEnvironment.run_process`` so the probe sees what the agent will.
-        Returns None when the file contributes nothing, leaving the probe to
-        inherit ``os.environ`` directly.
+        ``LocalEnvironment.run_process`` so a collision resolves to the same
+        credential the agent will use. None means "inherit ``os.environ``".
         """
         env_file_vars = parse_env_file(get_sculptor_folder() / ".env")
         if not env_file_vars:
