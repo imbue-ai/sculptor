@@ -1180,43 +1180,6 @@ class TestCheckAuthenticated:
         assert probe_env is not None
         assert probe_env["GH_TOKEN"] == "gh-token-from-env-file"
 
-    @patch("sculptor.services.dependency_management_service.get_sculptor_folder")
-    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
-    @patch("shutil.which", return_value="/usr/bin/claude")
-    def test_unreadable_env_file_still_probes(
-        self,
-        mock_which: MagicMock,
-        mock_config: MagicMock,
-        mock_sculptor_folder: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        """A broken ``.env`` must degrade to the inherited environment.
-
-        ``check_authenticated`` runs on every status snapshot, so an unreadable
-        file must not take the whole status read down with it.
-        """
-        mock_config.return_value = _make_user_config(claude_binary_mode="claude")
-        mock_sculptor_folder.return_value = tmp_path
-        env_file = tmp_path / ".env"
-        env_file.write_text("CLAUDE_CODE_OAUTH_TOKEN=unreachable\n")
-        env_file.chmod(0o000)
-
-        mock_cg = MagicMock()
-        mock_cg.run_process_to_completion.return_value = FinishedProcess(
-            stdout="",
-            stderr="",
-            returncode=0,
-            command=("test",),
-            is_output_already_logged=False,
-        )
-
-        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
-        try:
-            assert service.check_authenticated(Dependency.CLAUDE) is True
-            assert mock_cg.run_process_to_completion.call_args.kwargs["env"] is None
-        finally:
-            env_file.chmod(0o600)
-
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("shutil.which", return_value="/usr/bin/claude")
     def test_not_authenticated(self, mock_which: MagicMock, mock_config: MagicMock) -> None:

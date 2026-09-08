@@ -869,13 +869,7 @@ class DependencyManagementService(Service):
         Returns None when the file contributes nothing, leaving the probe to
         inherit ``os.environ`` directly.
         """
-        try:
-            env_file_vars = parse_env_file(get_sculptor_folder() / ".env")
-        except OSError:
-            # Status snapshots call this on every read; an unreadable .env
-            # should degrade to the plain inherited environment, not break them.
-            logger.opt(exception=True).debug("Could not read global .env for the auth probe")
-            return None
+        env_file_vars = parse_env_file(get_sculptor_folder() / ".env")
         if not env_file_vars:
             return None
         if get_user_config_instance().env_var_override_enabled:
