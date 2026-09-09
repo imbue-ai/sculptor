@@ -1,10 +1,13 @@
 import os
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated
 from typing import Any
 from typing import Literal
+from typing import assert_never
 
 from loguru import logger
+from pydantic import AwareDatetime
 from pydantic import Field
 from pydantic import Tag
 from pydantic import model_validator
@@ -149,6 +152,32 @@ class CIBabysitterConfig(SerializableModel):
     )
 
 
+# Night mode is stored as a single value with three cases so that no combination of
+# fields can express a contradictory state: "off", "on", or the absolute instant the
+# override expires. The expiry is an absolute instant rather than a wall-clock time so
+# that it survives a restart, a timezone change, and a machine that was asleep when it
+# passed.
+NIGHT_MODE_OFF: Literal["off"] = "off"
+NIGHT_MODE_ON: Literal["on"] = "on"
+NightMode = Literal["off", "on"] | AwareDatetime
+
+
+def is_night_mode_active(night_mode: NightMode, now: datetime) -> bool:
+    """Return whether the night-mode override applies at ``now``.
+
+    ``now`` must be timezone-aware; the expiry case compares two absolute instants.
+    """
+    if isinstance(night_mode, datetime):
+        return now < night_mode
+    match night_mode:
+        case "off":
+            return False
+        case "on":
+            return True
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 class UserConfig(SerializableModel):
     """Most configuration for user and for Sculptor app behavior should go here.
 
@@ -287,6 +316,14 @@ class UserConfig(SerializableModel):
     default_fast_mode: bool = Field(
         default=False,
         description="When enabled, new agents default to fast mode",
+    )
+    night_mode: NightMode = Field(
+        default=NIGHT_MODE_OFF,
+        description=(
+            "Global override that forces every Claude agent off fast mode, so overnight work bills at"
+            + ' standard rates instead of fast mode\'s premium. "off" disables the override, "on" holds it'
+            + " indefinitely, and a timestamp holds it until that instant passes."
+        ),
     )
     # pyrefly: ignore [bad-assignment]
     default_effort_level: Literal["low", "medium", "high", "xhigh", "max"] = Field(

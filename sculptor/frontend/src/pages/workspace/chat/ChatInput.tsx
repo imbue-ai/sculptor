@@ -10,6 +10,7 @@ import { CAPABILITY_UNSUPPORTED_COPY } from "~/common/hooks/useCapabilityGate.ts
 import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/useKeybinding.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import { useNightModeSuppressionReason } from "~/common/state/hooks/useNightModeSuppressionReason.ts";
 import { mergeClasses } from "~/common/utils/classNames.ts";
 import { HTTPException } from "~/common/utils/errors.ts";
 import { processAndValidateFiles, saveFiles } from "~/common/utils/fileUpload.ts";
@@ -204,6 +205,7 @@ export const ChatInput = ({
   // Per-agent fast-mode and effort preference, persisted in localStorage,
   // seeded lazily from the user default once userConfig loads.
   const [isStoredFastMode, setStoredFastMode] = useAtom(fastModeAtomFamily(agentId ?? ""));
+  const fastModeSuppressedReason = useNightModeSuppressionReason();
   const [storedEffort, setStoredEffort] = useAtom(effortAtomFamily(agentId ?? ""));
 
   const isFastMode = isStoredFastMode ?? isDefaultFastMode;
@@ -1057,7 +1059,11 @@ export const ChatInput = ({
                     </Tooltip>
                   </CapabilityGate>
                   {modelCapabilities.supportsFastMode && canUseFastMode && (
-                    <FastModeToggle isActive={isFastMode} onToggle={() => setIsFastMode(!isFastMode)} />
+                    <FastModeToggle
+                      isActive={isFastMode}
+                      onToggle={() => setIsFastMode(!isFastMode)}
+                      suppressedReason={fastModeSuppressedReason}
+                    />
                   )}
                   <EffortSelector effort={effort} onEffortChange={setEffort} />
                   <Flex pr="1">
