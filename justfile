@@ -440,6 +440,7 @@ test-unit junitxml="":
     just test-unit-backend {{ if junitxml != "" { "sculptor/pytest_junit.xml" } else { "" } }}
     just test-unit-frontend
     just test-unit-foundation
+    just test-unit-container
     just test-unit-sculpt {{ if junitxml != "" { "sculpt_junit.xml" } else { "" } }}
 
 # Run foundation unit tests (the former imbue_core library, now sculptor.foundation).
@@ -454,6 +455,21 @@ test-unit-foundation:
       env -u SESSION_TOKEN PROJECT_PATH=/tmp/repo GOOGLE_API_KEY=fake ANTHROPIC_API_KEY=fake uv run --project sculptor pytest -n "${SCULPTOR_TEST_WORKERS:-8}" sculptor/sculptor/foundation/ -m "not integration and not acceptance"
     }
     quiet_by_default test-unit-foundation _do_test_unit_foundation
+
+# Run container recipe unit tests.
+# The recipe is a standalone copy-and-customize script outside the sculptor package, so it
+# gets its own invocation rather than joining test-unit-backend, whose pytest rootdir is
+# sculptor/ (adding a second top-level path there would move the rootdir to the repo root
+# and lose sculptor/pytest.ini, which registers the markers that run's -m filter relies on).
+[group("ci")]
+test-unit-container:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _do_test_unit_container() {
+      env -u SESSION_TOKEN uv run --project sculptor pytest "{{justfile_directory()}}/container/"
+    }
+    quiet_by_default test-unit-container _do_test_unit_container
 
 # Run sculpt CLI unit tests
 # Pass a path to junitxml to output JUnit XML for CI
