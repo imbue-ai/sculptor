@@ -1042,6 +1042,19 @@ class TestAuthLogin:
 
 
 class TestCheckAuthenticated:
+    @pytest.fixture(autouse=True)
+    def sculptor_folder(self, tmp_path: Path) -> Iterator[Path]:
+        """Point the probe's global-``.env`` lookup at a folder the test owns.
+
+        ``check_authenticated`` reads ``<sculptor folder>/.env`` on every call, so
+        a developer machine that has one would otherwise change what the probe is
+        handed. Tests needing a populated file request this fixture and write into it.
+        """
+        folder = tmp_path / "sculptor_folder"
+        folder.mkdir()
+        with patch("sculptor.services.dependency_management_service.get_sculptor_folder", return_value=folder):
+            yield folder
+
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("shutil.which", return_value="/usr/bin/claude")
     def test_authenticated(self, mock_which: MagicMock, mock_config: MagicMock) -> None:
@@ -1068,20 +1081,17 @@ class TestCheckAuthenticated:
             env=None,
         )
 
-    @patch("sculptor.services.dependency_management_service.get_sculptor_folder")
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("shutil.which", return_value="/usr/bin/claude")
     def test_global_env_file_credential_reaches_probe(
         self,
         mock_which: MagicMock,
         mock_config: MagicMock,
-        mock_sculptor_folder: MagicMock,
-        tmp_path: Path,
+        sculptor_folder: Path,
     ) -> None:
         """A credential set only in ``~/.sculptor/.env`` must reach the probe."""
         mock_config.return_value = _make_user_config(claude_binary_mode="claude")
-        mock_sculptor_folder.return_value = tmp_path
-        (tmp_path / ".env").write_text("CLAUDE_CODE_OAUTH_TOKEN=token-from-env-file\n")
+        (sculptor_folder / ".env").write_text("CLAUDE_CODE_OAUTH_TOKEN=token-from-env-file\n")
 
         mock_cg = MagicMock()
         mock_cg.run_process_to_completion.return_value = FinishedProcess(
@@ -1103,26 +1113,23 @@ class TestCheckAuthenticated:
         "override_enabled,expected",
         [(False, "from-os-environ"), (True, "from-env-file")],
     )
-    @patch("sculptor.services.dependency_management_service.get_sculptor_folder")
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("shutil.which", return_value="/usr/bin/claude")
     def test_probe_precedence_matches_the_agent_environment(
         self,
         mock_which: MagicMock,
         mock_config: MagicMock,
-        mock_sculptor_folder: MagicMock,
         override_enabled: bool,
         expected: str,
-        tmp_path: Path,
+        sculptor_folder: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Collisions must resolve as ``LocalEnvironment.run_process`` does, or the
-        probe reads a different credential than the agent it reports on."""
+        """Collisions must resolve as ``LocalEnvironment._run_process_in_background`` does,
+        or the probe reads a different credential than the agent it reports on."""
         mock_config.return_value = _make_user_config(
             claude_binary_mode="claude", env_var_override_enabled=override_enabled
         )
-        mock_sculptor_folder.return_value = tmp_path
-        (tmp_path / ".env").write_text("SCTEST_PROBE_TOKEN=from-env-file\n")
+        (sculptor_folder / ".env").write_text("SCTEST_PROBE_TOKEN=from-env-file\n")
         monkeypatch.setenv("SCTEST_PROBE_TOKEN", "from-os-environ")
 
         mock_cg = MagicMock()
@@ -1141,20 +1148,17 @@ class TestCheckAuthenticated:
         assert probe_env is not None
         assert probe_env["SCTEST_PROBE_TOKEN"] == expected
 
-    @patch("sculptor.services.dependency_management_service.get_sculptor_folder")
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("shutil.which", return_value="/usr/bin/gh")
     def test_env_file_overlay_also_applies_to_gh(
         self,
         mock_which: MagicMock,
         mock_config: MagicMock,
-        mock_sculptor_folder: MagicMock,
-        tmp_path: Path,
+        sculptor_folder: Path,
     ) -> None:
         """``gh`` has the same split-brain problem as claude, so it gets the overlay too."""
         mock_config.return_value = _make_user_config()
-        mock_sculptor_folder.return_value = tmp_path
-        (tmp_path / ".env").write_text("GH_TOKEN=gh-token-from-env-file\n")
+        (sculptor_folder / ".env").write_text("GH_TOKEN=gh-token-from-env-file\n")
 
         mock_cg = MagicMock()
         mock_cg.run_process_to_completion.return_value = FinishedProcess(

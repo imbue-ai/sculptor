@@ -856,7 +856,7 @@ class DependencyManagementService(Service):
         """Environment for the ``auth status`` probe, overlaying ``~/.sculptor/.env``.
 
         Agents get the user's ``.env`` values merged into their environment (see
-        ``LocalEnvironment.run_process``), but the backend's own ``os.environ``
+        ``LocalEnvironment._run_process_in_background``), but the backend's own ``os.environ``
         never does, so a credential configured only there — a token, or a
         ``CLAUDE_CONFIG_DIR`` pointing at the store holding one — would leave
         Sculptor reporting the tool unauthenticated while the agent it launches
@@ -864,7 +864,7 @@ class DependencyManagementService(Service):
 
         Only the global file applies: the probe is project-agnostic, so there is
         no per-project ``.sculptor/.env`` to resolve. Precedence mirrors
-        ``LocalEnvironment.run_process`` so a collision resolves to the same
+        ``LocalEnvironment._run_process_in_background`` so a collision resolves to the same
         credential the agent will use. None means "inherit ``os.environ``".
         """
         env_file_vars = parse_env_file(get_sculptor_folder() / ".env")
