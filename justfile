@@ -460,7 +460,7 @@ test-unit-foundation:
 # The recipe is a standalone copy-and-customize script outside the sculptor package, so it
 # gets its own invocation rather than joining test-unit-backend, whose pytest rootdir is
 # sculptor/ (adding a second top-level path there would move the rootdir to the repo root
-# and lose sculptor/pytest.ini, which registers the markers that run's -m filter relies on).
+# and lose sculptor/pytest.ini, which registers the markers that target's -m filter needs).
 [group("ci")]
 test-unit-container:
     #!/usr/bin/env bash

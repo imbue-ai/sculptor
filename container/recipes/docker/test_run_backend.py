@@ -16,8 +16,6 @@ import pytest
 
 _SCRIPT_PATH = Path(__file__).parent / "run-backend.py"
 
-# Every host variable the recipe forwards, so a test asserting absence cannot be
-# fooled by one of these leaking in from the ambient environment.
 _FORWARDED_CREDENTIALS = ("SESSION_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
 
 
@@ -33,7 +31,7 @@ def recipe() -> ModuleType:
 
 @pytest.fixture(autouse=True)
 def clean_credential_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Start every test from a host with none of the forwarded variables set."""
+    """Clear the forwarded variables, so absence assertions test the recipe and not the host."""
     for name in _FORWARDED_CREDENTIALS:
         monkeypatch.delenv(name, raising=False)
     yield
@@ -48,12 +46,7 @@ def _forwarded_env(recipe: ModuleType, **config_kwargs: object) -> dict[str, str
 
 
 def test_oauth_token_is_forwarded_when_set(recipe: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The subscription credential must reach the container.
-
-    Without it, a macOS host has no way to authenticate the in-container claude
-    short of a separate sign-in, because the host's own credentials live in a
-    keychain the container cannot read.
-    """
+    """The subscription credential must reach the container."""
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-token-value")
 
     assert _forwarded_env(recipe)["CLAUDE_CODE_OAUTH_TOKEN"] == "oauth-token-value"
@@ -72,7 +65,7 @@ def test_session_token_is_forwarded_when_set(recipe: ModuleType, monkeypatch: py
 
 
 def test_debug_env_keys_are_forwarded(recipe: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keys named by _DEBUGSCULPTOR_ENV_KEYS reach the container alongside the credentials."""
+    """Keys named by _DEBUGSCULPTOR_ENV_KEYS reach the container too."""
     monkeypatch.setenv("SOME_DEBUG_VAR", "debug-value")
 
     forwarded = _forwarded_env(recipe, extra_env_keys=["SOME_DEBUG_VAR"])
