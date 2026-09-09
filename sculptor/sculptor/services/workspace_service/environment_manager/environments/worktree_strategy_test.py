@@ -41,6 +41,17 @@ def _current_branch(repo: Path) -> str:
     ).stdout.strip()
 
 
+def _commit_unmerged_change(worktree: Path) -> None:
+    (worktree / "new.txt").write_text("new")
+    subprocess.run(["git", "add", "."], cwd=worktree, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=t@t.com", "commit", "-m", "unmerged"],
+        cwd=worktree,
+        check=True,
+        capture_output=True,
+    )
+
+
 def test_create_worktree_happy_path(tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup) -> None:
     user_repo = tmp_path / "user"
     _make_repo(user_repo, "main")
@@ -181,14 +192,7 @@ def test_remove_worktree_delete_if_safe_unmerged_branch_preserves(
         base_ref="main",
         new_branch="feat/x",
     )
-    (destination / "new.txt").write_text("new")
-    subprocess.run(["git", "add", "."], cwd=destination, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "-c", "user.name=Test", "-c", "user.email=t@t.com", "commit", "-m", "unmerged"],
-        cwd=destination,
-        check=True,
-        capture_output=True,
-    )
+    _commit_unmerged_change(destination)
 
     with expect_exact_logged_errors(["{}: {}"]):
         remove_worktree(
@@ -216,14 +220,7 @@ def test_remove_worktree_always_force_deletes_unmerged_branch(
         base_ref="main",
         new_branch="feat/x",
     )
-    (destination / "new.txt").write_text("new")
-    subprocess.run(["git", "add", "."], cwd=destination, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "-c", "user.name=Test", "-c", "user.email=t@t.com", "commit", "-m", "unmerged"],
-        cwd=destination,
-        check=True,
-        capture_output=True,
-    )
+    _commit_unmerged_change(destination)
 
     remove_worktree(
         user_repo_path=user_repo,
@@ -264,3 +261,124 @@ def test_remove_worktree_is_idempotent(tmp_path: Path, test_root_concurrency_gro
             deletion_policy="never",
             concurrency_group=test_root_concurrency_group,
         )
+
+
+def test_remove_worktree_deletes_branch_renamed_inside_worktree(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """A branch renamed after creation (e.g. by the agent's auto-rename) is still cleaned up."""
+    user_repo = tmp_path / "user"
+    _make_repo(user_repo, "main")
+    destination = tmp_path / "worktree"
+    create_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        concurrency_group=test_root_concurrency_group,
+        base_ref="main",
+        new_branch="user/random-slug",
+    )
+    subprocess.run(["git", "branch", "-m", "user/descriptive-name"], cwd=destination, check=True, capture_output=True)
+    assert _current_branch(destination) == "user/descriptive-name"
+
+    remove_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        branch_name="user/random-slug",
+        deletion_policy="delete_if_safe",
+        concurrency_group=test_root_concurrency_group,
+    )
+
+    assert not destination.exists()
+    assert not _branch_exists(user_repo, "user/descriptive-name")
+    assert not _branch_exists(user_repo, "user/random-slug")
+
+
+def test_remove_worktree_force_deletes_renamed_unmerged_branch_under_always(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    user_repo = tmp_path / "user"
+    _make_repo(user_repo, "main")
+    destination = tmp_path / "worktree"
+    create_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        concurrency_group=test_root_concurrency_group,
+        base_ref="main",
+        new_branch="user/random-slug",
+    )
+    subprocess.run(["git", "branch", "-m", "user/descriptive-name"], cwd=destination, check=True, capture_output=True)
+    _commit_unmerged_change(destination)
+
+    remove_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        branch_name="user/random-slug",
+        deletion_policy="always",
+        concurrency_group=test_root_concurrency_group,
+    )
+
+    assert not destination.exists()
+    assert not _branch_exists(user_repo, "user/descriptive-name")
+
+
+def test_remove_worktree_leaves_foreign_checked_out_branch_alone(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """Checking out a pre-existing branch in the worktree must not get that branch deleted.
+
+    The worktree's own (still existing) branch is the one the policy applies to.
+    """
+    user_repo = tmp_path / "user"
+    _make_repo(user_repo, "main")
+    subprocess.run(["git", "-C", str(user_repo), "branch", "someone-elses-work"], check=True, capture_output=True)
+    destination = tmp_path / "worktree"
+    create_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        concurrency_group=test_root_concurrency_group,
+        base_ref="main",
+        new_branch="user/random-slug",
+    )
+    subprocess.run(["git", "checkout", "someone-elses-work"], cwd=destination, check=True, capture_output=True)
+    _commit_unmerged_change(destination)
+
+    remove_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        branch_name="user/random-slug",
+        deletion_policy="always",
+        concurrency_group=test_root_concurrency_group,
+    )
+
+    assert not destination.exists()
+    assert _branch_exists(user_repo, "someone-elses-work")
+    assert not _branch_exists(user_repo, "user/random-slug")
+
+
+def test_remove_worktree_leaves_branches_alone_when_rename_cannot_be_identified(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """With the created branch gone and HEAD detached, no branch can be attributed to the workspace."""
+    user_repo = tmp_path / "user"
+    _make_repo(user_repo, "main")
+    destination = tmp_path / "worktree"
+    create_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        concurrency_group=test_root_concurrency_group,
+        base_ref="main",
+        new_branch="user/random-slug",
+    )
+    subprocess.run(["git", "branch", "-m", "user/descriptive-name"], cwd=destination, check=True, capture_output=True)
+    subprocess.run(["git", "checkout", "--detach"], cwd=destination, check=True, capture_output=True)
+
+    remove_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        branch_name="user/random-slug",
+        deletion_policy="always",
+        concurrency_group=test_root_concurrency_group,
+    )
+
+    assert not destination.exists()
+    assert _branch_exists(user_repo, "user/descriptive-name")
