@@ -4,21 +4,22 @@ import type { ReactElement } from "react";
 import { ElementIds } from "~/api";
 import {
   getDefaultNightModeExpiry,
-  getNightModeExpiry,
-  getNightModeKind,
   NIGHT_MODE_OFF,
   NIGHT_MODE_ON,
   type NightModeKind,
+  parseNightMode,
   toDateTimeLocalValue,
 } from "~/common/nightMode.ts";
 
 import { SettingRow } from "./SettingRow.tsx";
 
-const KIND_LABELS: Record<NightModeKind, string> = {
-  off: "Off",
-  on: "On",
-  until: "Until…",
-};
+// An ordered list rather than a label map, so the rendered order is stated here
+// instead of resting on object key order.
+const KIND_OPTIONS: ReadonlyArray<{ kind: NightModeKind; label: string }> = [
+  { kind: "off", label: "Off" },
+  { kind: "on", label: "On" },
+  { kind: "until", label: "Until…" },
+];
 
 type NightModeSettingRowProps = {
   nightMode: string;
@@ -32,13 +33,12 @@ type NightModeSettingRowProps = {
  * overnight case costs one choice instead of a full date and time.
  */
 export const NightModeSettingRow = ({ nightMode, onChange }: NightModeSettingRowProps): ReactElement => {
-  const kind = getNightModeKind(nightMode);
-  const expiry = getNightModeExpiry(nightMode);
+  const state = parseNightMode(nightMode);
 
   const handleKindChange = (nextKind: string): void => {
-    if (nextKind === "off") {
+    if (nextKind === NIGHT_MODE_OFF) {
       onChange(NIGHT_MODE_OFF);
-    } else if (nextKind === "on") {
+    } else if (nextKind === NIGHT_MODE_ON) {
       onChange(NIGHT_MODE_ON);
     } else {
       onChange(getDefaultNightModeExpiry(new Date()).toISOString());
@@ -60,20 +60,20 @@ export const NightModeSettingRow = ({ nightMode, onChange }: NightModeSettingRow
       description="Run every Claude agent without fast mode, so overnight work bills at standard rates rather than fast mode's premium. Agents pick fast mode back up on their own once it ends."
     >
       <Flex gap="2" align="center" justify="end" wrap="wrap">
-        <Select.Root value={kind} onValueChange={handleKindChange}>
+        <Select.Root value={state.kind} onValueChange={handleKindChange}>
           <Select.Trigger variant="soft" data-testid={ElementIds.SETTINGS_NIGHT_MODE_SELECT} />
           <Select.Content>
-            {(Object.keys(KIND_LABELS) as Array<NightModeKind>).map((option) => (
-              <Select.Item key={option} value={option} data-testid={ElementIds.SETTINGS_NIGHT_MODE_OPTION}>
-                {KIND_LABELS[option]}
+            {KIND_OPTIONS.map(({ kind, label }) => (
+              <Select.Item key={kind} value={kind} data-testid={ElementIds.SETTINGS_NIGHT_MODE_OPTION}>
+                {label}
               </Select.Item>
             ))}
           </Select.Content>
         </Select.Root>
-        {expiry !== null && (
+        {state.kind === "until" && (
           <TextField.Root
             type="datetime-local"
-            value={toDateTimeLocalValue(expiry)}
+            value={toDateTimeLocalValue(state.expiry)}
             onChange={(event) => handleExpiryChange(event.target.value)}
             data-testid={ElementIds.SETTINGS_NIGHT_MODE_UNTIL_INPUT}
           />

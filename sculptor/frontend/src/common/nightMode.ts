@@ -15,38 +15,44 @@
 export const NIGHT_MODE_OFF = "off";
 export const NIGHT_MODE_ON = "on";
 
-export type NightModeKind = "off" | "on" | "until";
+/** The stored setting with its three cases resolved, so no case implies another. */
+export type NightModeState =
+  | { readonly kind: "off" }
+  | { readonly kind: "on" }
+  | { readonly kind: "until"; readonly expiry: Date };
 
-export const getNightModeKind = (nightMode: string): NightModeKind => {
+export type NightModeKind = NightModeState["kind"];
+
+/**
+ * Resolve the stored string into its case.
+ *
+ * The generated API type widens the backend's three-case union to `string`, so
+ * this is where the frontend pins the value down. An instant it cannot parse
+ * resolves to "off", leaving agents on the user's own fast-mode choice rather
+ * than suppressing it on the strength of a value nobody can read.
+ */
+export const parseNightMode = (nightMode: string): NightModeState => {
   if (nightMode === NIGHT_MODE_OFF) {
-    return "off";
+    return { kind: "off" };
   }
 
   if (nightMode === NIGHT_MODE_ON) {
-    return "on";
-  }
-  return "until";
-};
-
-export const getNightModeExpiry = (nightMode: string): Date | null => {
-  if (getNightModeKind(nightMode) !== "until") {
-    return null;
+    return { kind: "on" };
   }
   const expiry = new Date(nightMode);
-  return Number.isNaN(expiry.getTime()) ? null : expiry;
+  return Number.isNaN(expiry.getTime()) ? { kind: "off" } : { kind: "until", expiry };
 };
 
 export const isNightModeActive = (nightMode: string, now: Date): boolean => {
-  const kind = getNightModeKind(nightMode);
-  if (kind === "off") {
-    return false;
+  const state = parseNightMode(nightMode);
+  switch (state.kind) {
+    case "off":
+      return false;
+    case "on":
+      return true;
+    case "until":
+      return now < state.expiry;
   }
-
-  if (kind === "on") {
-    return true;
-  }
-  const expiry = getNightModeExpiry(nightMode);
-  return expiry !== null && now < expiry;
 };
 
 const NIGHT_MODE_DEFAULT_WAKE_HOUR = 8;
@@ -86,12 +92,15 @@ export const formatNightModeExpiry = (expiry: Date): string =>
  * toggle from silently disagreeing with what the agent will actually do.
  */
 export const getNightModeSuppressionReason = (nightMode: string, now: Date): string | null => {
-  if (!isNightModeActive(nightMode, now)) {
-    return null;
+  const state = parseNightMode(nightMode);
+  switch (state.kind) {
+    case "off":
+      return null;
+    case "on":
+      return "Night mode is on, so agents run without fast mode";
+    case "until":
+      return now < state.expiry
+        ? `Night mode is on until ${formatNightModeExpiry(state.expiry)}, so agents run without fast mode`
+        : null;
   }
-  const expiry = getNightModeExpiry(nightMode);
-  if (expiry === null) {
-    return "Night mode is on, so agents run without fast mode";
-  }
-  return `Night mode is on until ${formatNightModeExpiry(expiry)}, so agents run without fast mode`;
 };

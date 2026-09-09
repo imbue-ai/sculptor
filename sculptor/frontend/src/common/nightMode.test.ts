@@ -3,20 +3,27 @@ import { describe, expect, it } from "vitest";
 import {
   formatNightModeExpiry,
   getDefaultNightModeExpiry,
-  getNightModeExpiry,
-  getNightModeKind,
   getNightModeSuppressionReason,
   isNightModeActive,
   NIGHT_MODE_OFF,
   NIGHT_MODE_ON,
+  parseNightMode,
   toDateTimeLocalValue,
 } from "~/common/nightMode";
 
-describe("getNightModeKind", () => {
-  it("distinguishes the three stored states", () => {
-    expect(getNightModeKind(NIGHT_MODE_OFF)).toBe("off");
-    expect(getNightModeKind(NIGHT_MODE_ON)).toBe("on");
-    expect(getNightModeKind("2026-09-10T08:00:00Z")).toBe("until");
+describe("parseNightMode", () => {
+  it("resolves the three stored states, carrying the instant on the expiring one", () => {
+    expect(parseNightMode(NIGHT_MODE_OFF)).toEqual({ kind: "off" });
+    expect(parseNightMode(NIGHT_MODE_ON)).toEqual({ kind: "on" });
+    expect(parseNightMode("2026-09-10T08:00:00Z")).toEqual({
+      kind: "until",
+      expiry: new Date("2026-09-10T08:00:00Z"),
+    });
+  });
+
+  it("resolves a value it cannot parse to off, leaving fast mode to the user's own choice", () => {
+    expect(parseNightMode("not-an-instant")).toEqual({ kind: "off" });
+    expect(isNightModeActive("not-an-instant", new Date("2026-09-10T03:00:00Z"))).toBe(false);
   });
 });
 
@@ -35,14 +42,6 @@ describe("isNightModeActive", () => {
     expect(isNightModeActive("2026-09-10T08:00:00Z", now)).toBe(true);
     expect(isNightModeActive("2026-09-10T08:00:00Z", new Date("2026-09-10T08:00:00Z"))).toBe(false);
     expect(isNightModeActive("2026-09-10T02:00:00Z", now)).toBe(false);
-  });
-});
-
-describe("getNightModeExpiry", () => {
-  it("returns the instant for a timestamp and null for the fixed states", () => {
-    expect(getNightModeExpiry("2026-09-10T08:00:00Z")?.toISOString()).toBe("2026-09-10T08:00:00.000Z");
-    expect(getNightModeExpiry(NIGHT_MODE_OFF)).toBeNull();
-    expect(getNightModeExpiry(NIGHT_MODE_ON)).toBeNull();
   });
 });
 

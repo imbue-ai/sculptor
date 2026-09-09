@@ -30,7 +30,6 @@ export const FastModeToggle = ({ isActive, onToggle, suppressedReason }: FastMod
       aria-label="Toggle fast mode"
       data-testid={ElementIds.FAST_MODE_TOGGLE}
       data-active={isShownActive}
-      data-suppressed={isSuppressed}
       style={{ margin: 0, color: isShownActive ? "var(--button-primary-bg)" : undefined }}
     >
       <Zap size={16} />

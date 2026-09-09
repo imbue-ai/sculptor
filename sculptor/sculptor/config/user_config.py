@@ -167,13 +167,13 @@ def is_night_mode_active(night_mode: NightMode, now: datetime) -> bool:
 
     ``now`` must be timezone-aware; the expiry case compares two absolute instants.
     """
-    if isinstance(night_mode, datetime):
-        return now < night_mode
     match night_mode:
         case "off":
             return False
         case "on":
             return True
+        case datetime():
+            return now < night_mode
         case _ as unreachable:
             assert_never(unreachable)
 
