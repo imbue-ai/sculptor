@@ -8,10 +8,8 @@ type FastModeToggleProps = {
   isActive: boolean;
   onToggle: () => void;
   /**
-   * Why fast mode is unavailable, when it is. The toggle then renders inactive
-   * and disabled instead of reflecting the stored preference, so it never
-   * promises a speed the turn will not launch with. The preference itself is
-   * left untouched and applies again once the reason clears.
+   * Why fast mode is unavailable, when it is. The stored preference is left
+   * untouched and applies again once the reason clears.
    */
   suppressedReason?: string | null;
 };
@@ -40,7 +38,7 @@ export const FastModeToggle = ({ isActive, onToggle, suppressedReason }: FastMod
     <Tooltip content={suppressedReason ?? (isActive ? "Disable fast mode" : "Enable fast mode")}>
       {/* Radix Tooltip does not fire on a disabled button (it sets
           pointer-events: none), so the suppressed branch hangs the hover
-          target on a wrapping span — the same handling CapabilityGate uses. */}
+          target on a wrapping span. */}
       {isSuppressed ? <span style={{ display: "inline-flex" }}>{button}</span> : button}
     </Tooltip>
   );

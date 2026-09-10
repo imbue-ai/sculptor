@@ -153,20 +153,16 @@ class CIBabysitterConfig(SerializableModel):
 
 
 # Night mode is stored as a single value with three cases so that no combination of
-# fields can express a contradictory state: "off", "on", or the absolute instant the
-# override expires. The expiry is an absolute instant rather than a wall-clock time so
-# that it survives a restart, a timezone change, and a machine that was asleep when it
-# passed.
+# fields can express a contradictory state. The expiry is an absolute instant rather
+# than a wall-clock time so that it survives a restart, a timezone change, and a
+# machine that was asleep when it passed.
 NIGHT_MODE_OFF: Literal["off"] = "off"
 NIGHT_MODE_ON: Literal["on"] = "on"
 NightMode = Literal["off", "on"] | AwareDatetime
 
 
 def is_night_mode_active(night_mode: NightMode, now: datetime) -> bool:
-    """Return whether the night-mode override applies at ``now``.
-
-    ``now`` must be timezone-aware; the expiry case compares two absolute instants.
-    """
+    """Return whether the night-mode override applies at ``now``, which must be timezone-aware."""
     match night_mode:
         case "off":
             return False

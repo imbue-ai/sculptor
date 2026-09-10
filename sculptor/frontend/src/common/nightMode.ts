@@ -15,7 +15,6 @@
 export const NIGHT_MODE_OFF = "off";
 export const NIGHT_MODE_ON = "on";
 
-/** The stored setting with its three cases resolved, so no case implies another. */
 export type NightModeState =
   | { readonly kind: "off" }
   | { readonly kind: "on" }
@@ -61,8 +60,8 @@ const NIGHT_MODE_DEFAULT_WAKE_HOUR = 8;
  * The next 8am local time — when a night's work is expected to be picked back up.
  *
  * Prefilling this makes the overnight case a single choice rather than a date
- * and a time. An expiry that has already passed would leave night mode inert,
- * so 8am today is only offered while it is still ahead.
+ * and a time. Only an 8am still ahead is offered; a past instant would leave
+ * night mode inert.
  */
 export const getDefaultNightModeExpiry = (now: Date): Date => {
   const expiry = new Date(now);
@@ -88,8 +87,7 @@ export const formatNightModeExpiry = (expiry: Date): string =>
  * Why fast mode is unavailable right now, or null when it is available.
  *
  * The fast-mode preference is overridden for display rather than overwritten, so
- * it returns on its own once night mode lapses; this is the text that keeps the
- * toggle from silently disagreeing with what the agent will actually do.
+ * it returns on its own once night mode lapses.
  */
 export const getNightModeSuppressionReason = (nightMode: string, now: Date): string | null => {
   const state = parseNightMode(nightMode);

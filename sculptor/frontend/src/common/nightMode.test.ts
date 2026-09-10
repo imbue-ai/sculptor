@@ -47,11 +47,9 @@ describe("isNightModeActive", () => {
 
 describe("getDefaultNightModeExpiry", () => {
   it("is the next 8am local, so the overnight case is one click", () => {
-    // Late evening -> tomorrow morning.
     expect(getDefaultNightModeExpiry(new Date(2026, 8, 9, 23, 30))).toEqual(new Date(2026, 8, 10, 8, 0, 0, 0));
-    // Small hours -> later the same morning.
     expect(getDefaultNightModeExpiry(new Date(2026, 8, 10, 3, 0))).toEqual(new Date(2026, 8, 10, 8, 0, 0, 0));
-    // Exactly 8am -> the following day, never a moment already past.
+    // On the hour itself, the following day — never an instant already past.
     expect(getDefaultNightModeExpiry(new Date(2026, 8, 10, 8, 0))).toEqual(new Date(2026, 8, 11, 8, 0, 0, 0));
   });
 });

@@ -221,7 +221,5 @@ export const isDefaultFastModeAtom = atom<boolean>((get) => get(userConfigAtom)?
 
 export const defaultEffortLevelAtom = atom<string>((get) => get(userConfigAtom)?.defaultEffortLevel ?? "xhigh");
 
-// The global night-mode override. See `~/common/nightMode` for the encoding; the
-// backend re-resolves it at every turn launch and is the authority on whether a
-// turn runs fast.
+// The global night-mode override; see `~/common/nightMode` for the encoding.
 export const nightModeAtom = atom<string>((get) => get(userConfigAtom)?.nightMode ?? NIGHT_MODE_OFF);

@@ -9,8 +9,6 @@ import { nightModeAtom } from "../atoms/userConfig.ts";
 const NIGHT_MODE_TICK_INTERVAL_MS = 60_000;
 
 /**
- * Why fast mode is unavailable right now, or null when it is available.
- *
  * An "until" override lapses with the clock rather than with a server event, so
  * the reference instant is refreshed on a timer; without it the toggle would
  * stay greyed out past the expiry until something unrelated re-rendered. The

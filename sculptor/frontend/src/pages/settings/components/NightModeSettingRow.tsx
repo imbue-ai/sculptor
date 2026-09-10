@@ -13,8 +13,6 @@ import {
 
 import { SettingRow } from "./SettingRow.tsx";
 
-// An ordered list rather than a label map, so the rendered order is stated here
-// instead of resting on object key order.
 const KIND_OPTIONS: ReadonlyArray<{ kind: NightModeKind; label: string }> = [
   { kind: "off", label: "Off" },
   { kind: "on", label: "On" },
