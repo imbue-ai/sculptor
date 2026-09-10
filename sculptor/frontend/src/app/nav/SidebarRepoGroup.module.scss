@@ -45,12 +45,7 @@ $row-min-height: 28px;
   min-height: $row-min-height;
   padding: 0 var(--space-2);
   position: sticky;
-  // A sticky offset resolves against the scroller's CONTENT box, and .repoList
-  // (WorkspaceSidebar.module.scss) pads itself vertically by --space-1 — so
-  // `top: 0` would park the header a padding-width down and leave a strip above
-  // it where the rows sliding past stay visible. Cancel that padding to pin the
-  // header flush against the top of the scrollport.
-  top: calc(-1 * var(--space-1));
+  top: 0;
   z-index: var(--z-sticky);
 
   &:hover {
