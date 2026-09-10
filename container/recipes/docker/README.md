@@ -69,6 +69,7 @@ If `SCULPTOR_BINARIES_DIR` or `SCULPTOR_BACKEND_PATH` is set, the directory is b
 |---|---|
 | `SESSION_TOKEN` | Set automatically by Electron |
 | `ANTHROPIC_API_KEY` | Forwarded to the container if set |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Forwarded to the container if set; lets the in-container `claude` reuse your host login instead of signing in again |
 
 ## File Overview
 

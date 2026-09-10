@@ -158,17 +158,12 @@ def build_docker_args(config: ContainerConfig) -> list[str]:
     # Debug env vars
     docker_args += build_debug_env_args(config)
 
-    # Passthrough env vars
-    session_token = os.environ.get("SESSION_TOKEN", "")
-    if session_token:
-        docker_args += ["-e", f"SESSION_TOKEN={session_token}"]
-
-    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if anthropic_api_key:
-        docker_args += ["-e", f"ANTHROPIC_API_KEY={anthropic_api_key}"]
-
-    # Extra env vars from _DEBUGSCULPTOR_ENV_KEYS
-    for key in config.extra_env_keys:
+    # CLAUDE_CODE_OAUTH_TOKEN is the subscription counterpart of ANTHROPIC_API_KEY:
+    # forwarding it lets the container reuse the host's login rather than needing
+    # its own `claude` sign-in, which on macOS is stuck behind a keychain the
+    # container cannot read.
+    passthrough_keys = ("SESSION_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", *config.extra_env_keys)
+    for key in passthrough_keys:
         value = os.environ.get(key, "")
         if value:
             docker_args += ["-e", f"{key}={value}"]

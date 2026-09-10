@@ -69,7 +69,19 @@ Sculptor will ask for your name and email twice during initial setup — once fo
 
 ### Authenticating Claude on macOS
 
-If your host OS is macOS, Claude Code stores credentials in the system keychain, which isn't accessible from inside the container. You'll need to authenticate `claude` within the container environment:
+If your host OS is macOS, Claude Code stores credentials in the system keychain, which isn't accessible from inside the container. There are two ways around this.
+
+**Recommended: forward a long-lived token.** On the host, run `claude setup-token` to mint one, then export it before launching Sculptor:
+
+```bash
+export CLAUDE_CODE_OAUTH_TOKEN=<token>
+```
+
+The recipe forwards this variable into the container, so `claude` there uses it instead of asking you to sign in. Note that the app must be launched from a shell where the variable is exported — starting Sculptor from Finder or the Dock will not pick it up, because the app reads only `PATH` from your login shell.
+
+Be aware that `claude auth status` reports success on the token's *presence* without validating it, so a revoked or expired token shows as authenticated while agent runs fail. If the container starts failing to reach the API, re-mint the token.
+
+**Alternative: sign in inside the container.**
 
 1. Open a terminal inside the running container
 2. Run `claude` to start the initial setup flow
