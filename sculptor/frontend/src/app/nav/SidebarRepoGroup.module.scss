@@ -27,16 +27,37 @@ $row-min-height: 28px;
 // Repo header and workspace rows share the same pill height and full width.
 // min-height (rather than vertical padding) keeps the row height stable even
 // though the header contains a taller "+" icon button.
+//
+// The header pins to the top of the scrolling repo list (.repoList in
+// WorkspaceSidebar.module.scss) while any of its own rows are still on screen,
+// so an expanded group can never leave its workspaces floating under no label.
+// A sticky box is confined to its containing block — .repoGroup — so the header
+// rides out with the group's last row rather than hanging over the next repo,
+// and the following group's header pushes it off as it arrives.
 .repoHeader {
   align-items: center;
+  // Opaque, not transparent: rows scroll BEHIND a pinned header, so an
+  // unpainted one would let them read straight through it.
+  background-color: var(--gray-2);
   border-radius: var(--radius-2);
   display: flex;
   gap: var(--space-1);
   min-height: $row-min-height;
   padding: 0 var(--space-2);
+  position: sticky;
+  // A sticky offset resolves against the scroller's CONTENT box, and .repoList
+  // (WorkspaceSidebar.module.scss) pads itself vertically by --space-1 — so
+  // `top: 0` would park the header a padding-width down and leave a strip above
+  // it where the rows sliding past stay visible. Cancel that padding to pin the
+  // header flush against the top of the scrollport.
+  top: calc(-1 * var(--space-1));
+  z-index: var(--z-sticky);
 
   &:hover {
-    background: var(--gray-a3);
+    // The same --gray-a3 tint the workspace rows use, layered ON TOP of the
+    // opaque base as a background-image rather than replacing it — a bare alpha
+    // background-color would make a pinned header see-through again.
+    background-image: linear-gradient(var(--gray-a3), var(--gray-a3));
   }
 }
 
@@ -294,7 +315,13 @@ $row-min-height: 28px;
 // siblings, whose hover backgrounds and hover-revealed actions would otherwise
 // flicker in under the moving element. The dragged element keeps its own drag
 // surface, and the active row keeps its persistent accent.
-[data-sidebar-drag-active] .repoHeader:hover,
+// Only the header's hover TINT is cleared, never its background-color: the
+// header is pinned, so its opaque base has to survive the drag or the rows
+// passing behind it show through.
+[data-sidebar-drag-active] .repoHeader:hover {
+  background-image: none;
+}
+
 [data-sidebar-drag-active] .workspaceRow:not(.rowDragging, .workspaceRowActive):hover {
   background: transparent;
 }
