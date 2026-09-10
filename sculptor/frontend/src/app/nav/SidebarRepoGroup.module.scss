@@ -315,9 +315,11 @@ $row-min-height: 28px;
 // siblings, whose hover backgrounds and hover-revealed actions would otherwise
 // flicker in under the moving element. The dragged element keeps its own drag
 // surface, and the active row keeps its persistent accent.
-// Only the header's hover TINT is cleared, never its background-color: the
-// header is pinned, so its opaque base has to survive the drag or the rows
-// passing behind it show through.
+//
+// One rule, two spellings, because the two elements hold their hover state
+// differently: a pinned header must keep the opaque base that hides the rows
+// passing behind it, so only its tint is cleared, while a row can drop its
+// background outright.
 [data-sidebar-drag-active] .repoHeader:hover {
   background-image: none;
 }
