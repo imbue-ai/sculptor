@@ -206,6 +206,7 @@ export const ChatInput = ({
   // seeded lazily from the user default once userConfig loads.
   const [isStoredFastMode, setStoredFastMode] = useAtom(fastModeAtomFamily(agentId ?? ""));
   const fastModeSuppressedReason = useNightModeSuppressionReason();
+  const isFastModeSuppressed = fastModeSuppressedReason !== null;
   const [storedEffort, setStoredEffort] = useAtom(effortAtomFamily(agentId ?? ""));
 
   const isFastMode = isStoredFastMode ?? isDefaultFastMode;
@@ -1021,10 +1022,17 @@ export const ChatInput = ({
                     {modelCapabilities.supportsFastMode && canUseFastMode && (
                       <DropdownMenu.Item
                         onSelect={() => setIsFastMode(!isFastMode)}
+                        disabled={isFastModeSuppressed}
                         data-testid={ElementIds.MOBILE_CHAT_INPUT_FAST_MODE_ITEM}
                       >
                         <Zap size={16} /> Fast mode
-                        {isFastMode && <Check size={14} className={styles.menuTrailing} />}
+                        {isFastMode && !isFastModeSuppressed && (
+                          <Check
+                            size={14}
+                            className={styles.menuTrailing}
+                            data-testid={ElementIds.MOBILE_CHAT_INPUT_FAST_MODE_CHECK}
+                          />
+                        )}
                       </DropdownMenu.Item>
                     )}
                   </DropdownMenu.Content>

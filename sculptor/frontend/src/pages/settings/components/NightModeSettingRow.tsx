@@ -55,7 +55,7 @@ export const NightModeSettingRow = ({ nightMode, onChange }: NightModeSettingRow
   return (
     <SettingRow
       title="Night Mode"
-      description="Run every Claude agent without fast mode, so overnight work bills at standard rates rather than fast mode's premium. Agents pick fast mode back up on their own once it ends."
+      description="Turn on Night Mode when leaving agents running unattended. It overrides Fast Mode for every agent, so the same work will cost you less. Your Fast Mode settings will remain untouched and begin to apply again when Night Mode ends."
     >
       <Flex gap="2" align="center" justify="end" wrap="wrap">
         <Select.Root value={state.kind} onValueChange={handleKindChange}>
