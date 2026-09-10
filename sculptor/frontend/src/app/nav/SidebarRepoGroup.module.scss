@@ -227,7 +227,12 @@ $row-min-height: 28px;
   border-radius: var(--radius-2);
   box-shadow: var(--shadow-4);
   position: relative;
-  z-index: var(--z-above);
+  // Above the pinned repo headers (--z-sticky), not merely above its siblings:
+  // once a header pins it hangs over the rows' own extent, so the element the
+  // pointer is carrying would slide in behind it and disappear for the length
+  // of a row. The drag surface has to be the rail's topmost layer for the same
+  // reason it carries a shadow — it is the thing being moved.
+  z-index: calc(var(--z-sticky) + 1);
 
   // The pointer rides the dragged element, whose hover style would otherwise
   // replace the drag surface mid-move — and pop back at the rail's edge where
