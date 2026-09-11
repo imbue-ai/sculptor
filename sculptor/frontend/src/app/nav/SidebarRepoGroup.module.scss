@@ -27,16 +27,32 @@ $row-min-height: 28px;
 // Repo header and workspace rows share the same pill height and full width.
 // min-height (rather than vertical padding) keeps the row height stable even
 // though the header contains a taller "+" icon button.
+//
+// The header pins to the top of the scrolling repo list (.repoList in
+// WorkspaceSidebar.module.scss) while any of its own rows are still on screen,
+// so an expanded group can never leave its workspaces floating under no label.
+// A sticky box is confined to its containing block — .repoGroup — so the header
+// rides out with the group's last row rather than hanging over the next repo,
+// and the following group's header pushes it off as it arrives.
 .repoHeader {
   align-items: center;
+  // Opaque, not transparent: rows scroll BEHIND a pinned header, so an
+  // unpainted one would let them read straight through it.
+  background-color: var(--gray-2);
   border-radius: var(--radius-2);
   display: flex;
   gap: var(--space-1);
   min-height: $row-min-height;
   padding: 0 var(--space-2);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
 
   &:hover {
-    background: var(--gray-a3);
+    // The same --gray-a3 tint the workspace rows use, layered ON TOP of the
+    // opaque base as a background-image rather than replacing it — a bare alpha
+    // background-color would make a pinned header see-through again.
+    background-image: linear-gradient(var(--gray-a3), var(--gray-a3));
   }
 }
 
@@ -211,7 +227,12 @@ $row-min-height: 28px;
   border-radius: var(--radius-2);
   box-shadow: var(--shadow-4);
   position: relative;
-  z-index: var(--z-above);
+  // Above the pinned repo headers (--z-sticky), not merely above its siblings:
+  // once a header pins it hangs over the rows' own extent, so the element the
+  // pointer is carrying would slide in behind it and disappear for the length
+  // of a row. The drag surface has to be the rail's topmost layer for the same
+  // reason it carries a shadow — it is the thing being moved.
+  z-index: calc(var(--z-sticky) + 1);
 
   // The pointer rides the dragged element, whose hover style would otherwise
   // replace the drag surface mid-move — and pop back at the rail's edge where
@@ -294,7 +315,15 @@ $row-min-height: 28px;
 // siblings, whose hover backgrounds and hover-revealed actions would otherwise
 // flicker in under the moving element. The dragged element keeps its own drag
 // surface, and the active row keeps its persistent accent.
-[data-sidebar-drag-active] .repoHeader:hover,
+//
+// One rule, two spellings, because the two elements hold their hover state
+// differently: a pinned header must keep the opaque base that hides the rows
+// passing behind it, so only its tint is cleared, while a row can drop its
+// background outright.
+[data-sidebar-drag-active] .repoHeader:hover {
+  background-image: none;
+}
+
 [data-sidebar-drag-active] .workspaceRow:not(.rowDragging, .workspaceRowActive):hover {
   background: transparent;
 }

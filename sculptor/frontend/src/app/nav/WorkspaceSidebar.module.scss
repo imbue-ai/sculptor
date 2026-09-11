@@ -48,9 +48,21 @@
   flex-shrink: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-1) var(--space-2);
+  padding: 0 var(--space-2);
 
   @include thin-scrollbar(vertical);
+
+  // Breathing room at the list's two ends, carried by the CONTENT rather than
+  // as block padding on the scroller: a repo header pins to the top of this
+  // scrollport (see .repoHeader), and a sticky offset resolves against the
+  // content box — so block padding here would hold every pinned header that
+  // far down, leaving a strip above it that the passing rows show through.
+  &::before,
+  &::after {
+    content: "";
+    display: block;
+    height: var(--space-1);
+  }
 }
 
 .spacer {
