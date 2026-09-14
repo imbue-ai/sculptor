@@ -5,6 +5,7 @@ from datetime import timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_synthetic_diff_from_tool_input
@@ -858,3 +859,39 @@ def test_get_claude_command_omits_settings_flag_when_night_mode_suppresses_fast_
     cmd = _get_command_string(fast_mode=resolve_fast_mode(True, NIGHT_MODE_ON, now))
     assert "--settings" not in cmd
     assert "fastMode" not in cmd
+
+
+_BRANCH_HINT = BranchRenameHint(current_branch="dev/gorgeous-emu", target_template="dev/<slug>")
+
+
+def test_get_user_instructions_adds_the_branch_rename_when_a_hint_is_provided() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=True,
+        branch_rename=_BRANCH_HINT,
+    )
+    assert _AUTO_RENAME_MARKER in result
+    assert "dev/gorgeous-emu" in result
+    assert "git branch -m dev/<slug>" in result
+
+
+def test_get_user_instructions_omits_the_branch_rename_without_a_hint() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(message, file_paths=(), is_first_message=True, enable_auto_rename=True)
+    assert _AUTO_RENAME_MARKER in result
+    assert "git branch -m" not in result
+
+
+def test_get_user_instructions_ignores_the_branch_rename_when_auto_rename_is_disabled() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        enable_auto_rename=False,
+        branch_rename=_BRANCH_HINT,
+    )
+    assert "git branch -m" not in result

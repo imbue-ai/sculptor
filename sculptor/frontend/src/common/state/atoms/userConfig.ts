@@ -199,6 +199,11 @@ export const isEntityMentionsEnabledAtom = atom<boolean>((get) => get(userConfig
 // Auto-rename workspace + agent from the first prompt (experimental — off by default)
 export const isAutoRenameEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableAutoRename ?? false);
 
+// Also auto-rename the placeholder branch (experimental — off by default; only acts while auto-rename is on)
+export const isAutoRenameBranchEnabledAtom = atom<boolean>(
+  (get) => get(userConfigAtom)?.enableAutoRenameBranch ?? false,
+);
+
 // Extension system (experimental — off by default). Gates extension
 // loading at boot and the Extensions settings section. Enabling takes effect
 // immediately (ExtensionLoader bootstraps when the flag turns on); disabling only

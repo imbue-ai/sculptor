@@ -82,6 +82,7 @@ class ClaudeCodeSDKAgent(DefaultAgentWrapper):
             on_diff_needed=self.on_diff_needed,
             workspace_id=self.workspace_id,
             setup_state_provider=self.setup_state_provider,
+            project_naming_pattern=self.project.naming_pattern,
         )
 
     def _push_message(self, message: Message) -> bool:

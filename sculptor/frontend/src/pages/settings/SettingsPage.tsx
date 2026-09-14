@@ -20,6 +20,7 @@ import {
   configuredDefaultModelAtom,
   defaultEffortLevelAtom,
   isAlwaysInterruptAndSendAtom,
+  isAutoRenameBranchEnabledAtom,
   isAutoRenameEnabledAtom,
   isCloneWorkspacesEnabledAtom,
   isDefaultFastModeAtom,
@@ -134,6 +135,7 @@ export const SettingsPage = (): ReactElement => {
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const isAutoRenameEnabled = useAtomValue(isAutoRenameEnabledAtom);
+  const isAutoRenameBranchEnabled = useAtomValue(isAutoRenameBranchEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
@@ -516,12 +518,25 @@ export const SettingsPage = (): ReactElement => {
                   </SettingRow>
                   <SettingRow
                     title="Auto-name workspace and agent"
-                    description="After your first message, the agent is asked to name this workspace and itself based on the task. Set conventions in .sculptor/naming.md (shared with your team) or .sculptor/naming.local.md (personal, git-ignored)."
+                    description="After your first message, the agent names this workspace and itself from the task, following the naming conventions below."
                   >
                     <Switch
                       checked={isAutoRenameEnabled}
                       onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_AUTO_RENAME, checked)}
                       data-testid={ElementIds.SETTINGS_ENABLE_AUTO_RENAME_TOGGLE}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    title="Auto-name branch"
+                    description="The agent also renames the workspace's placeholder branch to match the workspace name, keeping the branch-naming pattern's prefix. Worktree and clone workspaces only; the renamed branch is still cleaned up when the workspace is deleted. Requires auto-naming above."
+                  >
+                    <Switch
+                      checked={isAutoRenameBranchEnabled}
+                      disabled={!isAutoRenameEnabled}
+                      onCheckedChange={(checked) =>
+                        handleSettingChange(UserConfigField.ENABLE_AUTO_RENAME_BRANCH, checked)
+                      }
+                      data-testid={ElementIds.SETTINGS_ENABLE_AUTO_RENAME_BRANCH_TOGGLE}
                     />
                   </SettingRow>
                   <CustomBackendSection setToast={setToast} />

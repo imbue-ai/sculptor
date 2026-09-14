@@ -11,6 +11,7 @@ from typing import final
 from pydantic import BaseModel
 from pydantic import PrivateAttr
 
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import MutableEvent
 from sculptor.foundation.event_utils import ReadOnlyEvent
@@ -74,6 +75,11 @@ class Environment(BaseModel, abc.ABC):
 
         Returns the actual filesystem path to the workspace directory.
         """
+
+    @abc.abstractmethod
+    def get_initialization_strategy(self) -> WorkspaceInitializationStrategy:
+        """How the workspace checkout relates to the user's repository: in-place, clone, or worktree."""
+        ...
 
     @abc.abstractmethod
     def get_working_directory(self) -> Path:

@@ -301,6 +301,10 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, a first-message system reminder asks the agent to rename its workspace and itself to concise, task-derived names (via the sculpt CLI) once it understands the task. Naming conventions can be supplied at three tiers, most-specific wins: ~/.sculptor/naming.md (yours, all repos), .sculptor/naming.md (this repo, shared), and .sculptor/naming.local.md (yours, this repo only). Experimental; off by default.",
     )
+    enable_auto_rename_branch: bool = Field(
+        default=False,
+        description="When enabled alongside enable_auto_rename, the first-message reminder also asks the agent to rename the workspace's placeholder branch to match the workspace name. Applies to worktree and clone workspaces whose branch still fits the branch-naming pattern; in-place workspaces are never touched. Experimental; off by default.",
+    )
     enable_extensions: bool = Field(
         default=True,
         description="When enabled, the extension system loads runtime extensions and shows the extension-management UI in the Extensions settings section. On by default. The Extensions settings section itself is always present (it hosts the toggle for this flag); this flag gates loading extensions and the management UI, not the section's visibility. Enabling applies immediately; disabling takes effect after an app reload (already-loaded extensions are not unloaded mid-session).",

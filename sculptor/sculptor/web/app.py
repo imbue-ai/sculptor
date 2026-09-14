@@ -148,8 +148,10 @@ from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableErr
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import resolve_workspace_setup_command
 from sculptor.services.workspace_service.branch_naming import generate_random_slug
+from sculptor.services.workspace_service.branch_naming import resolve_naming_pattern
 from sculptor.services.workspace_service.branch_naming import resolve_pattern
 from sculptor.services.workspace_service.branch_naming import slugify_workspace_name
+from sculptor.services.workspace_service.branch_naming import user_slug_from_full_name
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.environment_manager.env_file_parser import parse_env_file
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
@@ -917,11 +919,11 @@ def preview_branch_name(
         if project is None:
             raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
 
-    if project.naming_pattern is not None and project.naming_pattern.strip():
-        pattern = project.naming_pattern
-    else:
-        user_config = get_user_config_instance()
-        pattern = user_config.default_workspace_branch_naming_pattern if user_config is not None else "<user>/<slug>"
+    user_config = get_user_config_instance()
+    pattern = resolve_naming_pattern(
+        project.naming_pattern,
+        user_config.default_workspace_branch_naming_pattern if user_config is not None else "<user>/<slug>",
+    )
 
     name_slug = slugify_workspace_name(workspace_name)
     if not name_slug:
@@ -943,10 +945,7 @@ def preview_branch_name(
                 full_name = stdout.strip()
         except Exception:
             full_name = ""
-    first_token = full_name.split()[0] if full_name else ""
-    user_slug = slugify_workspace_name(first_token) if first_token else ""
-
-    resolved = resolve_pattern(pattern, user_slug=user_slug, name_slug=name_slug)
+    resolved = resolve_pattern(pattern, user_slug=user_slug_from_full_name(full_name), name_slug=name_slug)
     return PreviewBranchNameResponse(branch_name=resolved)
 
 

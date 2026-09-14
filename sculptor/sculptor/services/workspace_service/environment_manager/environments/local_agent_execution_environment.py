@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import MutableEvent
 from sculptor.foundation.processes.local_process import RunningProcess
@@ -133,6 +134,9 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
     def get_root_path(self) -> Path:
         """Get the root path of the environment."""
         return self._environment.get_root_path()
+
+    def get_initialization_strategy(self) -> WorkspaceInitializationStrategy:
+        return self._environment.get_initialization_strategy()
 
     def get_working_directory(self) -> Path:
         """Get the directory containing the code the agent operates on."""
