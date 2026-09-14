@@ -4,7 +4,8 @@ Not part of `just test-unit`; the pi-bump workflow runs them before trusting the
 tooling, and they run on demand with
 `uv run python -m pytest scripts/bump_pi_pin_test.py`. The end-to-end cases run
 against a miniature repo copy with the network stubbed out; hashing real release
-assets stays with the workflow itself.
+assets stays with the workflow itself. The last case is the exception, and reads
+this checkout.
 """
 
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import bump_pi_pin
+import check_pi_pin_freshness
 import compute_pi_pin
 
 _OLD_VERSION = "0.80.10"
@@ -203,3 +205,22 @@ def test_verify_rejects_a_missing_asset() -> None:
 
 def test_verify_skips_the_cross_check_when_upstream_publishes_no_sums() -> None:
     bump_pi_pin.verify_computed_against_published(_NEW_SHAS, None)
+
+
+def test_the_edit_table_matches_the_real_checkout() -> None:
+    """Every planned edit must name a live file and hit its literals exactly.
+
+    The cases above build their fixture out of these same path constants, so a
+    pinned file renamed out from under the table leaves them green and breaks
+    the bump only once the workflow runs it for real. This case reads the tree.
+    """
+    repo_root = Path(bump_pi_pin.__file__).resolve().parent.parent
+    current_version = check_pi_pin_freshness.read_pinned_version(repo_root)
+    edits = bump_pi_pin.plan_edits(current_version, _NEW_VERSION, bump_pi_pin.read_baked_shas(repo_root), _NEW_SHAS)
+
+    for edit in edits:
+        path = repo_root / edit.path
+        assert path.exists(), f"{edit.path} no longer exists; update the paths in scripts/bump_pi_pin.py"
+        assert path.read_text().count(edit.old) == edit.count, (
+            f"{edit.path}: expected {edit.count} occurrence(s) of {edit.old!r}"
+        )
