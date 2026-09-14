@@ -1,4 +1,7 @@
 {
+  "offload-perf.toml": {
+    "image_id": "im-NUUosHija0UWTrexPigpOI"
+  },
   "offload.toml": {
     "image_id": "im-Q7DcWYN1iXqEwllc1hmUis"
   }
