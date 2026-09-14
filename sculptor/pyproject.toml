@@ -46,7 +46,7 @@ dependencies = [
     "typer",
     "uvicorn>=0.34.3",
     "viztracer>=1.0.0",
-    "websockets>=15.0.1",
+    "websockets>=17.1",
 ]
 requires-python = ">=3.14"
 
