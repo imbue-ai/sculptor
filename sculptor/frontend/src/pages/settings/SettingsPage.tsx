@@ -45,6 +45,7 @@ import { ExtensionsSettingsSection } from "./components/ExtensionsSettingsSectio
 import { FileBrowserSettingsSection } from "./components/FileBrowserSettingsSection.tsx";
 import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
+import { NamingConventionsRows } from "./components/NamingConventionsRows.tsx";
 import { NightModeSettingRow } from "./components/NightModeSettingRow.tsx";
 import { PiSettingsSection } from "./components/PiSettingsSection.tsx";
 import { ReposSection } from "./components/ReposSection.tsx";
@@ -539,6 +540,7 @@ export const SettingsPage = (): ReactElement => {
                       data-testid={ElementIds.SETTINGS_ENABLE_AUTO_RENAME_BRANCH_TOGGLE}
                     />
                   </SettingRow>
+                  <NamingConventionsRows setToast={setToast} />
                   <CustomBackendSection setToast={setToast} />
                 </SettingsSectionLayout>
               )}

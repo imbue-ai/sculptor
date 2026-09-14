@@ -1,10 +1,10 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from sculptor.agents.default.claude_code_sdk.naming_conventions import NAMING_CONVENTIONS_FILENAME
-from sculptor.agents.default.claude_code_sdk.naming_conventions import NAMING_CONVENTIONS_LOCAL_FILENAME
 from sculptor.agents.default.claude_code_sdk.naming_conventions import _MAX_TIER_CHARS
 from sculptor.agents.default.claude_code_sdk.naming_conventions import resolve_naming_conventions
+from sculptor.config.naming_convention_files import NAMING_CONVENTIONS_FILENAME
+from sculptor.config.naming_convention_files import NAMING_CONVENTIONS_LOCAL_FILENAME
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID

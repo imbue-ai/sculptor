@@ -63,6 +63,11 @@ from sculptor.agents.pi_agent.catalog_probe import probe_catalog_on_host
 from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.common.plugin import get_plugin_dirs
+from sculptor.config.naming_convention_files import DEFAULT_NAMING_CONVENTIONS_TEMPLATE
+from sculptor.config.naming_convention_files import NamingConventionTier
+from sculptor.config.naming_convention_files import naming_conventions_file_path
+from sculptor.config.naming_convention_files import read_naming_conventions_file
+from sculptor.config.naming_convention_files import write_naming_conventions_file
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.user_config import UserConfig
 from sculptor.config.user_config import UserConfigField
@@ -232,6 +237,9 @@ from sculptor.web.data_types import InstallExtensionRequest
 from sculptor.web.data_types import InstallExtensionResponse
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
+from sculptor.web.data_types import NamingConventionFile
+from sculptor.web.data_types import NamingConventionsResponse
+from sculptor.web.data_types import NamingConventionsUpdateRequest
 from sculptor.web.data_types import NamingPatternRequest
 from sculptor.web.data_types import NewBranchNameValidationResponse
 from sculptor.web.data_types import OpenFileUiAction
@@ -247,6 +255,7 @@ from sculptor.web.data_types import PiModelsResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
+from sculptor.web.data_types import ProjectNamingConventions
 from sculptor.web.data_types import ReadFileAtRefRequest
 from sculptor.web.data_types import ReadFileAtRefResponse
 from sculptor.web.data_types import ReadFileRequest
@@ -4579,6 +4588,75 @@ def get_env_var_names(
         global_var_names=global_var_names,
         global_env_path=_display_path(global_env_path),
         projects=tuple(project_entries),
+    )
+
+
+@router.get("/api/v1/naming-conventions")
+def get_naming_conventions(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> NamingConventionsResponse:
+    """List the naming-convention docs: the user-global file and each accessible project's shared and local files."""
+    sculptor_folder = get_sculptor_folder()
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        projects = transaction.get_projects(organization_reference=user_session.organization_reference)
+    entries: list[ProjectNamingConventions] = []
+    for project in projects:
+        if project.is_deleted or not project.is_path_accessible or project.user_git_repo_url is None:
+            continue
+        project_path = project.get_local_user_path()
+        entries.append(
+            ProjectNamingConventions(
+                project_id=str(project.object_id),
+                project_name=project.name,
+                project_path=_display_path(project_path),
+                shared=_naming_convention_file(NamingConventionTier.PROJECT, sculptor_folder, project_path),
+                local=_naming_convention_file(NamingConventionTier.LOCAL, sculptor_folder, project_path),
+            )
+        )
+    return NamingConventionsResponse(
+        global_file=_naming_convention_file(NamingConventionTier.USER, sculptor_folder, project_path=None),
+        projects=tuple(entries),
+        template=DEFAULT_NAMING_CONVENTIONS_TEMPLATE,
+    )
+
+
+@router.put("/api/v1/naming-conventions")
+def update_naming_conventions(
+    request: Request,
+    update_request: NamingConventionsUpdateRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> NamingConventionFile:
+    """Write one naming-convention doc (blank content deletes it) and return its new state."""
+    sculptor_folder = get_sculptor_folder()
+    project_path: Path | None = None
+    if update_request.tier != NamingConventionTier.USER:
+        if update_request.project_id is None:
+            raise HTTPException(status_code=400, detail="projectId is required for the project and local tiers")
+        validated_project_id = validate_project_id(update_request.project_id)
+        services = get_services_from_request_or_websocket(request)
+        with user_session.open_transaction(services) as transaction:
+            project = transaction.get_project(validated_project_id)
+        if project is None or project.is_deleted:
+            raise HTTPException(status_code=404, detail=f"Project {update_request.project_id} not found")
+        if not project.is_path_accessible:
+            raise HTTPException(status_code=400, detail="The project's repository path is not accessible")
+        project_path = project.get_local_user_path()
+    path = naming_conventions_file_path(update_request.tier, sculptor_folder, project_path)
+    write_naming_conventions_file(path, update_request.content)
+    return _naming_convention_file(update_request.tier, sculptor_folder, project_path)
+
+
+def _naming_convention_file(
+    tier: NamingConventionTier, sculptor_folder: Path, project_path: Path | None
+) -> NamingConventionFile:
+    path = naming_conventions_file_path(tier, sculptor_folder, project_path)
+    return NamingConventionFile(
+        tier=tier,
+        path=str(path),
+        display_path=_display_path(path),
+        content=read_naming_conventions_file(path),
     )
 
 

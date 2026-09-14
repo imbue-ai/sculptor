@@ -12,6 +12,7 @@ from pydantic import Field
 from pydantic import Tag
 
 from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
+from sculptor.config.naming_convention_files import NamingConventionTier
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import SerializableModel
@@ -293,6 +294,42 @@ class EnvVarNamesResponse(SerializableModel):
     global_var_names: tuple[str, ...]
     global_env_path: str
     projects: tuple[ProjectEnvVarNames, ...]
+
+
+class NamingConventionFile(SerializableModel):
+    """One naming-convention doc on disk. `content` is None when the file does not exist."""
+
+    tier: NamingConventionTier
+    path: str
+    display_path: str
+    content: str | None
+
+
+class ProjectNamingConventions(SerializableModel):
+    """A project's shared (committed) and local (git-ignored) naming-convention docs."""
+
+    project_id: str
+    project_name: str
+    project_path: str
+    shared: NamingConventionFile
+    local: NamingConventionFile
+
+
+class NamingConventionsResponse(SerializableModel):
+    """Every naming-convention doc the settings editor can show, plus the starter template."""
+
+    global_file: NamingConventionFile
+    projects: tuple[ProjectNamingConventions, ...]
+    template: str
+
+
+class NamingConventionsUpdateRequest(RequestModel):
+    """Replace one naming-convention doc; blank content deletes the file."""
+
+    tier: NamingConventionTier
+    # Required for the project and local tiers.
+    project_id: str | None = None
+    content: str
 
 
 class AuthenticatedProviderEntry(SerializableModel):
