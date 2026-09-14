@@ -28,6 +28,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import Playwright
 from playwright.sync_api import expect
 
+from sculptor.config.user_config import NIGHT_MODE_OFF
 from sculptor.constants import ElementIDs
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.testing.dependency_stubs import install_default_claude_stub
@@ -394,6 +395,10 @@ class SculptorInstance:
         shipping config; add new entries when a test starts toggling a
         new flag.
 
+        Settings whose default is not False are reset alongside them:
+        defaultFastMode and the global nightMode override both change how
+        every agent a later test starts is launched.
+
         The most-recently-used harness (lastUsedAgentType) is the same kind
         of shared, persistent state: the server records it whenever an agent
         is created with an explicit type, and a later create that omits the
@@ -429,16 +434,21 @@ class SculptorInstance:
         flags_to_reset_to_false = (
             "enableInPlaceWorkspaces",
             "enableCloneWorkspaces",
+            "defaultFastMode",
         )
         # The recorded most-recently-used harness (see the docstring); reset to
         # None so an agent-type-less create defaults to Claude.
         needs_flag_reset = any(config.get(flag) is not False for flag in flags_to_reset_to_false)
         needs_mru_reset = config.get("lastUsedAgentType") not in (None, "")
-        if not (needs_flag_reset or needs_mru_reset):
+        # The global night-mode override; left on, it launches every agent a
+        # later test starts without fast mode.
+        needs_night_mode_reset = config.get("nightMode") != NIGHT_MODE_OFF
+        if not (needs_flag_reset or needs_mru_reset or needs_night_mode_reset):
             return
         for flag in flags_to_reset_to_false:
             config[flag] = False
         config["lastUsedAgentType"] = None
+        config["nightMode"] = NIGHT_MODE_OFF
         last_status: int | None = None
         for attempt in range(3):
             try:
