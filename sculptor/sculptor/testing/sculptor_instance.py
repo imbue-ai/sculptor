@@ -395,9 +395,7 @@ class SculptorInstance:
         shipping config; add new entries when a test starts toggling a
         new flag.
 
-        Settings whose default is not False are reset alongside them:
-        defaultFastMode and the global nightMode override both change how
-        every agent a later test starts is launched.
+        Settings whose default is not False are reset alongside them.
 
         The most-recently-used harness (lastUsedAgentType) is the same kind
         of shared, persistent state: the server records it whenever an agent

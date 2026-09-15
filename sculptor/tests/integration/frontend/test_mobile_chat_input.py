@@ -72,8 +72,7 @@ def test_mobile_send_message_and_receive_reply(sculptor_instance_: SculptorInsta
 
 @user_story("to not be offered fast mode on my phone while night mode is holding it off")
 def test_mobile_options_fast_mode_is_suppressed_by_night_mode(sculptor_instance_: SculptorInstance) -> None:
-    """Night mode overrides fast mode at launch, so every control that offers it has to
-    say so — the mobile options menu as much as the desktop toggle."""
+    """Night mode overrides fast mode at launch, so every control that offers it says so."""
     page = sculptor_instance_.page
 
     enable_default_fast_mode(page)

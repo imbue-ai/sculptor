@@ -13,11 +13,8 @@ const NIGHT_MODE_TICK_INTERVAL_MS = 60_000;
  * the reference instant is refreshed on a timer; without it the toggle would
  * stay greyed out past the expiry until something unrelated re-rendered.
  *
- * A tick advances the instant only when doing so changes the answer, comparing
- * against the reason this render already computed, so a quiet minute costs one
- * comparison and no re-render. The comparison is on the answer rather than on
- * which way it moved, so a state that becomes active with the clock would be
- * picked up the same way one that lapses is.
+ * A quiet minute costs one comparison and no re-render, so advancing the
+ * instant unconditionally would re-render the chat input every minute.
  */
 export const useNightModeSuppressionReason = (): string | null => {
   const nightMode = useAtomValue(nightModeAtom);
