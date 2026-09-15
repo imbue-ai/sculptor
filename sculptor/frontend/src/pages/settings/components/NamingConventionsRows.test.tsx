@@ -63,7 +63,6 @@ const renderRows = async (): Promise<void> => {
 };
 
 const expandProjectRow = (): void => {
-  // Row 0 is the global file; row 1 is the sculptor project.
   fireEvent.click(screen.getAllByTestId(ElementIds.SETTINGS_NAMING_CONVENTION_ROW_TOGGLE)[1]);
 };
 
@@ -87,7 +86,6 @@ describe("NamingConventionsRows", () => {
     await renderRows();
     expandProjectRow();
     expect(getTextareas().map((textarea) => textarea.value)).toEqual(["shared rules", TEMPLATE]);
-    // The row header already shows the repo path, so the editors name the file relative to it.
     expect(screen.getByText(".sculptor/naming.md")).toBeTruthy();
     expect(screen.getByText(".sculptor/naming.local.md")).toBeTruthy();
   });

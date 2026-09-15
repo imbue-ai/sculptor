@@ -41,7 +41,6 @@ export const NamingConventionFileEditor = ({
   const savedValue = file.content ?? template;
 
   const handleBlur = (event: FocusEvent<HTMLTextAreaElement>): void => {
-    // An untouched template must not create the file, and unchanged content is not re-saved.
     if (event.target.value !== savedValue) {
       void onSave(event.target.value);
     }
@@ -96,8 +95,7 @@ type OpenWithMenuProps = {
   onError: (message: string) => void;
 };
 
-// The same app list and remembered preference as the workspace header's "Open with"
-// menu: one click opens the file in the preferred app, the chevron picks another.
+// The same app list and remembered preference as the workspace header's "Open with" menu.
 const OpenWithMenu = ({ path, isDisabled, onError }: OpenWithMenuProps): ReactElement | null => {
   const [preferredApp, setPreferredApp] = useState<ExternalApp | null>(getPreferredApp);
   const items = getBackendCapabilities().canOpenInOS ? getOpenWithItems() : [];

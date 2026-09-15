@@ -618,7 +618,6 @@ class ClaudeProcessManager:
             setup_state = self._fetch_setup_state(is_first_message)
             user_config = get_user_config_instance()
             enable_auto_rename = user_config.enable_auto_rename
-            # Only read the on-disk convention docs and git state when the reminder will actually use them.
             naming_conventions = (
                 resolve_naming_conventions(self.environment) if is_first_message and enable_auto_rename else None
             )

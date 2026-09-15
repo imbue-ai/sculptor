@@ -8,10 +8,8 @@ User < Project < Local settings precedence:
 - Project: `.sculptor/naming.md` — committed, shared by all collaborators on the repo.
 - Local:   `.sculptor/naming.local.md` — gitignored, just you in this one repo.
 
-The settings UI reads and writes these files through the API; the first-message
-reminder reads them (see `naming_conventions.resolve_naming_conventions`). Both go
-through the names and paths defined here, which the .gitignore and the settings copy
-also reference, so update those together if these change.
+The user config's toggle description, the help docs, and the repo's .gitignore spell
+these names out too, so update those together if these change.
 """
 
 from enum import StrEnum

@@ -20,7 +20,6 @@ type NamingConventionsRowsProps = {
 
 const GLOBAL_ROW_KEY = "global";
 
-// The saved file replaces the entry with the same path wherever it sits in the response.
 const withUpdatedFile = (data: NamingConventionsResponse, updated: NamingConventionFile): NamingConventionsResponse => {
   const replace = (file: NamingConventionFile): NamingConventionFile => (file.path === updated.path ? updated : file);
   return {
@@ -44,14 +43,12 @@ const describeFile = (file: NamingConventionFile): string => {
 
 /**
  * The naming-convention files, one collapsible row for the user-global file and one
- * per repo (shared + local), each expanding into in-place editors. Lives under the
- * auto-naming switches in the Experimental section.
+ * per repo (shared + local), each expanding into in-place editors.
  */
 export const NamingConventionsRows = ({ setToast }: NamingConventionsRowsProps): ReactElement | null => {
   const [data, setData] = useState<NamingConventionsResponse | null>(null);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
 
-  // Load once on mount; the cleanup flag drops a stale response if the component unmounts mid-request.
   useEffect(() => {
     let isIgnored = false;
     void (async (): Promise<void> => {
