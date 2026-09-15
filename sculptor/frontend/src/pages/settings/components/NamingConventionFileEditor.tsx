@@ -4,7 +4,7 @@ import type { FocusEvent, ReactElement } from "react";
 import { useState } from "react";
 
 import type { ExternalApp, NamingConventionFile } from "~/api";
-import { ElementIds } from "~/api";
+import { ElementIds, NamingConventionTier } from "~/api";
 import { getOpenWithItems, getPreferredApp, openPathInExternalApp, savePreferredApp } from "~/common/openInApp/items";
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities";
 import { Code } from "~/components/Code.tsx";
@@ -22,6 +22,11 @@ type NamingConventionFileEditorProps = {
   onSave: (content: string) => Promise<void>;
   onOpenError: (message: string) => void;
 };
+
+// The row header already shows where the repo lives, so a repo file is named relative to
+// it; the user-global file keeps its home-relative display path.
+const labelPath = (file: NamingConventionFile): string =>
+  file.tier === NamingConventionTier.USER ? file.displayPath : file.path.split("/").slice(-2).join("/");
 
 export const NamingConventionFileEditor = ({
   label,
@@ -49,7 +54,7 @@ export const NamingConventionFileEditor = ({
           <FileText size={14} />
           {label}
           <Code size="1" style={inlineCodeStyle}>
-            {file.displayPath}
+            {labelPath(file)}
           </Code>
           {badge && <span className={styles.fileBadge}>{badge}</span>}
         </label>

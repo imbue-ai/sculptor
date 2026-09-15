@@ -87,6 +87,9 @@ describe("NamingConventionsRows", () => {
     await renderRows();
     expandProjectRow();
     expect(getTextareas().map((textarea) => textarea.value)).toEqual(["shared rules", TEMPLATE]);
+    // The row header already shows the repo path, so the editors name the file relative to it.
+    expect(screen.getByText(".sculptor/naming.md")).toBeTruthy();
+    expect(screen.getByText(".sculptor/naming.local.md")).toBeTruthy();
   });
 
   it("saves an edited local file when it loses focus", async () => {
