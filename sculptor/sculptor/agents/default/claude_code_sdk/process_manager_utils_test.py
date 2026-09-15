@@ -1,4 +1,7 @@
 import json
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -10,9 +13,12 @@ from sculptor.agents.default.claude_code_sdk.process_manager_utils import _extra
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_claude_command
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_user_instructions
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import parse_claude_code_json_lines
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import resolve_fast_mode
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
+from sculptor.config.user_config import NIGHT_MODE_OFF
+from sculptor.config.user_config import NIGHT_MODE_ON
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
@@ -827,3 +833,28 @@ def test_parse_lines_tool_result_missing_content_does_not_crash() -> None:
     assert isinstance(parsed, ParsedToolResultResponse)
     (block,) = parsed.content_blocks
     assert block.tool_use_id == tool_use_id
+
+
+def test_resolve_fast_mode_night_mode_off_honours_the_request() -> None:
+    now = datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)
+    assert resolve_fast_mode(True, NIGHT_MODE_OFF, now) is True
+    assert resolve_fast_mode(False, NIGHT_MODE_OFF, now) is False
+
+
+def test_resolve_fast_mode_night_mode_on_overrides_the_request() -> None:
+    now = datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)
+    assert resolve_fast_mode(True, NIGHT_MODE_ON, now) is False
+
+
+def test_resolve_fast_mode_until_overrides_only_before_it_expires() -> None:
+    until = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)
+    assert resolve_fast_mode(True, until, until - timedelta(hours=1)) is False
+    assert resolve_fast_mode(True, until, until + timedelta(hours=1)) is True
+
+
+def test_get_claude_command_omits_settings_flag_when_night_mode_suppresses_fast_mode() -> None:
+    """The launch flag, not just the boolean, has to drop out under night mode."""
+    now = datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)
+    cmd = _get_command_string(fast_mode=resolve_fast_mode(True, NIGHT_MODE_ON, now))
+    assert "--settings" not in cmd
+    assert "fastMode" not in cmd

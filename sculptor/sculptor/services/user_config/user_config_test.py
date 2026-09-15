@@ -1,11 +1,14 @@
 import concurrent.futures
 import threading
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 
 import pytest
 
 import sculptor.services.user_config.user_config as user_config_module
 from sculptor.config.user_config import UserConfig
+from sculptor.foundation.pydantic_utils import model_update
 from sculptor.services.user_config.user_config import canonicalize_telemetry_flags
 from sculptor.services.user_config.user_config import load_config
 from sculptor.services.user_config.user_config import make_onboarded_user_config
@@ -209,3 +212,22 @@ def test_concurrent_partial_updates_preserve_both_fields(
         assert final_on_disk.user_id == "thread_b_user_id"
     finally:
         user_config_module.set_user_config_instance(None)
+
+
+@pytest.mark.parametrize(
+    "night_mode",
+    ["off", "on", datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)],
+)
+def test_night_mode_round_trips_through_the_config_file(night_mode, tmp_path: Path) -> None:
+    """All three night-mode states have to survive TOML, which has no null and its own datetime type."""
+    config_path = tmp_path / "config.toml"
+    save_config(model_update(_make_config(), {"night_mode": night_mode}), config_path)
+
+    assert load_config(config_path).night_mode == night_mode
+
+
+def test_night_mode_defaults_to_off_for_configs_written_before_it_existed(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('userEmail = "alice@example.com"\nuserId = "u"\norganizationId = "o"\ninstanceId = "i"\n')
+
+    assert load_config(config_path).night_mode == "off"

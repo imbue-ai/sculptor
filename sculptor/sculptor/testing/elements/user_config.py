@@ -71,3 +71,8 @@ def enable_entity_mentions(page: Page) -> None:
 def enable_default_fast_mode(page: Page) -> None:
     """Enable the default-fast-mode user preference."""
     _set_user_config_flag(page, "defaultFastMode", True)
+
+
+def enable_night_mode(page: Page) -> None:
+    """Hold the global night-mode override on indefinitely."""
+    _set_user_config_flag(page, "nightMode", "on")

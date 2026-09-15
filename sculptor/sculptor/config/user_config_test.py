@@ -1,3 +1,7 @@
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
+
 from sculptor.config.user_config import BabysitterAgentClaude
 from sculptor.config.user_config import BabysitterAgentMRU
 from sculptor.config.user_config import BabysitterAgentPi
@@ -7,6 +11,7 @@ from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import PiConfig
 from sculptor.config.user_config import UserConfig
 from sculptor.config.user_config import UserConfigField
+from sculptor.config.user_config import is_night_mode_active
 
 
 def test_ci_babysitter_defaults() -> None:
@@ -198,3 +203,18 @@ def test_new_extension_keys_win_over_pre_rename_keys() -> None:
     )
     assert config.enable_extensions is True
     assert config.allow_agent_extension_loading is False
+
+
+def test_night_mode_off_is_never_active() -> None:
+    assert is_night_mode_active("off", datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)) is False
+
+
+def test_night_mode_on_is_always_active() -> None:
+    assert is_night_mode_active("on", datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)) is True
+
+
+def test_night_mode_until_expires_at_the_instant_it_names() -> None:
+    until = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)
+    assert is_night_mode_active(until, until - timedelta(seconds=1)) is True
+    assert is_night_mode_active(until, until) is False
+    assert is_night_mode_active(until, until + timedelta(seconds=1)) is False

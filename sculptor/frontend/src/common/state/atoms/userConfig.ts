@@ -1,6 +1,7 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
+import { NIGHT_MODE_OFF } from "~/common/nightMode.ts";
 import { getTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
 
 import type { CiBabysitterConfig, CustomActionsConfig, UserConfig } from "../../../api";
@@ -219,3 +220,6 @@ export const isAgentExtensionLoadingAllowedAtom = atom<boolean>(
 export const isDefaultFastModeAtom = atom<boolean>((get) => get(userConfigAtom)?.defaultFastMode ?? false);
 
 export const defaultEffortLevelAtom = atom<string>((get) => get(userConfigAtom)?.defaultEffortLevel ?? "xhigh");
+
+// The global night-mode override; see `~/common/nightMode` for the encoding.
+export const nightModeAtom = atom<string>((get) => get(userConfigAtom)?.nightMode ?? NIGHT_MODE_OFF);

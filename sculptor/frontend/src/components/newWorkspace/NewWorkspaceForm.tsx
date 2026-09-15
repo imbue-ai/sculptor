@@ -22,6 +22,7 @@ import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/proj
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
+import { useNightModeSuppressionReason } from "~/common/state/hooks/useNightModeSuppressionReason.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { usePiModels } from "~/common/state/hooks/usePiModels.ts";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
@@ -135,6 +136,7 @@ export const NewWorkspaceForm = ({
   const [agentModel, setAgentModel] = useState<LlmModel>(defaultModel as LlmModel);
   const [agentEffort, setAgentEffort] = useState<EffortLevel>(defaultEffortLevel as EffortLevel);
   const [isAgentFastMode, setIsAgentFastMode] = useState<boolean>(isDefaultFastMode);
+  const fastModeSuppressedReason = useNightModeSuppressionReason();
   const [isAgentPlanMode, setIsAgentPlanMode] = useState<boolean>(false);
   // The user's explicit pick in the pi model picker, if any. The effective
   // selection is derived from this plus the catalog (below) so it can never drift
@@ -675,6 +677,7 @@ export const NewWorkspaceForm = ({
                 onEffortChange={setAgentEffort}
                 isFastMode={isAgentFastMode}
                 onFastModeToggle={(): void => setIsAgentFastMode((v) => !v)}
+                fastModeSuppressedReason={fastModeSuppressedReason}
                 isPlanMode={isAgentPlanMode}
                 onPlanModeToggle={(): void => setIsAgentPlanMode((v) => !v)}
                 onAppendTranscript={handleAppendPromptTranscript}

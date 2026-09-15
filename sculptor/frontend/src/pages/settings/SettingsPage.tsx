@@ -26,6 +26,7 @@ import {
   isEntityMentionsEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
+  nightModeAtom,
   userEmailAtom,
 } from "../../common/state/atoms/userConfig.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
@@ -43,6 +44,7 @@ import { ExtensionsSettingsSection } from "./components/ExtensionsSettingsSectio
 import { FileBrowserSettingsSection } from "./components/FileBrowserSettingsSection.tsx";
 import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
+import { NightModeSettingRow } from "./components/NightModeSettingRow.tsx";
 import { PiSettingsSection } from "./components/PiSettingsSection.tsx";
 import { ReposSection } from "./components/ReposSection.tsx";
 import { SettingRow } from "./components/SettingRow.tsx";
@@ -135,6 +137,7 @@ export const SettingsPage = (): ReactElement => {
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
+  const nightMode = useAtomValue(nightModeAtom);
   const autoUpdateStatus = useAtomValue(autoUpdateStatusAtom);
   const [updateChannel, setUpdateChannel] = useAtom(updateChannelAtom);
   const healthCheckData = useAtomValue(healthCheckDataAtom);
@@ -376,6 +379,11 @@ export const SettingsPage = (): ReactElement => {
                       data-testid={ElementIds.SETTINGS_DEFAULT_FAST_MODE_TOGGLE}
                     />
                   </SettingRow>
+
+                  <NightModeSettingRow
+                    nightMode={nightMode}
+                    onChange={(value) => handleSettingChange(UserConfigField.NIGHT_MODE, value)}
+                  />
 
                   <SettingRow title="Effort Level" description="Default thinking effort level for new agents.">
                     <Select.Root
