@@ -4552,7 +4552,7 @@ def _display_path(path: Path) -> str:
 
 
 def _settings_listed_projects(request: Request, user_session: UserSession) -> list[Project]:
-    """The projects the settings lists show: a live git repo whose path is still readable."""
+    """The projects the settings lists show."""
     services = get_services_from_request_or_websocket(request)
     with user_session.open_transaction(services) as transaction:
         projects = transaction.get_projects(organization_reference=user_session.organization_reference)

@@ -265,10 +265,9 @@ where <slug> is a kebab-case slug of the workspace name: lowercase ASCII letters
 class AutoRenameReminder(FrozenModel):
     """The first-message auto-rename reminder to emit; `None` in its place emits none.
 
-    Both fields are optional blocks layered onto the default guidance.
+    Both fields are optional blocks layered onto the default guidance:
     ``naming_conventions`` is the pre-resolved, layered convention text (see
-    ``naming_conventions.resolve_naming_conventions``), inlined verbatim and told to
-    override the default guidance on conflict. ``branch_rename`` (see
+    ``naming_conventions.resolve_naming_conventions``), and ``branch_rename`` (see
     ``branch_rename_hint.resolve_branch_rename_hint``) adds the branch to the things
     the agent renames.
     """
