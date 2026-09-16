@@ -928,10 +928,8 @@ def preview_branch_name(
         if project is None:
             raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
 
-    user_config = get_user_config_instance()
     pattern = resolve_naming_pattern(
-        project.naming_pattern,
-        user_config.default_workspace_branch_naming_pattern if user_config is not None else "<user>/<slug>",
+        project.naming_pattern, get_user_config_instance().default_workspace_branch_naming_pattern
     )
 
     name_slug = slugify_workspace_name(workspace_name)
