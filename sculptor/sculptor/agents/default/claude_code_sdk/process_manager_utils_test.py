@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import AutoRenameReminder
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_synthetic_diff_from_tool_input
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_tool_content
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _extract_edits
@@ -195,13 +196,13 @@ def test_get_user_instructions_env_var_reminder_block_ordering() -> None:
 _AUTO_RENAME_MARKER = "sculpt workspace rename"
 
 
-def test_get_user_instructions_emits_auto_rename_reminder_when_enabled_and_first_message() -> None:
+def test_get_user_instructions_emits_auto_rename_reminder_when_requested_and_first_message() -> None:
     message = ChatInputUserMessage(text="hello")
     result = get_user_instructions(
         message,
         file_paths=(),
         is_first_message=True,
-        enable_auto_rename=True,
+        auto_rename=AutoRenameReminder(),
     )
     assert "<system-reminder>" in result
     assert _AUTO_RENAME_MARKER in result
@@ -227,8 +228,7 @@ def test_get_user_instructions_inlines_naming_conventions_when_provided() -> Non
         message,
         file_paths=(),
         is_first_message=True,
-        enable_auto_rename=True,
-        naming_conventions=conventions,
+        auto_rename=AutoRenameReminder(naming_conventions=conventions),
     )
     assert _AUTO_RENAME_MARKER in result
     # The resolved block is inlined verbatim inside a tagged region, told to override the defaults.
@@ -238,26 +238,12 @@ def test_get_user_instructions_inlines_naming_conventions_when_provided() -> Non
     assert "OVERRIDE" in result
 
 
-def test_get_user_instructions_ignores_naming_conventions_when_auto_rename_disabled() -> None:
+def test_get_user_instructions_no_auto_rename_reminder_when_not_requested() -> None:
     message = ChatInputUserMessage(text="hello")
     result = get_user_instructions(
         message,
         file_paths=(),
         is_first_message=True,
-        enable_auto_rename=False,
-        naming_conventions="### some conventions",
-    )
-    assert _AUTO_RENAME_MARKER not in result
-    assert "<naming-conventions>" not in result
-
-
-def test_get_user_instructions_no_auto_rename_reminder_when_flag_disabled() -> None:
-    message = ChatInputUserMessage(text="hello")
-    result = get_user_instructions(
-        message,
-        file_paths=(),
-        is_first_message=True,
-        enable_auto_rename=False,
     )
     assert _AUTO_RENAME_MARKER not in result
 
@@ -268,7 +254,7 @@ def test_get_user_instructions_no_auto_rename_reminder_when_not_first_message() 
         message,
         file_paths=(),
         is_first_message=False,
-        enable_auto_rename=True,
+        auto_rename=AutoRenameReminder(),
     )
     assert _AUTO_RENAME_MARKER not in result
 
@@ -356,7 +342,7 @@ def test_get_user_instructions_setup_reminder_stays_above_auto_rename() -> None:
         file_paths=(),
         is_first_message=True,
         setup_state=setup_state,
-        enable_auto_rename=True,
+        auto_rename=AutoRenameReminder(),
     )
     # The higher-priority setup warning must not be pushed below the auto-rename reminder.
     setup_idx = result.index(_SETUP_RUNNING_PREAMBLE)
@@ -870,8 +856,7 @@ def test_get_user_instructions_adds_the_branch_rename_when_a_hint_is_provided() 
         message,
         file_paths=(),
         is_first_message=True,
-        enable_auto_rename=True,
-        branch_rename=_BRANCH_HINT,
+        auto_rename=AutoRenameReminder(branch_rename=_BRANCH_HINT),
     )
     assert _AUTO_RENAME_MARKER in result
     assert "dev/gorgeous-emu" in result
@@ -880,18 +865,6 @@ def test_get_user_instructions_adds_the_branch_rename_when_a_hint_is_provided() 
 
 def test_get_user_instructions_omits_the_branch_rename_without_a_hint() -> None:
     message = ChatInputUserMessage(text="hello")
-    result = get_user_instructions(message, file_paths=(), is_first_message=True, enable_auto_rename=True)
+    result = get_user_instructions(message, file_paths=(), is_first_message=True, auto_rename=AutoRenameReminder())
     assert _AUTO_RENAME_MARKER in result
-    assert "git branch -m" not in result
-
-
-def test_get_user_instructions_ignores_the_branch_rename_when_auto_rename_is_disabled() -> None:
-    message = ChatInputUserMessage(text="hello")
-    result = get_user_instructions(
-        message,
-        file_paths=(),
-        is_first_message=True,
-        enable_auto_rename=False,
-        branch_rename=_BRANCH_HINT,
-    )
     assert "git branch -m" not in result
