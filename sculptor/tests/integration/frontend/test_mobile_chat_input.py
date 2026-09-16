@@ -9,9 +9,12 @@ FakeClaude reply.
 import pytest
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.mobile_workspace import enter_mobile_workspace
+from sculptor.testing.elements.user_config import enable_default_fast_mode
+from sculptor.testing.elements.user_config import enable_night_mode
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -65,3 +68,25 @@ def test_mobile_send_message_and_receive_reply(sculptor_instance_: SculptorInsta
     # User message + FakeClaude's default reply.
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
     expect(chat_panel.get_messages().last).to_contain_text("Task completed")
+
+
+@user_story("to not be offered fast mode on my phone while night mode is holding it off")
+def test_mobile_options_fast_mode_is_suppressed_by_night_mode(sculptor_instance_: SculptorInstance) -> None:
+    """Night mode overrides fast mode at launch, so every control that offers it says so."""
+    page = sculptor_instance_.page
+
+    enable_default_fast_mode(page)
+    start_task_and_wait_for_ready(sculptor_page=page)
+    shell = enter_mobile_workspace(page)
+
+    shell.open_chat_options()
+    expect(shell.get_options_fast_mode()).to_be_enabled()
+
+    enable_night_mode(page)
+    shell = enter_mobile_workspace(page)
+    shell.open_chat_options()
+
+    fast_mode_item = shell.get_options_fast_mode()
+    expect(fast_mode_item).to_be_disabled()
+    # The check mark claims fast mode is on; under night mode the turn runs standard.
+    expect(fast_mode_item.get_by_test_id(ElementIDs.MOBILE_CHAT_INPUT_FAST_MODE_CHECK)).to_have_count(0)

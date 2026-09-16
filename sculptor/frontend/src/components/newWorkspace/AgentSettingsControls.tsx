@@ -16,6 +16,8 @@ type AgentSettingsControlsProps = {
   onEffortChange: (effort: EffortLevel) => void;
   isFastMode: boolean;
   onFastModeToggle: () => void;
+  /** Why fast mode is unavailable, when it is; see `useNightModeSuppressionReason`. */
+  fastModeSuppressedReason?: string | null;
   isPlanMode: boolean;
   onPlanModeToggle: () => void;
   /** Receives each dictated voice segment so the creation prompt draft can append
@@ -53,6 +55,7 @@ export const AgentSettingsControls = ({
   onEffortChange,
   isFastMode,
   onFastModeToggle,
+  fastModeSuppressedReason,
   isPlanMode,
   onPlanModeToggle,
   onAppendTranscript,
@@ -76,7 +79,9 @@ export const AgentSettingsControls = ({
           <ListChecks size={16} />
         </IconButton>
       </Tooltip>
-      {doesSupportFastMode && <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} />}
+      {doesSupportFastMode && (
+        <FastModeToggle isActive={isFastMode} onToggle={onFastModeToggle} suppressedReason={fastModeSuppressedReason} />
+      )}
       <EffortSelector effort={effort} onEffortChange={onEffortChange} />
       <Flex pr="1">
         <ModelSelector model={model} onModelChange={onModelChange} />

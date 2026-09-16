@@ -4,6 +4,8 @@ import signal
 import time
 import uuid
 from contextlib import AbstractContextManager
+from datetime import datetime
+from datetime import timezone
 from queue import Queue
 from subprocess import TimeoutExpired
 from threading import Event
@@ -24,6 +26,7 @@ from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_cl
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_user_instructions
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import is_plan_approval
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import is_session_id_valid
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import resolve_fast_mode
 from sculptor.agents.default.claude_code_sdk.transcript_collector import TranscriptCollector
 from sculptor.agents.default.constants import ENTITY_MENTIONS_SYSTEM_PROMPT
 from sculptor.agents.default.constants import MODEL_SHORTNAME_MAP
@@ -667,6 +670,9 @@ class ClaudeProcessManager:
                 else None
             )
             plugin_dirs = get_plugin_dirs()
+            is_fast_mode_enabled = resolve_fast_mode(
+                self._fast_mode, get_user_config_instance().night_mode, datetime.now(timezone.utc)
+            )
             claude_command = get_claude_command(
                 system_prompt=combined_system_prompt,
                 session_id=maybe_session_id,
@@ -674,7 +680,7 @@ class ClaudeProcessManager:
                 enable_streaming=True,
                 is_fake_claude=self._is_fake_claude,
                 plugin_dirs=plugin_dirs,
-                fast_mode=self._fast_mode,
+                fast_mode=is_fast_mode_enabled,
                 effort=self._effort,
                 resolve_binary_path=self._resolve_claude_binary_path,
                 harness=self._harness,

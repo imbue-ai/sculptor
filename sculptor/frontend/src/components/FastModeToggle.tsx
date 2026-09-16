@@ -7,20 +7,39 @@ import { ElementIds } from "../api";
 type FastModeToggleProps = {
   isActive: boolean;
   onToggle: () => void;
+  /**
+   * Why fast mode is unavailable, when it is. The stored preference is left
+   * untouched and applies again once the reason clears.
+   */
+  suppressedReason?: string | null;
 };
 
-export const FastModeToggle = ({ isActive, onToggle }: FastModeToggleProps): ReactElement => (
-  <Tooltip content={isActive ? "Disable fast mode" : "Enable fast mode"}>
+export const FastModeToggle = ({ isActive, onToggle, suppressedReason }: FastModeToggleProps): ReactElement => {
+  const isSuppressed = suppressedReason != null;
+  const isShownActive = isActive && !isSuppressed;
+
+  const button = (
     <IconButton
       variant="ghost"
       size="3"
       onClick={onToggle}
+      disabled={isSuppressed}
+      aria-disabled={isSuppressed || undefined}
       aria-label="Toggle fast mode"
       data-testid={ElementIds.FAST_MODE_TOGGLE}
-      data-active={isActive}
-      style={{ margin: 0, color: isActive ? "var(--button-primary-bg)" : undefined }}
+      data-active={isShownActive}
+      style={{ margin: 0, color: isShownActive ? "var(--button-primary-bg)" : undefined }}
     >
       <Zap size={16} />
     </IconButton>
-  </Tooltip>
-);
+  );
+
+  return (
+    <Tooltip content={suppressedReason ?? (isActive ? "Disable fast mode" : "Enable fast mode")}>
+      {/* Radix Tooltip does not fire on a disabled button (it sets
+          pointer-events: none), so the suppressed branch hangs the hover
+          target on a wrapping span. */}
+      {isSuppressed ? <span style={{ display: "inline-flex" }}>{button}</span> : button}
+    </Tooltip>
+  );
+};
