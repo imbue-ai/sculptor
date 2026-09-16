@@ -4551,6 +4551,18 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
+def _settings_listed_projects(request: Request, user_session: UserSession) -> list[Project]:
+    """The projects the settings lists show: a live git repo whose path is still readable."""
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        projects = transaction.get_projects(organization_reference=user_session.organization_reference)
+    return [
+        project
+        for project in projects
+        if not project.is_deleted and project.is_path_accessible and project.user_git_repo_url is not None
+    ]
+
+
 @router.get("/api/v1/env-var-names")
 def get_env_var_names(
     request: Request,
@@ -4561,13 +4573,8 @@ def get_env_var_names(
     global_env_path = sculptor_folder / ".env"
     global_var_names = tuple(parse_env_file(global_env_path).keys())
 
-    services = get_services_from_request_or_websocket(request)
     project_entries: list[ProjectEnvVarNames] = []
-    with user_session.open_transaction(services) as transaction:
-        projects = transaction.get_projects(organization_reference=user_session.organization_reference)
-    for project in projects:
-        if project.is_deleted or not project.is_path_accessible or project.user_git_repo_url is None:
-            continue
+    for project in _settings_listed_projects(request, user_session):
         project_path = project.get_local_user_path()
         env_file = project_path / ".sculptor" / ".env"
         if not env_file.exists():
@@ -4596,13 +4603,8 @@ def get_naming_conventions(
 ) -> NamingConventionsResponse:
     """List the naming-convention docs: the user-global file and each accessible project's shared and local files."""
     sculptor_folder = get_sculptor_folder()
-    services = get_services_from_request_or_websocket(request)
-    with user_session.open_transaction(services) as transaction:
-        projects = transaction.get_projects(organization_reference=user_session.organization_reference)
     entries: list[ProjectNamingConventions] = []
-    for project in projects:
-        if project.is_deleted or not project.is_path_accessible or project.user_git_repo_url is None:
-            continue
+    for project in _settings_listed_projects(request, user_session):
         project_path = project.get_local_user_path()
         entries.append(
             ProjectNamingConventions(
