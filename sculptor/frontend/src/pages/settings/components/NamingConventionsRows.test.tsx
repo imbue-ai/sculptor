@@ -90,6 +90,22 @@ describe("NamingConventionsRows", () => {
     expect(screen.getByText(".sculptor/naming.local.md")).toBeTruthy();
   });
 
+  it("keeps the section with a retry when the list cannot be loaded", async () => {
+    apiHarness.getNamingConventions.mockRejectedValueOnce(new Error("offline"));
+    render(
+      <Theme>
+        <NamingConventionsRows setToast={vi.fn()} />
+      </Theme>,
+    );
+
+    const retry = await screen.findByTestId(ElementIds.SETTINGS_NAMING_CONVENTIONS_RETRY);
+    expect(screen.getByText("Naming conventions")).toBeTruthy();
+
+    apiHarness.getNamingConventions.mockResolvedValue({ data: makeResponse() });
+    fireEvent.click(retry);
+    await screen.findAllByTestId(ElementIds.SETTINGS_NAMING_CONVENTION_ROW);
+  });
+
   it("saves an edited local file when it loses focus", async () => {
     apiHarness.updateNamingConventions.mockResolvedValue({
       data: {

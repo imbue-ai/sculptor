@@ -19,6 +19,8 @@ type NamingConventionsRowsProps = {
 
 const GLOBAL_ROW_KEY = "global";
 
+type LoadState = { status: "loading" } | { status: "loaded"; data: NamingConventionsResponse } | { status: "failed" };
+
 const withUpdatedFile = (data: NamingConventionsResponse, updated: NamingConventionFile): NamingConventionsResponse => {
   const replace = (file: NamingConventionFile): NamingConventionFile => (file.path === updated.path ? updated : file);
   return {
@@ -45,7 +47,8 @@ const describeFile = (file: NamingConventionFile): string => {
  * per repo (shared + local), each expanding into in-place editors.
  */
 export const NamingConventionsRows = ({ setToast }: NamingConventionsRowsProps): ReactElement | null => {
-  const [data, setData] = useState<NamingConventionsResponse | null>(null);
+  const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
+  const [reloadCount, setReloadCount] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,10 +57,11 @@ export const NamingConventionsRows = ({ setToast }: NamingConventionsRowsProps):
       try {
         const response = await getNamingConventions({ meta: { skipWsAck: true } });
         if (!isIgnored) {
-          setData(response.data);
+          setLoadState({ status: "loaded", data: response.data });
         }
       } catch (error) {
         if (!isIgnored) {
+          setLoadState({ status: "failed" });
           setToast({
             title: "Could not load naming conventions",
             description: getErrorMessage(error, "Unknown error"),
@@ -70,7 +74,7 @@ export const NamingConventionsRows = ({ setToast }: NamingConventionsRowsProps):
     return (): void => {
       isIgnored = true;
     };
-  }, [setToast]);
+  }, [setToast, reloadCount]);
 
   const saveFile = useCallback(
     async (tier: NamingConventionTier, projectId: string | null, content: string): Promise<void> => {
@@ -79,7 +83,11 @@ export const NamingConventionsRows = ({ setToast }: NamingConventionsRowsProps):
           body: { tier, projectId, content },
           meta: { skipWsAck: true },
         });
-        setData((previous) => (previous === null ? previous : withUpdatedFile(previous, response.data)));
+        setLoadState((previous) =>
+          previous.status === "loaded"
+            ? { status: "loaded", data: withUpdatedFile(previous.data, response.data) }
+            : previous,
+        );
       } catch (error) {
         setToast({
           title: "Could not save naming conventions",
@@ -98,9 +106,33 @@ export const NamingConventionsRows = ({ setToast }: NamingConventionsRowsProps):
     [setToast],
   );
 
-  if (data === null) {
+  if (loadState.status === "loading") {
     return null;
   }
+
+  if (loadState.status === "failed") {
+    return (
+      <Box className={styles.container} data-testid={ElementIds.SETTINGS_NAMING_CONVENTIONS_LIST}>
+        <SectionTitle>Naming conventions</SectionTitle>
+        <Text as="p" size="2" className={styles.intro}>
+          Could not load the naming-convention files.{" "}
+          <Link
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
+              setLoadState({ status: "loading" });
+              setReloadCount((count) => count + 1);
+            }}
+            data-testid={ElementIds.SETTINGS_NAMING_CONVENTIONS_RETRY}
+          >
+            Try again
+          </Link>
+        </Text>
+      </Box>
+    );
+  }
+
+  const data = loadState.data;
 
   const toggleRow = (key: string): void => {
     setExpandedRowKey((current) => (current === key ? null : key));
