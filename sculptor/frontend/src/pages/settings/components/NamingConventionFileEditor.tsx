@@ -1,7 +1,7 @@
 import { Button, DropdownMenu, Flex, IconButton, Text } from "@radix-ui/themes";
 import { FileText } from "lucide-react";
 import type { FocusEvent, ReactElement } from "react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import type { ExternalApp, NamingConventionFile } from "~/api";
 import { ElementIds, NamingConventionTier } from "~/api";
@@ -23,10 +23,12 @@ type NamingConventionFileEditorProps = {
   onOpenError: (message: string) => void;
 };
 
+const PATH_SEPARATOR_RE = /[\\/]/;
+
 // The row header already shows where the repo lives, so a repo file is named relative to
 // it; the user-global file keeps its home-relative display path.
 const labelPath = (file: NamingConventionFile): string =>
-  file.tier === NamingConventionTier.USER ? file.displayPath : file.path.split("/").slice(-2).join("/");
+  file.tier === NamingConventionTier.USER ? file.displayPath : file.path.split(PATH_SEPARATOR_RE).slice(-2).join("/");
 
 export const NamingConventionFileEditor = ({
   label,
@@ -37,6 +39,7 @@ export const NamingConventionFileEditor = ({
   onSave,
   onOpenError,
 }: NamingConventionFileEditorProps): ReactElement => {
+  const textareaId = useId();
   const doesExist = file.content !== null;
   const savedValue = file.content ?? template;
 
@@ -49,7 +52,7 @@ export const NamingConventionFileEditor = ({
   return (
     <div>
       <div className={styles.fileLabelRow}>
-        <label className={styles.fileLabel}>
+        <label className={styles.fileLabel} htmlFor={textareaId}>
           <FileText size={14} />
           {label}
           <Code size="1" style={inlineCodeStyle}>
@@ -71,6 +74,7 @@ export const NamingConventionFileEditor = ({
       {/* Uncontrolled: `key` re-mounts the textarea when the saved value changes
           (after a save, reset, or delete), so we never copy the prop into local state. */}
       <textarea
+        id={textareaId}
         key={savedValue}
         className={`${styles.fileInput} ${doesExist ? "" : styles.fileInputTemplate}`}
         defaultValue={savedValue}
