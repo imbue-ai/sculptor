@@ -131,8 +131,9 @@ def _resolve_branch_to_delete(
 ) -> str | None:
     """Pick the branch the deletion policy applies to: the created one, or its rename.
 
-    None when neither can be identified (the created branch is gone and the
-    worktree's HEAD is detached or unreadable), in which case nothing is deleted.
+    None when neither can be identified, in which case nothing is deleted: a branch
+    is only ever deleted when it is the one this workspace created, or git records it
+    as that branch's rename.
     """
     if _local_branch_exists(user_repo_path, created_branch, concurrency_group):
         return created_branch
@@ -140,12 +141,35 @@ def _resolve_branch_to_delete(
     if checked_out is None:
         logger.debug("Branch {} no longer exists and the worktree's branch is unknown; not deleting", created_branch)
         return None
-    logger.debug(
-        "Branch {} no longer exists; treating {} (checked out in the worktree) as its rename",
-        created_branch,
-        checked_out,
-    )
+    if not _is_recorded_rename_of(user_repo_path, checked_out, created_branch, concurrency_group):
+        logger.debug(
+            "Branch {} no longer exists and {} (checked out in the worktree) is not recorded as its rename; not deleting",
+            created_branch,
+            checked_out,
+        )
+        return None
+    logger.debug("Branch {} was renamed to {}; deleting the rename instead", created_branch, checked_out)
     return checked_out
+
+
+def _is_recorded_rename_of(
+    user_repo_path: Path, branch_name: str, original_branch: str, concurrency_group: ConcurrencyGroup
+) -> bool:
+    """Whether git records `branch_name` as a rename of `original_branch`.
+
+    `git branch -m` appends `Branch: renamed refs/heads/<old> to refs/heads/<new>` to the
+    new branch's reflog, which is the only local evidence tying a renamed branch back to
+    the one the workspace created. Anything else — an unrelated branch checked out after
+    the created one was deleted, a second rename on top of the first, reflogs turned off —
+    reads as "not attributable", so the branch is left alone.
+    """
+    stdout = _run_git_query(
+        ["git", "-C", str(user_repo_path), "reflog", "show", "--format=%gs", branch_name], concurrency_group
+    )
+    if stdout is None:
+        return False
+    rename_entry = f"Branch: renamed refs/heads/{original_branch} to refs/heads/{branch_name}"
+    return any(line.strip() == rename_entry for line in stdout.splitlines())
 
 
 def _local_branch_exists(user_repo_path: Path, branch_name: str, concurrency_group: ConcurrencyGroup) -> bool:

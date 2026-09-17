@@ -355,6 +355,40 @@ def test_remove_worktree_leaves_foreign_checked_out_branch_alone(
     assert not _branch_exists(user_repo, "user/random-slug")
 
 
+def test_remove_worktree_leaves_a_foreign_branch_alone_when_the_created_branch_was_deleted(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """A branch checked out in the worktree is only deleted when git records it as the rename.
+
+    Deleting the created branch by hand and checking out an unrelated one leaves the
+    worktree on a branch that was never this workspace's.
+    """
+    user_repo = tmp_path / "user"
+    _make_repo(user_repo, "main")
+    subprocess.run(["git", "-C", str(user_repo), "branch", "someone-elses-work"], check=True, capture_output=True)
+    destination = tmp_path / "worktree"
+    create_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        concurrency_group=test_root_concurrency_group,
+        base_ref="main",
+        new_branch="user/random-slug",
+    )
+    subprocess.run(["git", "checkout", "someone-elses-work"], cwd=destination, check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(user_repo), "branch", "-D", "user/random-slug"], check=True, capture_output=True)
+
+    remove_worktree(
+        user_repo_path=user_repo,
+        destination=destination,
+        branch_name="user/random-slug",
+        deletion_policy="always",
+        concurrency_group=test_root_concurrency_group,
+    )
+
+    assert not destination.exists()
+    assert _branch_exists(user_repo, "someone-elses-work")
+
+
 def test_remove_worktree_leaves_branches_alone_when_rename_cannot_be_identified(
     tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
