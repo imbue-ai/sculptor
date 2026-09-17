@@ -24,6 +24,10 @@ from sculptor.services.workspace_service.branch_naming import SLUG_PLACEHOLDER
 from sculptor.services.workspace_service.branch_naming import resolve_pattern
 from sculptor.services.workspace_service.branch_naming import user_slug_from_full_name
 
+# These run on the path that assembles the user's first message, so a stuck git
+# (index.lock contention, a hung credential helper) must not hold up the prompt.
+_GIT_QUERY_TIMEOUT_SECONDS = 5.0
+
 
 class BranchRenameHint(FrozenModel):
     current_branch: str
@@ -55,10 +59,18 @@ def _fits_template(branch: str, template: str) -> bool:
 
 
 def _git_stdout(environment: AgentExecutionEnvironment, command: list[str]) -> str | None:
-    """Stripped stdout of a read-only git command run in the workspace checkout, or None if it failed."""
+    """Stripped stdout of a read-only git command run in the workspace checkout, or None if it failed.
+
+    A timeout raises `ProcessTimeoutError`, a `ProcessError`, so it lands in the same
+    "no hint" answer as any other failure.
+    """
     try:
         result = environment.run_process_to_completion(
-            command, secrets={}, cwd=str(environment.get_working_directory()), is_checked_after=False
+            command,
+            secrets={},
+            cwd=str(environment.get_working_directory()),
+            timeout=_GIT_QUERY_TIMEOUT_SECONDS,
+            is_checked_after=False,
         )
     except ProcessError as e:
         logger.debug("git query {} failed: {}", " ".join(command), e)
