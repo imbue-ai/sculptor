@@ -37,6 +37,7 @@ from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.default.utils import get_warning_message
 from sculptor.common.plugin import get_plugin_dirs
+from sculptor.config.user_config import UserConfig
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.processes.local_process import RunningProcess
@@ -70,6 +71,30 @@ from sculptor.services.workspace_service.setup_command_runner import SetupStateP
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+
+
+def resolve_auto_rename_reminder(
+    environment: AgentExecutionEnvironment,
+    user_config: UserConfig,
+    project_naming_pattern: str | None,
+) -> AutoRenameReminder | None:
+    """The auto-rename reminder for a first message, or None when auto-naming is off.
+
+    Reading the convention docs and querying git happen here rather than at the
+    reminder's assembly, so they are skipped entirely when nothing will use them.
+    """
+    if not user_config.enable_auto_rename:
+        return None
+    branch_rename = None
+    if user_config.enable_auto_rename_branch:
+        branch_rename = resolve_branch_rename_hint(
+            environment,
+            resolve_naming_pattern(project_naming_pattern, user_config.default_workspace_branch_naming_pattern),
+        )
+    return AutoRenameReminder(
+        naming_conventions=resolve_naming_conventions(environment),
+        branch_rename=branch_rename,
+    )
 
 
 class ClaudeProcessManager:
@@ -617,22 +642,13 @@ class ClaudeProcessManager:
             is_first_message = is_first_user_message_of_conversation(self.environment, self._harness)
             env_var_names = self.environment.get_project_env_var_names()
             setup_state = self._fetch_setup_state(is_first_message)
-            user_config = get_user_config_instance()
-            auto_rename: AutoRenameReminder | None = None
-            if is_first_message and user_config.enable_auto_rename:
-                auto_rename = AutoRenameReminder(
-                    naming_conventions=resolve_naming_conventions(self.environment),
-                    branch_rename=(
-                        resolve_branch_rename_hint(
-                            self.environment,
-                            resolve_naming_pattern(
-                                self._project_naming_pattern, user_config.default_workspace_branch_naming_pattern
-                            ),
-                        )
-                        if user_config.enable_auto_rename_branch
-                        else None
-                    ),
+            auto_rename = (
+                resolve_auto_rename_reminder(
+                    self.environment, get_user_config_instance(), self._project_naming_pattern
                 )
+                if is_first_message
+                else None
+            )
             user_instructions = get_user_instructions(
                 # UserMessageUnion is wider than get_user_instructions accepts; non-chat messages never reach here
                 # pyrefly: ignore [bad-argument-type]
