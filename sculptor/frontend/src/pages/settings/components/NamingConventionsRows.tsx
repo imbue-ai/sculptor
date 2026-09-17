@@ -4,10 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { NamingConventionFile, NamingConventionsResponse, NamingConventionTier } from "~/api";
 import { ElementIds, getNamingConventions, updateNamingConventions } from "~/api";
-import { getErrorMessage } from "~/common/Errors.ts";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import { getErrorMessage } from "~/common/utils/errors.ts";
 import { Code } from "~/components/Code.tsx";
-import type { ToastContent } from "~/components/Toast.tsx";
-import { ToastType } from "~/components/Toast.tsx";
 
 import { NamingConventionFileEditor } from "./NamingConventionFileEditor.tsx";
 import styles from "./NamingConventionsRows.module.scss";
