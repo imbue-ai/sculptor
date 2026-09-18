@@ -8,7 +8,7 @@ Per-turn emission for the happy path::
     {"type":"response","command":"prompt","success":true,"id":<echoed>}
     {"type":"agent_start"}
     {"type":"message_end","message":{"role":"user",...}}   # prompt echo
-    {"type":"message_update","message":{...},"assistantMessageEvent":{...}}
+    {"type":"message_update","usage":{...},"assistantMessageEvent":{...}}
     ...
     {"type":"message_end","message":{"role":"assistant",...}}
     {"type":"agent_end","messages":[...],"willRetry":false}
@@ -75,7 +75,7 @@ back and updates the current model, so a switch persists for a following ``get_s
 directive echoes that current model into the turn text, so a test can assert a switch
 reached pi (the turn ran under it), not just that the switcher's display updated.
 
-Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
+Wire-protocol reference: the pi RPC protocol notes (pi 0.84.4).
 """
 
 from __future__ import annotations
@@ -386,11 +386,14 @@ def _emit_response(
     _emit(payload)
 
 
-def _emit_text_delta(text: str, partial: str, content_index: int = 0) -> None:
+def _emit_text_delta(text: str, content_index: int = 0) -> None:
+    # pi >= 0.84's streaming shape: `message_update` carries only the
+    # `assistantMessageEvent` delta (plus cumulative `usage`), no cumulative
+    # `message` snapshot (pi#7290).
     _emit(
         {
             "type": "message_update",
-            "message": _assistant_message(partial, stop_reason=""),
+            "usage": {"input": 1, "output": 1},
             "assistantMessageEvent": {
                 "type": "text_delta",
                 "contentIndex": content_index,
@@ -509,8 +512,7 @@ def _handle_compaction(args: dict, builder: _TurnBuilder, abort_event: Event, st
 
 def _handle_emit_text(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     text = args.get("text", "")
-    accumulated = builder.full_text + text
-    _emit_text_delta(text, accumulated)
+    _emit_text_delta(text)
     builder.emit(text)
 
 
@@ -524,8 +526,7 @@ def _handle_stream_text(args: dict, builder: _TurnBuilder, abort_event: Event, s
         if abort_event.is_set():
             raise _TurnAborted()
         chunk = text[offset : offset + chunk_size]
-        accumulated = builder.full_text + chunk
-        _emit_text_delta(chunk, accumulated)
+        _emit_text_delta(chunk)
         builder.emit(chunk)
         if delay_seconds > 0:
             time.sleep(delay_seconds)
@@ -881,8 +882,7 @@ def _handle_report_inputs(args: dict, builder: _TurnBuilder, abort_event: Event,
     """
     mime_types = ",".join(str(image.get("mimeType", "")) for image in builder.images)
     summary = f"[FakePi] images={len(builder.images)}; mimeTypes=[{mime_types}]; prompt={builder.prompt_text}"
-    accumulated = builder.full_text + summary
-    _emit_text_delta(summary, accumulated)
+    _emit_text_delta(summary)
     builder.emit(summary)
 
 
@@ -894,8 +894,7 @@ def _handle_report_model(args: dict, builder: _TurnBuilder, abort_event: Event, 
     """
     model_id = state.current_model.get("id", "") if state.current_model else ""
     summary = f"[FakePi] current_model={model_id}"
-    accumulated = builder.full_text + summary
-    _emit_text_delta(summary, accumulated)
+    _emit_text_delta(summary)
     builder.emit(summary)
 
 
@@ -982,7 +981,7 @@ def _handle_ui_request(args: dict, builder: _TurnBuilder, abort_event: Event, st
     else:
         answer_text = str(response.get("value", ""))
     rendered = str(args.get("answer_prefix", "ANSWER=")) + answer_text
-    _emit_text_delta(rendered, builder.full_text + rendered)
+    _emit_text_delta(rendered)
     builder.emit(rendered)
 
 
@@ -1161,7 +1160,7 @@ def _run_turn(
     if not builder.has_text:
         skill_name = _skill_invocation_name(prompt_text)
         fallback = f"{_SKILL_FOLLOWED_PREFIX}{skill_name}" if skill_name is not None else _DEFAULT_RESPONSE_TEXT
-        _emit_text_delta(fallback, fallback)
+        _emit_text_delta(fallback)
         builder.emit(fallback)
     full_text = builder.full_text
     _emit_message_end(full_text)

@@ -656,6 +656,96 @@ def test_convert_agent_messages_to_task_update_tool_result_survives_subsequent_p
     assert isinstance(in_progress.content[1], ToolResultBlock)
 
 
+def test_convert_agent_messages_pi_tool_loop_renders_trailing_text() -> None:
+    """Regression test: a pi tool-loop turn's trailing text-only message must render live.
+
+    Mirrors the pi wrapper's exact emission sequence for one turn:
+    1. message_end re-advertise partial [Text, ToolUse] + its final (same ids)
+    2. the tool lane's [ToolResult] final
+    3. the follow-up assistant message's streamed partial [Text] + its final
+       (fresh ids — pi mints new message ids per assistant message)
+
+    When pi >= 0.84's delta-only `message_update` shape failed to parse, step
+    3's partial never existed: the lone final landed while streaming was still
+    active and its text was silently dropped from the live chat (it reappeared
+    only on reload).
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    tool_use_id = ToolUseID("tool-use-pi-loop-1")
+    m1_assistant_id = AssistantMessageID("pi-assistant-1")
+    m1_message_id = AgentMessageID()
+    m2_assistant_id = AssistantMessageID("pi-assistant-2")
+    m2_message_id = AgentMessageID()
+
+    m1_content = (
+        TextBlock(text="The version-bump PR merged. Verifying origin/main advanced:"),
+        ToolUseBlock(id=tool_use_id, name="Bash", input={"command": "git log origin/main -1 --oneline"}),
+    )
+    messages: list = [
+        # M1: message_end re-advertise partial, then the final with the same ids.
+        PartialResponseBlockAgentMessage(
+            assistant_message_id=m1_assistant_id,
+            message_id=AgentMessageID(),
+            first_response_message_id=m1_message_id,
+            content=m1_content,
+        ),
+        ResponseBlockAgentMessage(
+            role="assistant",
+            assistant_message_id=m1_assistant_id,
+            message_id=m1_message_id,
+            content=m1_content,
+        ),
+        # The tool lane's result.
+        ResponseBlockAgentMessage(
+            role="assistant",
+            assistant_message_id=m1_assistant_id,
+            message_id=AgentMessageID(),
+            content=(
+                ToolResultBlock(
+                    tool_use_id=tool_use_id,
+                    tool_name="Bash",
+                    invocation_string="git log origin/main -1 --oneline",
+                    content=GenericToolContent(text="abc123 Merge PR #437"),
+                ),
+            ),
+        ),
+        # M2 (text-only): streamed partial, then its final — fresh ids.
+        PartialResponseBlockAgentMessage(
+            assistant_message_id=m2_assistant_id,
+            message_id=AgentMessageID(),
+            first_response_message_id=m2_message_id,
+            content=(TextBlock(text="origin/main now points at the merge commit. All set."),),
+        ),
+        ResponseBlockAgentMessage(
+            role="assistant",
+            assistant_message_id=m2_assistant_id,
+            message_id=m2_message_id,
+            content=(TextBlock(text="origin/main now points at the merge commit. All set."),),
+        ),
+    ]
+
+    state = convert_agent_messages_to_task_update(
+        messages,
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    in_progress = state.in_progress_chat_message
+    assert in_progress is not None
+    assert len(in_progress.content) == 3
+    first_text = in_progress.content[0]
+    assert isinstance(first_text, TextBlock)
+    assert first_text.text == "The version-bump PR merged. Verifying origin/main advanced:"
+    assert isinstance(in_progress.content[1], ToolResultBlock)
+    trailing_text = in_progress.content[2]
+    assert isinstance(trailing_text, TextBlock)
+    assert trailing_text.text == "origin/main now points at the merge commit. All set."
+
+
 def _make_ask_user_question_messages(
     tool_use_id: ToolUseID,
     assistant_message_id: AssistantMessageID,
