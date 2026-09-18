@@ -45,6 +45,7 @@ from sculptor.agents.pi_agent.background import parse_background_completion
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedAgentEnd
+from sculptor.agents.pi_agent.output_processor import ParsedMessageUpdate
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
@@ -161,10 +162,13 @@ def _user_msg(text: str) -> dict[str, Any]:
     return {"role": "user", "content": [{"type": "text", "text": text}]}
 
 
-def _text_delta_update(delta: str, partial_text: str, content_index: int = 0) -> dict[str, Any]:
+def _text_delta_update(delta: str, content_index: int = 0) -> dict[str, Any]:
+    # pi >= 0.84's streaming shape: `message_update` carries only the
+    # `assistantMessageEvent` delta (plus cumulative `usage`), no cumulative
+    # `message` snapshot (pi#7290).
     return {
         "type": "message_update",
-        "message": _assistant_msg(partial_text, stop_reason=""),
+        "usage": {"input": 1, "output": 1},
         "assistantMessageEvent": {
             "type": "text_delta",
             "contentIndex": content_index,
@@ -337,10 +341,11 @@ _DOCUMENTED_EVENTS: list[dict[str, Any]] = [
     {"type": "extension_ui_request", "id": "u1", "method": "select"},
     {"type": "agent_start"},
     {"type": "agent_end", "messages": [], "willRetry": False},
+    {"type": "agent_settled"},
     {"type": "turn_start"},
     {"type": "turn_end", "message": _assistant_msg("x"), "toolResults": []},
     {"type": "message_start", "message": _assistant_msg("x", stop_reason="")},
-    _text_delta_update("x", "x"),
+    _text_delta_update("x"),
     {"type": "message_end", "message": _assistant_msg("x")},
     {"type": "tool_execution_start", "toolCallId": "t", "toolName": "read", "args": {}},
     {"type": "tool_execution_update", "toolCallId": "t", "toolName": "read", "args": {}, "partialResult": "..."},
@@ -360,6 +365,7 @@ _DOCUMENTED_EVENTS: list[dict[str, Any]] = [
 # compaction_start/end are deliberately ABSENT — they emit the AutoCompacting*
 # chrome pair (see the compaction tests above) rather than being discarded.
 _DISCARDED_EVENTS: list[dict[str, Any]] = [
+    {"type": "agent_settled"},
     {"type": "turn_start"},
     {"type": "turn_end", "message": _assistant_msg("x"), "toolResults": []},
     {"type": "message_start", "message": _assistant_msg("x", stop_reason="")},
@@ -710,8 +716,8 @@ class TestStreamingAndTurnLifecycle:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("hello ", "hello ")),
-                _event(_text_delta_update("world", "hello world")),
+                _event(_text_delta_update("hello ")),
+                _event(_text_delta_update("world")),
                 _event({"type": "agent_end", "messages": [_assistant_msg("hello world")], "willRetry": False}),
             ]
         )
@@ -728,7 +734,7 @@ class TestStreamingAndTurnLifecycle:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("done.", "done.")),
+                _event(_text_delta_update("done.")),
                 _event({"type": "message_end", "message": _assistant_msg("done.")}),
                 _event({"type": "agent_end", "messages": [_assistant_msg("done.")], "willRetry": False}),
             ]
@@ -761,7 +767,7 @@ class TestStreamingAndTurnLifecycle:
                 _event({"type": "agent_start"}),
                 # pi echoes the prompt back as a role="user" message_end here.
                 _event({"type": "message_end", "message": _user_msg("who are you?")}),
-                _event(_text_delta_update("I am Sculptor.", "I am Sculptor.")),
+                _event(_text_delta_update("I am Sculptor.")),
                 _event({"type": "message_end", "message": _assistant_msg("I am Sculptor.")}),
                 _event({"type": "agent_end", "messages": [_assistant_msg("I am Sculptor.")], "willRetry": False}),
             ]
@@ -779,7 +785,7 @@ class TestStreamingAndTurnLifecycle:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("partial-only", "partial-only")),
+                _event(_text_delta_update("partial-only")),
                 _event({"type": "agent_end", "messages": [], "willRetry": False}),
             ]
         )
@@ -803,7 +809,7 @@ class TestStreamingAndTurnLifecycle:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("thinking", "thinking")),
+                _event(_text_delta_update("thinking")),
                 _event({"type": "message_end", "message": _assistant_msg("thinking", stop_reason="toolUse")}),
                 _event({"type": "tool_execution_start", "toolCallId": "t1", "toolName": "read", "args": {}}),
                 _event(
@@ -815,7 +821,7 @@ class TestStreamingAndTurnLifecycle:
                         "isError": False,
                     }
                 ),
-                _event(_text_delta_update("done.", "done.")),
+                _event(_text_delta_update("done.")),
                 _event({"type": "message_end", "message": _assistant_msg("done.")}),
                 _event(
                     {
@@ -866,7 +872,7 @@ class TestResponseEnvelope:
             [
                 _event({"type": "response", "command": "prompt", "success": True, "id": _PROMPT_ID}),
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("hi", "hi")),
+                _event(_text_delta_update("hi")),
                 _event({"type": "agent_end", "messages": [_assistant_msg("hi")], "willRetry": False}),
             ]
         )
@@ -895,11 +901,10 @@ class TestTurnFailures:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("partial ", "partial ")),
+                _event(_text_delta_update("partial ")),
                 _event(
                     {
                         "type": "message_update",
-                        "message": _assistant_msg("partial ", stop_reason=""),
                         "assistantMessageEvent": {"type": "error", "reason": "upstream model failed"},
                     }
                 ),
@@ -990,7 +995,7 @@ class TestTransientRetry:
                 _event({"type": "message_end", "message": _assistant_error_msg(overloaded)}),
                 # Retry: pi recovers and completes the turn on the re-prompt.
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("recovered", "recovered")),
+                _event(_text_delta_update("recovered")),
                 _event({"type": "message_end", "message": _assistant_msg("recovered")}),
                 _event({"type": "agent_end", "messages": [_assistant_msg("recovered")], "willRetry": False}),
             ]
@@ -1133,7 +1138,7 @@ class TestInterruptAndAbort:
         agent = _make_agent()
         out_queue: Queue[tuple[str, bool]] = Queue()
         out_queue.put((_event({"type": "agent_start"}), True))
-        out_queue.put((_event(_text_delta_update("partial", "partial")), True))
+        out_queue.put((_event(_text_delta_update("partial")), True))
         process = MagicMock()
         process.get_queue.return_value = out_queue
         process.is_finished.return_value = False
@@ -1184,7 +1189,7 @@ class TestInterruptAndAbort:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("hello", "hello")),
+                _event(_text_delta_update("hello")),
                 _event({"type": "agent_end", "messages": [_assistant_msg("hello")], "willRetry": False}),
             ]
         )
@@ -1281,7 +1286,7 @@ class TestInterruptAndAbort:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("partial", "partial")),
+                _event(_text_delta_update("partial")),
                 _event(
                     {
                         "type": "agent_end",
@@ -1303,7 +1308,7 @@ class TestInterruptAndAbort:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("partial", "partial")),
+                _event(_text_delta_update("partial")),
                 _event({"type": "message_end", "message": _assistant_msg("partial", stop_reason="aborted")}),
                 _event(
                     {
@@ -1443,7 +1448,7 @@ class TestInterruptAndAbort:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("typing", "typing")),
+                _event(_text_delta_update("typing")),
                 _event(
                     {
                         "type": "agent_end",
@@ -1466,7 +1471,7 @@ class TestInterruptAndAbort:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("typing", "typing")),
+                _event(_text_delta_update("typing")),
                 _event(
                     {
                         "type": "agent_end",
@@ -1523,7 +1528,7 @@ class TestToolRendering:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("Reading. ", "Reading. ")),
+                _event(_text_delta_update("Reading. ")),
                 _event(
                     {
                         "type": "message_end",
@@ -1725,7 +1730,7 @@ class TestToolRendering:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("x", "x")),
+                _event(_text_delta_update("x")),
                 _event(
                     {
                         "type": "message_end",
@@ -2661,7 +2666,7 @@ class TestCompaction:
                 _event({"type": "agent_start"}),
                 _event({"type": "compaction_start", "reason": "threshold"}),
                 _event({"type": "compaction_end", "reason": "threshold", "aborted": False, "willRetry": False}),
-                _event(_text_delta_update("done.", "done.")),
+                _event(_text_delta_update("done.")),
                 _event({"type": "message_end", "message": _assistant_msg("done.")}),
                 _event({"type": "agent_end", "messages": [_assistant_msg("done.")], "willRetry": False}),
             ]
@@ -2719,7 +2724,7 @@ class TestCompaction:
                 _event({"type": "compaction_start", "reason": "overflow"}),
                 _event({"type": "compaction_end", "reason": "overflow", "aborted": False, "willRetry": True}),
                 # The turn continues: pi re-runs and streams the real response.
-                _event(_text_delta_update("after retry", "after retry")),
+                _event(_text_delta_update("after retry")),
                 _event({"type": "message_end", "message": _assistant_msg("after retry")}),
                 _event({"type": "agent_end", "messages": [_assistant_msg("after retry")], "willRetry": False}),
             ]
@@ -2754,6 +2759,21 @@ class TestEventParsing:
         # No discriminator at all, and a known type whose required field is absent.
         assert isinstance(parse_rpc_message({"no": "type"}), ParsedUnknownEvent)
         assert isinstance(parse_rpc_message({"type": "message_update"}), ParsedUnknownEvent)
+
+    def test_message_update_parses_without_cumulative_message(self) -> None:
+        # pi >= 0.84 removed the cumulative `message` snapshot from
+        # `message_update` (pi#7290); the delta-only shape must still parse
+        # (it previously fell to ParsedUnknownEvent and every streaming update
+        # was silently dropped).
+        parsed = parse_rpc_message(
+            {
+                "type": "message_update",
+                "usage": {"input": 100, "output": 1},
+                "assistantMessageEvent": {"type": "text_delta", "contentIndex": 0, "delta": "Hello "},
+            }
+        )
+        assert isinstance(parsed, ParsedMessageUpdate)
+        assert parsed.message is None
 
     @pytest.mark.parametrize("payload", _DISCARDED_EVENTS, ids=lambda p: str(p["type"]))
     def test_unconsumed_event_is_discarded_and_turn_still_ends(self, payload: dict[str, Any]) -> None:
@@ -3587,7 +3607,7 @@ class TestTurnFooterMetrics:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("part two.", "part two.")),
+                _event(_text_delta_update("part two.")),
                 _event({"type": "message_end", "message": msg_b}),
                 _event({"type": "agent_end", "messages": [msg_a, msg_b], "willRetry": False}),
             ]
@@ -3609,7 +3629,7 @@ class TestTurnFooterMetrics:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("hi.", "hi.")),
+                _event(_text_delta_update("hi.")),
                 _event({"type": "message_end", "message": _assistant_msg("hi.")}),
                 _event({"type": "agent_end", "messages": [], "willRetry": False}),
             ]
@@ -3633,7 +3653,7 @@ class TestTurnFooterMetrics:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("done.", "done.")),
+                _event(_text_delta_update("done.")),
                 _event({"type": "message_end", "message": _assistant_msg("done.")}),
                 _event({"type": "agent_end", "messages": [_assistant_msg("done.")], "willRetry": False}),
             ]
@@ -3655,7 +3675,7 @@ class TestTurnFooterMetrics:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update("done.", "done.")),
+                _event(_text_delta_update("done.")),
                 _event({"type": "message_end", "message": _assistant_msg("done.")}),
                 _event({"type": "agent_end", "messages": [_assistant_msg("done.")], "willRetry": False}),
             ]
@@ -3786,7 +3806,7 @@ class TestSculptorInitiatedWake:
         agent._process = _make_process(
             [
                 _event({"type": "agent_start"}),
-                _event(_text_delta_update(ack, ack)),
+                _event(_text_delta_update(ack)),
                 _event({"type": "message_end", "message": _assistant_msg(ack)}),
                 _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
             ]

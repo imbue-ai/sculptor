@@ -16,7 +16,7 @@ Field names are the Python snake_case mirror of pi's camelCase wire shapes;
 parse to `ParsedUnknownEvent` and are debug-logged and ignored (RPC §5.3
 forward-compat).
 
-Reference: the pi RPC protocol notes (pi 0.78.0).
+Reference: the pi RPC protocol notes (pi 0.84.4).
 """
 
 from __future__ import annotations
@@ -263,6 +263,17 @@ class ParsedAgentEnd(SerializableModel):
     will_retry: bool = False
 
 
+class ParsedAgentSettled(SerializableModel):
+    """pi >= 0.84's post-`agent_end` idle notice (the run is fully quiescent).
+
+    Sculptor's sole turn boundary remains `agent_end`; this is modeled so it
+    parses to a known variant (debug-logged and ignored) rather than the
+    unknown-event fallback.
+    """
+
+    type: Literal["agent_settled"]
+
+
 class ParsedTurnStart(SerializableModel):
     type: Literal["turn_start"]
 
@@ -280,7 +291,12 @@ class ParsedMessageStart(SerializableModel):
 
 class ParsedMessageUpdate(SerializableModel):
     type: Literal["message_update"]
-    message: AgentMessage
+    # WHY: optional — pi 0.84.0 removed the cumulative `message` snapshot from
+    # `message_update` (it caused quadratic output growth; pi#7290), leaving
+    # only the `assistantMessageEvent` delta. The dispatcher only ever reads
+    # the delta, so the snapshot is accepted when present (pi <= 0.83) but
+    # never required.
+    message: AgentMessage | None = None
     # WHY: kept as a raw dict — pi nests ~12 `assistantMessageEvent.type`
     # variants (see `ParsedAssistantMessageEvent` for the typed vocabulary)
     # and pi-basic only dispatches on `text_delta` / `error`; the caller
@@ -481,6 +497,7 @@ ParsedKnownRpcMessage = (
     | ExtensionUiRequest
     | ParsedAgentStart
     | ParsedAgentEnd
+    | ParsedAgentSettled
     | ParsedTurnStart
     | ParsedTurnEnd
     | ParsedMessageStart
