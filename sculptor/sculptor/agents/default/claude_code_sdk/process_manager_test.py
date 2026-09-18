@@ -12,8 +12,11 @@ from uuid import uuid4
 
 import pytest
 
+from sculptor.agents.default.claude_code_sdk import process_manager
+from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.process_manager import ClaudeProcessManager
+from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
@@ -575,3 +578,80 @@ def test_stale_question_answer_with_no_pending_call_is_discarded_not_wedged(
     assert any(
         isinstance(m, RequestSkippedAgentMessage) and m.request_id == stale_answer.message_id for m in emitted
     ), "stale answer must be discarded via RequestSkippedAgentMessage — not respawned or raised on"
+
+
+def _user_config(**overrides: object) -> UserConfig:
+    return UserConfig(
+        user_email="dev@example.com",
+        user_id="user123",
+        organization_id="org123",
+        instance_id="inst123",
+        **overrides,  # pyrefly: ignore [bad-argument-type]
+    )
+
+
+_NAMING_PATTERN = "dev/<slug>"
+_BRANCH_HINT = BranchRenameHint(current_branch="dev/gorgeous-emu", target_template=_NAMING_PATTERN)
+
+
+@pytest.fixture
+def patched_resolvers() -> Generator[tuple[MagicMock, MagicMock], None, None]:
+    """Stand in for the two resolvers that read the checkout, so only the flag wiring is under test."""
+    with (
+        patch.object(process_manager, "resolve_naming_conventions", return_value="### conventions") as conventions,
+        patch.object(process_manager, "resolve_branch_rename_hint", return_value=_BRANCH_HINT) as branch_hint,
+    ):
+        yield conventions, branch_hint
+
+
+def test_resolve_auto_rename_reminder_is_absent_when_auto_rename_is_off(
+    patched_resolvers: tuple[MagicMock, MagicMock],
+) -> None:
+    conventions, branch_hint = patched_resolvers
+    config = _user_config(enable_auto_rename=False, enable_auto_rename_branch=True)
+
+    assert process_manager.resolve_auto_rename_reminder(MagicMock(), config, None) is None
+    conventions.assert_not_called()
+    branch_hint.assert_not_called()
+
+
+def test_resolve_auto_rename_reminder_omits_the_branch_hint_when_only_auto_rename_is_on(
+    patched_resolvers: tuple[MagicMock, MagicMock],
+) -> None:
+    _, branch_hint = patched_resolvers
+    config = _user_config(enable_auto_rename=True, enable_auto_rename_branch=False)
+
+    reminder = process_manager.resolve_auto_rename_reminder(MagicMock(), config, None)
+
+    assert reminder is not None
+    assert reminder.naming_conventions == "### conventions"
+    assert reminder.branch_rename is None
+    branch_hint.assert_not_called()
+
+
+def test_resolve_auto_rename_reminder_carries_the_branch_hint_when_both_flags_are_on(
+    patched_resolvers: tuple[MagicMock, MagicMock],
+) -> None:
+    _, branch_hint = patched_resolvers
+    config = _user_config(enable_auto_rename=True, enable_auto_rename_branch=True)
+    environment = MagicMock()
+
+    reminder = process_manager.resolve_auto_rename_reminder(environment, config, "team/<slug>")
+
+    assert reminder is not None
+    assert reminder.branch_rename == _BRANCH_HINT
+    branch_hint.assert_called_once_with(environment, "team/<slug>")
+
+
+def test_resolve_auto_rename_reminder_falls_back_to_the_user_pattern_without_a_project_override(
+    patched_resolvers: tuple[MagicMock, MagicMock],
+) -> None:
+    _, branch_hint = patched_resolvers
+    config = _user_config(
+        enable_auto_rename=True, enable_auto_rename_branch=True, default_workspace_branch_naming_pattern="me/<slug>"
+    )
+    environment = MagicMock()
+
+    process_manager.resolve_auto_rename_reminder(environment, config, None)
+
+    branch_hint.assert_called_once_with(environment, "me/<slug>")

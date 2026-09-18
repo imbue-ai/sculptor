@@ -1,12 +1,7 @@
 """Resolve the layered naming-convention docs injected into the auto-rename reminder.
 
-A repo (or a user) can steer how the agent auto-names its workspace and itself by
-supplying a `naming.md`. There are three tiers, mirroring Claude Code's
-User < Project < Local settings precedence:
-
-- User:    `~/.sculptor/naming.md` — your machine, applies in every repo, never committed.
-- Project: `.sculptor/naming.md` — committed, shared by all collaborators on the repo.
-- Local:   `.sculptor/naming.local.md` — gitignored, just you in this one repo.
+The three tiers (User, Project, Local) and their on-disk locations are defined in
+`sculptor.config.naming_convention_files`.
 
 The tiers layer rather than replace: whichever exist are concatenated (least
 specific first), and a more-specific tier wins on conflict — the reminder tells
@@ -23,17 +18,16 @@ from pathlib import Path
 
 from loguru import logger
 
+from sculptor.config.naming_convention_files import NAMING_CONVENTIONS_FILENAME
+from sculptor.config.naming_convention_files import NAMING_CONVENTIONS_LOCAL_FILENAME
+from sculptor.config.naming_convention_files import NamingConventionTier
+from sculptor.config.naming_convention_files import SCULPTOR_CONFIG_DIRNAME
+from sculptor.config.naming_convention_files import naming_conventions_file_path
+from sculptor.config.naming_convention_files import read_naming_conventions_file
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.interfaces.environments.errors import EnvironmentFailure
 from sculptor.interfaces.environments.errors import FileNotFoundEnvironmentError
 from sculptor.utils.build import get_sculptor_folder
-
-# Directory and filenames of the convention docs. Kept here as the single source
-# of truth; the settings-toggle copy, help docs, and .gitignore reference the same
-# names, so update those together if these change.
-SCULPTOR_CONFIG_DIRNAME = ".sculptor"
-NAMING_CONVENTIONS_FILENAME = "naming.md"
-NAMING_CONVENTIONS_LOCAL_FILENAME = "naming.local.md"
 
 # Per-tier character cap. Conventions are meant to be a few lines; this only
 # guards against a stray large file bloating every first-message reminder.
@@ -48,14 +42,9 @@ def _clip(text: str) -> str:
 
 def _read_user_tier(sculptor_folder: Path) -> str | None:
     """Read the host-side user-global doc, or None if it is absent/unreadable."""
-    path = sculptor_folder / NAMING_CONVENTIONS_FILENAME
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-    except OSError as e:
-        logger.warning("Could not read user naming conventions at {}: {}", path, e)
-        return None
+    return read_naming_conventions_file(
+        naming_conventions_file_path(NamingConventionTier.USER, sculptor_folder, project_path=None)
+    )
 
 
 def _read_repo_tier(environment: AgentExecutionEnvironment, filename: str) -> str | None:

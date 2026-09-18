@@ -46,7 +46,9 @@ And after those:
 
 - **Privacy** — your account email and the telemetry toggle.
 - **Experimental** — features still in development, including workspace-mode
-  toggles and, on the desktop app, the custom backend command (see
+  toggles, auto-naming of workspaces, agents, and branches from the first
+  message (with an in-app editor for the `naming.md` convention files that
+  steer it), and, on the desktop app, the custom backend command (see
   [Container Backend](experimental/container_backend.md)).
 - **Actions** — manage your saved prompts (reusable one-click actions) and
   groups, with import and export.

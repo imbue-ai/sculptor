@@ -1,0 +1,96 @@
+.container {
+  margin-top: var(--space-5);
+}
+
+.intro {
+  color: var(--gray-11);
+  margin-bottom: var(--space-2);
+}
+
+.row {
+  border-bottom: 1px solid var(--gray-4);
+  padding: var(--space-4) 0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.rowInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowDetails {
+  color: var(--gray-11);
+  margin-top: var(--space-1);
+}
+
+.rowConfig {
+  margin-top: var(--space-3);
+}
+
+.fileLabelRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+
+.fileLabel {
+  align-items: center;
+  color: var(--gray-11);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  min-width: 0;
+
+  svg {
+    color: var(--gray-9);
+  }
+}
+
+.fileBadge {
+  color: var(--gray-9);
+}
+
+.notCreated {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+}
+
+.fileInput {
+  background: var(--gray-1);
+  border: 1px solid var(--gray-5);
+  border-radius: var(--radius-3);
+  box-sizing: border-box;
+  color: var(--gray-12);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+  width: 100%;
+
+  &:focus {
+    border-color: var(--accent-9);
+    outline: none;
+  }
+}
+
+.fileInputTemplate {
+  color: var(--gray-10);
+  font-style: italic;
+
+  &:focus {
+    color: var(--gray-12);
+    font-style: normal;
+  }
+}
+
+.fileHint {
+  color: var(--gray-9);
+  margin-top: var(--space-1);
+}

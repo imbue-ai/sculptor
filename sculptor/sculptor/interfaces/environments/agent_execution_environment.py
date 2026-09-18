@@ -14,6 +14,7 @@ from typing import Sequence
 from typing import TYPE_CHECKING
 from typing import runtime_checkable
 
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import MutableEvent
 from sculptor.foundation.processes.local_process import RunningProcess
@@ -98,6 +99,10 @@ class AgentExecutionEnvironment(Protocol):
 
     def get_root_path(self) -> Path:
         """Get the root path of the environment."""
+        ...
+
+    def get_initialization_strategy(self) -> WorkspaceInitializationStrategy:
+        """How the workspace checkout relates to the user's repository: in-place, clone, or worktree."""
         ...
 
     def get_working_directory(self) -> Path:

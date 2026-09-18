@@ -16,12 +16,14 @@ from typing import Mapping
 from loguru import logger
 
 from sculptor.agents.attachments import save_attachments_to_environment
+from sculptor.agents.default.claude_code_sdk.branch_rename_hint import resolve_branch_rename_hint
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
 from sculptor.agents.default.claude_code_sdk.naming_conventions import resolve_naming_conventions
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor
 from sculptor.agents.default.claude_code_sdk.output_processor import is_first_user_message_of_conversation
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import AutoRenameReminder
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_claude_command
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_user_instructions
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import is_plan_approval
@@ -35,6 +37,7 @@ from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.default.utils import get_warning_message
 from sculptor.common.plugin import get_plugin_dirs
+from sculptor.config.user_config import UserConfig
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.processes.local_process import RunningProcess
@@ -61,12 +64,37 @@ from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.workspace_service.branch_naming import resolve_naming_pattern
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+
+
+def resolve_auto_rename_reminder(
+    environment: AgentExecutionEnvironment,
+    user_config: UserConfig,
+    project_naming_pattern: str | None,
+) -> AutoRenameReminder | None:
+    """The auto-rename reminder for a first message, or None when auto-naming is off.
+
+    Reading the convention docs and querying git happen here rather than at the
+    reminder's assembly, so they are skipped entirely when nothing will use them.
+    """
+    if not user_config.enable_auto_rename:
+        return None
+    branch_rename = None
+    if user_config.enable_auto_rename_branch:
+        branch_rename = resolve_branch_rename_hint(
+            environment,
+            resolve_naming_pattern(project_naming_pattern, user_config.default_workspace_branch_naming_pattern),
+        )
+    return AutoRenameReminder(
+        naming_conventions=resolve_naming_conventions(environment),
+        branch_rename=branch_rename,
+    )
 
 
 class ClaudeProcessManager:
@@ -83,6 +111,7 @@ class ClaudeProcessManager:
         on_diff_needed: Callable[[], None] | None = None,
         workspace_id: WorkspaceID | None = None,
         setup_state_provider: SetupStateProvider | None = None,
+        project_naming_pattern: str | None = None,
     ):
         self.environment = environment
         self.task_id = task_id
@@ -95,6 +124,7 @@ class ClaudeProcessManager:
         self._on_diff_needed = on_diff_needed
         self._workspace_id = workspace_id
         self._setup_state_provider = setup_state_provider
+        self._project_naming_pattern = project_naming_pattern
         self._harness: ClaudeCodeHarness = harness
         self._fast_mode: bool = False
         self._effort: str | None = "xhigh"
@@ -612,10 +642,12 @@ class ClaudeProcessManager:
             is_first_message = is_first_user_message_of_conversation(self.environment, self._harness)
             env_var_names = self.environment.get_project_env_var_names()
             setup_state = self._fetch_setup_state(is_first_message)
-            enable_auto_rename = get_user_config_instance().enable_auto_rename
-            # Only read the on-disk convention docs when the reminder will actually use them.
-            naming_conventions = (
-                resolve_naming_conventions(self.environment) if is_first_message and enable_auto_rename else None
+            auto_rename = (
+                resolve_auto_rename_reminder(
+                    self.environment, get_user_config_instance(), self._project_naming_pattern
+                )
+                if is_first_message
+                else None
             )
             user_instructions = get_user_instructions(
                 # UserMessageUnion is wider than get_user_instructions accepts; non-chat messages never reach here
@@ -626,8 +658,7 @@ class ClaudeProcessManager:
                 env_var_names=env_var_names,
                 is_first_message=is_first_message,
                 setup_state=setup_state,
-                enable_auto_rename=enable_auto_rename,
-                naming_conventions=naming_conventions,
+                auto_rename=auto_rename,
             )
             filename = str(self.environment.get_state_path() / f"user_instructions_{message.message_id}.txt")
             self.environment.write_file(filename, user_instructions)

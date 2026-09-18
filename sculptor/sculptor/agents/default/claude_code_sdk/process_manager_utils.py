@@ -12,11 +12,13 @@ from typing import cast
 
 from loguru import logger
 
+from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.config.user_config import NightMode
 from sculptor.config.user_config import is_night_mode_active
 from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.agents.agent import ChatInputUserMessage
 from sculptor.interfaces.agents.agent import ParsedAgentResponseType
 from sculptor.interfaces.agents.agent import ParsedToolResultResponse
@@ -250,24 +252,43 @@ Do this early and only once. Do not ask the user about it, do not mention it in 
 """
 
 
-def _build_auto_rename_reminder(naming_conventions: str | None) -> str:
-    """Assemble the first-message auto-rename reminder.
+def _build_branch_rename_block(branch_rename: BranchRenameHint) -> str:
+    return f"""
 
-    ``naming_conventions`` is the pre-resolved, layered convention block (see
-    ``naming_conventions.resolve_naming_conventions``). When present it is inlined
-    verbatim and told to override the default guidance on conflict; when absent the
-    default guidance stands alone.
+This workspace's branch, `{branch_rename.current_branch}`, is a placeholder generated from the repo's branch-naming pattern. Once you have named the workspace, rename the branch to match by running this once from the repo root:
+
+  git branch -m {branch_rename.target_template}
+
+where <slug> is a kebab-case slug of the workspace name: lowercase ASCII letters, digits and hyphens, at most 5 words. Keep every other part of the name exactly as shown, and do it before pushing or opening a pull request. If the branch's slug already looks deliberate rather than a random word pair, or the command fails, leave the branch as it is."""
+
+
+class AutoRenameReminder(FrozenModel):
+    """The first-message auto-rename reminder to emit; `None` in its place emits none.
+
+    Both fields are optional blocks layered onto the default guidance:
+    ``naming_conventions`` is the pre-resolved, layered convention text (see
+    ``naming_conventions.resolve_naming_conventions``), and ``branch_rename`` (see
+    ``branch_rename_hint.resolve_branch_rename_hint``) adds the branch to the things
+    the agent renames.
     """
+
+    naming_conventions: str | None = None
+    branch_rename: BranchRenameHint | None = None
+
+
+def _build_auto_rename_reminder(auto_rename: AutoRenameReminder) -> str:
+    branch_rename = auto_rename.branch_rename
+    branch_block = _build_branch_rename_block(branch_rename) if branch_rename is not None else ""
     conventions_block = ""
-    if naming_conventions is not None:
+    if auto_rename.naming_conventions is not None:
         conventions_block = f"""
 
 The naming conventions below apply here and OVERRIDE the guidance above where they conflict. They are listed from least to most specific; when two conventions disagree, follow the one listed later.
 
 <naming-conventions>
-{naming_conventions}
+{auto_rename.naming_conventions}
 </naming-conventions>"""
-    return _AUTO_RENAME_REMINDER_PREFIX + conventions_block + _AUTO_RENAME_REMINDER_SUFFIX
+    return _AUTO_RENAME_REMINDER_PREFIX + branch_block + conventions_block + _AUTO_RENAME_REMINDER_SUFFIX
 
 
 def get_user_instructions(
@@ -277,8 +298,7 @@ def get_user_instructions(
     env_var_names: Sequence[str] = (),
     is_first_message: bool = False,
     setup_state: SetupReminderState | None = None,
-    enable_auto_rename: bool = False,
-    naming_conventions: str | None = None,
+    auto_rename: AutoRenameReminder | None = None,
 ) -> str:
     if isinstance(message, ChatInputUserMessage):
         user_instructions = _strip_and_unescape_html(message.text)
@@ -313,8 +333,8 @@ The user has configured the following environment variables for this agent: {", 
 
 """
             user_instructions = env_var_instructions + user_instructions
-        if is_first_message and enable_auto_rename:
-            user_instructions = _build_auto_rename_reminder(naming_conventions) + user_instructions
+        if is_first_message and auto_rename is not None:
+            user_instructions = _build_auto_rename_reminder(auto_rename) + user_instructions
         # Prepend the setup reminder after the auto-rename one so it ends up above it: a
         # running or failed setup command is higher-priority first-message context than the
         # rename nudge, and shouldn't be pushed down by it.

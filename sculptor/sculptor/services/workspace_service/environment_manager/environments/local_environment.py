@@ -123,6 +123,9 @@ class LocalEnvironment(Environment):
         """
         return Path(self.workspace_path)
 
+    def get_initialization_strategy(self) -> WorkspaceInitializationStrategy:
+        return self.initialization_strategy
+
     def get_working_directory(self) -> Path:
         """Get the directory where the agent should perform all work.
 
