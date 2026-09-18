@@ -67,7 +67,9 @@ a human sign-off that the RC/release is good to publish. When running as a skill
   If they still want it, proceed.
 - Show them how to do it themselves:
   - **UI:** open the run, click **Review deployments**, check `release`, **Approve and deploy**.
-  - **CLI:** `gh api --method POST repos/imbue-ai/sculptor/actions/runs/<run_id>/pending_deployments -f 'environment_ids[]=<env_id>' -f state=approved -f comment='...'`
+  - **CLI:** `gh api --method POST repos/imbue-ai/sculptor/actions/runs/<run_id>/pending_deployments -F 'environment_ids[]=<env_id>' -f state=approved -f comment='...'`
+    (the env id must use `-F`, not `-f` — `-f` sends it as a string and GitHub
+    422s with `"<id>" is not an integer`)
 
 ### Before you approve: check what will actually ship
 
