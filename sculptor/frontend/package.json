@@ -106,7 +106,7 @@
     "fuse.js": "7.4.2",
     "get-port": "7.2.0",
     "highlight.js": "11.11.1",
-    "jotai": "2.20.1",
+    "jotai": "3.0.0",
     "lodash": "4.18.1",
     "lowlight": "3.3.0",
     "lucide-react": "1.21.0",
