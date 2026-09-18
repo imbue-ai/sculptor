@@ -1,5 +1,8 @@
 {
   "offload-perf-fast.toml": {
     "image_id": "im-LsT1VOryEcCChiUQBMgQK0"
+  },
+  "offload.toml": {
+    "image_id": "im-4m10FmYspZQMQkRJHsa0Zo"
   }
 }
