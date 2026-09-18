@@ -102,7 +102,7 @@
     "electron-squirrel-startup": "1.0.1",
     "electron-store": "11.0.2",
     "electron-updater": "6.8.9",
-    "eslint-plugin-simple-import-sort": "13.0.0",
+    "eslint-plugin-simple-import-sort": "14.0.0",
     "fuse.js": "7.4.2",
     "get-port": "7.2.0",
     "highlight.js": "11.11.1",
