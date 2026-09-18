@@ -20,7 +20,7 @@ Result/partial-result payloads on the lane are permissively typed (RPC §9
 leaves them uncharacterized beyond the file-tool detail bundle), so the text
 extractors here parse defensively.
 
-Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
+Wire-protocol reference: the pi RPC protocol notes (pi 0.84.4).
 """
 
 from __future__ import annotations

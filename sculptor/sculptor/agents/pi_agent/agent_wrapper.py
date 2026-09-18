@@ -32,7 +32,7 @@ on completion. The adapter (`_emit_subagent_started` +
 children as nested `ResponseBlockAgentMessage`s carrying `parent_tool_use_id` plus
 a completion notification, so children group under the parent.
 
-Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
+Wire-protocol reference: the pi RPC protocol notes (pi 0.84.4).
 """
 
 from __future__ import annotations
@@ -85,6 +85,7 @@ from sculptor.agents.pi_agent.harness import PiHarness
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ExtensionUiRequest
 from sculptor.agents.pi_agent.output_processor import ParsedAgentEnd
+from sculptor.agents.pi_agent.output_processor import ParsedAgentSettled
 from sculptor.agents.pi_agent.output_processor import ParsedAgentStart
 from sculptor.agents.pi_agent.output_processor import ParsedAssistantMessageError
 from sculptor.agents.pi_agent.output_processor import ParsedAutoRetryEnd
@@ -1874,7 +1875,8 @@ class PiAgent(DefaultAgentWrapper):
                 self._handle_compaction_end(state)
                 return False
             case (
-                ParsedTurnStart()
+                ParsedAgentSettled()
+                | ParsedTurnStart()
                 | ParsedTurnEnd()
                 | ParsedMessageStart()
                 | ParsedQueueUpdate()
