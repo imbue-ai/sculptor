@@ -11,12 +11,14 @@ import respx
 import typer
 from httpx import ConnectError
 from httpx import Response
+from sculpt.auth import DEFAULT_CLAUDE_MODEL
 from sculpt.auth import MODEL_MAPPING
 from sculpt.commands.agent import _resolve_send_model
 from sculpt.main import app
 from sculpt.ws_client import AgentNotFoundError
 from sculpt.ws_client import AgentSnapshot
 from sculpt.ws_client import ExitReason
+from sculptor.state.messages import LLMModel
 from typer.testing import CliRunner
 
 
@@ -1768,10 +1770,10 @@ class TestAgentSendModelDefault:
 
         assert result.exit_code == 0, result.output + (result.stderr or "")
         body = json.loads(route.calls.last.request.content)
-        assert body["model"] == MODEL_MAPPING["opus"].value
+        assert body["model"] == LLMModel.CLAUDE_4_OPUS_200K.value
 
     @respx.mock
-    def test_send_null_current_model_falls_back_to_opus(self, runner: CliRunner) -> None:
+    def test_send_null_current_model_falls_back_to_the_pinned_default(self, runner: CliRunner) -> None:
         """Terminal agents carry no model; the request field still needs a value."""
         _mock_session()
         _mock_workspaces("ws_test123")
@@ -1786,7 +1788,7 @@ class TestAgentSendModelDefault:
 
         assert result.exit_code == 0, result.output + (result.stderr or "")
         body = json.loads(route.calls.last.request.content)
-        assert body["model"] == MODEL_MAPPING["opus"].value
+        assert body["model"] == DEFAULT_CLAUDE_MODEL.value
 
     def test_resolve_send_model_unrecognized_current_model_requires_flag(
         self, capsys: pytest.CaptureFixture[str]
@@ -1802,8 +1804,8 @@ class TestAgentSendModelDefault:
     def test_resolve_send_model_explicit_wins_over_current(self) -> None:
         assert _resolve_send_model("haiku", "CLAUDE-4-SONNET", False) == MODEL_MAPPING["haiku"]
 
-    def test_resolve_send_model_no_flag_no_current_defaults_to_opus(self) -> None:
-        assert _resolve_send_model(None, None, False) == MODEL_MAPPING["opus"]
+    def test_resolve_send_model_no_flag_no_current_uses_the_pinned_default(self) -> None:
+        assert _resolve_send_model(None, None, False) == DEFAULT_CLAUDE_MODEL
 
 
 class TestAgentDeleteConfirmation:
