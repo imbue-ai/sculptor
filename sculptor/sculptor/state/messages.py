@@ -41,6 +41,8 @@ class LLMModel(StrEnum):
     CLAUDE_4_OPUS = "CLAUDE-4-OPUS"
     CLAUDE_4_OPUS_200K = "CLAUDE-4-OPUS-200K"
     # Pinned Opus generations (explicit `--model` ids), newest first.
+    CLAUDE_5_5_OPUS = "CLAUDE-5-5-OPUS"
+    CLAUDE_5_5_OPUS_200K = "CLAUDE-5-5-OPUS-200K"
     CLAUDE_5_OPUS = "CLAUDE-5-OPUS"
     CLAUDE_5_OPUS_200K = "CLAUDE-5-OPUS-200K"
     CLAUDE_4_8_OPUS = "CLAUDE-4-8-OPUS"
