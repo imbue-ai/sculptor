@@ -18,8 +18,9 @@ from sculpt.main import app
 from sculpt.ws_client import AgentNotFoundError
 from sculpt.ws_client import AgentSnapshot
 from sculpt.ws_client import ExitReason
-from sculptor.state.messages import LLMModel
 from typer.testing import CliRunner
+
+from sculptor.state.messages import LLMModel
 
 
 @pytest.fixture
