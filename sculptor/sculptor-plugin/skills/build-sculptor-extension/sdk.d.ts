@@ -488,7 +488,9 @@ declare const LlmModel: {
  * 5. Regenerate the API types + extension SDK + frozen schema, and bump the
  * managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.
  * Check what that build's own ``opus`` alias resolves to: the rolling members
- * below follow it, so the bump moves them.
+ * below follow it, so the bump moves them. Regenerate last: this docstring is
+ * copied verbatim into both the SDK declarations and the frozen schema, so
+ * editing it after generating leaves them stale.
  * 6. Update what names models from outside this file: the fast-mode gating and
  * default-model integration tests, and the model claims in ``docs/specs``.
  */
