@@ -418,12 +418,12 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             if isinstance(message, ChatInputUserMessage) and message.model_name is not None:
                 return message.model_name
         # Fall back to the model selected at agent creation time, then to the
-        # product default: the pinned 1M-context Opus (CLAUDE_5_OPUS). Fable stays
-        # available in the switcher but is not the default (SCU-1576).
+        # product default: the newest pinned 1M-context Opus. Fable stays available
+        # in the switcher but is not the default.
         input_data = self.task.input_data
         if isinstance(input_data, AgentTaskInputsV2) and input_data.default_model is not None:
             return input_data.default_model
-        return LLMModel.CLAUDE_5_OPUS
+        return LLMModel.CLAUDE_5_5_OPUS
 
     @computed_field
     @property
@@ -482,6 +482,8 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             LLMModel.CLAUDE_4_SONNET_200K,
             LLMModel.CLAUDE_4_OPUS,
             LLMModel.CLAUDE_4_OPUS_200K,
+            LLMModel.CLAUDE_5_5_OPUS,
+            LLMModel.CLAUDE_5_5_OPUS_200K,
             LLMModel.CLAUDE_5_OPUS,
             LLMModel.CLAUDE_5_OPUS_200K,
             LLMModel.CLAUDE_4_8_OPUS,
