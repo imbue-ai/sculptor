@@ -476,13 +476,21 @@ declare const LlmModel: {
  * 1. Add explicit members here named after the real model, and map each to its
  * exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).
  * 2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),
- * prepend to ``PRODUCTION_MODELS``, and add to ``derived.py``'s streaming list.
- * 3. Point the product default at the new member (``userConfig.ts``
- * ``defaultModelAtom`` and ``web/derived.py``'s fallback).
+ * insert at the correct spot in ``PRODUCTION_MODELS`` — that list is grouped by
+ * family, so a new Opus heads the Opus block rather than the whole list — and
+ * add to ``derived.py``'s streaming list.
+ * 3. Point the product default at the new member: ``userConfig.ts``
+ * ``defaultModelAtom``, ``web/derived.py``'s fallback, and ``sculpt``'s
+ * ``DEFAULT_CLAUDE_MODEL``.
  * 4. Drop the oldest generation from the picker (remove from ``PRODUCTION_MODELS``
- * / ``derived`` lists only — keep its enum value here for load-compat).
+ * / ``derived`` lists only — its enum value, label and capabilities all stay, so
+ * a stored selection still renders and keeps its toggles).
  * 5. Regenerate the API types + extension SDK + frozen schema, and bump the
  * managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.
+ * Check what that build's own ``opus`` alias resolves to: the rolling members
+ * below follow it, so the bump moves them.
+ * 6. Update what names models from outside this file: the fast-mode gating and
+ * default-model integration tests, and the model claims in ``docs/specs``.
  */
 export type LlmModel = typeof LlmModel[keyof typeof LlmModel];
 declare const ModelCatalogState: {
