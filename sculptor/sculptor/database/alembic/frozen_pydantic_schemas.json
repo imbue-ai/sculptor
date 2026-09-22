@@ -575,6 +575,8 @@
             "enum": [
               "CLAUDE-4-OPUS",
               "CLAUDE-4-OPUS-200K",
+              "CLAUDE-5-5-OPUS",
+              "CLAUDE-5-5-OPUS-200K",
               "CLAUDE-5-OPUS",
               "CLAUDE-5-OPUS-200K",
               "CLAUDE-4-8-OPUS",
@@ -2019,6 +2021,8 @@
             "enum": [
               "CLAUDE-4-OPUS",
               "CLAUDE-4-OPUS-200K",
+              "CLAUDE-5-5-OPUS",
+              "CLAUDE-5-5-OPUS-200K",
               "CLAUDE-5-OPUS",
               "CLAUDE-5-OPUS-200K",
               "CLAUDE-4-8-OPUS",
@@ -2989,6 +2993,8 @@
             "enum": [
               "CLAUDE-4-OPUS",
               "CLAUDE-4-OPUS-200K",
+              "CLAUDE-5-5-OPUS",
+              "CLAUDE-5-5-OPUS-200K",
               "CLAUDE-5-OPUS",
               "CLAUDE-5-OPUS-200K",
               "CLAUDE-4-8-OPUS",
