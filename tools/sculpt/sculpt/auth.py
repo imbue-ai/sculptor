@@ -39,6 +39,13 @@ MODEL_MAPPING: dict[str, LLMModel] = {
     "fable": LLMModel.CLAUDE_FABLE_5,
 }
 
+# What an unspecified --model resolves to, kept out of MODEL_MAPPING on purpose. The
+# `opus` entry above is the Claude CLI's rolling alias, which lands on a different
+# generation as the managed CLI is bumped; a default that follows it would move new
+# agents onto a new model with no change here. Track the GUI's default
+# (`defaultModelAtom`, `web/derived.py`) when this moves.
+DEFAULT_CLAUDE_MODEL: LLMModel = LLMModel.CLAUDE_5_5_OPUS
+
 
 def get_authenticated_client(base_url: str, json_output: bool = False) -> Client:
     """Create an authenticated client for the Sculptor API."""
