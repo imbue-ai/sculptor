@@ -11,6 +11,7 @@ from sculpt.auth import DEFAULT_CLAUDE_MODEL
 from sculpt.auth import MODEL_MAPPING
 from sculpt.auth import build_client
 from sculpt.commands._harness_helpers import resolve_prompt_models
+
 from sculptor.state.messages import LLMModel
 
 _UNUSED_CLIENT = build_client("http://localhost:1")
