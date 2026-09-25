@@ -19,6 +19,8 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (latest, 1M)", long: "Claude Opus (latest, 1M)" },
   [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
   // Pinned Opus generations.
+  [LlmModel.CLAUDE_5_5_OPUS]: { short: "Opus 5.5 (1M)", long: "Claude 5.5 Opus (1M)" },
+  [LlmModel.CLAUDE_5_5_OPUS_200K]: { short: "Opus 5.5", long: "Claude 5.5 Opus" },
   [LlmModel.CLAUDE_5_OPUS]: { short: "Opus 5 (1M)", long: "Claude 5 Opus (1M)" },
   [LlmModel.CLAUDE_5_OPUS_200K]: { short: "Opus 5", long: "Claude 5 Opus" },
   [LlmModel.CLAUDE_4_8_OPUS]: { short: "Opus 4.8 (1M)", long: "Claude 4.8 Opus (1M)" },
@@ -43,12 +45,12 @@ export const getModelLongName = (model: LlmModel): string => modelNames[model]?.
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_FABLE_5_1,
   LlmModel.CLAUDE_FABLE_5,
+  LlmModel.CLAUDE_5_5_OPUS_200K,
+  LlmModel.CLAUDE_5_5_OPUS,
   LlmModel.CLAUDE_5_OPUS_200K,
   LlmModel.CLAUDE_5_OPUS,
   LlmModel.CLAUDE_4_8_OPUS_200K,
   LlmModel.CLAUDE_4_8_OPUS,
-  LlmModel.CLAUDE_4_7_OPUS_200K,
-  LlmModel.CLAUDE_4_7_OPUS,
   LlmModel.CLAUDE_4_SONNET_200K,
   LlmModel.CLAUDE_4_SONNET,
   LlmModel.CLAUDE_4_HAIKU,

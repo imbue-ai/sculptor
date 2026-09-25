@@ -25,22 +25,36 @@ class LLMModel(StrEnum):
       1. Add explicit members here named after the real model, and map each to its
          exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).
       2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),
-         prepend to ``PRODUCTION_MODELS``, and add to ``derived.py``'s streaming list.
-      3. Point the product default at the new member (``userConfig.ts``
-         ``defaultModelAtom`` and ``web/derived.py``'s fallback).
+         insert at the correct spot in ``PRODUCTION_MODELS`` — that list is grouped by
+         family, so a new Opus heads the Opus block rather than the whole list — and
+         add to ``derived.py``'s streaming list.
+      3. Point the product default at the new member: ``userConfig.ts``
+         ``defaultModelAtom``, ``web/derived.py``'s fallback, and ``sculpt``'s
+         ``DEFAULT_CLAUDE_MODEL``.
       4. Drop the oldest generation from the picker (remove from ``PRODUCTION_MODELS``
-         / ``derived`` lists only — keep its enum value here for load-compat).
+         / ``derived`` lists only — its enum value, label and capabilities all stay, so
+         a stored selection still renders and keeps its toggles).
       5. Regenerate the API types + extension SDK + frozen schema, and bump the
          managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.
+         Check what that build's own ``opus`` alias resolves to: the rolling members
+         below follow it, so the bump moves them. Regenerate last: this docstring is
+         copied verbatim into both the SDK declarations and the frozen schema, so
+         editing it after generating leaves them stale.
+      6. Update what names models from outside this file: the fast-mode gating and
+         default-model integration tests, and the model claims in ``docs/specs``.
     """
 
     # Rolling "latest Opus" alias (shortnames `opus[1m]` / `opus`). Retired from the
     # GUI picker in favor of the explicit per-generation members below, but kept
-    # defined: old persisted rows still deserialize, and the `sculpt` CLI's `opus`
-    # alias resolves through it to whatever the CLI treats as the newest Opus.
+    # defined: old persisted rows still deserialize, and `sculpt --model opus`
+    # resolves through it to whatever the managed CLI treats as the newest Opus.
+    # Bumping CLAUDE_VERSION_RANGE can therefore land these members on a new
+    # generation with nothing in this repo changing.
     CLAUDE_4_OPUS = "CLAUDE-4-OPUS"
     CLAUDE_4_OPUS_200K = "CLAUDE-4-OPUS-200K"
     # Pinned Opus generations (explicit `--model` ids), newest first.
+    CLAUDE_5_5_OPUS = "CLAUDE-5-5-OPUS"
+    CLAUDE_5_5_OPUS_200K = "CLAUDE-5-5-OPUS-200K"
     CLAUDE_5_OPUS = "CLAUDE-5-OPUS"
     CLAUDE_5_OPUS_200K = "CLAUDE-5-OPUS-200K"
     CLAUDE_4_8_OPUS = "CLAUDE-4-8-OPUS"
