@@ -25,8 +25,8 @@ from sculptor.services.managed_tools import _PI_PLATFORM_MAP
 from sculptor.services.managed_tools import get_managed_tool
 from sculptor.services.managed_tools import get_managed_tools
 
-# Verified darwin-arm64 sha256 for pi 0.84.4; ``just bump-pi <version>`` refreshes it.
-_PI_DARWIN_ARM64_SHA256_0_84_4 = "c68e3ac4d05b4e282aaab2e6c76f161d3e9e68f19a22e38913cbfaadb6c800f0"
+# Verified darwin-arm64 sha256 for pi 0.87.1; ``just bump-pi <version>`` refreshes it.
+_PI_DARWIN_ARM64_SHA256_0_87_1 = "4f8d288b78c9768d3a4ac6f61f06cd34394b82ac17d5b42d1e44a437add401b7"
 
 
 def _instantiate_with_no_arguments(candidate: Callable[[], object]) -> object:
@@ -100,7 +100,7 @@ def test_pi_pin_asset_names_follow_the_pi_release_naming_for_each_platform() -> 
 
 
 def test_pi_pin_darwin_arm64_sha256_matches_the_verified_value() -> None:
-    assert PI_PIN.platforms["darwin-arm64"].sha256 == _PI_DARWIN_ARM64_SHA256_0_84_4
+    assert PI_PIN.platforms["darwin-arm64"].sha256 == _PI_DARWIN_ARM64_SHA256_0_87_1
 
 
 def test_pi_pin_platform_sha256s_are_distinct_lowercase_hex_digests() -> None:
