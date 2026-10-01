@@ -491,8 +491,11 @@ declare const LlmModel: {
  * below follow it, so the bump moves them. Regenerate last: this docstring is
  * copied verbatim into both the SDK declarations and the frozen schema, so
  * editing it after generating leaves them stale.
- * 6. Update what names models from outside this file: the fast-mode gating and
- * default-model integration tests, and the model claims in ``docs/specs``.
+ * 6. Update what names models from outside this file. Integration tests select
+ * models by display name, and not only the ones about models — grep the test
+ * tree for the retired generation's long name (``"Claude <gen> Opus"``) rather
+ * than working from a list, since a test that merely needs *a* real model also
+ * names one. Then the model claims in ``docs/specs``.
  */
 export type LlmModel = typeof LlmModel[keyof typeof LlmModel];
 declare const ModelCatalogState: {
