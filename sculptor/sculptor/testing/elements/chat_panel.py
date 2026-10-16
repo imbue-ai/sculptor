@@ -365,6 +365,10 @@ def select_model_by_name(chat_panel: PlaywrightChatPanelElement, model_name: str
 
     Returns:
         The text shown in the selector after selection
+
+    Raises:
+        AssertionError: when the picker offers no option with that exact name,
+            reporting the names it does offer.
     """
     model_selector = chat_panel.get_model_selector()
     # Open the dropdown
@@ -376,7 +380,16 @@ def select_model_by_name(chat_panel: PlaywrightChatPanelElement, model_name: str
     # substring matches (e.g. "Fake Claude" matching "Fake Claude 2").
     options = chat_panel.get_model_options()
     target_model_option = options.filter(has=chat_panel._page.get_by_text(model_name, exact=True))
-    expect(target_model_option).to_be_visible()
+    try:
+        expect(target_model_option).to_be_visible()
+    except AssertionError as e:
+        # A name the picker no longer offers (a retired model, a renamed label) lands
+        # here, and the bare visibility timeout names neither the request nor the
+        # alternatives, so it reads as a broken dropdown. Snapshotting the options is
+        # safe only on this path: the wait above has already given them time to
+        # render, which is what makes `.all_inner_texts()` race on the happy path.
+        offered = sorted(text.strip() for text in options.all_inner_texts())
+        raise AssertionError(f"the model picker offers no option named {model_name!r}; it offers {offered}") from e
     target_model_option.click()
 
     return model_selector.inner_text()

@@ -10,6 +10,7 @@ import httpx
 import typer
 import websockets.exceptions
 
+from sculpt.auth import DEFAULT_CLAUDE_MODEL
 from sculpt.auth import MODEL_MAPPING
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
@@ -665,7 +666,7 @@ def _resolve_send_model(model_option: str | None, current_model: str | None, jso
                 + " version; pass --model explicitly",
                 json_output=json_output,
             )
-    return MODEL_MAPPING["opus"]
+    return DEFAULT_CLAUDE_MODEL
 
 
 @agent_app.command("status")

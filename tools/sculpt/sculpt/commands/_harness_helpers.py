@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 import httpx
 
+from sculpt.auth import DEFAULT_CLAUDE_MODEL
 from sculpt.auth import MODEL_MAPPING
 from sculpt.client import Client
 from sculpt.client.api.default import get_pi_models
@@ -64,7 +65,8 @@ def resolve_harness_selection(harness: str | None, client: Client, json_output: 
 # Shared --model help so `agent create` and `run` describe the same contract.
 MODEL_HELP = (
     "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable;"
-    + " default opus). With --harness pi, a model from pi's own catalog:"
+    + " defaults to the current pinned Opus). With --harness pi, a model from"
+    + " pi's own catalog:"
     + " model_id, display name, or provider/model_id (default: pi's own"
     + " default model)."
 )
@@ -140,7 +142,9 @@ def resolve_prompt_models(
     """
     if selection is not None and selection.agent_type == AgentTypeName.PI:
         return None, _resolve_pi_backend_model(client, json_output, model)
-    model_lower = "opus" if model is None else model.lower()
+    if model is None:
+        return DEFAULT_CLAUDE_MODEL, None
+    model_lower = model.lower()
     if model_lower not in MODEL_MAPPING:
         valid = ", ".join(MODEL_MAPPING.keys())
         cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)

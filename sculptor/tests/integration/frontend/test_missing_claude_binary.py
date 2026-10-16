@@ -14,12 +14,12 @@ Setup strategy
    ``dependency_paths.claude`` so the server resolves the binary directly
    (avoids PATH manipulation that can be fragile in CI).
 3. Start the Sculptor instance (stub present → installed=True at mount time).
-4. Create a workspace using the real Claude Opus model but WITHOUT a prompt
+4. Create a workspace on the product default model but WITHOUT a prompt
    yet, while the stub is still alive (the workspace creation flow may
    perform a full page reload which would re-trigger RequireOnboarding).
 5. Delete the stub binary.  We are now on the task page — no more full
    page reloads expected.
-6. Send a chat message.  The model is Claude Opus (not FAKE_CLAUDE), so
+6. Send a chat message.  The default is a real model (not FAKE_CLAUDE), so
    _is_fake_claude=False and _resolve_claude_binary_path() is called.
    shutil.which(absolute_path) returns None → ClaudeBinaryNotFoundError.
 """
@@ -36,9 +36,6 @@ from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
-
-# Long name shown in the model selector for the real Claude Opus model.
-_CLAUDE_OPUS_MODEL_NAME = "Claude 4.7 Opus"
 
 
 def _setup_removable_claude_stub(factory: SculptorInstanceFactory, tmp_path: Path) -> Path:
@@ -78,23 +75,24 @@ def test_missing_claude_binary_shows_friendly_error(
         # Stub exists: RequireOnboarding.tsx runs its one-time mount check,
         # sees installed=True, and lets the app through.
 
-        # Create the workspace with the real Opus model but WITHOUT a prompt.
-        # We must NOT delete the stub yet: open_new_workspace_form may
-        # trigger a full page reload which would re-trigger RequireOnboarding.
+        # Create the workspace WITHOUT a prompt. We must NOT delete the stub yet:
+        # open_new_workspace_form may trigger a full page reload which would
+        # re-trigger RequireOnboarding. Skipping model selection leaves the product
+        # default, which is a real model — the assertions below only hold for one.
         task_page = start_task_and_wait_for_ready(
             sculptor_page=instance.page,
             prompt="",  # no message yet
-            model_name=_CLAUDE_OPUS_MODEL_NAME,
+            model_name=None,
         )
 
         # We are now on the task page. No more full page reloads expected.
         # Delete the stub to simulate Claude being removed after setup.
         claude_stub.unlink()
 
-        # Send a chat message. The workspace model is Claude Opus (not
-        # FAKE_CLAUDE), so _is_fake_claude=False and
-        # _resolve_claude_binary_path() is called. shutil.which returns None
-        # → ClaudeBinaryNotFoundError is raised and caught by the agent wrapper.
+        # Send a chat message. The workspace model is not FAKE_CLAUDE, so
+        # _is_fake_claude=False and _resolve_claude_binary_path() is called.
+        # shutil.which returns None → ClaudeBinaryNotFoundError is raised and
+        # caught by the agent wrapper.
         chat_panel = task_page.get_chat_panel()
         send_chat_message(chat_panel, "Hello")
 

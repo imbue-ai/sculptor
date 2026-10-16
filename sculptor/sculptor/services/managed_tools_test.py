@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from packaging.version import Version
 from pydantic import ValidationError
 
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
@@ -325,6 +326,27 @@ class TestClaudeManagedToolRegistration:
 
     def test_version_range_is_the_claude_version_range(self) -> None:
         assert ClaudeManagedTool().version_range == CLAUDE_VERSION_RANGE
+
+
+class TestClaudeVersionRange:
+    """The window has to stay wide enough for the models the picker offers.
+
+    A `--model` id the installed CLI does not recognize fails at agent launch, not at
+    install time, so the floor is what keeps a stale managed binary from being handed
+    a model it cannot resolve.
+    """
+
+    # The first Claude release whose model table carries `claude-opus-5-5`.
+    OPUS_5_5_FLOOR = Version("2.1.280")
+
+    def test_the_recommended_release_knows_the_newest_pinned_opus(self) -> None:
+        assert Version(CLAUDE_VERSION_RANGE.recommended_version) >= self.OPUS_5_5_FLOOR
+
+    def test_the_floor_is_the_recommended_release(self) -> None:
+        """An in-range binary is never upgraded to recommended, so a lower floor
+        would leave an install able to satisfy the range while missing the models
+        the picker advertises."""
+        assert CLAUDE_VERSION_RANGE.min_version == CLAUDE_VERSION_RANGE.recommended_version
 
 
 def test_claude_platform_map_values_match_the_advertised_platform_keys() -> None:
