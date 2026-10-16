@@ -25,12 +25,12 @@ const renderCard = (status: DependencyStatus): HTMLElement => {
   return card;
 };
 
-// SCU-1215: the card gates `handleToggle` on `canExpand`. That gate must be
-// reflected in the DOM via `aria-disabled` so the framework's actionability
-// contract blocks a click until the card is ready — otherwise a click landing
-// while the dependency probe is in flight is silently dropped by the handler's
-// early-return. These tests pin the attribute to the gate deterministically,
-// independent of probe timing.
+// SCU-1215: the card gates `handleToggle` on `canExpand`, and a click landing
+// while the dependency probe is in flight is silently dropped by that gate's
+// early-return. `aria-disabled` is how the card publishes the gate so callers
+// can wait for readiness instead of racing it — the integration tests' card
+// `expand()` helper reads exactly this attribute. These tests pin the attribute
+// to the gate deterministically, independent of probe timing.
 describe("DependencyCard — readiness reflected via aria-disabled", () => {
   it("is aria-disabled while the dependency probe is loading", () => {
     expect(renderCard({ state: "loading" }).getAttribute("aria-disabled")).toBe("true");

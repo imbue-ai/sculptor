@@ -67,9 +67,7 @@ def test_setup_command_runs_in_new_workspace(sculptor_instance_: SculptorInstanc
 
     setup = PlaywrightSetupStatusElement(page=page)
     expect(setup.get_card()).to_be_visible()
-    # The queued card mirrors its readiness via `aria-disabled`, so this click
-    # auto-waits for the run to start and the popover trigger to mount (SCU-1215).
-    setup.get_card().click()
+    setup.open_popover()
     expect(setup.get_output()).to_contain_text("SCULPTOR_SETUP_MARKER_12345")
 
 

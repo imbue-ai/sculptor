@@ -208,9 +208,7 @@ def test_dependency_path_and_version_display(sculptor_instance_factory_: Sculpto
         # Expand the Git card to see path/version details
         git_card = installation_step.get_git_card()
         expect(git_card.locator).to_be_visible()
-        # The card mirrors its `canExpand` gate via `aria-disabled`, so this click
-        # auto-waits for the dependency probe to settle (SCU-1215) — no precondition needed.
-        git_card.locator.click()
+        git_card.expand()
 
         # Git should show path and version (Git is installed in test environments)
         expect(git_card.get_path()).to_be_visible()
@@ -245,7 +243,7 @@ def test_invalid_override_path_shows_error(sculptor_instance_factory_: SculptorI
         # Expand the Claude card to see override link
         claude_card = installation_step.get_claude_card()
         expect(claude_card.locator).to_be_visible()
-        claude_card.locator.click()
+        claude_card.expand()
 
         # Claude card should show override link (not found state)
         override_link = claude_card.get_override_link()
@@ -295,7 +293,7 @@ def test_onboarding_without_claude_installed(sculptor_instance_factory_: Sculpto
         expect(claude_card.locator).to_be_visible()
 
         # Expand to see override link
-        claude_card.locator.click()
+        claude_card.expand()
 
         # Override link should show the manual path option
         expect(claude_card.get_override_link()).to_be_visible()
