@@ -1,12 +1,13 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useMemo } from "react";
 
-import type { AskUserQuestionData, ChatMessage, TaskStatus } from "~/api";
-import { LlmModel, sendWorkspaceAgentMessages } from "~/api";
+import type { AskUserQuestionData, ChatMessage, LlmModel, TaskStatus } from "~/api";
+import { sendWorkspaceAgentMessages } from "~/api";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions.ts";
 import { useAgentChatMessages, useAgentDetailWithDefaults } from "~/common/state/hooks/useAgentDetail";
 import { useAgentIsAutoCompacting, useAgentModel, useAgentStatusField } from "~/common/state/hooks/useAgentHelpers.ts";
+import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
 import { useChatSmoothStreaming } from "~/pages/workspace/chat/hooks/useSmoothStreaming.ts";
 import {
   useSmoothStreamingOnAgentSwitch,
@@ -92,7 +93,7 @@ export const useChatData = ({ agentId, workspaceID, appendTextRef, insertSkillRe
         if (!agentId) return;
         await sendWorkspaceAgentMessages({
           path: { workspace_id: workspaceID, agent_id: agentId },
-          body: { message, model: (agentModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
+          body: { message, model: (agentModel as LlmModel) || DEFAULT_LLM_MODEL },
         });
       },
     }));
