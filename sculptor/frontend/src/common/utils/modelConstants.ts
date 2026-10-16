@@ -41,6 +41,17 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
 export const getModelShortName = (model: LlmModel): string => modelNames[model]?.short || "Unknown";
 export const getModelLongName = (model: LlmModel): string => modelNames[model]?.long || "Unknown";
 
+/**
+ * The model to use when no selection is known: the product default for a new agent,
+ * and the stand-in for the two cases where an agent reports no model of its own —
+ * before its view has loaded, and for terminal agents, whose model the backend
+ * reports as null because Sculptor does not control it.
+ *
+ * Every send path and the settings atom read this one value, so moving the default
+ * is one edit rather than one per call site.
+ */
+export const DEFAULT_LLM_MODEL: LlmModel = LlmModel.CLAUDE_5_5_OPUS;
+
 // Models offered in production model pickers (desktop selector + mobile `+` menu).
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_FABLE_5_1,

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { LlmModel } from "~/api";
 
 import { getModelCapabilities } from "./modelCapabilities";
-import { getModelLongName, getModelShortName, PRODUCTION_MODELS } from "./modelConstants";
+import { DEFAULT_LLM_MODEL, getModelLongName, getModelShortName, PRODUCTION_MODELS } from "./modelConstants";
 
 describe("Opus 5.5", () => {
   it("is labelled by its pinned generation in both context sizes", () => {
@@ -35,5 +35,25 @@ describe("retired models", () => {
     expect(PRODUCTION_MODELS).not.toContain(LlmModel.CLAUDE_4_7_OPUS);
     expect(PRODUCTION_MODELS).not.toContain(LlmModel.CLAUDE_4_7_OPUS_200K);
     expect(getModelShortName(LlmModel.CLAUDE_4_7_OPUS_200K)).toBe("Opus 4.7");
+  });
+});
+
+describe("DEFAULT_LLM_MODEL", () => {
+  it("is a model the picker offers", () => {
+    // A default the picker does not list is a selection the user cannot get back to
+    // after switching away from it.
+    expect(PRODUCTION_MODELS).toContain(DEFAULT_LLM_MODEL);
+  });
+
+  it("is a large-context variant", () => {
+    // New agents get the 1M window; the 200K variants are opt-in from the picker.
+    expect(getModelShortName(DEFAULT_LLM_MODEL)).toMatch(/\(1M\)$/);
+  });
+
+  it("supports the capabilities a default needs", () => {
+    expect(getModelCapabilities(DEFAULT_LLM_MODEL)).toEqual({
+      supportsFastMode: true,
+      supportsFileAttachments: true,
+    });
   });
 });

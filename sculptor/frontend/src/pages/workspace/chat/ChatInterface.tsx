@@ -6,12 +6,12 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
+import type { LlmModel } from "~/api";
 import {
   answerWorkspaceAgentQuestion,
   ChatMessageRole,
   ElementIds,
   interruptWorkspaceAgent,
-  LlmModel,
   sendWorkspaceAgentMessages,
   TaskStatus,
 } from "~/api";
@@ -19,6 +19,7 @@ import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
 import { useRegisterCommandAction } from "~/components/commandPalette/utils/commandActions.ts";
 import { Toast } from "~/components/Toast.tsx";
 import { isModifierPressed } from "~/electron/platform.ts";
@@ -458,7 +459,7 @@ export const ChatInterface = ({
       try {
         await sendWorkspaceAgentMessages({
           path: { workspace_id: workspaceID, agent_id: agentId },
-          body: { message: messageText, model: (agentModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
+          body: { message: messageText, model: (agentModel as LlmModel) || DEFAULT_LLM_MODEL },
         });
         posthog.capture("agent.message_retried", {
           workspace_id: workspaceID,
@@ -490,7 +491,7 @@ export const ChatInterface = ({
             notes,
             questionData: pendingUserQuestion,
             toolUseId: pendingUserQuestion.toolUseId,
-            model: (agentModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K,
+            model: (agentModel as LlmModel) || DEFAULT_LLM_MODEL,
           },
         });
       } catch (error) {

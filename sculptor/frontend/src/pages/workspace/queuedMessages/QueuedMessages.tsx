@@ -2,8 +2,10 @@ import { useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useState } from "react";
 
-import type { ChatMessage } from "../../../api";
-import { LlmModel, sendWorkspaceAgentMessages } from "../../../api";
+import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
+
+import type { ChatMessage, LlmModel } from "../../../api";
+import { sendWorkspaceAgentMessages } from "../../../api";
 import { attachedFilesAtomFamily } from "../../../common/state/atoms/attachedFiles.ts";
 import { promptDraftAtomFamily } from "../../../common/state/atoms/promptDrafts.ts";
 import { useAgentModel } from "../../../common/state/hooks/useAgentHelpers.ts";
@@ -57,7 +59,7 @@ export const QueuedMessages = ({ messages }: QueuedMessagesProps): ReactElement 
       path: { workspace_id: workspaceID, agent_id: agentId },
       body: {
         message: undoDialogData.rawTextContent,
-        model: (agentModel as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K,
+        model: (agentModel as LlmModel) || DEFAULT_LLM_MODEL,
         files: undoDialogData.fileSources,
       },
     });

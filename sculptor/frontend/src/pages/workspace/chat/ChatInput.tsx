@@ -15,7 +15,12 @@ import { mergeClasses } from "~/common/utils/classNames.ts";
 import { HTTPException } from "~/common/utils/errors.ts";
 import { processAndValidateFiles, saveFiles } from "~/common/utils/fileUpload.ts";
 import { getModelCapabilities } from "~/common/utils/modelCapabilities.ts";
-import { getModelShortName, hasNoUsableModel, PRODUCTION_MODELS } from "~/common/utils/modelConstants.ts";
+import {
+  DEFAULT_LLM_MODEL,
+  getModelShortName,
+  hasNoUsableModel,
+  PRODUCTION_MODELS,
+} from "~/common/utils/modelConstants.ts";
 import { optional } from "~/common/utils/optional.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/utils/pseudoSkills.ts";
 import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
@@ -31,6 +36,7 @@ import { FilePreviewList } from "~/pages/workspace/filePreview/FilePreviewList.t
 import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
 import { isTextBlock } from "~/pages/workspace/utils/blockGuards.ts";
 
+import type { LlmModel } from "../../../api";
 import {
   btwAgent,
   type ChatMessage,
@@ -39,7 +45,6 @@ import {
   EffortLevel,
   ElementIds,
   interruptWorkspaceAgent,
-  LlmModel,
   ModelCatalogState,
   type ModelOption,
   sendWorkspaceAgentMessages,
@@ -189,7 +194,7 @@ export const ChatInput = ({
   const userConfig = useAtomValue(userConfigAtom);
   const [storedModel, setStoredModel] = useAtom(modelAtomFamily(agentId ?? ""));
   const setLastUsedModel = useSetAtom(lastUsedModelAtom);
-  const localModel = storedModel ?? (agentModel as LlmModel) ?? LlmModel.CLAUDE_4_OPUS_200K;
+  const localModel = storedModel ?? (agentModel as LlmModel) ?? DEFAULT_LLM_MODEL;
   // The mobile settings menu renders the model picker itself (desktop delegates
   // to ModelSelector), so it needs the same catalog handling: the fetched pi
   // list when the harness sources backend models, the built-in Claude list

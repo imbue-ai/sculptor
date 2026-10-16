@@ -14,7 +14,8 @@ import type { Getter } from "jotai";
 import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 
-import { LlmModel, postAgentTerminalInput, sendWorkspaceAgentMessages, TaskStatus } from "~/api";
+import type { LlmModel } from "~/api";
+import { postAgentTerminalInput, sendWorkspaceAgentMessages, TaskStatus } from "~/api";
 import { agentDetailStateAtomFamily } from "~/common/state/atoms/agentDetails.ts";
 import {
   agentAcceptsAutomatedPromptsAtomFamily,
@@ -25,6 +26,7 @@ import {
   agentSupportsChatInterfaceAtomFamily,
 } from "~/common/state/atoms/agents.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
+import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { AGENT_PANEL_ID_PREFIX, makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
@@ -255,7 +257,7 @@ export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
     try {
       await sendWorkspaceAgentMessages({
         path: { workspace_id: workspaceId, agent_id: agentId },
-        body: { message, model: (model as LlmModel) || LlmModel.CLAUDE_4_OPUS_200K },
+        body: { message, model: (model as LlmModel) || DEFAULT_LLM_MODEL },
       });
     } catch {
       // The send failed (network/HTTP). The button fires its onCommit callback

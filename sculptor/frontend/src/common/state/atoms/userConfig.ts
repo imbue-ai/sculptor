@@ -3,6 +3,7 @@ import { atomWithStorage } from "jotai/utils";
 
 import { NIGHT_MODE_OFF } from "~/common/nightMode.ts";
 import { getTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
+import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
 
 import type { CiBabysitterConfig, CustomActionsConfig, UserConfig } from "../../../api";
 import { LlmModel } from "../../../api";
@@ -64,9 +65,7 @@ export const defaultModelAtom = atom<string>((get) => {
   if (lastUsedModel && isLlmModel(lastUsedModel)) {
     return lastUsedModel;
   }
-  // Product default when nothing else is selected: the newest pinned 1M-context
-  // Opus. Fable stays available in the switcher but is not the default.
-  return LlmModel.CLAUDE_5_5_OPUS;
+  return DEFAULT_LLM_MODEL;
 });
 
 // User identity settings
