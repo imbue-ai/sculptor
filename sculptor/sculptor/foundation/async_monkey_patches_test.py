@@ -182,3 +182,38 @@ def test_log_error_at_least(explode_on_error: Any) -> None:
     with pytest.raises(IncorrectErrorsLoggedDuringTesting):
         with expect_at_least_logged_errors({"Something bad happened", "Something else bad happened"}):
             logger.error("Something bad happened")
+
+
+def _log_exception_from_a_source_line_containing_braces(exc: BaseException) -> None:
+    """Call ``log_exception`` from a frame whose executing source line has a dict literal.
+
+    This mirrors ``RunningProcess.start``, where the outermost frame of every
+    subprocess worker thread is a lambda whose source line reads
+    ``{**kwargs, **extra_kwargs}``.
+    """
+    call_from_lambda = lambda: log_exception(exc, "process didn't die", extra={"command": "sleep 100"})  # noqa: E731
+    call_from_lambda()
+
+
+def test_log_exception_with_kwargs_keeps_braces_in_the_call_site_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """log_exception embeds the call-site stack in the message, and loguru expands that
+    message with ``str.format`` whenever kwargs are passed, so braces in the captured
+    source lines have to survive as text rather than being read as format fields."""
+    handed_to_loguru: list[tuple[str, tuple, dict]] = []
+    monkeypatch.setattr(
+        logger,
+        "_log",
+        lambda level, flag, options, message, args, kwargs: handed_to_loguru.append((message, args, kwargs)),
+    )
+
+    try:
+        _raise_zero_division()
+    except ZeroDivisionError as e:
+        _log_exception_from_a_source_line_containing_braces(e)
+
+    assert len(handed_to_loguru) == 1
+    message, args, kwargs = handed_to_loguru[0]
+    assert kwargs, "the regression only fires when loguru is given kwargs to expand the message with"
+    assert '{"command": "sleep 100"}' in message.format(*args, **kwargs)
