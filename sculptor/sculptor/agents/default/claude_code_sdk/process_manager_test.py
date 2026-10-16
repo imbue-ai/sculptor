@@ -338,6 +338,35 @@ def test_slow_exit_after_successful_response_does_not_raise(
     mock_process.terminate.assert_called_once_with(force_kill_seconds=5.0)
 
 
+def test_process_that_outlives_shutdown_is_sigkilled_and_does_not_crash_the_turn(
+    local_environment: AgentExecutionEnvironment,
+) -> None:
+    """A CLI process that ignores both shutdown waits never records an exit code.
+
+    ``RunningProcess.returncode`` only becomes non-None once the worker thread
+    finishes, and a ``TimeoutExpired`` out of ``terminate`` means it has not. The
+    turn must still complete — its output was already fully captured — and the
+    SIGKILL that ``_shutdown_process`` documents has to actually be delivered,
+    which ``terminate`` alone does not do.
+    """
+    process_manager = _make_process_manager(local_environment)
+
+    mock_process = MagicMock()
+    mock_process.get_queue.return_value = Queue()
+    mock_process.wait.side_effect = TimeoutExpired(cmd=["claude"], timeout=5.0)
+    mock_process.terminate.side_effect = TimeoutExpired(cmd=["claude"], timeout=5.0)
+    mock_process.returncode = None
+    mock_process.read_stdout.return_value = ""
+    mock_process.read_stderr.return_value = ""
+
+    with patch(
+        "sculptor.agents.default.claude_code_sdk.process_manager.ClaudeOutputProcessor.build_and_process_output",
+    ):
+        process_manager._read_output_from_process(mock_process, ["claude"])
+
+    mock_process.kill_now.assert_called_once_with(signal.SIGKILL)
+
+
 def test_shutdown_exception_does_not_mask_original_error(
     local_environment: AgentExecutionEnvironment,
 ) -> None:

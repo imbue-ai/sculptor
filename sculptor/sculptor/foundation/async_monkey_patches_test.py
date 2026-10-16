@@ -7,6 +7,7 @@ from typing import NoReturn
 import pytest
 from loguru import logger
 
+from sculptor.foundation import async_monkey_patches
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.constants import ExceptionPriority
 
@@ -182,3 +183,67 @@ def test_log_error_at_least(explode_on_error: Any) -> None:
     with pytest.raises(IncorrectErrorsLoggedDuringTesting):
         with expect_at_least_logged_errors({"Something bad happened", "Something else bad happened"}):
             logger.error("Something bad happened")
+
+
+def _log_exception_from_a_source_line_containing_braces(exc: BaseException) -> None:
+    """Call ``log_exception`` from a frame whose executing source line has a dict literal.
+
+    This mirrors ``RunningProcess.start``, where the outermost frame of every
+    subprocess worker thread is a lambda whose source line reads
+    ``{**kwargs, **extra_kwargs}``.
+    """
+    call_from_lambda = lambda: log_exception(exc, "process didn't die", extra={"command": "sleep 100"})  # noqa: E731
+    call_from_lambda()
+
+
+def test_log_exception_with_kwargs_keeps_braces_in_the_call_site_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """log_exception embeds the call-site stack in the message, and loguru expands that
+    message with ``str.format`` whenever kwargs are passed, so braces in the captured
+    source lines have to survive as text rather than being read as format fields."""
+    handed_to_loguru: list[tuple[str, tuple, dict]] = []
+    monkeypatch.setattr(
+        logger,
+        "_log",
+        lambda level, flag, options, message, args, kwargs: handed_to_loguru.append((message, args, kwargs)),
+    )
+
+    try:
+        _raise_zero_division()
+    except ZeroDivisionError as e:
+        _log_exception_from_a_source_line_containing_braces(e)
+
+    assert len(handed_to_loguru) == 1
+    message, args, kwargs = handed_to_loguru[0]
+    assert kwargs, "the regression only fires when loguru is given kwargs to expand the message with"
+    assert '{"command": "sleep 100"}' in message.format(*args, **kwargs)
+
+
+def test_log_exception_reports_anyway_when_the_first_attempt_cannot_be_expanded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Callers log from ``except`` and ``finally`` blocks that still have cleanup to run,
+    so failing to report an exception must neither replace the exception being reported
+    nor skip the cleanup behind the call. It falls back to a log with nothing to expand."""
+    attempts: list[tuple[str, object]] = []
+
+    def _fail_when_given_anything_to_expand(
+        exc: BaseException, message: str, priority: object = None, extra: object = None
+    ) -> None:
+        attempts.append((message, extra))
+        if extra is not None:
+            raise KeyError("unexpandable")
+
+    monkeypatch.setattr(async_monkey_patches, "inject_exception_and_log", _fail_when_given_anything_to_expand)
+
+    try:
+        _raise_zero_division()
+    except ZeroDivisionError as e:
+        log_exception(e, "could not shut the process down", extra={"command": "sleep 100"})
+
+    assert len(attempts) == 2
+    fallback_message, fallback_extra = attempts[1]
+    assert fallback_extra is None, "the fallback must leave loguru nothing to expand"
+    assert "could not shut the process down" in fallback_message
+    assert "KeyError('unexpandable')" in fallback_message, "the reporting failure must not be swallowed silently"
