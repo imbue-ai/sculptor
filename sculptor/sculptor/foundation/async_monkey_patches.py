@@ -76,14 +76,25 @@ def log_exception(
         return None
 
     traceback_str = "".join(traceback.format_stack())
-    if args or kwargs:
-        # loguru treats `message` as a str.format template whenever args or kwargs are
-        # present. The source lines captured above are data, not a template, so a dict
-        # literal in one of them must not be read as a format field.
-        traceback_str = traceback_str.replace("{", "{{").replace("}", "}}")
-    message = (
-        f"{message}\n\nlog_exception CALL SITE TRACEBACK:\n\n{traceback_str}\nORIGINAL EXCEPTION TRACEBACK FOLLOWS:\n"
+    message_tail = (
+        f"\n\nlog_exception CALL SITE TRACEBACK:\n\n{traceback_str}\nORIGINAL EXCEPTION TRACEBACK FOLLOWS:\n"
     )
 
     # inject received exception stack trace into logger error message
-    inject_exception_and_log(exc, message, priority, *args, **kwargs)
+    if args or kwargs:
+        # loguru treats the message as a str.format template whenever args or kwargs
+        # are present. The source lines captured above are data, not a template, so a
+        # dict literal in one of them must not be read as a format field.
+        escaped_tail = message_tail.replace("{", "{{").replace("}", "}}")
+        try:
+            inject_exception_and_log(exc, message + escaped_tail, priority, *args, **kwargs)
+        except Exception as reporting_error:
+            # Callers log from `except` and `finally` blocks that still have cleanup to
+            # run, so failing to report an exception must neither replace it nor skip
+            # the cleanup behind the call. Retry below with nothing for loguru to
+            # expand, since the caller's own message may be the unexpandable template.
+            message = f"{message}\n\nCOULD NOT LOG WITH {args!r} {kwargs!r}: {reporting_error!r}"
+        else:
+            return None
+
+    inject_exception_and_log(exc, message + message_tail, priority)
