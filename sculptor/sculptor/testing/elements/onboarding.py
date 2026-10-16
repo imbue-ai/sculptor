@@ -1,5 +1,6 @@
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
+from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
@@ -82,6 +83,23 @@ class PlaywrightDependencyCardElement:
     @property
     def locator(self) -> Locator:
         return self._card
+
+    def expand(self) -> None:
+        """Expand the card to reveal its path, version and override controls.
+
+        The card's toggle is inert until the dependency probe settles: the click
+        handler early-returns rather than queueing the toggle, so a click landing
+        in that window is dropped and the details never appear. Gate the click on
+        the readiness signal the card publishes as ``aria-disabled`` on its root.
+
+        Playwright's own actionability check cannot carry this precondition.
+        ``aria-disabled`` is consulted only when the target element's ARIA role is
+        one that supports the state, and the card root is a plain ``div`` with no
+        role — so ``click()`` on the root never reads the attribute and races the
+        probe instead (SCU-1215).
+        """
+        expect(self._card).to_have_attribute("aria-disabled", "false")
+        self._card.click()
 
     def get_status(self) -> Locator:
         return self._card.locator('[data-role="status"]')

@@ -234,7 +234,7 @@ def test_onboarding_claude_not_found_shows_override(sculptor_instance_factory_: 
         expect(claude_card.locator).to_be_visible()
 
         # Expand to see override link
-        claude_card.locator.click()
+        claude_card.expand()
 
         override_link = claude_card.get_override_link()
         expect(override_link).to_be_visible()
@@ -270,7 +270,7 @@ def test_onboarding_claude_override_invalid_path(sculptor_instance_factory_: Scu
         claude_card = installation_step.get_claude_card()
         expect(claude_card.locator).to_be_visible()
 
-        claude_card.locator.click()
+        claude_card.expand()
 
         # Click override link
         override_link = claude_card.get_override_link()

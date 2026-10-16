@@ -276,12 +276,13 @@ export const DependencyCard = ({
     status.state === "authenticating";
 
   return (
-    // `aria-disabled` reflects the `canExpand` gate that `handleToggle` enforces. Without
-    // it the card renders as a plain actionable element while the dependency probe is
-    // loading/installing/authenticating, so a click landing in that window is silently
-    // dropped by the early-return. Surfacing the gate as `aria-disabled` makes the
-    // framework's actionability contract honor it — Playwright auto-waits for the card to
-    // become ready instead of dropping the click and timing out downstream (SCU-1215).
+    // `aria-disabled` publishes the `canExpand` gate that `handleToggle` enforces, so a
+    // caller can tell whether the card is ready before acting on it. Playwright reads
+    // `aria-disabled` only off a target whose own ARIA role supports the state, then walks
+    // that target's ancestors — so the attribute does block clicks on the card's nested
+    // controls (buttons carry a role), but NOT a click on this role-less root. Tests
+    // clicking the root must wait on the attribute explicitly; see
+    // `PlaywrightDependencyCardElement.expand` in testing/elements/onboarding.py (SCU-1215).
     <Flex
       direction="column"
       className={isNeutralOptional ? styles.row : ROW_CLASSES[status.state]}

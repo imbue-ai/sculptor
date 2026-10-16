@@ -283,9 +283,12 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
     // The queued card carries the same `setup-status-card` testid as the
     // interactive (popover-opening) card it becomes once the run starts, but
     // while pending it renders inert — no row click handler. `aria-disabled`
-    // makes that transient gap honest: the framework's actionability contract
-    // holds a click until the card turns interactive, instead of dispatching it
-    // onto the inert row where it is silently dropped (SCU-1215). The early
+    // marks that transient gap, and gates the role-bearing controls nested in
+    // the row. It does NOT hold a click on the row itself: Playwright reads
+    // `aria-disabled` only off a target whose own ARIA role supports the state,
+    // and the inert row is role-less. Callers must wait for the row to become
+    // the real trigger (`role="button"`); see
+    // `PlaywrightSetupStatusElement.open_popover` (SCU-1215). The early
     // `not_configured`/`legacy` rows are deliberately left alone — they render
     // as plain, non-interactive divs (no role, default cursor) and do not
     // misrepresent themselves, and gating them would also disable the Run/Edit

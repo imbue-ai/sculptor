@@ -1,5 +1,6 @@
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
+from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 
@@ -13,6 +14,23 @@ class PlaywrightSetupStatusElement:
     def get_card(self) -> Locator:
         """Get the setup status card locator."""
         return self._page.get_by_test_id(ElementIDs.SETUP_STATUS_CARD)
+
+    def open_popover(self) -> None:
+        """Open the setup card's output popover by clicking the card.
+
+        The queued card carries the same testid as the interactive card it becomes
+        once the run starts, but while queued it renders with no click handler, so
+        a click landing in that window is dropped and the popover never opens.
+        Wait for the card to actually become the popover trigger — it takes
+        ``role="button"`` only in the interactive variant — before clicking.
+
+        Waiting on the queued card's ``aria-disabled`` would not work: Playwright
+        reads that attribute only off a target whose own ARIA role supports the
+        state, and the queued card is a role-less ``div`` (SCU-1215).
+        """
+        card = self.get_card()
+        expect(card).to_have_attribute("role", "button")
+        card.click()
 
     def get_output(self) -> Locator:
         """Get the setup command output locator."""

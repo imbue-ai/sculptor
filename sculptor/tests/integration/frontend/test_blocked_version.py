@@ -80,7 +80,7 @@ def test_blocked_version_shows_out_of_range(
         # Expand the claude card to see version details
         claude_card = installation_step.get_claude_card()
         expect(claude_card.get_status()).to_contain_text("version mismatch")
-        claude_card.locator.click()
+        claude_card.expand()
 
         claude_version = claude_card.get_version()
         expect(claude_version).to_contain_text(_BLOCKED_VERSION)
