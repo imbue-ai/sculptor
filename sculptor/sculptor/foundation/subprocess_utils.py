@@ -429,14 +429,16 @@ def _shutdown_popen(
         return process.returncode
     except subprocess.TimeoutExpired as e:
         extra = {"command": command, "shutdown_timeout_sec": str(shutdown_timeout_sec)}
+        # Escalate first, report second. This runs on a cleanup path, so anything that
+        # raises on the way to the kill — a bad log format field, a dead sink — would
+        # leave the child alive and its worker thread without a return code to record.
+        send_shutdown_signal(process, signal.SIGKILL, kill_process_group)
         log_exception(
             e,
-            "process didn't die within shutdown_timeout_sec of SIGTERM",
+            "process didn't die within shutdown_timeout_sec of SIGTERM, sent SIGKILL",
             extra=extra,
             priority=ExceptionPriority.LOW_PRIORITY,
         )
-        # this sends SIGKILL which immediately kills the process
-        send_shutdown_signal(process, signal.SIGKILL, kill_process_group)
         try:
             process.wait(timeout=2)
             return process.returncode
