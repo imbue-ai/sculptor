@@ -125,14 +125,23 @@ export const MentionPickerList = forwardRef<SuggestionListRef, MentionPickerList
         setDrilledItems([]);
         return;
       }
+      // The pickers' own `items` implementations ignore the signal, so the flag is what
+      // actually suppresses a stale resolution; the signal lets any implementation that
+      // does honour it bail out early.
+      const controller = new AbortController();
       let isCancelled = false;
-      Promise.resolve(subConfig.items({ query: suggestionProps.query, editor: suggestionProps.editor })).then(
-        (items) => {
-          if (!isCancelled) setDrilledItems(items as Array<unknown>);
-        },
-      );
+      Promise.resolve(
+        subConfig.items({
+          query: suggestionProps.query,
+          editor: suggestionProps.editor,
+          signal: controller.signal,
+        }),
+      ).then((items) => {
+        if (!isCancelled) setDrilledItems(items as Array<unknown>);
+      });
       return (): void => {
         isCancelled = true;
+        controller.abort();
       };
     }, [category, suggestionProps.query, suggestionProps.editor, subConfigs]);
 

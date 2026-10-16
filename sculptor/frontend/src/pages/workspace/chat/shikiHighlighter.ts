@@ -65,12 +65,10 @@ export const highlightCode = async (
   });
 
   return tokens.map((line: ReadonlyArray<ThemedToken>) =>
-    line.map(
-      (token): DualThemedToken => ({
-        content: token.content,
-        lightColor: token.htmlStyle?.["color"],
-        darkColor: token.htmlStyle?.["--shiki-dark"],
-      }),
-    ),
+    line.map((token): DualThemedToken => ({
+      content: token.content,
+      lightColor: token.htmlStyle?.["color"],
+      darkColor: token.htmlStyle?.["--shiki-dark"],
+    })),
   );
 };

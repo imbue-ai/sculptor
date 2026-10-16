@@ -66,7 +66,7 @@ export const ChipDiffPopover = ({ chipData, onClose, onNavigate, actionRef }: Ch
   const isHighlighterReady = usePierreHighlighterReady(shikiThemes);
 
   const pierreOptions = useMemo(
-    (): FileDiffOptions<undefined> => ({
+    (): FileDiffOptions<undefined, undefined> => ({
       diffStyle: "unified",
       overflow: "scroll",
       themeType: appTheme,

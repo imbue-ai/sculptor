@@ -5,7 +5,7 @@ import { ElementIds } from "~/api";
 
 import styles from "./ToolPill.module.scss";
 import type { PillData } from "./toolPill.types.ts";
-import { getToolIcon } from "./toolPillIcons.tsx";
+import { getToolIcon } from "./toolPillIcons.ts";
 
 type ToolPillProps = {
   pillData: PillData;

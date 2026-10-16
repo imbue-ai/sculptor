@@ -60,7 +60,8 @@ const runItemsFilter = async (query: string): Promise<Array<MentionPickerCategor
   // `items` returns either a sync array or a promise depending on the picker;
   // wrap with Promise.resolve so the test body stays uniform.
   const result = await Promise.resolve(
-    config.items?.({ query, editor }) as Promise<Array<MentionPickerCategoryRow>> | Array<MentionPickerCategoryRow>,
+    config.items?.({ query, editor, signal: new AbortController().signal }) as
+      Promise<Array<MentionPickerCategoryRow>> | Array<MentionPickerCategoryRow>,
   );
   return result;
 };

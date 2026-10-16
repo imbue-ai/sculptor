@@ -59,16 +59,14 @@ export const buildThemeCommands = (runtime: CommandRuntime): Array<Command> => [
   // APPEARANCE_MODES so adding a new mode (e.g. "Auto") in
   // ~/common/theme/appearanceModes.ts surfaces here automatically — and
   // appearanceModesDrift.test.ts asserts the two stay in sync.
-  ...APPEARANCE_MODES.map(
-    (mode): Command => ({
-      id: `theme.appearance.${mode.id}`,
-      title: mode.label,
-      subtitle: mode.paletteSubtitle,
-      keywords: [...mode.paletteKeywords],
-      group: "view",
-      icon: mode.icon,
-      onPage: "theme.appearance",
-      perform: () => runtime.ui.setTheme(mode.id),
-    }),
-  ),
+  ...APPEARANCE_MODES.map((mode): Command => ({
+    id: `theme.appearance.${mode.id}`,
+    title: mode.label,
+    subtitle: mode.paletteSubtitle,
+    keywords: [...mode.paletteKeywords],
+    group: "view",
+    icon: mode.icon,
+    onPage: "theme.appearance",
+    perform: () => runtime.ui.setTheme(mode.id),
+  })),
 ];

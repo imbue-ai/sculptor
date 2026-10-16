@@ -184,8 +184,8 @@ export const submitReportAtom: WritableAtom<null, [], Promise<void>> = atom(null
       const entries = getDiagnosticEntries(healthCheckData);
       diagnosticTags = getDiagnosticTags(entries);
       diagnosticsContext = Object.fromEntries(
-        entries.flatMap(
-          ({ label, value }): ReadonlyArray<[string, string]> => (value !== undefined ? [[label, value]] : []),
+        entries.flatMap(({ label, value }): ReadonlyArray<[string, string]> =>
+          value !== undefined ? [[label, value]] : [],
         ),
       );
     }

@@ -7,7 +7,7 @@ import { ElementIds } from "~/api";
 import { formatDuration } from "./durationUtils.ts";
 import styles from "./ExpandedToolRow.module.scss";
 import type { PillData } from "./toolPill.types.ts";
-import { getToolIcon } from "./toolPillIcons.tsx";
+import { getToolIcon } from "./toolPillIcons.ts";
 import { ToolEntryContent, type ToolEntryShell } from "./ToolPopover.tsx";
 import { useElapsedTime } from "./useElapsedTime.ts";
 

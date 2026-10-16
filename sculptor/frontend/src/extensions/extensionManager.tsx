@@ -697,13 +697,11 @@ export class ExtensionManager {
 
     // `fetchManifest` shouldn't throw, but a synchronous fault (e.g. bad URL)
     // in an injected/edge implementation would; treat it as a load-phase error.
-    const result = await this.fetchManifest(this.manifestUrlForLoad(source)).catch(
-      (e): ExtensionLoadError => ({
-        manifest: { id: source, name: source, version: "?", entry: "", sdkVersion: "?" },
-        phase: "load",
-        error: e instanceof Error ? e : new Error(String(e)),
-      }),
-    );
+    const result = await this.fetchManifest(this.manifestUrlForLoad(source)).catch((e): ExtensionLoadError => ({
+      manifest: { id: source, name: source, version: "?", entry: "", sdkVersion: "?" },
+      phase: "load",
+      error: e instanceof Error ? e : new Error(String(e)),
+    }));
     if (this.loadSeqBySource.get(source) !== seq) return; // superseded while fetching
 
     if ("phase" in result) {
