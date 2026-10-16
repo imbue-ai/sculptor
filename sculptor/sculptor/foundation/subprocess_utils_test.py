@@ -2,9 +2,11 @@ import subprocess
 import time
 from threading import Event
 from threading import Thread
+from unittest.mock import MagicMock
 
 import pytest
 
+from sculptor.foundation import subprocess_utils
 from sculptor.foundation.subprocess_utils import CommandError
 from sculptor.foundation.subprocess_utils import SUBPROCESS_STOPPED_BY_REQUEST_EXIT_CODE
 from sculptor.foundation.subprocess_utils import run_local_command
@@ -129,3 +131,28 @@ def test_run_local_command_timeout_stops_long_running_process() -> None:
     # Verify the process was stopped early (should be ~2 seconds, not 10)
     assert elapsed_time < 5, f"Process took {elapsed_time:.2f}s, expected < 5s"
     assert elapsed_time > 1.5, f"Process took {elapsed_time:.2f}s, expected > 1.5s"
+
+
+class ReportingFailure(Exception):
+    """Stands in for anything log_exception can throw: a bad format field, a dead sink."""
+
+
+def test_shutdown_popen_kills_the_process_before_reporting_the_sigterm_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Escalating to SIGKILL must not sit behind a call that can raise.
+
+    Callers run this from cleanup paths, where an exception on the way to the kill
+    leaves the child alive and its worker thread without a return code.
+    """
+    process = MagicMock()
+    process.wait.side_effect = subprocess.TimeoutExpired(cmd="sleep 10", timeout=0.5)
+
+    monkeypatch.setattr(
+        subprocess_utils, "log_exception", MagicMock(side_effect=ReportingFailure("could not report the timeout"))
+    )
+
+    with pytest.raises(ReportingFailure):
+        subprocess_utils._shutdown_popen(process, "sleep 10", shutdown_timeout_sec=0.5)
+
+    assert [name for name, _args, _kwargs in process.method_calls] == ["terminate", "wait", "kill"]
