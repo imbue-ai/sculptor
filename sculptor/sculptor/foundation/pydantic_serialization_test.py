@@ -23,7 +23,8 @@ def test_default_factory_signature_check_is_memoized() -> None:
         + " leak workaround in pydantic_serialization is missing or no longer applies to this pydantic version"
     )
 
-    # ...and the cache is effective: the expensive signature check runs once per factory, not per call.
+    # ...and the cache is effective: the expensive signature check costs at most one call per
+    # distinct factory, however many instances get built.
     # (cache_info/cache_clear are added by functools.cache at runtime, so reach them via getattr.)
     getattr(check, "cache_clear")()
 
@@ -34,7 +35,11 @@ def test_default_factory_signature_check_is_memoized() -> None:
     _Model()
     _Model()
     info = getattr(check, "cache_info")()
-    assert info.misses <= 2 and info.hits >= 1, f"default-factory signature check is not being cached: {info}"
+    # Only the miss count is asserted on. pydantic <= 2.13 consulted the check on every
+    # instantiation, so the cache showed hits; 2.14 consults it once, lazily, and then stops
+    # asking, so zero hits is legitimate there. What must never happen either way is the miss
+    # count growing with the number of instantiations.
+    assert info.misses <= 1, f"default-factory signature check is not being cached: {info}"
 
 
 def test_unhashable_default_factory_does_not_crash() -> None:

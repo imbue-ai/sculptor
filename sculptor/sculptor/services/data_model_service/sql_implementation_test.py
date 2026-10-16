@@ -405,7 +405,7 @@ def test_migration_chain_produces_correct_schema() -> None:
     )
 
 
-def _generate_synthetic_value(field_name: str, pydantic_type: type) -> Any:
+def _generate_synthetic_value(field_name: str, pydantic_type: Any) -> Any:
     """Generate a synthetic value for a Pydantic model field based on its type."""
     leaf_types = extract_leaf_types(pydantic_type)
     non_none_types = [t for t in leaf_types if t is not type(None)]
