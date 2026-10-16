@@ -76,6 +76,11 @@ def log_exception(
         return None
 
     traceback_str = "".join(traceback.format_stack())
+    if args or kwargs:
+        # loguru treats `message` as a str.format template whenever args or kwargs are
+        # present. The source lines captured above are data, not a template, so a dict
+        # literal in one of them must not be read as a format field.
+        traceback_str = traceback_str.replace("{", "{{").replace("}", "}}")
     message = (
         f"{message}\n\nlog_exception CALL SITE TRACEBACK:\n\n{traceback_str}\nORIGINAL EXCEPTION TRACEBACK FOLLOWS:\n"
     )

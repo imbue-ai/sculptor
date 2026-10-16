@@ -831,7 +831,17 @@ class ClaudeProcessManager:
             try:
                 process.terminate(force_kill_seconds=5.0)
             except TimeoutExpired:
-                logger.info("Claude process did not exit after SIGTERM+SIGKILL, giving up")
+                # ``terminate`` only sets the shutdown event and joins the worker
+                # thread, and that thread's own shutdown path waits 30 s before
+                # escalating — so the SIGKILL in the sequence documented above has to
+                # go to the process group directly, the way ``_escalate_interrupt``
+                # does it (SCU-1340).
+                logger.info("Claude process did not exit 5s after SIGTERM, sending SIGKILL to the process group")
+                process.kill_now(signal.SIGKILL)
+                try:
+                    process.wait(timeout=5.0)
+                except TimeoutExpired:
+                    logger.warning("Claude process did not exit after SIGKILL, giving up")
             return True
 
     def _read_output_from_process(
@@ -871,7 +881,12 @@ class ClaudeProcessManager:
 
         # Exit-code diagnostics — only reachable when output processing succeeded
         # (no exception).  When it raised, the process is already cleaned up above.
-        assert process.returncode is not None, "Process return code should be set by now"
+        if process.returncode is None:
+            # ``_shutdown_process`` gave up: the worker thread that records the exit
+            # code is still running, so there is no code to report on. The response
+            # was already fully captured, so the turn itself still succeeded.
+            logger.warning("Process never reported an exit code after shutdown; skipping exit code checks")
+            return
         logger.info(
             "Process returned return code {}, {}, {}", process.returncode, process.read_stdout(), process.read_stderr()
         )
