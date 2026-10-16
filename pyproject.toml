@@ -103,5 +103,5 @@ dev = [
     "pyrefly>=1.3.2",
     "pytest-xdist>=3.8.0",
     # Ruff uses minor versions to signal breaking changes until 1.0.0 is reached.
-    "ruff~=0.17.0",
+    "ruff~=0.15.17",
 ]
