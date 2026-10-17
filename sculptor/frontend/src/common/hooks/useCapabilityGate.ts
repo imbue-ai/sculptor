@@ -7,8 +7,7 @@ export const CAPABILITY_UNSUPPORTED_COPY = "Not supported by this agent harness"
 
 /** The decision a capability gate yields for one affordance. */
 export type CapabilityGateState =
-  | { readonly enabled: true }
-  | { readonly enabled: false; readonly tooltip: string; readonly elementId: ElementIds };
+  { readonly enabled: true } | { readonly enabled: false; readonly tooltip: string; readonly elementId: ElementIds };
 
 /**
  * Resolve a narrow capability value (the result of a `useAgentSupports<X>`

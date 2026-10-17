@@ -82,7 +82,7 @@ const mobileSelectItem = (id: SettingsSectionId): ReactElement => (
 // mirroring the desktop sidebar's grouped headers.
 const renderMobileNavNodes = (): Array<ReactElement> => {
   const nodes: Array<ReactElement> = [];
-  for (let i = 0; i < SETTINGS_SECTIONS.length; ) {
+  for (let i = 0; i < SETTINGS_SECTIONS.length;) {
     const { id, group } = SETTINGS_SECTIONS[i];
     if (group === undefined) {
       nodes.push(mobileSelectItem(id));

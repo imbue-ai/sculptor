@@ -14,14 +14,7 @@ const VOICE_MODELS_TOOL = "VOICE_MODELS";
 
 /** The single button affordance state, folding install + engine lifecycle. */
 export type VoiceButtonStatus =
-  | "not-installed"
-  | "installing"
-  | "install-error"
-  | "idle"
-  | "initializing"
-  | "listening"
-  | "stopping"
-  | "voice-error";
+  "not-installed" | "installing" | "install-error" | "idle" | "initializing" | "listening" | "stopping" | "voice-error";
 
 export type VoiceEntryView = {
   status: VoiceButtonStatus;

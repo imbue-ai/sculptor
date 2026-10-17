@@ -17,12 +17,7 @@ import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
 import { PrPromptDialog } from "./PrPromptDialog.tsx";
 
 export type PrErrorCategory =
-  | "cli_missing"
-  | "not_authenticated"
-  | "no_access"
-  | "network_error"
-  | "rate_limited"
-  | "transient";
+  "cli_missing" | "not_authenticated" | "no_access" | "network_error" | "rate_limited" | "transient";
 
 export type EffectiveError = {
   category: PrErrorCategory;

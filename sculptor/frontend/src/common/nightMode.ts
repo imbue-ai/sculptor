@@ -16,9 +16,7 @@ export const NIGHT_MODE_OFF = "off";
 export const NIGHT_MODE_ON = "on";
 
 export type NightModeState =
-  | { readonly kind: "off" }
-  | { readonly kind: "on" }
-  | { readonly kind: "until"; readonly expiry: Date };
+  { readonly kind: "off" } | { readonly kind: "on" } | { readonly kind: "until"; readonly expiry: Date };
 
 export type NightModeKind = NightModeState["kind"];
 

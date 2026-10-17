@@ -118,7 +118,7 @@ export const PierreDiffView = ({
   // React StrictMode's remount (see usePierreHighlighterReady).
   const isHighlighterReady = usePierreHighlighterReady(shikiThemes);
   const options = useMemo(
-    (): FileDiffOptions<undefined> => ({
+    (): FileDiffOptions<undefined, undefined> => ({
       diffStyle: viewType,
       overflow,
       themeType,

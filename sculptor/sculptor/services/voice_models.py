@@ -62,7 +62,7 @@ _MOONSHINE_SERVE_PREFIX = "onnx-community/moonshine-base-ONNX/resolve/main"
 
 # The renderer pins the same @ricky0123/vad-web package version for its VAD
 # runtime; keep the two pins in sync when upgrading.
-_VAD_WEB_NPM_VERSION = "0.0.30"
+_VAD_WEB_NPM_VERSION = "0.0.31"
 
 
 def _moonshine_file(relative_path: str, sha256: str, size_bytes: int) -> VoiceModelFile:

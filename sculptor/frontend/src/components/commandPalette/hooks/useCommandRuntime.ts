@@ -150,8 +150,8 @@ export const useCommandRuntime = (): CommandRuntime => {
   const openReportProblem = useEvent((): void => updateReportProblem({ isOpen: true }));
   const clearActiveTerminal = useEvent((): void => invokeAction("terminal.clearActive"));
 
-  const updateConfigField = useEvent(
-    (field: UserConfigField, value: unknown): Promise<unknown> => updateField(field, value),
+  const updateConfigField = useEvent((field: UserConfigField, value: unknown): Promise<unknown> =>
+    updateField(field, value),
   );
   const reloadWindow = useEvent((): void => reloadElectronWindow());
 

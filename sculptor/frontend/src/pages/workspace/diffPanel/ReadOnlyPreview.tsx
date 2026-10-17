@@ -144,7 +144,7 @@ export const ReadOnlyPreview = ({ workspaceId, filePath, renderModeOverride }: R
   const lang = useMemo(() => getLanguageFromPath(filePath), [filePath]);
 
   const fileOptions = useMemo(
-    (): FileOptions<undefined> => ({
+    (): FileOptions<undefined, undefined> => ({
       overflow,
       themeType: appTheme,
       theme: shikiThemes,
