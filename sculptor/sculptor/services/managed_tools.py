@@ -68,15 +68,15 @@ PI_PIN = PiPin(
     platforms={
         "darwin-arm64": PlatformPin(
             asset="pi-darwin-arm64.tar.gz",
-            sha256="c68e3ac4d05b4e282aaab2e6c76f161d3e9e68f19a22e38913cbfaadb6c800f0",
+            sha256="1f9ae61cdeae04dd68caf1a1e8ab8ec9b292062f6ccb3252e0a9cbe93b5b16f1",
         ),
         "darwin-x64": PlatformPin(
             asset="pi-darwin-x64.tar.gz",
-            sha256="7a042d6413065421387001a4986190a1a03186c95a695f4dee0bdc76e60de8f7",
+            sha256="9ff562e2e439f50971b1f6bd9b62b30946600d9e9baa4ea19635cf630a553066",
         ),
         "linux-x64": PlatformPin(
             asset="pi-linux-x64.tar.gz",
-            sha256="c2f3c3e6a1850bd87654cc3ca8811013272397c3d042a4e2a64c43ee1b423972",
+            sha256="24f5be328b66d4da36876296989501974f43ab8434fbb57c35c523a3ea505ded",
         ),
     },
 )
