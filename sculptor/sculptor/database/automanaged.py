@@ -22,6 +22,7 @@ NOTE: Never update records in the snapshots table. (Only insert.)
 import inspect
 from abc import ABC
 from datetime import datetime
+from typing import Any
 from typing import get_type_hints
 
 from pydantic import AnyUrl
@@ -57,8 +58,9 @@ AUTOMANAGED_MODEL_CLASSES: set[type["DatabaseModel"]] = set()
 
 SQLAlchemyTypes = type[String] | type[JSON] | type[Integer] | type[Float] | DateTime
 
-# pyrefly: ignore [bad-assignment]
-_PYDANTIC_TO_SQLALCHEMY_TYPES: dict[type, SQLAlchemyTypes] = {
+# Keyed by type form rather than `type`: pydantic aliases such as EmailStr and
+# AnyUrl are `Annotated[...]` values, not classes.
+_PYDANTIC_TO_SQLALCHEMY_TYPES: dict[Any, SQLAlchemyTypes] = {
     ObjectID: String,
     SerializableModel: JSON,
     HttpUrl: String,
@@ -114,7 +116,7 @@ class InvalidDatabaseModelDefinitionError(Exception):
     pass
 
 
-def _get_sqlalchemy_type(pydantic_type: type) -> tuple[type | DateTime, bool]:
+def _get_sqlalchemy_type(pydantic_type: Any) -> tuple[type | DateTime, bool]:
     if pydantic_type in _PYDANTIC_TO_SQLALCHEMY_TYPES:
         return _PYDANTIC_TO_SQLALCHEMY_TYPES[pydantic_type], False
     leaf_types = extract_leaf_types(pydantic_type)

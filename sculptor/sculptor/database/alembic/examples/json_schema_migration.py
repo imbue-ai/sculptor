@@ -56,7 +56,7 @@ def _bulk_update(update_message_in_place_function: Callable[[dict[str, Any]], No
         rows = connection.execute(select_statement).mappings().all()
         update_data = []
         for row in rows:
-            message = json.loads(row.message) if isinstance(row.message, str) else row.message
+            message = json.loads(row["message"]) if isinstance(row["message"], str) else row["message"]
             update_message_in_place_function(message)
             update_data.append({primary_key: row[primary_key], "message": json.dumps(message)})
 

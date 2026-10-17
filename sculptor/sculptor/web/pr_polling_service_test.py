@@ -352,9 +352,11 @@ def test_add_observer_pushes_all_cached_results() -> None:
     q: queue.Queue[StreamingUpdateSourceTypes] = queue.Queue()
     svc.add_observer(q)
 
-    items = []
+    items: list[PrStatusInfo] = []
     while not q.empty():
-        items.append(q.get_nowait())
+        item = q.get_nowait()
+        assert isinstance(item, PrStatusInfo)
+        items.append(item)
     assert sorted(items, key=lambda s: str(s.workspace_id)) == sorted(
         [status1, status2], key=lambda s: str(s.workspace_id)
     )
