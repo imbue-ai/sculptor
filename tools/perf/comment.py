@@ -132,11 +132,6 @@ class Report:
     def has_regression(self) -> bool:
         return any(r.status == "regressed" for r in self.rows)
 
-    @property
-    def is_all_green(self) -> bool:
-        c = self.counts()
-        return c["regressed"] == 0 and c["improved"] == 0 and c["new"] == 0 and c["removed"] == 0
-
 
 def _pct(base: float, head: float) -> float:
     if base == 0:
@@ -291,21 +286,38 @@ def _verdict(report: Report) -> str:
 
 
 def render_markdown(report: Report, base_sha: str | None, observational: bool) -> str:
-    c = report.counts()
+    counts = report.counts()
     out: list[str] = [MARKER, "", f"### {_verdict(report)}"]
     if observational:
         out.append("")
-        out.append("_Observational — thresholds under calibration; comment-only, not a gate._")
+        out.append("_Experimental — observational only; thresholds still calibrating, not a gate._")
+
+    # Everything above the collapsible block is the always-visible summary: the
+    # verdict heading plus this one counts line (baseline sha folded in). This
+    # lane comments on *every* run, so an unchanged run must stay a quiet
+    # one-liner — the full table lives one click away inside <details>.
+    # Zero-suppress the counts: this line is the always-visible one-liner on
+    # every PR, so a clean run should read "✅ N unchanged", not lead with a red
+    # "❌ 0 regressed". Only non-zero buckets get a marker; unchanged always
+    # shows as the reassuring green tally.
     out.append("")
-    summary = f"❌ {c['regressed']} regressed · ⚡ {c['improved']} improved · ✅ {c['unchanged']} unchanged"
-    if c["new"]:
-        summary += f" · 🆕 {c['new']} new"
-    if c["removed"]:
-        summary += f" · 🗑️ {c['removed']} removed"
-    out.append(summary)
+    parts = []
+    if counts["regressed"]:
+        parts.append(f"❌ {counts['regressed']} regressed")
+    if counts["improved"]:
+        parts.append(f"⚡ {counts['improved']} improved")
+    if counts["new"]:
+        parts.append(f"🆕 {counts['new']} new")
+    if counts["removed"]:
+        parts.append(f"🗑️ {counts['removed']} removed")
+    parts.append(f"✅ {counts['unchanged']} unchanged")
+    summary = " · ".join(parts)
     if base_sha:
-        out.append("")
-        out.append(f"Baseline: `{base_sha}` (merge-base with main).")
+        summary += f" · baseline `{base_sha[:7]}`"
+    out.append(summary)
+
+    # Duplicate-row warnings stay visible: they signal corrupt/retried data
+    # (not a perf delta) and are rare enough not to add routine noise.
     for k in ("base", "head"):
         dupes = report.base_dupes if k == "base" else report.head_dupes
         if dupes:
@@ -313,6 +325,14 @@ def render_markdown(report: Report, base_sha: str | None, observational: bool) -
             out.append(f"⚠️ duplicate {k} rows (retries appended twice?): " + ", ".join(f"`{s}/{v}`" for s, v in dupes))
 
     out.append("")
+    out.append(
+        f"<details><summary>Full measurements — {len(report.rows)} scenario(s)"
+        + " (fg req · commits · dom · bg req · duration)</summary>"
+    )
+    out.append("")
+    if base_sha:
+        out.append(f"Baseline: `{base_sha}` (merge-base with main).")
+        out.append("")
     out.append("| scenario / variant | fg req | commits | dom | bg req | duration |")
     out.append("|---|---|---|---|---|---|")
     for r in report.rows:
@@ -324,12 +344,14 @@ def render_markdown(report: Report, base_sha: str | None, observational: bool) -
             out.append(f"| {name} | 🗑️ removed (base only) | | | | |")
             continue
 
-        by = {c.metric: c for c in r.cells}
+        by = {cell.metric: cell for cell in r.cells}
         cols = " | ".join(_cell(by[m]) for m in ("fg_req", "commits", "dom", "bg_req", "dur"))
         out.append(f"| {name} | {cols} |")
 
     detailed = [r for r in report.rows if r.details]
     if detailed:
+        # Attribution nests one level deeper: it's secondary to the table and
+        # only present when something changed. GitHub renders nested <details>.
         out.append("")
         out.append("<details><summary>Attribution for changed scenarios</summary>")
         out.append("")
@@ -341,6 +363,8 @@ def render_markdown(report: Report, base_sha: str | None, observational: bool) -
             out.append("")
         out.append("</details>")
 
+    out.append("")
+    out.append("</details>")
     out.append("")
     return "\n".join(out)
 
@@ -363,12 +387,16 @@ def render_head_only_markdown(head_idx: dict, head_dupes: list[tuple[str, str]])
     out: list[str] = [MARKER, "", "### 📊 perf measurements (no baseline yet)"]
     out.append("")
     out.append(
-        "_No `refs/notes/perf` baseline for the merge-base yet — deltas begin"
-        + " once a main run records a note. Absolute numbers below._"
+        "_Experimental — no `refs/notes/perf` baseline for the merge-base yet;"
+        + " deltas begin once a main run records a note. Absolute numbers below._"
     )
+    out.append("")
+    out.append(f"✅ {len(head_idx)} scenario(s) measured · no baseline to diff")
     if head_dupes:
         out.append("")
         out.append("⚠️ duplicate rows (retries appended twice?): " + ", ".join(f"`{s}/{v}`" for s, v in head_dupes))
+    out.append("")
+    out.append(f"<details><summary>Full measurements — {len(head_idx)} scenario(s)</summary>")
     out.append("")
     out.append("| scenario / variant | fg req | commits | dom | bg req | duration |")
     out.append("|---|---|---|---|---|---|")
@@ -376,6 +404,8 @@ def render_head_only_markdown(head_idx: dict, head_dupes: list[tuple[str, str]])
         scenario, variant = k
         fg, commits, dom, bg, dur = _head_cells(head_idx[k])
         out.append(f"| {scenario} / {variant} | {fg} | {commits} | {dom} | {bg} | {dur} |")
+    out.append("")
+    out.append("</details>")
     out.append("")
     return "\n".join(out)
 
