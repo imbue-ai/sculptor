@@ -1,4 +1,29 @@
 {
+  "recipe:0cb89c92e62de680": {
+    "image_id": "im-6d01lTEd2WzftwuXZE6f7p",
+    "recipe": {
+      "builder": {
+        "modal": {
+          "dockerfile": ".devcontainer/Dockerfile",
+          "include_dir": null,
+          "script": "6b393167d6cfc9d9e3553bbfc7d1693fa802924623cc04a5020ca5c47a136d71"
+        }
+      },
+      "copy_dirs": [],
+      "escaping_symlinks": null,
+      "export_extras": {
+        "content": "94f97c98372d6e94de7b6297c11e566cc2b37a7cf18704d53116dcf71414a385",
+        "paths": [
+          "offload-out.log"
+        ]
+      },
+      "format": 2,
+      "sandbox_init_cmd": "bash /app/scripts/finalize-base-image.sh"
+    },
+    "config_path": "offload-perf.toml",
+    "offload_version": "0.10.0",
+    "built_at": "2026-10-20T20:29:30Z"
+  },
   "recipe:5d163de219ea2ae9": {
     "image_id": "im-EV43JmJqo0Bt9tDV3ivduQ",
     "recipe": {
