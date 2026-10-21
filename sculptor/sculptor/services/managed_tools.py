@@ -243,12 +243,12 @@ CLAUDE_VERSION_RANGE = VersionRange(
     # Keep the floor at recommended: an in-range managed binary is never upgraded to
     # recommended (auto-install and the "up to date" status both gate on range, not
     # recommended), so a lower floor strands old installs.
-    min_version="2.1.280",
+    min_version="2.1.306",
     max_version="2.99.99",
     # Recommended is the latest validated release. It has to be one whose model table
     # carries every `--model` id the picker offers, which is ahead of the `stable`
     # channel whenever a new model generation has just shipped.
-    recommended_version="2.1.280",
+    recommended_version="2.1.306",
     # Blocked versions create background tool invocations that are missing events
     # describing them.
     blocked_versions=(BlockedVersionRange(min_version="2.1.101", max_version="2.1.101"),),
