@@ -22,7 +22,7 @@ from sculptor.testing.user_stories import user_story
 # Long display names as they appear in the model selector dropdown (ModelSelectOptions uses getModelLongName).
 _OPUS_48_1M_MODEL_NAME = "Claude 4.8 Opus (1M)"
 _OPUS_48_MODEL_NAME = "Claude 4.8 Opus"
-_SONNET_MODEL_NAME = "Claude 4.6 Sonnet"
+_SONNET_MODEL_NAME = "Claude 5.5 Sonnet"
 _OPUS_5_1M_MODEL_NAME = "Claude 5 Opus (1M)"
 _OPUS_5_MODEL_NAME = "Claude 5 Opus"
 _OPUS_55_1M_MODEL_NAME = "Claude 5.5 Opus (1M)"

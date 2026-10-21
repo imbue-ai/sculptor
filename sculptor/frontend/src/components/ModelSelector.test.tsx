@@ -67,7 +67,7 @@ describe("ModelSelectOptions", () => {
     renderOptions(undefined);
     // The Claude path keeps PRODUCTION_MODELS display names — integration tests
     // select these by exact name, so the fallback must not regress.
-    expect(screen.getAllByText("Claude 4.6 Sonnet").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Claude 5.5 Sonnet").length).toBeGreaterThan(0);
     // A pi model id must NOT appear on the Claude path.
     expect(screen.queryByText("Claude Opus 4.8")).not.toBeInTheDocument();
     // The Claude path stays a flat list — no provider group headers.

@@ -32,7 +32,7 @@ real_claude = pytest.mark.real_claude
 _TEST_PREFIX = "[SCULPTOR-UI-TEST] This is an automated integration test of Sculptor's UI, not a real user request. Follow the instructions exactly as given. "
 
 # The model to use for real Claude tests. Must match the dropdown option text exactly.
-REAL_CLAUDE_MODEL = "Claude 4.6 Sonnet"
+REAL_CLAUDE_MODEL = "Claude 5.5 Sonnet"
 
 # Timeouts for real Claude (much longer than FakeClaude).
 RESPONSE_TIMEOUT_MS = 120_000  # 2 minutes for a single response

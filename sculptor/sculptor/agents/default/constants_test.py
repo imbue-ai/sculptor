@@ -37,6 +37,12 @@ def test_opus_5_5_maps_to_its_pinned_model_ids() -> None:
     assert MODEL_SHORTNAME_MAP[LLMModel.CLAUDE_5_5_OPUS_200K] == "claude-opus-5-5"
 
 
+def test_sonnet_5_5_and_haiku_5_5_map_to_their_pinned_model_ids() -> None:
+    """The bare ids already run with a 1M window, so neither model has a `[1m]` variant."""
+    assert MODEL_SHORTNAME_MAP[LLMModel.CLAUDE_5_5_SONNET] == "claude-sonnet-5-5"
+    assert MODEL_SHORTNAME_MAP[LLMModel.CLAUDE_5_5_HAIKU] == "claude-haiku-5-5"
+
+
 def test_every_real_model_has_a_shortname() -> None:
     """Every model that reaches the CLI needs a `--model` id to pass to it.
 
