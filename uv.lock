@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.14.*"
 
 [manifest]
@@ -374,11 +374,11 @@ wheels = [
 
 [[package]]
 name = "filelock"
-version = "3.29.4"
+version = "4.2.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e6/dc/be6cbe99670cd6e4ad387123647cb08e0c32975e223f82551e914c5568a6/filelock-3.29.4.tar.gz", hash = "sha256:10cdb3656fc44541cdf30652a93fb10ec6b05325620eb316bd26893e4201538a", size = 63028, upload-time = "2026-06-13T16:12:00.744Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/28/3893324bcadf8f89b1616637468d766af3f625008c0735bf704fdfa86617/filelock-4.2.4.tar.gz", hash = "sha256:c6d8663535e1650ee430507b4ffbac7b464dd64b7647ea0112a9f406499d163d", size = 652444, upload-time = "2026-10-19T01:57:51.001Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/37/a065dc3bd6e49423a6532c642ca7378d3f467b1ef44c2800c937af7f9739/filelock-3.29.4-py3-none-any.whl", hash = "sha256:dac1648087d5115554850d113e7dd8c83ab2d38e3435dde2d4f163847e57b767", size = 42757, upload-time = "2026-06-13T16:11:59.582Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/1b/5e74289a1878e666bb4b65fe5805a04cafcac2aa5f519ef1ead67ef91c56/filelock-4.2.4-py3-none-any.whl", hash = "sha256:301241438c57936ef93f4243a94f2559022268bfcf9b375a9a72eb0f8db8358e", size = 162475, upload-time = "2026-10-19T01:57:49.419Z" },
 ]
 
 [[package]]
@@ -1444,7 +1444,7 @@ requires-dist = [
     { name = "coolname", specifier = ">=2.2.0" },
     { name = "email-validator" },
     { name = "fastapi" },
-    { name = "filelock", specifier = ">=3.8.0" },
+    { name = "filelock", specifier = ">=4.2.4" },
     { name = "httpx" },
     { name = "loguru" },
     { name = "psutil", specifier = ">=5.9.0" },
@@ -1472,7 +1472,7 @@ provides-extras = ["packaging"]
 [package.metadata.requires-dev]
 dev = [
     { name = "boto3-stubs", specifier = ">=1.40.49" },
-    { name = "filelock", specifier = ">=3.18.0" },
+    { name = "filelock", specifier = ">=4.2.4" },
     { name = "inline-snapshot" },
     { name = "pillow", specifier = ">=11.0.0" },
     { name = "playwright", specifier = "==1.60.0" },
