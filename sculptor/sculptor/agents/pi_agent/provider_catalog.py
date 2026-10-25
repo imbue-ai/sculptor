@@ -96,6 +96,14 @@ _PROVIDER_CATALOG: tuple[ProviderCatalogEntry, ...] = (
         group=ProviderGroup.SINGLE_KEY,
     ),
     ProviderCatalogEntry(
+        # Registered by Sculptor's bundled `sculptor_trustedrouter.ts` extension,
+        # not built into pi.
+        provider_id="trustedrouter",
+        env_var_names=("TRUSTEDROUTER_API_KEY",),
+        display_name="TrustedRouter",
+        group=ProviderGroup.SINGLE_KEY,
+    ),
+    ProviderCatalogEntry(
         provider_id="vercel-ai-gateway",
         env_var_names=("AI_GATEWAY_API_KEY",),
         display_name="Vercel AI Gateway",

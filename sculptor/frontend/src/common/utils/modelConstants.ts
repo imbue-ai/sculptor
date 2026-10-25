@@ -107,6 +107,7 @@ export const groupModelsByProvider = (models: ReadonlyArray<ModelOption>): Reado
 const providerDisplayNames: Record<string, string> = {
   anthropic: "Anthropic",
   openrouter: "OpenRouter",
+  trustedrouter: "TrustedRouter",
   deepseek: "DeepSeek",
   google: "Google",
   openai: "OpenAI",

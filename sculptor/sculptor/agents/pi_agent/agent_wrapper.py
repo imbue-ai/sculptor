@@ -236,6 +236,11 @@ _SUBAGENT_EXTENSION_FILENAME: str = "sculptor_subagent.ts"
 # pyproject.toml). Registers the `background` tool that starts a shell command
 # in the background and reports its lifecycle out-of-band (see background.py).
 _BACKGROUND_EXTENSION_FILENAME: str = "sculptor_background.ts"
+# The TrustedRouter provider extension shipped with Sculptor (package data; see
+# pyproject.toml). Registers the `trustedrouter` provider from TrustedRouter's
+# public model list; it registers nothing, and pi starts normally, if that list
+# cannot be fetched.
+_TRUSTEDROUTER_EXTENSION_FILENAME: str = "sculptor_trustedrouter.ts"
 _EXTENSIONS_SOURCE_DIR: Path = Path(__file__).resolve().parent / "extensions"
 
 # Prepended to a turn's prompt while the agent is in plan mode. Drives the pi
@@ -911,6 +916,7 @@ class PiAgent(DefaultAgentWrapper):
             _BACKCHANNEL_EXTENSION_FILENAME,
             _SUBAGENT_EXTENSION_FILENAME,
             _BACKGROUND_EXTENSION_FILENAME,
+            _TRUSTEDROUTER_EXTENSION_FILENAME,
         ):
             content = (_EXTENSIONS_SOURCE_DIR / filename).read_text(encoding="utf-8")
             destination = state_path / filename

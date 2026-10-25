@@ -2436,6 +2436,14 @@ class TestStartAndSessionResume:
         # The pinned backchannel extension also ships: discovery off, our `-e` set on.
         assert "--no-extensions" in command
         assert "-e" in command
+        # Every pinned extension is loaded, including the TrustedRouter provider.
+        loaded = [command[i + 1] for i, arg in enumerate(command) if arg == "-e"]
+        assert [Path(path).name for path in loaded] == [
+            "sculptor_backchannel.ts",
+            "sculptor_subagent.ts",
+            "sculptor_background.ts",
+            "sculptor_trustedrouter.ts",
+        ]
         # The minted id is persisted up front so a crash during the first turn still leaves a
         # resumable id (write_file is also called once to materialize the extension into the env).
         session_id_path = str(Path("/fake/state") / PI_SESSION_ID_STATE_FILE)

@@ -26,6 +26,14 @@ def test_single_key_providers_present_with_expected_env_vars() -> None:
     assert google.group == ProviderGroup.SINGLE_KEY
 
 
+def test_trustedrouter_is_a_single_key_provider() -> None:
+    trustedrouter = get_provider_entry("trustedrouter")
+    assert trustedrouter is not None
+    assert trustedrouter.env_var_names == ("TRUSTEDROUTER_API_KEY",)
+    assert trustedrouter.display_name == "TrustedRouter"
+    assert trustedrouter.group == ProviderGroup.SINGLE_KEY
+
+
 def test_session_only_providers_present_and_grouped() -> None:
     for provider_id in (
         "azure-openai-responses",
