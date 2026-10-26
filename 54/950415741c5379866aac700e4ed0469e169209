@@ -1,4 +1,24 @@
 {
+  "recipe:5d163de219ea2ae9": {
+    "image_id": "im-EH4BHvN8rNWwP9ebYb2raF",
+    "recipe": {
+      "builder": {
+        "modal": {
+          "dockerfile": ".devcontainer/Dockerfile",
+          "include_dir": null,
+          "script": "6b393167d6cfc9d9e3553bbfc7d1693fa802924623cc04a5020ca5c47a136d71"
+        }
+      },
+      "copy_dirs": [],
+      "escaping_symlinks": null,
+      "export_extras": null,
+      "format": 2,
+      "sandbox_init_cmd": "bash /app/scripts/finalize-base-image.sh"
+    },
+    "config_path": "offload-electron.toml",
+    "offload_version": "0.10.0",
+    "built_at": "2026-10-26T23:21:42Z"
+  },
   "recipe:c015d5644c103046": {
     "image_id": "im-SSzRUpBPDwG4zWDzbY7zOT",
     "recipe": {
