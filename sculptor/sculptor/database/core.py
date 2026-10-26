@@ -34,6 +34,7 @@ from sqlalchemy.pool import NullPool
 
 from sculptor.database.alembic.utils import get_alembic_script_location
 from sculptor.database.alembic.utils import override_run_env
+from sculptor.database.alembic.utils import set_sqlalchemy_url
 
 METADATA = MetaData()
 
@@ -127,9 +128,7 @@ def initialize_db(engine: Engine) -> None:
 def _run_migrations_on_database_url(database_url: str, script_location: str) -> None:
     config = Config()
     config.set_main_option("script_location", script_location)
-    # Alembic's config is a ConfigParser, which reads `%` as interpolation syntax, and a
-    # rendered URL percent-encodes characters such as non-ASCII letters.
-    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+    set_sqlalchemy_url(config, database_url)
     try:
         command.upgrade(config, "head")
     except Exception as e:
