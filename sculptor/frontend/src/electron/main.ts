@@ -246,6 +246,7 @@ const store = new Store({
     updateChannel: "STABLE",
     customBackendCommand: "",
     backendReadinessTimeout: 60,
+    lastProjectDirectoryParent: "",
   },
 });
 
@@ -1041,12 +1042,21 @@ app.whenReady().then(async () => {
     if (!window) {
       return null;
     }
+    // Without a defaultPath the dialog opens in Downloads and the OS does not
+    // track the last folder, so remember it ourselves.
+    const lastParent = store.get("lastProjectDirectoryParent", "") as string;
     const result = await dialog.showOpenDialog(window, {
       properties: ["openDirectory"],
       title: "Select Project Directory",
       buttonLabel: "Select",
+      defaultPath: lastParent || undefined,
     });
-    return result.canceled ? null : result.filePaths[0];
+    if (result.canceled) {
+      return null;
+    }
+    const selected = result.filePaths[0];
+    store.set("lastProjectDirectoryParent", path.dirname(selected));
+    return selected;
   });
 
   ipcMain.handle(GET_CURRENT_BACKEND_STATUS_CHANNEL_NAME, () => {
