@@ -92,6 +92,15 @@ def get_alembic_script_location() -> str:
     return str(Path(__file__).parent)
 
 
+def set_sqlalchemy_url(config: Config, database_url: str) -> None:
+    """Point an Alembic config at a database.
+
+    The config is a ConfigParser, which reads `%` as interpolation syntax, and a URL
+    percent-encodes characters such as non-ASCII letters, so `%` is escaped as `%%`.
+    """
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+
+
 def get_frozen_database_model_nested_json_schemas() -> Schemas:
     return json.loads(FROZEN_SCHEMAS_PATH.read_text(encoding="utf-8"))
 

@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from sculptor.database.alembic.utils import drop_all_automanaged_triggers
+from sculptor.database.alembic.utils import set_sqlalchemy_url
 from sculptor.database.core import METADATA
 from sculptor.services.data_model_service.sql_implementation import register_all_tables
 
@@ -55,7 +56,7 @@ def run_migrations_online() -> None:
     """
     dburl = context.get_x_argument(as_dictionary=True).get("dburl")
     if dburl:
-        config.set_main_option("sqlalchemy.url", dburl)
+        set_sqlalchemy_url(config, dburl)
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
