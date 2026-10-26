@@ -54,6 +54,12 @@ _run_pipe = functools.partial(
 )  # Writes to a pipe for checking
 
 
+# electron-updater skips an update whose manifest minimumSystemVersion is newer
+# than os.release(), which on macOS is the Darwin version. Darwin 22 is macOS 13;
+# keep in sync with LSMinimumSystemVersion in sculptor/frontend/forge.config.ts.
+MACOS_MINIMUM_DARWIN_VERSION = "22.0.0"
+
+
 @app.command("generate-autoupdate-manifest")
 def generate_autoupdate_manifest(platform: str, arch: str) -> None:
     """Generate an electron-updater compatible YAML manifest for auto-updates.
@@ -67,10 +73,12 @@ def generate_autoupdate_manifest(platform: str, arch: str) -> None:
         artifact_filename = f"Sculptor-darwin-arm64-{semver_version}.zip"
         manifest_filename = "latest-mac.yml"
         output_dir = dist_dir / "zip" / "darwin" / arch
+        platform_lines = [f"minimumSystemVersion: {MACOS_MINIMUM_DARWIN_VERSION}"]
     elif platform == "linux":
         artifact_filename = "Sculptor.AppImage"
         manifest_filename = "latest-linux-arm64.yml" if arch == "arm64" else "latest-linux.yml"
         output_dir = dist_dir / "AppImage" / arch
+        platform_lines = []
     else:
         typer.secho(f"Unsupported platform: {platform}. Must be 'darwin' or 'linux'.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
@@ -92,6 +100,7 @@ def generate_autoupdate_manifest(platform: str, arch: str) -> None:
         f"    sha512: {sha512_base64}",
         f"    size: {file_size}",
         f"releaseDate: {release_date}",
+        *platform_lines,
         "",
     ]
     manifest_content = "\n".join(manifest_lines)
