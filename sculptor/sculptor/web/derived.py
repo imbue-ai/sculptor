@@ -493,6 +493,8 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             LLMModel.CLAUDE_4_6_OPUS,
             LLMModel.CLAUDE_4_6_OPUS_200K,
             LLMModel.CLAUDE_4_HAIKU,
+            LLMModel.CLAUDE_5_5_SONNET,
+            LLMModel.CLAUDE_5_5_HAIKU,
             LLMModel.CLAUDE_FABLE_5,
             LLMModel.CLAUDE_FABLE_5_1,
             LLMModel.FAKE_CLAUDE,

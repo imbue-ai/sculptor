@@ -24,27 +24,29 @@ class LLMModel(StrEnum):
     Per-release runbook (surface the newest generation, drop the oldest):
       1. Add explicit members here named after the real model, and map each to its
          exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).
+         A model whose bare id runs at 200K gets a 1M/200K pair (``[1m]`` + bare id);
+         one whose bare id already runs at 1M gets a single member.
       2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),
          insert at the correct spot in ``PRODUCTION_MODELS`` — that list is grouped by
          family, so a new Opus heads the Opus block rather than the whole list — and
          add to ``derived.py``'s streaming list.
-      3. Point the product default at the new member: ``userConfig.ts``
+      3. For a new Opus, point the product default at the new member: ``userConfig.ts``
          ``defaultModelAtom``, ``web/derived.py``'s fallback, and ``sculpt``'s
          ``DEFAULT_CLAUDE_MODEL``.
-      4. Drop the oldest generation from the picker (remove from ``PRODUCTION_MODELS``
-         / ``derived`` lists only — its enum value, label and capabilities all stay, so
-         a stored selection still renders and keeps its toggles).
+      4. Drop the oldest generation from the picker (remove it from ``PRODUCTION_MODELS``
+         only — its enum value, label, capabilities and streaming all stay, so a stored
+         selection still renders, keeps its toggles and streams).
       5. Regenerate the API types + extension SDK + frozen schema, and bump the
          managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.
-         Check what that build's own ``opus`` alias resolves to: the rolling members
-         below follow it, so the bump moves them. Regenerate last: this docstring is
-         copied verbatim into both the SDK declarations and the frozen schema, so
-         editing it after generating leaves them stale.
-      6. Update what names models from outside this file. Integration tests select
-         models by display name, and not only the ones about models — grep the test
-         tree for the retired generation's long name (``"Claude <gen> Opus"``) rather
-         than working from a list, since a test that merely needs *a* real model also
-         names one. Then the model claims in ``docs/specs``.
+         Check what that build's own ``opus``, ``sonnet`` and ``haiku`` aliases resolve
+         to: the rolling members below follow them, so the bump moves them. Regenerate
+         last: this docstring is copied verbatim into both the SDK declarations and
+         the frozen schema, so editing it after generating leaves them stale.
+      6. Update what names models from outside this file. Integration and frontend
+         tests select models by display name, and not only the ones about models —
+         grep the tests for the retired entry's long name (``"Claude <gen> <family>"``)
+         rather than working from a list, since a test that merely needs *a* real
+         model also names one. Then the model claims in ``docs/specs``.
     """
 
     # Rolling "latest Opus" alias (shortnames `opus[1m]` / `opus`). Retired from the
@@ -66,9 +68,16 @@ class LLMModel(StrEnum):
     CLAUDE_4_7_OPUS_200K = "CLAUDE-4-7-OPUS-200K"
     CLAUDE_4_6_OPUS = "CLAUDE-4-6-OPUS"
     CLAUDE_4_6_OPUS_200K = "CLAUDE-4-6-OPUS-200K"
+    # Rolling "latest Sonnet" / "latest Haiku" aliases (shortnames `sonnet[1m]` /
+    # `sonnet` / `haiku`). Like the rolling Opus alias, they are retired from the GUI
+    # picker but kept defined, and a managed CLI bump can move them to a new generation.
     CLAUDE_4_SONNET = "CLAUDE-4-SONNET"
     CLAUDE_4_SONNET_200K = "CLAUDE-4-SONNET-200K"
     CLAUDE_4_HAIKU = "CLAUDE-4-HAIKU"
+    # Pinned Sonnet and Haiku generations. Their 1M context is native, so each is a
+    # single entry with no 1M/200K split.
+    CLAUDE_5_5_SONNET = "CLAUDE-5-5-SONNET"
+    CLAUDE_5_5_HAIKU = "CLAUDE-5-5-HAIKU"
     # Fable (frontier line; single-context entries, no 1M/200K split).
     CLAUDE_FABLE_5 = "CLAUDE-FABLE-5"
     CLAUDE_FABLE_5_1 = "CLAUDE-FABLE-5-1"

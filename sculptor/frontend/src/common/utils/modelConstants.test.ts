@@ -30,11 +30,37 @@ describe("Opus 5.5", () => {
   });
 });
 
+describe("Sonnet 5.5 and Haiku 5.5", () => {
+  it("are labelled by their pinned generation, with no 1M variant", () => {
+    expect(getModelShortName(LlmModel.CLAUDE_5_5_SONNET)).toBe("Sonnet 5.5");
+    expect(getModelLongName(LlmModel.CLAUDE_5_5_SONNET)).toBe("Claude 5.5 Sonnet");
+    expect(getModelShortName(LlmModel.CLAUDE_5_5_HAIKU)).toBe("Haiku 5.5");
+    expect(getModelLongName(LlmModel.CLAUDE_5_5_HAIKU)).toBe("Claude 5.5 Haiku");
+  });
+
+  it("support file attachments but not fast mode", () => {
+    for (const model of [LlmModel.CLAUDE_5_5_SONNET, LlmModel.CLAUDE_5_5_HAIKU]) {
+      expect(getModelCapabilities(model)).toEqual({ supportsFastMode: false, supportsFileAttachments: true });
+    }
+  });
+
+  it("follow the Opus block in the picker, Sonnet before Haiku", () => {
+    expect(PRODUCTION_MODELS.slice(-2)).toEqual([LlmModel.CLAUDE_5_5_SONNET, LlmModel.CLAUDE_5_5_HAIKU]);
+  });
+});
+
 describe("retired models", () => {
   it("keeps Opus 4.7 out of the picker while leaving it selectable by a stored value", () => {
     expect(PRODUCTION_MODELS).not.toContain(LlmModel.CLAUDE_4_7_OPUS);
     expect(PRODUCTION_MODELS).not.toContain(LlmModel.CLAUDE_4_7_OPUS_200K);
     expect(getModelShortName(LlmModel.CLAUDE_4_7_OPUS_200K)).toBe("Opus 4.7");
+  });
+
+  it("keeps the rolling Sonnet and Haiku aliases out of the picker, labelled as rolling", () => {
+    for (const model of [LlmModel.CLAUDE_4_SONNET, LlmModel.CLAUDE_4_SONNET_200K, LlmModel.CLAUDE_4_HAIKU]) {
+      expect(PRODUCTION_MODELS).not.toContain(model);
+      expect(getModelLongName(model)).toMatch(/\(latest/);
+    }
   });
 });
 

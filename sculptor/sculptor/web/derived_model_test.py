@@ -1,5 +1,7 @@
 """The product default model a Claude agent reports, and its streaming support."""
 
+import pytest
+
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -16,8 +18,8 @@ from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import create_initial_task_view
 
 
-def _make_view_without_a_selected_model() -> CodingAgentTaskView:
-    """A Claude agent that carries no creation-time model and no chat selection."""
+def _make_view_without_a_selected_model(default_model: LLMModel | None = None) -> CodingAgentTaskView:
+    """A Claude agent that carries no chat selection, and no creation-time model unless given one."""
     task = Task(
         object_id=TaskID(),
         user_reference=UserReference("test-user"),
@@ -27,6 +29,7 @@ def _make_view_without_a_selected_model() -> CodingAgentTaskView:
             agent_config=ClaudeCodeSDKAgentConfig(),
             git_hash="abc123",
             system_prompt=None,
+            default_model=default_model,
         ),
         current_state=AgentTaskStateV2(workspace_id=WorkspaceID()),
         outcome=TaskState.RUNNING,
@@ -48,3 +51,9 @@ def test_the_default_model_supports_smooth_streaming() -> None:
     without failing anything else.
     """
     assert _make_view_without_a_selected_model().is_smooth_streaming_supported
+
+
+@pytest.mark.parametrize("model", list(LLMModel))
+def test_every_model_supports_smooth_streaming(model: LLMModel) -> None:
+    """A member left off the opt-in list loses streaming with nothing else failing."""
+    assert _make_view_without_a_selected_model(default_model=model).is_smooth_streaming_supported

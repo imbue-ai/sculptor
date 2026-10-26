@@ -14,10 +14,11 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFileAttachments: true,
     supportsFastMode: true,
   },
-  // The rolling "latest Opus" alias resolves through the managed Claude CLI's own
-  // `opus` alias, so bumping CLAUDE_VERSION_RANGE can move it onto a new generation
-  // without this file changing. Re-check the new CLI's alias target when bumping:
-  // these capabilities are a claim about whichever model it resolves to.
+  // The rolling "latest" aliases resolve through the managed Claude CLI's own
+  // `opus` / `sonnet` / `haiku` aliases, so bumping CLAUDE_VERSION_RANGE can move them
+  // onto a new generation without this file changing. Re-check the new CLI's alias
+  // targets when bumping: these capabilities are a claim about whichever model each
+  // resolves to.
   [LlmModel.CLAUDE_4_OPUS]: {
     supportsFileAttachments: true,
     supportsFastMode: true,
@@ -25,6 +26,18 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
   [LlmModel.CLAUDE_4_OPUS_200K]: {
     supportsFileAttachments: true,
     supportsFastMode: true,
+  },
+  [LlmModel.CLAUDE_4_SONNET]: {
+    supportsFileAttachments: true,
+    supportsFastMode: false,
+  },
+  [LlmModel.CLAUDE_4_SONNET_200K]: {
+    supportsFileAttachments: true,
+    supportsFastMode: false,
+  },
+  [LlmModel.CLAUDE_4_HAIKU]: {
+    supportsFileAttachments: true,
+    supportsFastMode: false,
   },
   [LlmModel.CLAUDE_5_5_OPUS]: {
     supportsFileAttachments: true,
@@ -58,15 +71,11 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFileAttachments: true,
     supportsFastMode: true,
   },
-  [LlmModel.CLAUDE_4_SONNET]: {
+  [LlmModel.CLAUDE_5_5_SONNET]: {
     supportsFileAttachments: true,
     supportsFastMode: false,
   },
-  [LlmModel.CLAUDE_4_SONNET_200K]: {
-    supportsFileAttachments: true,
-    supportsFastMode: false,
-  },
-  [LlmModel.CLAUDE_4_HAIKU]: {
+  [LlmModel.CLAUDE_5_5_HAIKU]: {
     supportsFileAttachments: true,
     supportsFastMode: false,
   },

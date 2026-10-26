@@ -331,16 +331,26 @@ class TestClaudeManagedToolRegistration:
 class TestClaudeVersionRange:
     """The window has to stay wide enough for the models the picker offers.
 
-    A `--model` id the installed CLI does not recognize fails at agent launch, not at
-    install time, so the floor is what keeps a stale managed binary from being handed
-    a model it cannot resolve.
+    A `--model` id missing from the installed CLI's model table is not caught at install
+    time: depending on the model, the agent either fails at launch or runs it as an
+    unrecognized model with a default 200K window. The floor is what keeps a stale
+    managed binary from being handed a model it does not know.
     """
 
     # The first Claude release whose model table carries `claude-opus-5-5`.
     OPUS_5_5_FLOOR = Version("2.1.280")
+    # The first Claude releases whose model tables carry `claude-sonnet-5-5` and
+    # `claude-haiku-5-5`.
+    SONNET_5_5_FLOOR = Version("2.1.284")
+    HAIKU_5_5_FLOOR = Version("2.1.293")
 
     def test_the_recommended_release_knows_the_newest_pinned_opus(self) -> None:
         assert Version(CLAUDE_VERSION_RANGE.recommended_version) >= self.OPUS_5_5_FLOOR
+
+    def test_the_recommended_release_knows_the_newest_pinned_sonnet_and_haiku(self) -> None:
+        recommended = Version(CLAUDE_VERSION_RANGE.recommended_version)
+        assert recommended >= self.SONNET_5_5_FLOOR
+        assert recommended >= self.HAIKU_5_5_FLOOR
 
     def test_the_floor_is_the_recommended_release(self) -> None:
         """An in-range binary is never upgraded to recommended, so a lower floor
