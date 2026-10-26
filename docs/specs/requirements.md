@@ -194,7 +194,7 @@ depends on.
 - **REQ-COMPAT-002 (SHOULD).** Sculptor ships a **Linux x64** build; **Linux arm64** is best-effort /
   non-blocking (`.github/workflows/build-desktop.yml`; `SPEC.md` §11.1).
 - **REQ-COMPAT-003 [Unspecified].** The supported **minimum macOS version** is not stated as a
-  product requirement (CI builds/tests on macOS 14 Sonoma; Electron 42's own floor is macOS 12), and
+  product requirement (CI builds/tests on macOS 14 Sonoma; Electron 45's own floor is macOS 13 Ventura), and
   the **minimum Linux glibc** is likewise unpinned. → OPEN-5 (§7).
 
 ### 3.2 Toolchain / framework baselines
@@ -206,7 +206,7 @@ packaging Sculptor):
 |---|---|---|
 | REQ-COMPAT-010 Python | **>=3.14, <3.15** (pinned 3.14) | `pyproject.toml`, `.python-version` |
 | REQ-COMPAT-011 Node.js | **24.17.0** | `sculptor/frontend/.nvmrc` |
-| REQ-COMPAT-012 Electron | **42.4.1** (Forge **7.11.2**) | `sculptor/frontend/package.json` |
+| REQ-COMPAT-012 Electron | **45.0.0** (Forge **7.11.2**) | `sculptor/frontend/package.json` |
 | REQ-COMPAT-013 uv (Python pkg mgr) | **>=0.11.22** | `pyproject.toml` |
 | REQ-COMPAT-014 TypeScript / React / Jotai / Radix Themes / Vite | **6.0 / 19.2 / 2.20 / 3.3 / 6.4** | `sculptor/frontend/package.json` |
 

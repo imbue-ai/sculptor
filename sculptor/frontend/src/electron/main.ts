@@ -10,6 +10,7 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  ClipboardItem,
   dialog,
   globalShortcut,
   ipcMain,
@@ -1099,7 +1100,8 @@ app.whenReady().then(async () => {
     // image until the first frame is composited, and writing that empty image
     // would leave no PNG on the clipboard.
     const image = await captureNonEmptyPage(contents);
-    clipboard.writeImage(image);
+    const png = new Blob([new Uint8Array(image.toPNG())], { type: "image/png" });
+    await clipboard.write([new ClipboardItem({ "image/png": png })]);
   });
 
   if (isInPytest) {
