@@ -29,6 +29,7 @@ from sqlalchemy import create_engine
 from sqlalchemy import event
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
 from sculptor.database.alembic.utils import get_alembic_script_location
@@ -88,7 +89,8 @@ def _enable_foreign_keys_in_sqlite(dbapi_connection: sqlite3.Connection, connect
 
 
 def initialize_db_from_connection(connection: Connection, database_url: str) -> None:
-    if database_url != IN_MEMORY_SQLITE:
+    # Compare parsed URLs: a rendered URL spells `:memory:` percent-encoded.
+    if make_url(database_url) != make_url(IN_MEMORY_SQLITE):
         # For non-in-memory databases, we run migrations in the standard Alembic way.
         _run_migrations_on_database_url(database_url, script_location=get_alembic_script_location())
     else:
@@ -125,7 +127,9 @@ def initialize_db(engine: Engine) -> None:
 def _run_migrations_on_database_url(database_url: str, script_location: str) -> None:
     config = Config()
     config.set_main_option("script_location", script_location)
-    config.set_main_option("sqlalchemy.url", database_url)
+    # Alembic's config is a ConfigParser, which reads `%` as interpolation syntax, and a
+    # rendered URL percent-encodes characters such as non-ASCII letters.
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
     try:
         command.upgrade(config, "head")
     except Exception as e:
