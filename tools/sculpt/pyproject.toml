@@ -17,7 +17,7 @@ dependencies = [
     # CLI framework
     "typer>=0.26.7",
     # WebSocket client
-    "websockets>=17.1",
+    "websockets>=17.3",
 ]
 requires-python = ">=3.14"
 
