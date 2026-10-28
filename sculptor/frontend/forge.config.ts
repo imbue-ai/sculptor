@@ -64,6 +64,10 @@ let config = {
     extendInfo: {
       NSMicrophoneUsageDescription:
         "Sculptor uses the microphone for voice entry. Speech is transcribed to text locally on this device.",
+      // The oldest macOS the bundled Electron supports. macOS refuses to launch
+      // the app on anything older instead of letting it crash. Keep in sync
+      // with MACOS_MINIMUM_DARWIN_VERSION in sculptor/builder/cli.py.
+      LSMinimumSystemVersion: "13.0",
     },
     name: "Sculptor",
     productName: "Sculptor",

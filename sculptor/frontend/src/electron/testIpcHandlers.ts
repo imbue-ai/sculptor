@@ -21,10 +21,11 @@ export const registerTestIpcHandlers = (ipcMain: IpcMain): void => {
   // Reads the system clipboard PNG image so tests can verify the
   // screenshot-to-clipboard feature without relying on renderer-side
   // clipboard APIs (which require focus + permission grants).
-  ipcMain.handle(TEST_READ_CLIPBOARD_PNG_CHANNEL_NAME, () => {
-    const image = clipboard.readImage();
-    if (image.isEmpty()) return null;
-    const png = image.toPNG();
-    return png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength);
+  ipcMain.handle(TEST_READ_CLIPBOARD_PNG_CHANNEL_NAME, async () => {
+    const items = await clipboard.read();
+    const pngItem = items.find((item) => item.types.includes("image/png"));
+    if (!pngItem) return null;
+    const png = await pngItem.getType("image/png");
+    return png.arrayBuffer();
   });
 };

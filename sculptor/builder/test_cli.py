@@ -213,6 +213,8 @@ def test_generate_autoupdate_manifest_darwin(tmp_path: Path) -> None:
     assert manifest["files"][0]["sha512"] == DARWIN_ARTIFACT_SHA512
     assert manifest["files"][0]["size"] == len(DARWIN_ARTIFACT_CONTENT)
     assert "releaseDate" in manifest
+    # Darwin 22 is macOS 13.
+    assert manifest["minimumSystemVersion"] == "22.0.0"
 
 
 def test_generate_autoupdate_manifest_linux(tmp_path: Path) -> None:
@@ -231,6 +233,7 @@ def test_generate_autoupdate_manifest_linux(tmp_path: Path) -> None:
     assert manifest["files"][0]["sha512"] == LINUX_ARTIFACT_SHA512
     assert manifest["files"][0]["size"] == len(LINUX_ARTIFACT_CONTENT)
     assert "releaseDate" in manifest
+    assert "minimumSystemVersion" not in manifest
 
 
 def _invoke_publish(missing_substrings: tuple[str, ...]) -> tuple[int, list[tuple[str, str]], str]:

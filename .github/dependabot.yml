@@ -6,6 +6,11 @@
 # minor/patch bumps per ecosystem into a single PR, while major bumps (more
 # likely to need code changes) arrive as individual PRs for separate review.
 #
+# Electron, the npm "playwright" package and the Python "playwright" package
+# are ignored and bumped together by hand: Playwright's bundled Chromium must
+# match Electron's Chromium major (see the playwright pin in
+# sculptor/pyproject.toml), and Dependabot would move each one independently.
+#
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
 version: 2
 updates:
@@ -15,6 +20,9 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "electron"
+      - dependency-name: "playwright"
     groups:
       npm-minor-and-patch:
         update-types:
@@ -27,6 +35,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "playwright"
     groups:
       python-minor-and-patch:
         update-types:

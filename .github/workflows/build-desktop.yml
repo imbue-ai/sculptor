@@ -51,7 +51,7 @@ jobs:
   # .dev version (the builder derives the date from CI_PIPELINE_CREATED_AT).
   setup:
     name: setup (pipeline metadata)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       pipeline_created_at: ${{ steps.meta.outputs.pipeline_created_at }}
     steps:
@@ -66,7 +66,7 @@ jobs:
   # create-version-file, whose assumptions this enforces.
   verify-version:
     name: verify version (tag/dev consistency)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -125,11 +125,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Pinned to ubuntu-24.04, not ubuntu-latest (now 26.04): the PyInstaller
-          # bundles pick up host libraries, so a newer build OS can raise the
-          # minimum glibc the AppImage needs.
-          - { name: linux-x64,   runs-on: ubuntu-24.04,     os: linux,  arch: x64,   allow-failure: false }
-          - { name: linux-arm64, runs-on: ubuntu-24.04-arm, os: linux,  arch: arm64, allow-failure: true }
+          # Pinned rather than ubuntu-latest: the PyInstaller bundles pick up
+          # host libraries, so the build OS sets the minimum glibc the AppImage
+          # needs. Move it deliberately.
+          - { name: linux-x64,   runs-on: ubuntu-26.04,     os: linux,  arch: x64,   allow-failure: false }
+          - { name: linux-arm64, runs-on: ubuntu-26.04-arm, os: linux,  arch: arm64, allow-failure: true }
           - { name: macos-arm64, runs-on: macos-14,         os: darwin, arch: arm64, allow-failure: false }
     env:
       # Tag pushes mint the release role (env-claim-bound); everything else
@@ -341,12 +341,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Pinned to ubuntu-24.04: Playwright 1.60 can't install Chromium on
-          # 26.04, which ubuntu-latest now resolves to.
-          - { name: linux-x64,   runs-on: ubuntu-24.04,     os: linux,  arch: x64,   allow-failure: false, pytest-timeout: 900,  job-timeout: 30 }
+          - { name: linux-x64,   runs-on: ubuntu-26.04,     os: linux,  arch: x64,   allow-failure: false, pytest-timeout: 900,  job-timeout: 30 }
           # arm64 runs ~2x slower than x64; give it a large budget. Its result
           # is non-blocking, so an over-budget run does not gate the workflow.
-          - { name: linux-arm64, runs-on: ubuntu-24.04-arm, os: linux,  arch: arm64, allow-failure: true,  pytest-timeout: 3000, job-timeout: 75 }
+          - { name: linux-arm64, runs-on: ubuntu-26.04-arm, os: linux,  arch: arm64, allow-failure: true,  pytest-timeout: 3000, job-timeout: 75 }
           - { name: macos-arm64, runs-on: macos-14,         os: darwin, arch: arm64, allow-failure: false, pytest-timeout: 1200, job-timeout: 45 }
     env:
       # The packaged backend uses get_filesystem_root(); override off /mnt/private.
@@ -391,7 +389,7 @@ jobs:
 
       - name: Enable unprivileged user namespaces (Linux)
         if: matrix.os == 'linux'
-        # ubuntu-24.04 ships kernel.apparmor_restrict_unprivileged_userns=1,
+        # Ubuntu 24.04 and later ship kernel.apparmor_restrict_unprivileged_userns=1,
         # which blocks Electron's namespace sandbox. The packaged harness only
         # passes --no-sandbox when running as root (it is not, here), so
         # re-enable userns so the sandbox can initialize. No-op (|| true) on
@@ -470,7 +468,7 @@ jobs:
     # Publishes only when the blocking build + packaged tests succeeded; gated
     # by the `release` environment's required reviewers (declared below).
     if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v') && needs.build.result == 'success' && needs.packaged-tests.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       id-token: write
       contents: write
@@ -579,7 +577,7 @@ jobs:
     # alone isn't enough to publish a dev artifact.
     needs: [setup, build, packaged-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       id-token: write
       contents: read
@@ -657,7 +655,7 @@ jobs:
     # failure does not trigger this.
     needs: [build, packaged-tests]
     if: failure() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       id-token: write
       contents: read
