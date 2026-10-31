@@ -13,7 +13,7 @@ const piNotInstalled = {
   version: null,
   isOverride: false,
   mode: null,
-  versionRange: { minVersion: "1.3.0", maxVersion: "1.3.0", recommendedVersion: "1.3.0" },
+  versionRange: { minVersion: "1.4.0", maxVersion: "1.4.0", recommendedVersion: "1.4.0" },
   isVersionInRange: null,
 } as const;
 
