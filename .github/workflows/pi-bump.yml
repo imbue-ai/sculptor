@@ -1,6 +1,6 @@
 # Keeps the managed pi pin fresh. Daily (and on manual dispatch), compare
 # PI_PINNED_VERSION against the latest earendil-works/pi release; when upstream
-# is ahead, run scripts/bump_pi_pin.py and open — or force-refresh — the single
+# is ahead, run scripts/bump_pin.py and open — or force-refresh — the single
 # rolling automation/pi-bump PR with the rewritten pins. The PR is the
 # notification; builds keep passing while the pin is stale (the checks workflow
 # separately annotates stale runs with a non-blocking warning).
@@ -57,19 +57,19 @@ jobs:
       - name: Self-test the bump tooling
         run: |
           python3 -m pip install --quiet pytest
-          python3 -m pytest -q scripts/check_pi_pin_freshness_test.py scripts/bump_pi_pin_test.py
+          python3 -m pytest -q scripts/managed_pin_test.py scripts/check_pin_freshness_test.py scripts/bump_pin_test.py
 
       - name: Compare the pin with the latest release
         id: freshness
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/check_pi_pin_freshness.py --github-output
+        run: python3 scripts/check_pin_freshness.py pi --github-output
 
       - name: Apply the bump
         if: inputs.version != '' || steps.freshness.outputs.stale == 'true'
         env:
           TARGET_VERSION: ${{ inputs.version || steps.freshness.outputs.latest }}
-        run: python3 scripts/bump_pi_pin.py "$TARGET_VERSION"
+        run: python3 scripts/bump_pin.py pi "$TARGET_VERSION"
 
       - name: Open or refresh the bump PR
         if: inputs.version != '' || steps.freshness.outputs.stale == 'true'
@@ -96,7 +96,7 @@ jobs:
           BODY="$(printf '%s\n' \
             "Automated pin refresh: upstream pi released $TARGET_VERSION." \
             "" \
-            "- \`scripts/bump_pi_pin.py\` rewrote \`PI_PINNED_VERSION\`, the baked per-platform sha256s, and every hardcoded copy in tests/docs." \
+            "- \`scripts/bump_pin.py\` rewrote \`PI_PINNED_VERSION\`, the baked per-platform sha256s, and every hardcoded copy in tests/docs." \
             "- Digests are computed from the release tarballs and cross-checked against the release's published \`SHA256SUMS\`." \
             "" \
             "CI does not start automatically on workflow-opened PRs — close and reopen this PR (or push to its branch) to run checks." \
