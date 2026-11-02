@@ -6,8 +6,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { RecentWorkspaceResponse } from "../../../api";
 import { listRecentWorkspaces } from "../../../api";
+import type { WorkspaceIdentitySources } from "../../../common/state/atoms/workspaceIdentity.ts";
+import { workspaceIdentitySourcesByIdAtom } from "../../../common/state/atoms/workspaceIdentity.ts";
 import { isWorkspaceDeletingAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
+import { resolveWorkspaceIdentityLabel } from "../../../common/state/hooks/useWorkspaceIdentity.ts";
 import { queryClient, recentWorkspacesQueryKey } from "../../../common/state/queryClient.ts";
 import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
 import { EmptyState } from "./EmptyState.tsx";
@@ -16,6 +19,17 @@ import { WorkspaceRow } from "./WorkspaceRow.tsx";
 import { WorkspaceSearchBar } from "./WorkspaceSearchBar.tsx";
 
 const PAGE_SIZE = 25;
+
+// The label a workspace's row settles on, so search matches what the row shows.
+const rowLabelText = (workspace: RecentWorkspaceResponse, sources: WorkspaceIdentitySources | undefined): string => {
+  const label = resolveWorkspaceIdentityLabel({
+    liveBranch: sources?.liveBranch ?? null,
+    fetchedBranch: workspace.currentBranch ?? null,
+    requestedBranchName: sources?.requestedBranchName ?? null,
+    hasGraceElapsed: true,
+  });
+  return label.status === "READY" ? label.text : "";
+};
 
 type RecentWorkspacesProps = {
   searchInputRef: RefObject<HTMLInputElement | null>;
@@ -108,16 +122,17 @@ export const RecentWorkspaces = ({
   // refreshed server list confirms the deletion.
   const enrichedWorkspaces = useMemo(() => workspaces ?? [], [workspaces]);
 
+  const identitySourcesById = useAtomValue(workspaceIdentitySourcesByIdAtom);
   const filteredWorkspaces = useMemo(() => {
     if (!searchQuery.trim()) return enrichedWorkspaces;
     const query = searchQuery.toLowerCase();
     return enrichedWorkspaces.filter(
       (ws) =>
         ws.description.toLowerCase().includes(query) ||
-        (ws.sourceBranch?.toLowerCase().includes(query) ?? false) ||
+        rowLabelText(ws, identitySourcesById.get(ws.objectId)).toLowerCase().includes(query) ||
         ws.projectName.toLowerCase().includes(query),
     );
-  }, [enrichedWorkspaces, searchQuery]);
+  }, [enrichedWorkspaces, searchQuery, identitySourcesById]);
 
   const sortedWorkspaces = useMemo(
     () =>
