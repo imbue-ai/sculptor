@@ -7,10 +7,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/api";
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/hooks/navigation";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
-import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
+import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
 import { toBareRefName, toRemoteRefName } from "~/common/utils/refNames.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getCollapsedSidebarToggleClearance } from "~/electron/platform.ts";
@@ -95,7 +95,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const workspace = useWorkspace(workspaceID);
   const workspaceBranchInfo = useWorkspaceBranch(workspaceID);
   const gitProvider = useGitProvider(projectID ?? "");
-  const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
+  const currentTargetBranch = useWorkspaceTarget(workspaceID);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
   const targetBranches = useWorkspaceTargetBranches(workspaceID);
 
@@ -162,8 +162,6 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   );
 
   // JSX and rendering logic
-  const currentTargetBranch = workspace?.targetBranch ?? prDefaultTargetBranch;
-
   // Only show mismatch when the PR's target branch differs from the current
   // workspace target, compared as the branch names the code host uses.
   const hasMismatch =

@@ -7,9 +7,9 @@ import { useMemo } from "react";
 import type { RecentWorkspaceResponse } from "~/api";
 import { ElementIds } from "~/api";
 import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
-import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
 import { isWorkspaceDeletingAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider.ts";
+import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
 import { formatRelativeTime } from "~/common/utils/formatRelativeTime.ts";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS } from "~/common/utils/statusDot.ts";
 import { PrButton } from "~/components/prButton/PrButton.tsx";
@@ -47,7 +47,7 @@ export const WorkspaceRow = ({
   onOpenInNewTab,
   onDelete,
 }: WorkspaceRowProps): ReactElement => {
-  const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
+  const targetBranch = useWorkspaceTarget(workspace.objectId);
   // The workspace's own working branch streams in over the WebSocket. Until it
   // arrives the row shows a skeleton rather than flashing `sourceBranch` (the
   // base branch it was forked from); after a grace window it falls back to
@@ -103,7 +103,7 @@ export const WorkspaceRow = ({
             <div className={styles.prButton} onClick={(e) => e.stopPropagation()}>
               <PrButton
                 workspaceId={workspace.objectId}
-                targetBranch={prDefaultTargetBranch}
+                targetBranch={targetBranch}
                 hideCreateAction
                 gitProvider={gitProvider}
               />
