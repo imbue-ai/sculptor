@@ -11,6 +11,7 @@ import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
+import { toBareRefName, toRemoteRefName } from "~/common/utils/refNames.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getCollapsedSidebarToggleClearance } from "~/electron/platform.ts";
 import { extensionWorkspaceWidgetsAtom } from "~/extensions/extensionRegistry.ts";
@@ -145,11 +146,12 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
 
   const handleSwitchTarget = useCallback(
     async (newTarget: string): Promise<void> => {
-      // PRs live on the origin remote, so prefer "origin/{bare}".
+      // PRs live on the origin remote, so prefer its ref for the branch.
+      const remoteRef = toRemoteRefName(newTarget);
       const fullBranch =
-        targetBranches.find((b) => b === `origin/${newTarget}`) ??
+        targetBranches.find((b) => b === remoteRef) ??
         targetBranches.find((b) => b.endsWith(`/${newTarget}`)) ??
-        `origin/${newTarget}`;
+        remoteRef;
       try {
         await updateWorkspace({ path: { workspace_id: workspaceID }, body: { targetBranch: fullBranch } });
       } catch (e) {
@@ -163,13 +165,12 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const currentTargetBranch = workspace?.targetBranch ?? prDefaultTargetBranch;
 
   // Only show mismatch when the PR's target branch differs from the current
-  // workspace target. Compare bare names (strip remote prefix like "origin/").
-  const currentTargetBare = currentTargetBranch.replace(/^[^/]+\//, "");
+  // workspace target, compared as the branch names the code host uses.
   const hasMismatch =
     prStatus?.prState === "none" &&
     prStatus.mismatchedPrIid != null &&
     prStatus.mismatchedPrTargetBranch != null &&
-    prStatus.mismatchedPrTargetBranch !== currentTargetBare;
+    prStatus.mismatchedPrTargetBranch !== toBareRefName(currentTargetBranch);
   // Stable reference so the useMemo inside TargetBranchSelector doesn't thrash.
   const mismatchForSelector = useMemo(
     () =>

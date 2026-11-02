@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import { ElementIds } from "~/api";
+import { toRemoteRefName } from "~/common/utils/refNames.ts";
 import type { BadgeInfo } from "~/components/BranchCombobox.tsx";
 import { BranchCombobox, type BranchWithBadges } from "~/components/BranchCombobox.tsx";
 
@@ -36,7 +37,7 @@ export const TargetBranchSelector = ({
   const branches: Array<BranchWithBadges> = useMemo(() => {
     return targetBranches.map((branch) => ({
       branch,
-      badges: mismatch && branch === `origin/${mismatch.targetBranch}` ? [mismatch.badge] : [],
+      badges: mismatch && branch === toRemoteRefName(mismatch.targetBranch) ? [mismatch.badge] : [],
     }));
   }, [targetBranches, mismatch]);
 

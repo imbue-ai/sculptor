@@ -60,3 +60,30 @@ describe("PrButton opens PRs in a reusable browser tab", () => {
     expect(open).toHaveBeenCalledWith(PR_URL, reusableTabTarget(PR_URL));
   });
 });
+
+describe("PrButton offers to adopt an existing PR only when it targets another branch", () => {
+  const renderWithNoPr = (targetBranch: string, mismatchedPrTargetBranch: string): void => {
+    renderWithProviders(<PrButton workspaceId={WORKSPACE_ID} targetBranch={targetBranch} gitProvider="github" />, {
+      store: storeWith(prStatus({ prState: "none", mismatchedPrIid: 7, mismatchedPrTargetBranch })),
+    });
+  };
+
+  it("offers the existing PR when it targets a different branch", () => {
+    renderWithNoPr("origin/main", "release");
+
+    expect(screen.getByTestId(ElementIds.PR_BUTTON_ASSIGN)).toBeTruthy();
+  });
+
+  it("offers to create a PR when the existing PR targets the remote target's branch", () => {
+    renderWithNoPr("origin/main", "main");
+
+    expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeTruthy();
+  });
+
+  it("reads a local target with a slash as one branch name, not a remote and a branch", () => {
+    renderWithNoPr("feature/login", "feature/login");
+
+    expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeTruthy();
+    expect(screen.queryByTestId(ElementIds.PR_BUTTON_ASSIGN)).toBeNull();
+  });
+});
