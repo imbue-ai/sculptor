@@ -3,6 +3,10 @@ import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { Workspace } from "~/api";
+import { WorkspaceInitializationStrategy } from "~/api";
+import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
+import { updateWorkspacesAtom } from "~/common/state/atoms/workspaces.ts";
 import { newWorkspaceDialogAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 import { ExtensionContext } from "../ExtensionContext.tsx";
@@ -11,6 +15,7 @@ import {
   useExtensionSettings,
   useOpenNewWorkspaceModal,
   useSetExtensionSetting,
+  useWorkspaces,
 } from "./hostHooks.ts";
 
 type Store = ReturnType<typeof createStore>;
@@ -120,5 +125,37 @@ describe("useSetExtensionSetting", () => {
     });
     expect(other.result.current.get("shared-key")).toBe("");
     expect(window.localStorage.getItem("sculptor-extension:extension-a:shared-key")).toBe(JSON.stringify("a-value"));
+  });
+});
+
+describe("useWorkspaces", () => {
+  const storeWithWorkspace = (): Store => {
+    const store = createStore();
+    const workspace: Workspace = {
+      objectId: "ws-ext-1",
+      projectId: "proj-1",
+      organizationReference: "org-1",
+      description: "My workspace",
+      initializationStrategy: WorkspaceInitializationStrategy.WORKTREE,
+      sourceBranch: "main",
+      requestedBranchName: "dev/requested",
+    };
+    store.set(updateWorkspacesAtom, [workspace]);
+    return store;
+  };
+
+  it("reports the branch the backend reports for the workspace", () => {
+    const store = storeWithWorkspace();
+    store.set(workspaceBranchAtomFamily("ws-ext-1"), { currentBranch: "dev/live", workspaceId: "ws-ext-1" });
+
+    const { result } = renderHook(() => useWorkspaces(), { wrapper: createWrapper(store, "ext-a") });
+
+    expect(result.current?.map((view) => view.branch)).toEqual(["dev/live"]);
+  });
+
+  it("reports no branch until the backend has, rather than the requested or source branch", () => {
+    const { result } = renderHook(() => useWorkspaces(), { wrapper: createWrapper(storeWithWorkspace(), "ext-a") });
+
+    expect(result.current?.map((view) => view.branch)).toEqual([null]);
   });
 });
