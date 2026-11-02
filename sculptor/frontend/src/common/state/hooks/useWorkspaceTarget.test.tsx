@@ -3,9 +3,8 @@ import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { UserConfig, Workspace } from "~/api";
+import type { Workspace } from "~/api";
 import { WorkspaceInitializationStrategy } from "~/api";
-import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 
 import { useWorkspaceTarget } from "./useWorkspaceTarget.ts";
@@ -18,7 +17,6 @@ const createWrapper = (store: Store) => {
 
 const storeWith = (targetBranch: string | null): Store => {
   const store = createStore();
-  store.set(userConfigAtom, { prDefaultTargetBranch: "origin/develop" } as UserConfig);
   const workspace: Workspace = {
     objectId: "ws1",
     projectId: "proj-1",
@@ -44,9 +42,9 @@ describe("useWorkspaceTarget", () => {
     expect(result.current).toBe("origin/release");
   });
 
-  it("falls back to the default target setting when the workspace has none", () => {
+  it("falls back to origin/main when the workspace has none", () => {
     const { result } = renderHook(() => useWorkspaceTarget("ws1"), { wrapper: createWrapper(storeWith(null)) });
 
-    expect(result.current).toBe("origin/develop");
+    expect(result.current).toBe("origin/main");
   });
 });

@@ -4,7 +4,6 @@ import { atomWithStorage } from "jotai/utils";
 import { NIGHT_MODE_OFF } from "~/common/nightMode.ts";
 import { getTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
 import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
-import { toRemoteRefName } from "~/common/utils/refNames.ts";
 
 import type { CiBabysitterConfig, CustomActionsConfig, UserConfig } from "../../../api";
 import { LlmModel } from "../../../api";
@@ -113,10 +112,6 @@ export const isPrPollingEnabledAtom = atom<boolean>((get) => get(userConfigAtom)
 export const prPollIntervalAtom = atom<number>((get) => get(userConfigAtom)?.prPollIntervalSeconds ?? 30);
 
 export const prPollClosedMultiplierAtom = atom<number>((get) => get(userConfigAtom)?.prPollClosedMultiplier ?? 6);
-
-export const prDefaultTargetBranchAtom = atom<string>(
-  (get) => get(userConfigAtom)?.prDefaultTargetBranch ?? toRemoteRefName("main"),
-);
 
 // CI Babysitter settings (experimental). The full nested config lives under
 // userConfig.ciBabysitter on the backend; individual atoms below derive from

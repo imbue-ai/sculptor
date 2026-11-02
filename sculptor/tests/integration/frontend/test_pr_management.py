@@ -129,12 +129,11 @@ def test_settings_git_section(sculptor_instance_: SculptorInstance) -> None:
 
     expect(git_section.get_creation_prompt_textarea()).to_be_visible()
     expect(git_section.get_poll_interval_input()).to_be_visible()
-    expect(git_section.get_default_target_branch_input()).to_be_visible()
 
-    git_section.set_default_target_branch("develop")
+    git_section.set_poll_interval(60)
 
     toast = settings_page.get_toast()
     expect(toast).to_be_visible()
 
     config = load_config(config_path)
-    assert config.pr_default_target_branch == "develop"
+    assert config.pr_poll_interval_seconds == 60

@@ -679,7 +679,7 @@ The repo-facing sections are **Repositories**, **Git**, and **CI**. Repositories
 repos with their paths and agent counts and lets you add or remove them and configure each one's
 **setup command** and **branch-naming pattern**. Git holds the cross-repo defaults: the pull-request
 creation prompt, PR-status polling and its interval (plus a multiplier that throttles polling for
-closed workspaces), the default target branch, the global
+closed workspaces), the global
 branch-naming pattern, and the branch-deletion policy. CI configures the **CI babysitter** that
 watches pipelines and asks an agent to fix failures — handing the fix prompt to the agent only once
 the workspace's agents are **idle**, so a failed pipeline never interrupts an agent mid-turn. The CI

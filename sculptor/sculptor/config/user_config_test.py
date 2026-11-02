@@ -146,6 +146,7 @@ def test_user_config_tolerates_and_drops_stale_keys() -> None:
         "isPanelLayoutPerWorkspace": True,
         "fileBrowserDefaultSplitRatio": 65,
         "panelLayout": {"zoneAssignments": {"chat": "left"}, "zoneSizes": {"left": 0.4}},
+        "prDefaultTargetBranch": "develop",
         "someFutureUnknownSetting": "value",
     }
     config = UserConfig.model_validate(
