@@ -74,14 +74,7 @@ export const useRepoInfo = (projectId: ProjectID | null): RepoInfoHookReturn => 
         return;
       }
 
-      const newRepoInfo: RepoInfo = {
-        currentBranch: currentBranchInfo.currentBranch,
-        projectId,
-        recentBranches: existingRepoInfo.recentBranches,
-        repoPath: existingRepoInfo.repoPath,
-      };
-
-      store.set(repoInfoAtom, newRepoInfo);
+      store.set(repoInfoAtom, { ...existingRepoInfo, currentBranch: currentBranchInfo.currentBranch });
     } catch (error) {
       console.error(`Failed to load current branch for project ${projectId}:`, error);
     }
