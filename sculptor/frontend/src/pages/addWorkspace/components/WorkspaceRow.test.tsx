@@ -11,6 +11,7 @@ import {
   rollbackDeleteWorkspaceAtom,
   updateWorkspacesAtom,
 } from "~/common/state/atoms/workspaces.ts";
+import { IDENTITY_LABEL_GRACE_MS } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 
 import { WorkspaceRow } from "./WorkspaceRow.tsx";
 
@@ -35,7 +36,7 @@ const createWrapper = (store: Store) => {
 
 const WORKSPACE_ID = "ws-row-1";
 
-const recentRow = (): RecentWorkspaceResponse =>
+const recentRow = (overrides: Partial<RecentWorkspaceResponse> = {}): RecentWorkspaceResponse =>
   ({
     objectId: WORKSPACE_ID,
     projectId: "proj-1",
@@ -48,9 +49,10 @@ const recentRow = (): RecentWorkspaceResponse =>
     lastActivityAt: "2024-01-01T00:00:00.000Z",
     createdAt: "2024-01-01T00:00:00.000Z",
     initializationStrategy: "CLONE",
+    ...overrides,
   }) as unknown as RecentWorkspaceResponse;
 
-const liveWorkspace = (): Workspace =>
+const liveWorkspace = (overrides: Partial<Workspace> = {}): Workspace =>
   ({
     objectId: WORKSPACE_ID,
     projectId: "proj-1",
@@ -59,14 +61,18 @@ const liveWorkspace = (): Workspace =>
     initializationStrategy: "CLONE",
     isOpen: true,
     isDeleted: false,
+    ...overrides,
   }) as Workspace;
 
-const renderRow = (store: Store): { onClick: ReturnType<typeof vi.fn>; onDelete: ReturnType<typeof vi.fn> } => {
+const renderRow = (
+  store: Store,
+  workspace: RecentWorkspaceResponse = recentRow(),
+): { onClick: ReturnType<typeof vi.fn>; onDelete: ReturnType<typeof vi.fn> } => {
   const onClick = vi.fn();
   const onDelete = vi.fn();
   render(
     <WorkspaceRow
-      workspace={recentRow()}
+      workspace={workspace}
       isFocused={false}
       onClick={onClick}
       onOpenInNewTab={vi.fn()}
@@ -124,5 +130,34 @@ describe("WorkspaceRow deleting state", () => {
 
     expect(screen.queryByText("Deleting…")).toBeNull();
     expect(screen.getByTestId(ElementIds.WORKSPACE_ROW_CONTEXT_MENU_DELETE)).toBeTruthy();
+  });
+});
+
+describe("WorkspaceRow branch label", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows the current branch from the listing at once", () => {
+    const store = createStore();
+    store.set(updateWorkspacesAtom, [liveWorkspace()]);
+    renderRow(store, recentRow({ currentBranch: "dev/listed" }));
+
+    expect(screen.getByTestId(ElementIds.WORKSPACE_ROW_BRANCH).textContent).toBe("dev/listed");
+    expect(screen.queryByTestId(ElementIds.WORKSPACE_ROW_BRANCH_SKELETON)).toBeNull();
+  });
+
+  it("falls back to the requested branch name, never the source branch", () => {
+    vi.useFakeTimers();
+    const store = createStore();
+    store.set(updateWorkspacesAtom, [liveWorkspace({ requestedBranchName: "dev/requested" })]);
+    renderRow(store, recentRow({ sourceBranch: "main" }));
+
+    expect(screen.getByTestId(ElementIds.WORKSPACE_ROW_BRANCH_SKELETON)).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(IDENTITY_LABEL_GRACE_MS);
+    });
+
+    expect(screen.getByTestId(ElementIds.WORKSPACE_ROW_BRANCH).textContent).toBe("dev/requested");
   });
 });

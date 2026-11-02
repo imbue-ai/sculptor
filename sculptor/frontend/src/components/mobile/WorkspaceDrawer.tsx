@@ -12,7 +12,7 @@ import { userEmailAtom } from "~/common/state/atoms/userConfig.ts";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
-import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
+import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 import { useWorkspaceRename } from "~/common/state/hooks/useWorkspaceRename.ts";
 import { computeWorkspaceDotStatus } from "~/common/utils/statusDot.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
@@ -51,12 +51,12 @@ const DrawerWorkspaceRow = ({
   onRequestDelete: (workspace: Workspace) => void;
 }): ReactElement => {
   const agents = useAtomValue(agentsArrayAtom);
-  const branchInfo = useWorkspaceBranch(workspace.objectId);
+  const identityLabel = useWorkspaceIdentityLabel({ workspaceId: workspace.objectId });
   const dotStatus = useMemo(
     () => computeWorkspaceDotStatus((agents ?? []).filter((t) => t.workspaceId === workspace.objectId)),
     [agents, workspace.objectId],
   );
-  const branch = branchInfo?.currentBranch ?? workspace.sourceBranch ?? "";
+  const branch = identityLabel.status === "READY" ? identityLabel.text : "";
   const [isRenaming, setIsRenaming] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { handlers: longPress, consumeClick } = useLongPress(() => setIsMenuOpen(true));

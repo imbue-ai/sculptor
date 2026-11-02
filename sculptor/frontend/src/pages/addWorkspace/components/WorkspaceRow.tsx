@@ -9,13 +9,13 @@ import { ElementIds } from "~/api";
 import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import { isWorkspaceDeletingAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider.ts";
+import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
 import { formatRelativeTime } from "~/common/utils/formatRelativeTime.ts";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS } from "~/common/utils/statusDot.ts";
 import { PrButton } from "~/components/prButton/PrButton.tsx";
 import { WorkspaceStatusDots } from "~/components/statusDot";
 
-import { useWorkspaceRowBranch } from "./useWorkspaceRowBranch.ts";
 import styles from "./WorkspaceRow.module.scss";
 
 type WorkspaceRowProps = {
@@ -48,11 +48,10 @@ export const WorkspaceRow = ({
   onDelete,
 }: WorkspaceRowProps): ReactElement => {
   const targetBranch = useWorkspaceTarget(workspace.objectId);
-  // The workspace's own working branch streams in over the WebSocket. Until it
-  // arrives the row shows a skeleton rather than flashing `sourceBranch` (the
-  // base branch it was forked from); after a grace window it falls back to
-  // `sourceBranch` so the skeleton can't become permanent (see the hook).
-  const { branch, isLoading: isBranchLoading } = useWorkspaceRowBranch(workspace.objectId, workspace.sourceBranch);
+  const identityLabel = useWorkspaceIdentityLabel({
+    workspaceId: workspace.objectId,
+    fetchedBranch: workspace.currentBranch,
+  });
   const gitProvider = useGitProvider(workspace.projectId);
   // A delete in flight (or confirmed while this pulled row awaits its refetch)
   // renders the row dimmed and non-interactive: the pending state stays
@@ -76,15 +75,15 @@ export const WorkspaceRow = ({
 
       <div className={styles.leftGroup}>
         <span className={styles.name}>{workspace.description}</span>
-        {isBranchLoading ? (
-          // Branch not yet streamed in — a delayed-reveal skeleton so a fast load
+        {identityLabel.status === "LOADING" ? (
+          // Branch not yet known — a delayed-reveal skeleton so a fast load
           // shows nothing then the real branch, and never the wrong one.
           <span className={styles.branchSkeletonWrap} data-testid={ElementIds.WORKSPACE_ROW_BRANCH_SKELETON}>
             <Skeleton className={styles.branchSkeleton} />
           </span>
-        ) : branch !== null ? (
+        ) : identityLabel.status === "READY" ? (
           <span className={styles.branch} data-testid={ElementIds.WORKSPACE_ROW_BRANCH}>
-            {branch}
+            {identityLabel.text}
           </span>
         ) : null}
       </div>

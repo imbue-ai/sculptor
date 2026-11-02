@@ -1,6 +1,6 @@
 import { Badge, Flex, Skeleton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import { GitBranchIcon, PanelBottom, PanelLeft, PanelRight } from "lucide-react";
+import { PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -9,7 +9,7 @@ import { useActiveProjectID, useWorkspacePageParams } from "~/common/hooks/navig
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
-import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
+import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
 import { toBareRefName, toRemoteRefName } from "~/common/utils/refNames.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
@@ -93,7 +93,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const { workspaceID } = useWorkspacePageParams();
   const projectID = useActiveProjectID();
   const workspace = useWorkspace(workspaceID);
-  const workspaceBranchInfo = useWorkspaceBranch(workspaceID);
+  const identityLabel = useWorkspaceIdentityLabel({ workspaceId: workspaceID });
   const gitProvider = useGitProvider(projectID ?? "");
   const currentTargetBranch = useWorkspaceTarget(workspaceID);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
@@ -104,9 +104,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const [isTargetBranchOpen, setIsTargetBranchOpen] = useState<boolean>(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Normalize an absent branch (loading or unavailable) to null so the header
-  // renders a single empty state.
-  const branchName = workspaceBranchInfo?.currentBranch ?? null;
+  const branchCopyText = identityLabel.status === "READY" ? identityLabel.copyText : null;
 
   // Effects
   // Prevent setState-on-unmount from the "Copied!" timer.
@@ -118,11 +116,11 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
 
   // Functions and callbacks
   const handleCopyBranch = useCallback((): void => {
-    if (!branchName) {
+    if (branchCopyText === null) {
       return;
     }
     navigator.clipboard
-      .writeText(branchName)
+      .writeText(branchCopyText)
       .then(() => {
         setIsCopied(true);
         if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
@@ -131,7 +129,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
       .catch((error) => {
         console.warn("Failed to copy branch name to clipboard.", error);
       });
-  }, [branchName]);
+  }, [branchCopyText]);
 
   const handleTargetBranchChange = useCallback(
     async (branch: string): Promise<void> => {
@@ -244,7 +242,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
       {/* Branch pill: a real button so it is focusable and Enter/Space-activatable
           for free; the visible label is the branch name, so the aria-label spells
           out what pressing it does. */}
-      {branchName ? (
+      {identityLabel.status === "READY" ? (
         <Tooltip
           content={isCopied ? "Copied!" : "Workspace branch — click to copy"}
           open={isCopied || undefined}
@@ -254,16 +252,16 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
             type="button"
             className={styles.branchSection}
             onClick={handleCopyBranch}
-            aria-label={`Copy branch name ${branchName}`}
+            aria-label={`Copy branch name ${identityLabel.text}`}
             data-testid={ElementIds.BRANCH_NAME}
           >
-            <GitBranchIcon size={12} className={styles.branchIcon} />
-            <span className={styles.branchName}>{branchName}</span>
+            <identityLabel.icon size={12} className={styles.branchIcon} />
+            <span className={styles.branchName}>{identityLabel.text}</span>
           </button>
         </Tooltip>
-      ) : (
+      ) : identityLabel.status === "LOADING" ? (
         <Skeleton width="160px" height="16px" />
-      )}
+      ) : null}
 
       {/* Workspace init-mode badge (non-default modes only). */}
       {shouldShowModeBadge && (
