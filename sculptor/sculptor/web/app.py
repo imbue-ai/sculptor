@@ -731,7 +731,8 @@ def start_task(
         # little transaction here -- we don't want to span the whole thing bc then it will be slow
         with user_session.open_transaction(services) as transaction:
             project = transaction.get_project(project_id)
-            assert project is not None, f"Project {project_id} not found"
+            if project is None:
+                raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
 
             if workspace_id is not None:
                 # Use existing workspace

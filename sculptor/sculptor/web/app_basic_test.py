@@ -379,6 +379,13 @@ def test_create_workspace_applies_the_branch_name_rules(
         assert expected_detail in response.json()["detail"]
 
 
+def test_start_task_returns_404_for_a_missing_project(client: TestClient) -> None:
+    response = client.post(
+        f"/api/v1/projects/{ProjectID()}/tasks", json={"prompt": "hello", "model": LLMModel.CLAUDE_4_SONNET.value}
+    )
+    assert response.status_code == 404, response.text
+
+
 def test_workspace_working_directory_resolves_per_strategy() -> None:
     # Clone and worktree checkouts live at <environment_id>/code.
     assert _workspace_working_directory(WorkspaceInitializationStrategy.CLONE, "/tmp/ws1", "/repo") == "/tmp/ws1/code"
