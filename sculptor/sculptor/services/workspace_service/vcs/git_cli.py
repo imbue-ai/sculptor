@@ -19,10 +19,10 @@ from tenacity import wait_exponential
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.retry_utils import log_before_sleep
-from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundError
@@ -80,6 +80,10 @@ class GitCli:
         self._concurrency_group = concurrency_group
         self._dependency_management_service = dependency_management_service
 
+    @property
+    def concurrency_group(self) -> ConcurrencyGroup:
+        return self._concurrency_group
+
     def run_git(
         self,
         options: Sequence[str],
@@ -90,12 +94,12 @@ class GitCli:
         paths: Sequence[str] = (),
         is_checked: bool = True,
         timeout: float | None = DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS,
-    ) -> FinishedProcess:
+    ) -> VcsCommandResult:
         """Run `git <options> --end-of-options <operands> -- <paths>` in `cwd`.
 
         Raises `GitCommandInJjWorkspaceError` when `cwd` is inside a jj workspace.
         With `is_checked`, a non-zero exit raises `VcsCommandError`; without it,
-        the finished process is returned whatever its exit code.
+        the result is returned whatever its exit code.
         """
         jj_workspace_root = find_jj_workspace_root(cwd)
         if jj_workspace_root is not None:
@@ -115,7 +119,7 @@ class GitCli:
         is_checked: bool = True,
         timeout: float | None = DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS,
         extra_env: Mapping[str, str] | None = None,
-    ) -> FinishedProcess:
+    ) -> VcsCommandResult:
         """Run `gh <arguments>` in `cwd`.
 
         gh runs in jj workspaces too (it reads the repository from `GH_REPO`
@@ -144,7 +148,7 @@ class GitCli:
         is_checked: bool,
         timeout: float | None,
         extra_env: Mapping[str, str] | None,
-    ) -> FinishedProcess:
+    ) -> VcsCommandResult:
         env = None if extra_env is None else {**os.environ, **extra_env}
         if is_read_only:
             return _retry_read_only_command(self._run_once)(command, cwd, is_read_only, is_checked, timeout, env)
@@ -158,7 +162,7 @@ class GitCli:
         is_checked: bool,
         timeout: float | None,
         env: Mapping[str, str] | None,
-    ) -> FinishedProcess:
+    ) -> VcsCommandResult:
         try:
             result = self._concurrency_group.run_process_to_completion(
                 command=command,
@@ -183,6 +187,14 @@ class GitCli:
                 stdout=result.stdout,
                 stderr=result.stderr,
             )
+        if result.returncode is None:
+            raise VcsCommandError(
+                f"{command} finished without an exit code",
+                command=command,
+                returncode=None,
+                stdout=result.stdout,
+                stderr=result.stderr,
+            )
         if is_checked and result.returncode != 0:
             error_type = _RetriableVcsCommandError if is_read_only else VcsCommandError
             raise error_type(
@@ -192,7 +204,9 @@ class GitCli:
                 stdout=result.stdout,
                 stderr=result.stderr,
             )
-        return result
+        return VcsCommandResult(
+            command=tuple(command), returncode=result.returncode, stdout=result.stdout, stderr=result.stderr
+        )
 
 
 def _build_arguments(options: Sequence[str], operands: Sequence[str], paths: Sequence[str]) -> list[str]:

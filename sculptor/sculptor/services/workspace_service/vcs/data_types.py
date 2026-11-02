@@ -12,6 +12,15 @@ BranchDeletionPolicy = Literal["never", "delete_if_safe", "always"]
 `UserConfig.workspace_branch_deletion_policy`."""
 
 
+class VcsCommandResult(FrozenModel):
+    """A git or gh command that ran to completion."""
+
+    command: tuple[str, ...]
+    returncode: int
+    stdout: str
+    stderr: str
+
+
 class CheckoutSpec(FrozenModel):
     """What to create for a new workspace checkout."""
 

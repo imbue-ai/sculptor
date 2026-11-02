@@ -59,3 +59,7 @@ class GitCommandInJjWorkspaceError(Exception):
         self.cwd = cwd
         self.workspace_root = workspace_root
         super().__init__(f"Refusing to run {' '.join(command)!r} in {cwd}: {workspace_root} is a jj workspace")
+
+
+class InvalidCheckoutSpecError(ValueError):
+    """A `CheckoutSpec` lacks a field the workspace kind requires."""
