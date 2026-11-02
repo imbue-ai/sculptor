@@ -386,6 +386,37 @@ def test_start_task_returns_404_for_a_missing_project(client: TestClient) -> Non
     assert response.status_code == 404, response.text
 
 
+@pytest.mark.parametrize(
+    ("workspace_creation_fields", "expected_status"),
+    [
+        pytest.param({}, 200, id="existing-workspace-only"),
+        pytest.param({"initializationStrategy": WorkspaceInitializationStrategy.IN_PLACE.value}, 422, id="strategy"),
+        pytest.param({"sourceBranch": "main"}, 422, id="source-branch"),
+    ],
+)
+def test_start_task_rejects_workspace_creation_fields_alongside_an_existing_workspace(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    workspace_creation_fields: dict[str, str],
+    expected_status: int,
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = client.post(
+        f"/api/v1/projects/{test_project.object_id}/tasks",
+        json={
+            "prompt": "hello",
+            "model": LLMModel.CLAUDE_4_SONNET.value,
+            "workspaceId": str(workspace.object_id),
+            **workspace_creation_fields,
+        },
+    )
+    assert response.status_code == expected_status, response.text
+
+
 def test_workspace_working_directory_resolves_per_strategy() -> None:
     # Clone and worktree checkouts live at <environment_id>/code.
     assert _workspace_working_directory(WorkspaceInitializationStrategy.CLONE, "/tmp/ws1", "/repo") == "/tmp/ws1/code"

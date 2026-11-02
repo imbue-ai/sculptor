@@ -747,12 +747,17 @@ def start_task(
                 logger.debug("Using existing workspace {} for task {}", workspace.object_id, task_id)
             else:
                 # Create implicit workspace for this task
+                new_workspace_strategy = (
+                    WorkspaceInitializationStrategy.IN_PLACE
+                    if initialization_strategy is None
+                    else initialization_strategy
+                )
                 _validate_workspace_creation_request(
-                    services, project, initialization_strategy, source_branch, requested_branch_name=None
+                    services, project, new_workspace_strategy, source_branch, requested_branch_name=None
                 )
                 workspace = services.workspace_service.create_workspace(
                     project=project,
-                    initialization_strategy=initialization_strategy,
+                    initialization_strategy=new_workspace_strategy,
                     source_branch=source_branch,
                     requested_branch_name=None,
                     description=task_name,

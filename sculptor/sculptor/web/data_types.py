@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
+from pydantic import model_validator
 
 from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.config.naming_convention_files import NamingConventionTier
@@ -138,11 +139,12 @@ class StartTaskRequest(RequestModel):
     model: LLMModel | None = None
     backend_model: ModelOption | None = None
     files: list[str] = Field(default_factory=list)
-    initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE
+    # Strategy for the workspace this task creates; IN_PLACE when omitted.
+    initialization_strategy: WorkspaceInitializationStrategy | None = None
     name: str | None = None
     source_branch: str | None = None
-    # Mutually exclusive with initialization_strategy.
-    # When provided, the task will be created in an existing workspace
+    # Runs the task in this existing workspace instead of creating one, so it is
+    # mutually exclusive with initialization_strategy and source_branch.
     workspace_id: WorkspaceID | None = None
     enter_plan_mode: bool = False
     fast_mode: bool = False
@@ -152,6 +154,14 @@ class StartTaskRequest(RequestModel):
     # resolves it). Prompt-ful creation is always a chat agent; terminal types
     # are rejected (422).
     agent_type: AgentTypeName | None = None
+
+    @model_validator(mode="after")
+    def _reject_workspace_creation_fields_with_workspace_id(self) -> "StartTaskRequest":
+        if self.workspace_id is not None and (
+            self.initialization_strategy is not None or self.source_branch is not None
+        ):
+            raise ValueError("workspace_id is mutually exclusive with initialization_strategy and source_branch")
+        return self
 
 
 class CreateWorkspaceRequestV2(RequestModel):
