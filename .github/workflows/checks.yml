@@ -136,8 +136,11 @@ jobs:
       - name: Sync Python deps
         run: uv sync --frozen
 
+      - name: Install jj
+        run: just install-jj
+
       - name: Verify toolchain
-        run: just --version && uv --version && node --version && npm --version && pnpm --version
+        run: just --version && uv --version && node --version && npm --version && pnpm --version && .venv/bin/jj --version
 
       - name: Run checks + unit tests
         run: |

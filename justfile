@@ -1073,8 +1073,64 @@ install:
     just install-build-deps
     just install-backend
     just install-frontend
+    just install-jj
     # pi is not installed here: Sculptor provisions it in MANAGED mode (the
     # default). Run `just install-pi` only for a CUSTOM or real_pi dev setup.
+
+# Installs the pinned jj (Jujutsu) release binary into .venv/jj and symlinks it
+# into .venv/bin, where the jj test fixtures look before PATH. The version and
+# the per-platform sha256 come from sculptor/sculptor/services/jj_version.py.
+[group("install")]
+install-jj:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _do_install_jj() {
+      cd "{{justfile_directory()}}"
+      venv="{{justfile_directory()}}/.venv"
+      target="$venv/bin/jj"
+      platform="$(uname -s)-$(uname -m)"
+      # An x86_64 shell under Rosetta reports x86_64 on Apple silicon; the native build runs from it too.
+      if [ "$platform" = Darwin-x86_64 ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then
+        platform=Darwin-arm64
+      fi
+      case "$platform" in
+        Darwin-arm64) triple=aarch64-apple-darwin ;;
+        Darwin-x86_64) triple=x86_64-apple-darwin ;;
+        Linux-x86_64|Linux-amd64) triple=x86_64-unknown-linux-musl ;;
+        Linux-aarch64|Linux-arm64) triple=aarch64-unknown-linux-musl ;;
+        *) echo "install-jj: unsupported platform '$(uname -s) $(uname -m)'" >&2; return 1 ;;
+      esac
+      # uv run also ensures the workspace venv exists, since we install into its bin.
+      pin="$(uv run --project sculptor python -c 'import sys; from sculptor.services.jj_version import JJ_PINNED_VERSION, JJ_PINNED_SHA256_BY_TARGET_TRIPLE; print(JJ_PINNED_VERSION, JJ_PINNED_SHA256_BY_TARGET_TRIPLE[sys.argv[1]])' "$triple")"
+      read -r version expected_sha256 <<< "$pin"
+      # `jj --version` prints `jj 0.46.0-<commit hash>`, so keep only the x.y.z.
+      if [ -x "$target" ] && [ "$("$target" --version 2>/dev/null | sed -nE 's/^jj ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')" = "$version" ]; then
+        echo "jj $version already installed."
+        return 0
+      fi
+      asset="jj-v${version}-${triple}.tar.gz"
+      url="https://github.com/jj-vcs/jj/releases/download/v${version}/${asset}"
+      echo "Downloading jj $version ($asset)..."
+      tmp="$(mktemp -d)"
+      trap 'rm -rf "$tmp"' RETURN
+      curl -fsSL "$url" -o "$tmp/$asset"
+      if command -v sha256sum >/dev/null; then
+        actual_sha256="$(sha256sum "$tmp/$asset" | cut -d' ' -f1)"
+      else
+        actual_sha256="$(shasum -a 256 "$tmp/$asset" | cut -d' ' -f1)"
+      fi
+      if [ "$actual_sha256" != "$expected_sha256" ]; then
+        echo "install-jj: sha256 mismatch for $asset: expected $expected_sha256, got $actual_sha256" >&2
+        return 1
+      fi
+      rm -rf "$venv/jj"
+      mkdir -p "$venv/jj"
+      tar -xzf "$tmp/$asset" -C "$venv/jj" ./jj
+      ln -sf ../jj/jj "$target"
+      echo "Installed $("$target" --version) -> $target"
+    }
+    quiet_by_default install-jj _do_install_jj
 
 # Installs the pinned, self-contained pi binary from GitHub Releases into
 # .venv/pi (the whole release tree — the binary loads sibling files like
@@ -1501,7 +1557,7 @@ publish-build-artifacts *args="":
 # Run backend unit tests (excludes integration/acceptance tests)
 # Pass a path to junitxml to output JUnit XML for CI
 [group("test")]
-test-unit-backend junitxml="":
+test-unit-backend junitxml="": install-jj
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
@@ -1540,7 +1596,7 @@ test-build-artifacts:
 # Uses pytest-xdist for parallel execution (-n auto, capped at 3 workers).
 # Set XDIST_WORKERS to override (e.g. XDIST_WORKERS=1 for serial).
 [group("test")]
-test-integration tests="sculptor/tests/integration/" buildargs="": build-frontend generate-sculpt-client
+test-integration tests="sculptor/tests/integration/" buildargs="": install-jj build-frontend generate-sculpt-client
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "${JUST_VERBOSE:-}" != "1" ] && [ -z "${JUST_LOG_FILE:-}" ]; then
@@ -1661,7 +1717,7 @@ test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": install-p
 # Same env var overrides as test-integration: RUN_ALL=1, XDIST_WORKERS=N, JUST_VERBOSE=1.
 # Uses fewer parallel workers than test-integration (Electron is heavier than headless Chromium).
 [group("test")]
-test-integration-electron tests="sculptor/tests/integration/" buildargs="": build-frontend generate-sculpt-client
+test-integration-electron tests="sculptor/tests/integration/" buildargs="": install-jj build-frontend generate-sculpt-client
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "${JUST_VERBOSE:-}" != "1" ] && [ -z "${JUST_LOG_FILE:-}" ]; then
