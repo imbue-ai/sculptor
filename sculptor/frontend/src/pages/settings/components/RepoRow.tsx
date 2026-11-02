@@ -5,12 +5,16 @@ import { useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useOnMountIf } from "~/common/hooks/useOnMountIf";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import { useNamingPatternMutation, useWorkspaceSetupCommandMutation } from "~/common/state/mutations/projects.ts";
+import { getErrorMessage } from "~/common/utils/errors.ts";
 import { DEFAULT_WORKSPACE_SETUP_COMMAND } from "~/common/utils/setupDefaults";
 
 import styles from "./RepoRow.module.scss";
 
 type RepoRowProps = {
+  projectId: string;
   projectName: string;
   projectPath: string;
   agentCount: number;
@@ -20,12 +24,19 @@ type RepoRowProps = {
   // null: tracking the current default. "": user cleared (no command runs).
   // Any other string: user's custom command.
   workspaceSetupCommand: string | null;
-  onSetupCommandSave: (command: string | null) => void;
   namingPattern: string;
-  onNamingPatternSave: (pattern: string) => void;
+  setToast: (toast: ToastContent | null) => void;
 };
 
+// Key for an uncontrolled field. A successful save re-keys it once the stream
+// delivers the new saved value; a failed save changes nothing server-side, so
+// bumping `resetCount` re-mounts it to drop the rejected text. JSON keeps a null
+// saved value distinct from the string "null".
+const savedFieldKey = (savedValue: string | null, resetCount: number): string =>
+  JSON.stringify([savedValue, resetCount]);
+
 export const RepoRow = ({
+  projectId,
   projectName,
   projectPath,
   agentCount,
@@ -33,40 +44,63 @@ export const RepoRow = ({
   onRemove,
   shouldAutoFocusSetupCommand = false,
   workspaceSetupCommand,
-  onSetupCommandSave,
   namingPattern,
-  onNamingPatternSave,
+  setToast,
 }: RepoRowProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
   const isTrackingDefault = workspaceSetupCommand === null;
   const displayValue = workspaceSetupCommand ?? DEFAULT_WORKSPACE_SETUP_COMMAND;
   const [isExpanded, setIsExpanded] = useState<boolean>(() => shouldAutoFocusSetupCommand);
+  const [setupCommandResetCount, setSetupCommandResetCount] = useState(0);
+  const [namingPatternResetCount, setNamingPatternResetCount] = useState(0);
   const setupCommandTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const { mutate: saveSetupCommand } = useWorkspaceSetupCommandMutation();
+  const { mutate: saveNamingPattern } = useNamingPatternMutation();
 
   useOnMountIf(shouldAutoFocusSetupCommand, () => {
     setupCommandTextareaRef.current?.focus();
   });
+
+  const handleSetupCommandSave = (command: string | null): void => {
+    saveSetupCommand(
+      { projectId, command },
+      {
+        onError: (error): void => {
+          setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save setup command") });
+          setSetupCommandResetCount((count) => count + 1);
+        },
+      },
+    );
+  };
 
   const handleSetupCommandBlur = (e: FocusEvent<HTMLTextAreaElement>): void => {
     const trimmed = e.target.value.trim();
     if (isTrackingDefault) {
       // Unchanged default text → remain tracking default. Otherwise freeze the edit.
       if (trimmed !== DEFAULT_WORKSPACE_SETUP_COMMAND) {
-        onSetupCommandSave(trimmed);
+        handleSetupCommandSave(trimmed);
       }
     } else if (trimmed !== workspaceSetupCommand) {
-      onSetupCommandSave(trimmed);
+      handleSetupCommandSave(trimmed);
     }
   };
 
   const handleReset = (): void => {
-    onSetupCommandSave(null);
+    handleSetupCommandSave(null);
   };
 
   const handleNamingPatternBlur = (e: FocusEvent<HTMLInputElement>): void => {
     const trimmed = e.target.value.trim();
     if (trimmed !== namingPattern) {
-      onNamingPatternSave(trimmed);
+      saveNamingPattern(
+        { projectId, pattern: trimmed },
+        {
+          onError: (error): void => {
+            setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save naming pattern") });
+            setNamingPatternResetCount((count) => count + 1);
+          },
+        },
+      );
     }
   };
 
@@ -132,7 +166,7 @@ export const RepoRow = ({
                 (e.g. after blur-save or reset), so we never copy the prop into local state. */}
             <textarea
               ref={setupCommandTextareaRef}
-              key={workspaceSetupCommand}
+              key={savedFieldKey(workspaceSetupCommand, setupCommandResetCount)}
               className={`${styles.setupCommandInput} ${
                 isTrackingDefault ? styles.setupCommandInputTrackingDefault : ""
               }`}
@@ -151,7 +185,7 @@ export const RepoRow = ({
           <Box className={styles.namingPatternSection}>
             <label className={styles.namingPatternLabel}>Branch-naming pattern</label>
             <input
-              key={namingPattern}
+              key={savedFieldKey(namingPattern, namingPatternResetCount)}
               className={styles.namingPatternInput}
               defaultValue={namingPattern}
               onBlur={handleNamingPatternBlur}
