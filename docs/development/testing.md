@@ -17,6 +17,8 @@ just test-unit-frontend     # Frontend only
 just test-integration       # All integration tests
 ```
 
+Tests that use the jj fixtures (`sculptor/sculptor/testing/jj_repos.py`) need the pinned jj: run `just install-jj` (`just install` and the backend and integration test recipes run it for you).
+
 For specific integration tests:
 
 ```bash
