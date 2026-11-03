@@ -1128,7 +1128,7 @@ install-pi:
 # (sculptor/services/managed_tools.py). Print-only; `just bump-pi` applies a bump.
 [group("install")]
 compute-pi-pin version:
-    uv run python "{{justfile_directory()}}/scripts/compute_pi_pin.py" "{{version}}"
+    uv run python "{{justfile_directory()}}/scripts/compute_pin.py" pi "{{version}}"
 
 # Apply a pi version bump end-to-end: recompute the per-platform sha256 pins
 # (cross-checked against the release's published SHA256SUMS) and rewrite
@@ -1137,7 +1137,7 @@ compute-pi-pin version:
 # warning fires.
 [group("install")]
 bump-pi version:
-    uv run python "{{justfile_directory()}}/scripts/bump_pi_pin.py" "{{version}}"
+    uv run python "{{justfile_directory()}}/scripts/bump_pin.py" pi "{{version}}"
 
 # Installs additional dependencies for testing
 [group("install")]

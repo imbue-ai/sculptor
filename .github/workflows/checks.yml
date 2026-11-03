@@ -131,7 +131,7 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/check_pi_pin_freshness.py --emit-github-warning
+        run: python3 scripts/check_pin_freshness.py pi --emit-github-warning
 
       - name: Sync Python deps
         run: uv sync --frozen
