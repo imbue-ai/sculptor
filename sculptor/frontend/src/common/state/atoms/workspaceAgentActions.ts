@@ -26,6 +26,7 @@ import {
   agentSupportsChatInterfaceAtomFamily,
 } from "~/common/state/atoms/agents.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
+import { agentIdForWorkspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
@@ -160,7 +161,10 @@ export const activeChatAgentIdAtomFamily = atomFamily((workspaceId: string) =>
  *      everywhere): any open chat-capable agent panel, in tab order — chat
  *      messages queue and surface when the chat is re-shown, whereas typing
  *      into a hidden terminal's PTY would not be seen,
- *   4. the workspace's first chat-capable agent (layout not seeded yet).
+ *   4. no agent panel is open: the agent the workspace's route last showed,
+ *      whatever its harness — the mobile shell renders that agent without
+ *      seeding the panel layout,
+ *   5. the workspace's first chat-capable agent (layout not seeded yet).
  *
  * `undefined` when nothing resolves; candidates must have loaded agent data
  * (a stale layout can reference a deleted agent).
@@ -190,6 +194,10 @@ export const activeAgentIdAtomFamily = atomFamily((workspaceId: string) =>
         if (isHiddenFallbackTarget(agentId)) return agentId;
       }
     }
+
+    const lastViewed = get(agentIdForWorkspaceAtomFamily(workspaceId));
+    if (lastViewed !== null && isLoaded(lastViewed)) return lastViewed;
+
     return get(agentsArrayAtom)?.find((agent) => agent.workspaceId === workspaceId && isHiddenFallbackTarget(agent.id))
       ?.id;
   }),

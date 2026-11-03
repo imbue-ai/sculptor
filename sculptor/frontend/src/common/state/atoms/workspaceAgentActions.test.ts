@@ -6,6 +6,7 @@ import { LlmModel, TaskStatus } from "~/api";
 import { agentDetailStateAtomFamily, getEmptyAgentDetailState } from "~/common/state/atoms/agentDetails.ts";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
+import { tabsAtom } from "~/common/state/atoms/workspaces.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
@@ -400,6 +401,28 @@ describe("activeAgentIdAtomFamily", () => {
     });
 
     expect(store.get(activeAgentIdAtomFamily(WS))).toBe("chat-agent");
+  });
+});
+
+describe("activeAgentIdAtomFamily without agent panels", () => {
+  // The mobile shell shows the route's agent without seeding the panel layout.
+  it("resolves the workspace's last-viewed agent rather than its first agent", () => {
+    const store = createStore();
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
+    seedAgent(store, createMockAgent({ id: "agent-b" }));
+    seedLayout(store, {});
+    store.set(tabsAtom, { order: [{ tabId: WS, agentId: "agent-b" }], activeIndex: 0 });
+
+    expect(store.get(activeAgentIdAtomFamily(WS))).toBe("agent-b");
+  });
+
+  it("ignores a last-viewed agent that is no longer loaded", () => {
+    const store = createStore();
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
+    seedLayout(store, {});
+    store.set(tabsAtom, { order: [{ tabId: WS, agentId: "deleted-agent" }], activeIndex: 0 });
+
+    expect(store.get(activeAgentIdAtomFamily(WS))).toBe("agent-a");
   });
 });
 
