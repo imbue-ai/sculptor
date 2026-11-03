@@ -11,6 +11,7 @@ from typing import assert_never
 from loguru import logger
 
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.services.workspace_service.api import CommitFileChange
 from sculptor.services.workspace_service.api import CommitRecord
@@ -61,9 +62,15 @@ _DEFAULT_BRANCH_NAMES = ("main", "master")
 class GitWorkspaceVcs(WorkspaceVcs):
     """Version control for workspaces that work in, clone, or add a worktree to a git repository."""
 
-    def __init__(self, initialization_strategy: WorkspaceInitializationStrategy, git: GitCli) -> None:
+    def __init__(
+        self,
+        initialization_strategy: WorkspaceInitializationStrategy,
+        git: GitCli,
+        concurrency_group: ConcurrencyGroup,
+    ) -> None:
         self._initialization_strategy = initialization_strategy
         self._git = git
+        self._concurrency_group = concurrency_group
 
     def create_checkout(self, spec: CheckoutSpec) -> CheckoutLocation:
         match self._initialization_strategy:
@@ -81,7 +88,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
         clone_repository(
             source_repo_path=spec.repo_path,
             destination=spec.checkout_path,
-            concurrency_group=self._git.concurrency_group,
+            concurrency_group=self._concurrency_group,
             target_branch=spec.base_ref,
         )
         if spec.new_ref_name is not None and spec.new_ref_name.strip():

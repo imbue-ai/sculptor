@@ -77,10 +77,6 @@ class GitCli:
         self._concurrency_group = concurrency_group
         self._dependency_management_service = dependency_management_service
 
-    @property
-    def concurrency_group(self) -> ConcurrencyGroup:
-        return self._concurrency_group
-
     def run_git(
         self,
         options: Sequence[str],

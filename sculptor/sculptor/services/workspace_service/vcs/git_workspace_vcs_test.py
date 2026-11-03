@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
@@ -47,18 +48,18 @@ def _in_place(repo: Path) -> CheckoutLocation:
 
 
 @pytest.fixture
-def worktree_vcs(git_cli: GitCli) -> GitWorkspaceVcs:
-    return GitWorkspaceVcs(WorkspaceInitializationStrategy.WORKTREE, git_cli)
+def worktree_vcs(git_cli: GitCli, test_root_concurrency_group: ConcurrencyGroup) -> GitWorkspaceVcs:
+    return GitWorkspaceVcs(WorkspaceInitializationStrategy.WORKTREE, git_cli, test_root_concurrency_group)
 
 
 @pytest.fixture
-def clone_vcs(git_cli: GitCli) -> GitWorkspaceVcs:
-    return GitWorkspaceVcs(WorkspaceInitializationStrategy.CLONE, git_cli)
+def clone_vcs(git_cli: GitCli, test_root_concurrency_group: ConcurrencyGroup) -> GitWorkspaceVcs:
+    return GitWorkspaceVcs(WorkspaceInitializationStrategy.CLONE, git_cli, test_root_concurrency_group)
 
 
 @pytest.fixture
-def in_place_vcs(git_cli: GitCli) -> GitWorkspaceVcs:
-    return GitWorkspaceVcs(WorkspaceInitializationStrategy.IN_PLACE, git_cli)
+def in_place_vcs(git_cli: GitCli, test_root_concurrency_group: ConcurrencyGroup) -> GitWorkspaceVcs:
+    return GitWorkspaceVcs(WorkspaceInitializationStrategy.IN_PLACE, git_cli, test_root_concurrency_group)
 
 
 @pytest.fixture
