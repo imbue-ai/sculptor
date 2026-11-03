@@ -19,7 +19,7 @@ from tenacity import wait_exponential
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.retry_utils import log_before_sleep
-from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
@@ -171,7 +171,7 @@ class GitCli:
                 is_checked_after=False,
                 env=env,
             )
-        except ProcessError as e:
+        except ProcessSetupError as e:
             raise VcsCommandError(
                 f"Failed to start {command} in {cwd}\nstderr: {e.stderr}",
                 command=command,
@@ -187,14 +187,7 @@ class GitCli:
                 stdout=result.stdout,
                 stderr=result.stderr,
             )
-        if result.returncode is None:
-            raise VcsCommandError(
-                f"{command} finished without an exit code",
-                command=command,
-                returncode=None,
-                stdout=result.stdout,
-                stderr=result.stderr,
-            )
+        assert result.returncode is not None, "a process that ran to completion has an exit code"
         if is_checked and result.returncode != 0:
             error_type = _RetriableVcsCommandError if is_read_only else VcsCommandError
             raise error_type(
