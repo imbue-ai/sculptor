@@ -7,6 +7,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 
 import { ElementIds } from "~/api";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions";
+import { activeChatAgentIdAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { useAgentSupportsSkills } from "~/common/state/hooks/useAgentHelpers";
 import type { SkillEntry } from "~/common/state/hooks/useSkills";
 import { useSkills } from "~/common/state/hooks/useSkills";
@@ -21,7 +22,6 @@ import { draggedPanelIdAtom } from "~/pages/workspace/layout/atoms/transient.ts"
 
 import styles from "./SkillsPanel.module.scss";
 import { SkillsSearch } from "./SkillsSearch";
-import { activeChatAgentIdAtomFamily } from "./workspaceAgentActions.ts";
 
 const SKILL_TYPE_LABELS: Record<SkillType, string> = {
   builtin: "Built-in",

@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { ElementIds } from "~/api";
 import { notesDraftAtomFamily } from "~/common/state/atoms/notesDrafts.ts";
+import { activeChatAgentIdAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { usePromptDraft } from "~/common/state/hooks/usePromptDraft.ts";
 import { Editor } from "~/components/editor/Editor.tsx";
 import { PanelHeader } from "~/components/panels/PanelHeader.tsx";
@@ -14,7 +15,6 @@ import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts
 
 import { UndoQueuedMessageDialog } from "../queuedMessages/UndoQueuedMessageDialog.tsx";
 import styles from "./NotesPanel.module.scss";
-import { activeChatAgentIdAtomFamily } from "./workspaceAgentActions.ts";
 
 export const NotesPanel = (): ReactElement => {
   // Identity comes from the section shell, not the route: "add to prompt"

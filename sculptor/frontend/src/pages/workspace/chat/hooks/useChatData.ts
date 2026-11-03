@@ -5,6 +5,7 @@ import type { AskUserQuestionData, ChatMessage, LlmModel, TaskStatus } from "~/a
 import { sendWorkspaceAgentMessages } from "~/api";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions.ts";
+import { activeChatAgentIdAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { useAgentChatMessages, useAgentDetailWithDefaults } from "~/common/state/hooks/useAgentDetail";
 import { useAgentIsAutoCompacting, useAgentModel, useAgentStatusField } from "~/common/state/hooks/useAgentHelpers.ts";
 import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
@@ -13,7 +14,6 @@ import {
   useSmoothStreamingOnAgentSwitch,
   useSmoothStreamingViewportObserver,
 } from "~/pages/workspace/chat/hooks/useSmoothStreamingViewportObserver.ts";
-import { activeChatAgentIdAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 type UseChatDataArgs = {
   agentId: string;

@@ -5,8 +5,8 @@ import { type ReactElement, useEffect, useRef } from "react";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatPanelMountedAtom } from "~/common/state/atoms/panelMounts.ts";
+import { lastFocusedChatAgentAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { useAgentSupportsChatInterface, useAgentWorkspaceId } from "~/common/state/hooks/useAgentHelpers.ts";
-import { lastFocusedChatAgentAtomFamily } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
 import { BtwPopup } from "./BtwPopup.tsx";

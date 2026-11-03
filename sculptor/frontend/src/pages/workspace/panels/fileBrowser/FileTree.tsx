@@ -4,9 +4,9 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useEffect, useId, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
+import { activeAgentIdAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { VerticalOverlayScrollbar } from "~/pages/workspace/VerticalOverlayScrollbar.tsx";
 
-import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
 import { expandFoldersAtom, fileBrowserStateAtomFamily, toggleFolderAtom } from "./atoms/fileBrowser.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
 import styles from "./FileTree.module.scss";

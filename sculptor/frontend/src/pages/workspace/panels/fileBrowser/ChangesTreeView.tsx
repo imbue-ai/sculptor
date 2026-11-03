@@ -5,11 +5,11 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { DiffStatus, ElementIds } from "~/api";
+import { activeAgentIdAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import type { DiffScope } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
 
-import { activeAgentIdAtomFamily } from "../workspaceAgentActions.ts";
 import { expandChangesFoldersAtom, fileBrowserStateAtomFamily, toggleChangesFolderAtom } from "./atoms/fileBrowser.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
 import { usePerFileDiffMap } from "./fileDiffMaps.ts";

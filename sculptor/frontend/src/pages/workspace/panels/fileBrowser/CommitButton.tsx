@@ -5,9 +5,9 @@ import { useState } from "react";
 
 import { ElementIds } from "~/api";
 import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
+import { canCommitAtomFamily, commitActionAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
-import { canCommitAtomFamily, commitActionAtomFamily } from "../workspaceAgentActions.ts";
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
 // Fills the footer row; the row's own padding (shared with the scope picker

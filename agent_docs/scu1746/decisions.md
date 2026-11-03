@@ -133,7 +133,7 @@ useWorkspaceShellBootstrap}` (and the dynamic-panels test) reach back into
 home as second consumers appear.** _18 import lines, 11 files._ Shared UI/state
 reaches into workspace feature internals beyond layout: `diffPanel` atoms/types,
 `panels/browser` atoms, `panels/fileBrowser` atoms/types/`fileIcons`,
-`panels/workspaceAgentActions`, `chatAlpha` atoms/`chipRowUtils`, and
+`chatAlpha` atoms/`chipRowUtils`, and
 `workspace/hooks/useTimedLatch`. Excepts: those specific files in the
 `common→pages` and `components→pages` zones (kept at file granularity so the
 boundary still catches new, unrelated reaches).
