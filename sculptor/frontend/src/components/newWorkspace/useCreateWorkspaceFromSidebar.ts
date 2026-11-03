@@ -8,6 +8,7 @@ import { createWorkspaceErrorToastAtom, ToastType } from "~/common/state/atoms/t
 import { defaultModelAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
+import { hasRequiredCreationFields, WORKSPACE_MODE_RULES } from "~/common/utils/workspaceModeRules.ts";
 import {
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDialogAtom,
@@ -22,18 +23,18 @@ type UseCreateWorkspaceFromSidebarReturn = {
    * freshly auto-generated unique branch name. Settings come from the last
    * creation when it targeted the same repo; otherwise the repo's current
    * branch is fetched and the last mode/agent type (or the defaults) are
-   * reused. Falls back to opening the dialog pre-selecting the repo when the
-   * branch can't be resolved or the create fails.
+   * reused. Falls back to opening the dialog pre-selecting the repo when a
+   * field the mode requires can't be resolved or the create fails.
    */
   createFromSidebar: (projectId: string) => Promise<void>;
 };
 
 /**
  * Decides between direct-create and opening the dialog for the repo group's
- * "+" button. Direct-create needs a source branch and a fresh auto-branch —
- * when either is missing it defers to the dialog so the user can fill in the
- * gaps (and so branch collisions stay a dialog-only concern, since
- * direct-create always uses a fresh unique branch).
+ * "+" button. Direct-create needs every field the mode requires — when one is
+ * missing it defers to the dialog so the user can fill in the gaps (and so
+ * branch collisions stay a dialog-only concern, since any branch direct-create
+ * names is a freshly rolled random slug).
  */
 export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarReturn => {
   // State and hooks
@@ -62,19 +63,18 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
       const agentType: StoredAgentType =
         seedAgentType === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seedAgentType);
 
+      const modeRules = WORKSPACE_MODE_RULES[mode];
       setIsPreparing(true);
       let sourceBranch = sameRepoSettings?.sourceBranch ?? "";
-      // In-place reuses the current branch, so it never needs an auto-generated
-      // branch name. Worktree/clone do — generate a fresh unique one (a blank
-      // workspace name makes the backend roll a random slug).
       let branchName = "";
       try {
-        if (!sourceBranch) {
+        if (modeRules.sourceBranch !== "unused" && !sourceBranch) {
           const branchInfo = await getCurrentBranch({ path: { project_id: projectId } });
           sourceBranch = branchInfo.data?.currentBranch ?? "";
         }
 
-        if (mode !== WorkspaceInitializationStrategy.IN_PLACE) {
+        if (modeRules.branchName !== "unused") {
+          // A blank workspace name makes the backend roll a random slug.
           const result = await previewBranchName({
             query: { project_id: projectId, workspace_name: "", mode },
           });
@@ -86,8 +86,7 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
         setIsPreparing(false);
       }
 
-      const doesNeedBranchName = mode !== WorkspaceInitializationStrategy.IN_PLACE;
-      if (!sourceBranch || (doesNeedBranchName && !branchName)) {
+      if (!hasRequiredCreationFields({ mode, branchName, sourceBranch })) {
         setModalState({ open: true, presetProjectId: projectId });
         return;
       }
