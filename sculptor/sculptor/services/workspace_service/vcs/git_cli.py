@@ -24,7 +24,6 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
-from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
@@ -57,13 +56,6 @@ def find_jj_workspace_root(directory: Path) -> Path | None:
         if has_jj:
             return candidate
     return None
-
-
-def validate_operand(operand: str) -> str:
-    """Return `operand` if it is safe to pass to git as a ref, revision or path operand."""
-    if operand == "" or any(character in operand for character in ("\0", "\n", "\r")):
-        raise InvalidRevisionError(f"Invalid git operand: {operand!r}")
-    return operand
 
 
 class GitCli:
@@ -196,7 +188,7 @@ class GitCli:
 def _build_arguments(options: Sequence[str], operands: Sequence[str], paths: Sequence[str]) -> list[str]:
     arguments = list(options)
     if operands:
-        arguments.extend(["--end-of-options", *(validate_operand(operand) for operand in operands)])
+        arguments.extend(["--end-of-options", *operands])
     if paths:
-        arguments.extend(["--", *(validate_operand(path) for path in paths)])
+        arguments.extend(["--", *paths])
     return arguments

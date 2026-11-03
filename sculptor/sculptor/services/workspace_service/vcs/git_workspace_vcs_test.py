@@ -373,13 +373,26 @@ def test_compute_diff_artifact_diffs_everything_since_the_merge_base_with_the_ta
     assert "committed.txt" not in artifact.uncommitted_diff
 
 
-def test_compute_diff_artifact_leaves_the_target_diff_empty_for_an_unknown_target(
+def test_compute_diff_artifact_leaves_the_target_diff_empty_for_an_unknown_or_empty_target(
     in_place_vcs: GitWorkspaceVcs, git_repo: Path
 ) -> None:
-    artifact = in_place_vcs.compute_diff_artifact(_in_place(git_repo), target_ref="origin/nope", context_lines=3)
+    (git_repo / "file.txt").write_text("changed\n")
+    for target_ref in ("origin/nope", ""):
+        artifact = in_place_vcs.compute_diff_artifact(_in_place(git_repo), target_ref=target_ref, context_lines=3)
 
-    assert artifact.target_branch_diff == ""
-    assert artifact.target_branch_merge_base == ""
+        assert "+changed" in artifact.uncommitted_diff
+        assert artifact.target_branch_diff == ""
+        assert artifact.target_branch_merge_base == ""
+
+
+def test_compute_diff_artifact_diffs_an_untracked_file_with_a_newline_in_its_name(
+    in_place_vcs: GitWorkspaceVcs, git_repo: Path
+) -> None:
+    (git_repo / "new\nline.txt").write_text("odd name\n")
+
+    artifact = in_place_vcs.compute_diff_artifact(_in_place(git_repo), target_ref=None, context_lines=3)
+
+    assert "+odd name" in artifact.uncommitted_diff
 
 
 def test_compute_diff_artifact_honours_the_context_line_count(in_place_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
@@ -438,15 +451,15 @@ def test_get_revision_history_uses_the_base_commit_without_a_target(
     assert [commit.message for commit in history.commits] == ["work"]
 
 
-def test_get_revision_history_falls_back_to_the_base_commit_for_an_unknown_target(
+def test_get_revision_history_falls_back_to_the_base_commit_for_an_unknown_or_empty_target(
     worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation, git_repo: Path
 ) -> None:
     base = _git(git_repo, ["rev-parse", "main"])
+    for target_ref in ("origin/nope", ""):
+        history = worktree_vcs.get_revision_history(worktree, target_ref=target_ref, base_commit_id=base)
 
-    history = worktree_vcs.get_revision_history(worktree, target_ref="origin/nope", base_commit_id=base)
-
-    assert history.fork_point == base
-    assert history.commits == []
+        assert history.fork_point == base
+        assert history.commits == []
 
 
 def test_get_revision_history_is_empty_without_any_fork_point(
@@ -527,6 +540,16 @@ def test_read_file_at_revision_base64_encodes_binary_content(in_place_vcs: GitWo
     assert base64.b64decode(result.content) == b"ab\x00cd"
 
 
+def test_read_file_at_revision_reads_a_file_with_a_newline_in_its_name(
+    in_place_vcs: GitWorkspaceVcs, git_repo: Path
+) -> None:
+    _commit_file(git_repo, "odd\nname.txt", "odd\n", "odd name")
+
+    result = in_place_vcs.read_file_at_revision(_in_place(git_repo), "odd\nname.txt", "HEAD")
+
+    assert result.content == "odd\n"
+
+
 def test_read_file_at_revision_raises_for_a_missing_file(in_place_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
     with pytest.raises(FileNotFoundAtRefError):
         in_place_vcs.read_file_at_revision(_in_place(git_repo), "missing.txt", "HEAD")
@@ -548,6 +571,20 @@ def test_discard_file_changes_deletes_an_untracked_file(in_place_vcs: GitWorkspa
 
     assert result.success
     assert not (git_repo / "-untracked.txt").exists()
+
+
+def test_discard_file_changes_handles_newlines_in_file_names(in_place_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
+    _commit_file(git_repo, "tracked\nname.txt", "original\n", "odd name")
+    (git_repo / "tracked\nname.txt").write_text("changed\n")
+    (git_repo / "untracked\nname.txt").write_text("new\n")
+
+    restored = in_place_vcs.discard_file_changes(_in_place(git_repo), "tracked\nname.txt")
+    removed = in_place_vcs.discard_file_changes(_in_place(git_repo), "untracked\nname.txt")
+
+    assert restored.success
+    assert removed.success
+    assert (git_repo / "tracked\nname.txt").read_text() == "original\n"
+    assert not (git_repo / "untracked\nname.txt").exists()
 
 
 def test_discard_file_changes_rejects_paths_outside_the_checkout(

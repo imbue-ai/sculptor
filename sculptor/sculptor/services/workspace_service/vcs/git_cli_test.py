@@ -7,7 +7,6 @@ from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
-from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
@@ -120,14 +119,18 @@ def test_run_git_does_not_set_git_ssh_command(
     assert result.stdout.strip() == "unset"
 
 
-def test_run_git_rejects_an_operand_that_could_split_into_two_arguments(git_cli: GitCli, git_repo: Path) -> None:
-    with pytest.raises(InvalidRevisionError):
-        git_cli.run_git(["rev-parse"], git_repo, is_read_only=True, operands=["HEAD\nmain"])
+def test_run_git_passes_each_operand_and_path_to_git_as_one_argument(git_cli: GitCli, tmp_path: Path) -> None:
+    fake_git = _write_script(tmp_path / "fake-git", "printf '[%s]' \"$@\"")
+    _use_dependency_paths(DependencyPaths(git=str(fake_git)))
+
+    result = git_cli.run_git(["show"], tmp_path, is_read_only=True, operands=["", "HEAD\nmain"], paths=["a\nb"])
+
+    assert result.stdout == "[show][--end-of-options][][HEAD\nmain][--][a\nb]"
 
 
-def test_run_git_rejects_an_empty_operand(git_cli: GitCli, git_repo: Path) -> None:
-    with pytest.raises(InvalidRevisionError):
-        git_cli.run_git(["rev-parse"], git_repo, is_read_only=True, operands=[""])
+def test_run_git_reports_an_argument_containing_nul_as_a_vcs_command_error(git_cli: GitCli, git_repo: Path) -> None:
+    with pytest.raises(VcsCommandError):
+        git_cli.run_git(["rev-parse"], git_repo, is_read_only=True, operands=["HEAD\0main"])
 
 
 def test_checked_non_zero_exit_raises_vcs_command_exit_error(git_cli: GitCli, git_repo: Path) -> None:
