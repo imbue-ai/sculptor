@@ -116,8 +116,8 @@ jobs:
         with:
           role: ${{ env.VAULT_AUTH_ROLE }}
           secrets: |
-            shared/modal/MODAL_TOKEN_ID
-            shared/modal/MODAL_TOKEN_SECRET
+            sculptor-ci/modal/MODAL_TOKEN_ID
+            sculptor-ci/modal/MODAL_TOKEN_SECRET
 
       - name: Run offload integration tests
         id: tests
@@ -257,8 +257,8 @@ jobs:
         with:
           role: ${{ env.VAULT_AUTH_ROLE }}
           secrets: |
-            shared/modal/MODAL_TOKEN_ID
-            shared/modal/MODAL_TOKEN_SECRET
+            sculptor-ci/modal/MODAL_TOKEN_ID
+            sculptor-ci/modal/MODAL_TOKEN_SECRET
 
       - name: Run offload electron integration tests
         id: tests

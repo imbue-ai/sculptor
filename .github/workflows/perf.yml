@@ -116,8 +116,8 @@ jobs:
         with:
           role: ${{ env.VAULT_AUTH_ROLE }}
           secrets: |
-            shared/modal/MODAL_TOKEN_ID
-            shared/modal/MODAL_TOKEN_SECRET
+            sculptor-ci/modal/MODAL_TOKEN_ID
+            sculptor-ci/modal/MODAL_TOKEN_SECRET
 
       # Scenario subset: PRs run the fast subset (~5-6 min) for quick signal;
       # main records the full matrix (including perf_heavy scenarios like the
