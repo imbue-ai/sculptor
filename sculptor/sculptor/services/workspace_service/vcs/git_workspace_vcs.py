@@ -324,24 +324,18 @@ class GitWorkspaceVcs(WorkspaceVcs):
         if not isinstance(context_lines, int) or context_lines < 0:
             raise ValueError(f"context_lines must be a non-negative integer, got {context_lines!r}")
         checkout = location.checkout_path
-        context_flag = f"-U{context_lines}"
+        diff_options = ["--no-pager", "diff", "-M", f"-U{context_lines}"]
         untracked_diff = self._diff_untracked_files(checkout)
-
-        uncommitted_diff = self._run_diff(["--no-pager", "diff", "-M", context_flag], checkout, "HEAD", "uncommitted")
-        target_branch_diff = ""
-        target_branch_merge_base = ""
-        if target_ref is not None:
-            merge_base = self._get_merge_base(checkout, target_ref)
-            if merge_base is not None:
-                target_branch_merge_base = merge_base
-                target_branch_diff = self._run_diff(
-                    ["--no-pager", "diff", "-M", context_flag], checkout, merge_base, "target-branch"
-                )
-
+        uncommitted_diff = self._run_diff(diff_options, checkout, "HEAD", "uncommitted")
+        merge_base = None if target_ref is None else self._get_merge_base(checkout, target_ref)
+        if merge_base is None:
+            target_branch_diff = ""
+        else:
+            target_branch_diff = self._run_diff(diff_options, checkout, merge_base, "target-branch") + untracked_diff
         return DiffArtifact(
             uncommitted_diff=(uncommitted_diff + untracked_diff).strip(),
-            target_branch_diff=(target_branch_diff + untracked_diff).strip() if target_branch_merge_base else "",
-            target_branch_merge_base=target_branch_merge_base,
+            target_branch_diff=target_branch_diff.strip(),
+            target_branch_merge_base=merge_base or "",
             file_errors=self._detect_file_errors(checkout),
         )
 
