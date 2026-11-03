@@ -8,6 +8,7 @@ import { createWorkspaceAgent, createWorkspaceV2, EffortLevel, LlmModel, Workspa
 import type * as NavigationModule from "~/common/hooks/navigation.ts";
 import { encodeRegisteredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 import { useCreateWorkspace } from "./useCreateWorkspace.ts";
 
@@ -117,6 +118,54 @@ describe("useCreateWorkspace", () => {
     await waitFor(() => expect(store.get(createAgentErrorToastAtom)).not.toBeNull());
     expect(store.get(createAgentErrorToastAtom)).toMatchObject({ title: "Failed to create agent" });
     expect(navigateToAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe("useCreateWorkspace per-mode request fields", () => {
+  const getWorkspaceRequestBody = (): Record<string, unknown> =>
+    vi.mocked(createWorkspaceV2).mock.calls[0][0].body as unknown as Record<string, unknown>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(createWorkspaceV2).mockResolvedValue({
+      data: { objectId: "ws_1" },
+    } as unknown as Awaited<ReturnType<typeof createWorkspaceV2>>);
+    vi.mocked(createWorkspaceAgent).mockResolvedValue({
+      data: { id: "agent_1" },
+    } as unknown as Awaited<ReturnType<typeof createWorkspaceAgent>>);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it.each([
+    { mode: WorkspaceInitializationStrategy.IN_PLACE, requestedBranchName: undefined, sourceBranch: undefined },
+    { mode: WorkspaceInitializationStrategy.CLONE, requestedBranchName: "dev/ws", sourceBranch: "main" },
+    { mode: WorkspaceInitializationStrategy.WORKTREE, requestedBranchName: "dev/ws", sourceBranch: "main" },
+  ])("sends only the branch fields $mode uses", async ({ mode, requestedBranchName, sourceBranch }) => {
+    const { store, result } = renderCreateWorkspaceHook();
+
+    await result.current.createWorkspace({ ...CREATE_ARGS, mode, branchName: " dev/ws ", sourceBranch: "main" });
+
+    const body = getWorkspaceRequestBody();
+    expect(body.requestedBranchName).toBe(requestedBranchName);
+    expect(body.sourceBranch).toBe(sourceBranch);
+    expect(store.get(lastWorkspaceCreationSettingsAtom)?.sourceBranch).toBe(sourceBranch);
+  });
+
+  it.each([
+    WorkspaceInitializationStrategy.IN_PLACE,
+    WorkspaceInitializationStrategy.CLONE,
+    WorkspaceInitializationStrategy.WORKTREE,
+  ])("leaves a blank branch name and source branch out of a %s request", async (mode) => {
+    const { result } = renderCreateWorkspaceHook();
+
+    await result.current.createWorkspace({ ...CREATE_ARGS, mode, branchName: "  ", sourceBranch: "" });
+
+    const body = getWorkspaceRequestBody();
+    expect(body.requestedBranchName).toBeUndefined();
+    expect(body.sourceBranch).toBeUndefined();
   });
 });
 

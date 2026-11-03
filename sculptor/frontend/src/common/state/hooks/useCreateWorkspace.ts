@@ -2,8 +2,14 @@ import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useState } from "react";
 
-import type { EffortLevel, LlmModel, ModelOption, TerminalAgentRegistration } from "~/api";
-import { createWorkspaceAgent, createWorkspaceV2, WorkspaceInitializationStrategy } from "~/api";
+import type {
+  EffortLevel,
+  LlmModel,
+  ModelOption,
+  TerminalAgentRegistration,
+  WorkspaceInitializationStrategy,
+} from "~/api";
+import { createWorkspaceAgent, createWorkspaceV2 } from "~/api";
 import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 import {
   encodeRegisteredAgentType,
@@ -13,6 +19,7 @@ import {
 import { createAgentErrorToastAtom, ToastType } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { HTTPException } from "~/common/utils/errors.ts";
+import { toCreateRequestFields } from "~/common/utils/workspaceModeRules.ts";
 import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 /** Everything the create flow needs from its caller's form state. */
@@ -27,9 +34,9 @@ type CreateWorkspaceArgs = {
    */
   prompt: string;
   mode: WorkspaceInitializationStrategy;
-  /** Source branch to base the workspace on (ignored for in-place). */
+  /** Source branch to base the workspace on; sent only when the mode uses one. */
   sourceBranch: string | undefined;
-  /** The displayed branch name (override-or-preview); ignored for in-place. */
+  /** Name for the new branch; sent only when the mode uses one. */
   branchName: string;
   /** Stored agent type for the first agent (e.g. "claude", "registered:<id>"). */
   agentTypeValue: StoredAgentType;
@@ -92,13 +99,11 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
   // Functions and callbacks
   const createWorkspace = useCallback(
     async (args: CreateWorkspaceArgs): Promise<CreateWorkspaceResult> => {
-      const trimmedBranch = args.branchName.trim();
-      const requestedBranchName =
-        args.mode === WorkspaceInitializationStrategy.IN_PLACE
-          ? undefined
-          : args.mode === WorkspaceInitializationStrategy.WORKTREE
-            ? trimmedBranch
-            : trimmedBranch || undefined;
+      const requestFields = toCreateRequestFields({
+        mode: args.mode,
+        branchName: args.branchName,
+        sourceBranch: args.sourceBranch,
+      });
 
       setIsCreating(true);
       try {
@@ -106,9 +111,9 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
           body: {
             projectId: args.projectId,
             initializationStrategy: args.mode,
-            sourceBranch: args.mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : args.sourceBranch,
+            sourceBranch: requestFields.sourceBranch,
             description: args.workspaceName.trim() || "Untitled workspace",
-            requestedBranchName,
+            requestedBranchName: requestFields.branchName,
           },
         });
 
@@ -133,7 +138,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
 
         setLastWorkspaceCreationSettings({
           projectId: args.projectId,
-          sourceBranch: args.mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : args.sourceBranch,
+          sourceBranch: requestFields.sourceBranch,
           agentType: effectiveAgentTypeValue,
           initStrategy: args.mode,
         });
@@ -223,7 +228,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         console.error("Failed to create workspace:", error);
         const kind: CreateWorkspaceErrorKind =
           error instanceof HTTPException && error.status === 409 ? "branch-collision" : "generic";
-        return { ok: false, error: { kind, branchName: trimmedBranch, cause: error } };
+        return { ok: false, error: { kind, branchName: requestFields.branchName ?? "", cause: error } };
       } finally {
         setIsCreating(false);
       }
