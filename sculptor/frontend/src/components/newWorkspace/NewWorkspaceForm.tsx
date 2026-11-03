@@ -634,19 +634,17 @@ export const NewWorkspaceForm = ({
 
             {/* Borderless, iconless branch — reads as an editable subtitle of the
                 title. */}
-            {modeRules.branchName !== "unused" ? (
-              <BranchNameField
-                mode={mode}
-                value={effectiveBranchName}
-                isManuallyEdited={isBranchNameManuallyEdited}
-                isLoading={isBranchNamePreviewLoading}
-                status={branchNameStatus}
-                onUserEdit={(value): void => setBranchNameOverride(value)}
-                onShuffle={handleShuffle}
-                disabled={isCreating}
-                variant="plain"
-              />
-            ) : null}
+            <BranchNameField
+              mode={mode}
+              value={effectiveBranchName}
+              isManuallyEdited={isBranchNameManuallyEdited}
+              isLoading={isBranchNamePreviewLoading}
+              status={branchNameStatus}
+              onUserEdit={(value): void => setBranchNameOverride(value)}
+              onShuffle={handleShuffle}
+              disabled={isCreating}
+              variant="plain"
+            />
           </div>
 
           <textarea
