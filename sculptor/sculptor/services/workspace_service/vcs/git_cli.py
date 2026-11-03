@@ -27,17 +27,14 @@ from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspa
 from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandTimeoutError
 
 DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS = 30.0
 
 
-class _RetriableVcsCommandError(VcsCommandError):
-    """A read-only command exited non-zero; safe to run again."""
-
-
 _retry_read_only_command = retry(
-    retry=retry_if_exception_type(_RetriableVcsCommandError),
+    retry=retry_if_exception_type(VcsCommandExitError),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
     reraise=True,
@@ -98,8 +95,8 @@ class GitCli:
         """Run `git <options> --end-of-options <operands> -- <paths>` in `cwd`.
 
         Raises `GitCommandInJjWorkspaceError` when `cwd` is inside a jj workspace.
-        With `is_checked`, a non-zero exit raises `VcsCommandError`; without it,
-        the result is returned whatever its exit code.
+        With `is_checked`, a non-zero exit raises `VcsCommandExitError`; without
+        it, the result is returned whatever its exit code.
         """
         jj_workspace_root = find_jj_workspace_root(cwd)
         if jj_workspace_root is not None:
@@ -151,14 +148,13 @@ class GitCli:
     ) -> VcsCommandResult:
         env = None if extra_env is None else {**os.environ, **extra_env}
         if is_read_only:
-            return _retry_read_only_command(self._run_once)(command, cwd, is_read_only, is_checked, timeout, env)
-        return self._run_once(command, cwd, is_read_only, is_checked, timeout, env)
+            return _retry_read_only_command(self._run_once)(command, cwd, is_checked, timeout, env)
+        return self._run_once(command, cwd, is_checked, timeout, env)
 
     def _run_once(
         self,
         command: Sequence[str],
         cwd: Path,
-        is_read_only: bool,
         is_checked: bool,
         timeout: float | None,
         env: Mapping[str, str] | None,
@@ -189,8 +185,7 @@ class GitCli:
             )
         assert result.returncode is not None, "a process that ran to completion has an exit code"
         if is_checked and result.returncode != 0:
-            error_type = _RetriableVcsCommandError if is_read_only else VcsCommandError
-            raise error_type(
+            raise VcsCommandExitError(
                 f"Error running {command}\nstdout: {result.stdout}\nstderr: {result.stderr}",
                 command=command,
                 returncode=result.returncode,

@@ -22,6 +22,10 @@ class VcsCommandError(ExpectedError):
         super().__init__(message)
 
 
+class VcsCommandExitError(VcsCommandError):
+    """A git or gh command ran to completion and exited non-zero."""
+
+
 class VcsCommandTimeoutError(VcsCommandError):
     """A git or gh command ran past its timeout."""
 

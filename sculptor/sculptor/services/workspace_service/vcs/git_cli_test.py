@@ -10,6 +10,7 @@ from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspa
 from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandTimeoutError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_cli import find_jj_workspace_root
@@ -129,8 +130,8 @@ def test_run_git_rejects_an_empty_operand(git_cli: GitCli, git_repo: Path) -> No
         git_cli.run_git(["rev-parse"], git_repo, is_read_only=True, operands=[""])
 
 
-def test_checked_non_zero_exit_raises_vcs_command_error(git_cli: GitCli, git_repo: Path) -> None:
-    with pytest.raises(VcsCommandError) as error_info:
+def test_checked_non_zero_exit_raises_vcs_command_exit_error(git_cli: GitCli, git_repo: Path) -> None:
+    with pytest.raises(VcsCommandExitError) as error_info:
         git_cli.run_git(["checkout", "-q"], git_repo, is_read_only=False, operands=["no-such-branch"])
 
     assert error_info.value.returncode != 0
@@ -181,6 +182,17 @@ def test_read_only_command_is_retried_after_a_failure(git_cli: GitCli, tmp_path:
 
     assert result.stdout.strip() == "ok"
     assert len(attempts_file.read_text().splitlines()) == 2
+
+
+def test_read_only_command_that_times_out_is_not_retried(git_cli: GitCli, tmp_path: Path) -> None:
+    attempts_file = tmp_path / "attempts"
+    hanging_git = _write_script(tmp_path / "hanging-git", f'echo attempt >> "{attempts_file}"\nexec sleep 30')
+    _use_dependency_paths(DependencyPaths(git=str(hanging_git)))
+
+    with pytest.raises(VcsCommandTimeoutError):
+        git_cli.run_git(["status"], tmp_path, is_read_only=True, timeout=2.0)
+
+    assert len(attempts_file.read_text().splitlines()) == 1
 
 
 def test_mutating_command_is_not_retried(git_cli: GitCli, tmp_path: Path) -> None:
