@@ -1,4 +1,4 @@
-"""The single runner for every git and gh command the VCS seam issues.
+"""How the VCS seam runs git and gh.
 
 Binaries come from the dependency service, so `dependency_paths.git` and
 `dependency_paths.gh` are honoured. Every failure, including a timeout, is a

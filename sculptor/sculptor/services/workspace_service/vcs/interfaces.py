@@ -18,10 +18,10 @@ from sculptor.state.chat_state import ToolInput
 
 
 class WorkspaceVcs(ABC):
-    """Every version-control operation Sculptor performs on a workspace or its repository.
+    """The version-control operations Sculptor performs on a workspace or its repository.
 
-    One implementation per kind of workspace. Repository-scoped methods take the
-    user's repository path; checkout-scoped methods take a `CheckoutLocation`.
+    One implementation per version-control system. Repository-scoped methods take
+    the user's repository path; checkout-scoped methods take a `CheckoutLocation`.
     """
 
     @abstractmethod
@@ -44,7 +44,7 @@ class WorkspaceVcs(ABC):
     ) -> None:
         """Detach a deleted workspace's checkout from the repository and apply `deletion_policy` to its ref.
 
-        Never raises: deleting a workspace must always make progress, so failures are logged.
+        Logs VCS failures instead of raising them: deleting a workspace must always make progress.
         """
 
     @abstractmethod
@@ -123,7 +123,7 @@ class WorkspaceVcs(ABC):
 
     @abstractmethod
     def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:
-        """Environment additions for agents, terminals and setup commands launched in the checkout."""
+        """Environment additions for processes launched in the checkout."""
 
     @abstractmethod
     def compute_change_fingerprint(self, location: CheckoutLocation) -> str | None:

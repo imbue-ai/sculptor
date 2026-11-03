@@ -1,5 +1,3 @@
-"""`WorkspaceVcs` for git workspaces: in-place, clone and worktree."""
-
 import base64
 import hashlib
 import re
@@ -51,7 +49,7 @@ DEFAULT_GIT_WORKSPACE_SETUP_COMMAND = "git fetch origin 2>/dev/null || true"
 _MAX_HISTORY_COMMITS = 500
 _FINGERPRINT_TIMEOUT_SECONDS = 5.0
 _COMMIT_ID_PATTERN = re.compile(r"^[0-9a-f]{4,40}$")
-# Unit separator: cannot appear in commit subjects or author names.
+# The ASCII unit separator, which ordinary commit subjects and author names do not contain.
 _LOG_FIELD_SEPARATOR = "\x1f"
 # One placeholder per field `_build_commit_record` unpacks, in the same order.
 _COMMIT_LOG_PLACEHOLDERS = ("%H", "%h", "%s", "%aN", "%aE", "%aI", "%P")
@@ -252,7 +250,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
                 assert_never(unreachable)
 
     def _detect_default_branch_for_remote(self, repo_path: Path, remote: str) -> str | None:
-        """`<remote>/HEAD` as set by `git remote set-head`, else `<remote>/main`, else `<remote>/master`."""
+        """What `<remote>/HEAD` points at (set by `git remote set-head`), else the first conventional default branch."""
         result = self._git.run_git(
             ["symbolic-ref"], repo_path, is_read_only=True, operands=[f"refs/remotes/{remote}/HEAD"], is_checked=False
         )
@@ -353,7 +351,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
         except VcsCommandError as e:
             logger.debug("Failed to generate {} diff: {}", diff_kind, e)
             return ""
-        # Exit 1 means the diff is non-empty; anything above is a real failure.
+        # git diff uses exit status 1 to report differences (under `--exit-code`), so only higher codes are errors.
         if result.returncode > 1:
             logger.debug(
                 "Unexpected returncode for {} diff: returncode={}, stderr={}",

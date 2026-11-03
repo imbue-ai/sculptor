@@ -71,9 +71,6 @@ def worktree(worktree_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path) -> C
     return worktree_vcs.create_checkout(spec)
 
 
-# create_checkout
-
-
 def test_create_checkout_adds_a_worktree_on_a_new_branch_off_the_base(
     worktree: CheckoutLocation, git_repo: Path
 ) -> None:
@@ -130,9 +127,6 @@ def test_create_checkout_clones_and_creates_the_requested_branch(
     assert (destination / ".git").is_dir()
     assert _git(destination, ["symbolic-ref", "--short", "HEAD"]) == "feature"
     assert not _branch_exists(git_repo, "feature")
-
-
-# verify_checkout and remove_checkout
 
 
 def test_verify_checkout_accepts_a_git_checkout(worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation) -> None:
@@ -231,9 +225,6 @@ def test_remove_checkout_leaves_an_in_place_repository_alone(in_place_vcs: GitWo
     assert _branch_exists(git_repo, "main")
 
 
-# resolve_default_target and list_target_candidates
-
-
 def test_resolve_default_target_prefers_the_remote_head(worktree_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
     _git(git_repo, ["update-ref", "refs/remotes/origin/trunk", "HEAD"])
     _git(git_repo, ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk"])
@@ -288,9 +279,6 @@ def test_list_target_candidates_falls_back_to_local_branches_without_remotes(
     assert worktree_vcs.list_target_candidates(git_repo) == ["dev", "main"]
 
 
-# validate_new_ref_name, resolve_base_commit_id, default_setup_command, read_identity
-
-
 def test_validate_new_ref_name_accepts_an_unused_well_formed_name(
     worktree_vcs: GitWorkspaceVcs, git_repo: Path
 ) -> None:
@@ -324,9 +312,6 @@ def test_default_setup_command_fetches_origin_without_failing(worktree_vcs: GitW
 
 def test_read_identity_reports_the_worktree_branch(worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation) -> None:
     assert worktree_vcs.read_identity(worktree) == GitHeadIdentity(branch_name="feature")
-
-
-# compute_diff_artifact
 
 
 def test_compute_diff_artifact_includes_modified_and_untracked_files(
@@ -413,9 +398,6 @@ def test_compute_diff_artifact_rejects_negative_context(in_place_vcs: GitWorkspa
         in_place_vcs.compute_diff_artifact(_in_place(git_repo), target_ref=None, context_lines=-1)
 
 
-# get_revision_history
-
-
 def test_get_revision_history_lists_commits_since_the_fork_point_with_file_changes(
     worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation, git_repo: Path
 ) -> None:
@@ -476,9 +458,6 @@ def test_get_revision_history_is_empty_without_any_fork_point(
     assert history.fork_point is None
 
 
-# get_revision_diff
-
-
 def test_get_revision_diff_diffs_a_commit_against_its_parent(in_place_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
     parent = _git(git_repo, ["rev-parse", "HEAD"])
     commit = _commit_file(git_repo, "second.txt", "second\n", "second")
@@ -507,9 +486,6 @@ def test_get_revision_diff_rejects_malformed_ids_and_non_commits(
     for bad_id in ("HEAD", "--stat", "abc", "f" * 40, tree):
         with pytest.raises(InvalidRevisionError):
             in_place_vcs.get_revision_diff(_in_place(git_repo), bad_id)
-
-
-# list_files and read_file_at_revision
 
 
 def test_list_files_lists_tracked_and_untracked_files_but_not_ignored_ones(
@@ -556,9 +532,6 @@ def test_read_file_at_revision_raises_for_a_missing_file(in_place_vcs: GitWorksp
         in_place_vcs.read_file_at_revision(_in_place(git_repo), "missing.txt", "HEAD")
 
 
-# discard_file_changes
-
-
 def test_discard_file_changes_restores_a_tracked_file(in_place_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
     (git_repo / "file.txt").write_text("changed\n")
 
@@ -587,9 +560,6 @@ def test_discard_file_changes_rejects_paths_outside_the_checkout(
     assert absolute.error_message == "Absolute paths are not allowed"
     assert not traversal.success
     assert traversal.error_message == "Path traversal is not allowed"
-
-
-# get_pull_request_refs, agent_environment, compute_change_fingerprint
 
 
 def test_get_pull_request_refs_reports_the_branch_and_origin(
@@ -641,9 +611,6 @@ def test_compute_change_fingerprint_is_none_outside_a_repository(
     plain.mkdir()
 
     assert in_place_vcs.compute_change_fingerprint(_in_place(plain)) is None
-
-
-# The tripwire escapes even the operations that degrade gracefully on git failures.
 
 
 def test_tripwire_escapes_operations_that_swallow_git_failures(in_place_vcs: GitWorkspaceVcs, tmp_path: Path) -> None:

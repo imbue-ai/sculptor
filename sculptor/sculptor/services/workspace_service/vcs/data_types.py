@@ -67,7 +67,7 @@ class GitHeadIdentity(FrozenModel):
 class GitCommitHistory(FrozenModel):
     """The commits a git workspace has made since it forked from its target."""
 
-    commits: list[CommitRecord] = Field(description="Newest first, capped at 500")
+    commits: list[CommitRecord] = Field(description="Newest first, truncated to a fixed maximum")
     fork_point: str | None = Field(description="The commit the history is measured from; None when unknown")
 
 

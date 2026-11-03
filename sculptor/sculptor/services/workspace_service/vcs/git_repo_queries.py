@@ -1,4 +1,4 @@
-"""Read-only questions about a git repository or checkout, each answered in one place."""
+"""Read-only questions about a git repository or checkout."""
 
 from pathlib import Path
 
