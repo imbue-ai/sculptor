@@ -96,9 +96,13 @@ const piModelsEmpty = (): unknown => ({
   refetch: vi.fn(),
 });
 
+// `repoInfo` is null until the per-repo branch fetch lands; a test that needs
+// that window sets `mockRepoInfo.current` to null.
+const REPO_INFO = { currentBranch: "main", recentBranches: ["main"] };
+const { mockRepoInfo } = vi.hoisted(() => ({ mockRepoInfo: { current: null as unknown } }));
 vi.mock("~/common/state/hooks/useRepoInfo.ts", () => ({
   useRepoInfo: (): unknown => ({
-    repoInfo: { currentBranch: "main", recentBranches: ["main"] },
+    repoInfo: mockRepoInfo.current,
     fetchRepoInfo: vi.fn(),
     fetchCurrentBranch: vi.fn(),
   }),
@@ -163,6 +167,7 @@ const clickCreate = async (): Promise<void> => {
 describe("NewWorkspaceForm", () => {
   beforeEach(() => {
     mockCreateWorkspace.mockResolvedValue({ ok: true, workspaceId: "w1" });
+    mockRepoInfo.current = REPO_INFO;
     // Default the catalog to still-resolving; the Claude tests never read it, and
     // the pi tests override per case.
     mockUsePiModels.mockReturnValue(piModelsResolving());
@@ -361,6 +366,48 @@ describe("NewWorkspaceForm", () => {
           expect.objectContaining({ agentTypeValue: "pi", prompt: "do a thing", piBackendModel: PI_MODEL_DEFAULT }),
         ),
       );
+    });
+  });
+
+  describe("per-mode creation rules", () => {
+    const { IN_PLACE, CLONE, WORKTREE } = WorkspaceInitializationStrategy;
+
+    const renderFormInMode = (mode: WorkspaceInitializationStrategy): void => {
+      const store = createStore();
+      store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+      store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude", initStrategy: mode });
+      renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    };
+
+    it.each([
+      { mode: IN_PLACE, placeholder: undefined },
+      { mode: CLONE, placeholder: "Branch name (optional)" },
+      { mode: WORKTREE, placeholder: "Branch name (required)" },
+    ])("shows the branch-name field for $mode with placeholder $placeholder", ({ mode, placeholder }) => {
+      renderFormInMode(mode);
+
+      const branchInput = screen.queryByTestId(ElementIds.BRANCH_NAME_INPUT);
+      if (placeholder === undefined) {
+        expect(branchInput).not.toBeInTheDocument();
+      } else {
+        expect(branchInput).toHaveAttribute("placeholder", placeholder);
+      }
+    });
+
+    it.each([
+      { mode: IN_PLACE, isEnabled: true },
+      { mode: CLONE, isEnabled: true },
+      { mode: WORKTREE, isEnabled: false },
+    ])("enables Create for $mode before the source branch resolves: $isEnabled", ({ mode, isEnabled }) => {
+      mockRepoInfo.current = null;
+      renderFormInMode(mode);
+
+      const createButton = screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON);
+      if (isEnabled) {
+        expect(createButton).toBeEnabled();
+      } else {
+        expect(createButton).toBeDisabled();
+      }
     });
   });
 

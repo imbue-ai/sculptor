@@ -2,13 +2,14 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import type { NewBranchNameValidationResponse, WorkspaceInitializationStrategy } from "~/api";
-import { previewBranchName, validateNewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
+import { previewBranchName, validateNewBranchName } from "~/api";
 import type { BackendQueryKeyResult } from "~/common/state/queryClient.ts";
 import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
+import { WORKSPACE_MODE_RULES } from "~/common/utils/workspaceModeRules.ts";
 
 /**
  * Status of the displayed branch name, from the debounced backend check:
- * - `unknown`: not checked yet (empty name, in-place mode, or in flight)
+ * - `unknown`: not checked yet (empty name, a mode that creates no branch, or in flight)
  * - `invalid`: not a legal git ref name
  * - `exists`: legal, but already a branch in the repo
  * - `available`: legal and free to use
@@ -117,12 +118,13 @@ export const useBranchNamePreview = ({
   shuffleNonce = 0,
 }: UseBranchNamePreviewArgs): BranchNamePreviewState => {
   const isManuallyEdited = override !== null;
+  const doesModeUseBranchName = WORKSPACE_MODE_RULES[mode].branchName !== "unused";
 
   // Debounce the typed workspace name so each keystroke doesn't spawn a preview
   // request; discrete inputs (mode, shuffle) change the key immediately.
   const debouncedWorkspaceName = useDebouncedValue(workspaceName, PREVIEW_DEBOUNCE_MS);
   const previewKey = branchNamePreviewQueryKey(projectId, debouncedWorkspaceName, mode, shuffleNonce);
-  const isPreviewEnabled = previewKey.isValid && mode !== Strategy.IN_PLACE && !isManuallyEdited;
+  const isPreviewEnabled = previewKey.isValid && doesModeUseBranchName && !isManuallyEdited;
   const previewQuery = useQuery({
     queryKey: previewKey.key,
     queryFn: ({ signal }) => fetchBranchNamePreview(projectId!, debouncedWorkspaceName, mode, signal),
@@ -143,7 +145,7 @@ export const useBranchNamePreview = ({
   // settled name, not on every intermediate keystroke or preview update.
   const debouncedBranchName = useDebouncedValue(displayedValue.trim(), VALIDATION_DEBOUNCE_MS);
   const validationKey = validateNewBranchNameQueryKey(projectId, debouncedBranchName);
-  const isValidationEnabled = validationKey.isValid && mode !== Strategy.IN_PLACE && debouncedBranchName !== "";
+  const isValidationEnabled = validationKey.isValid && doesModeUseBranchName && debouncedBranchName !== "";
   const validationQuery = useQuery({
     queryKey: validationKey.key,
     queryFn: ({ signal }) => fetchBranchNameValidation(projectId!, debouncedBranchName, signal),

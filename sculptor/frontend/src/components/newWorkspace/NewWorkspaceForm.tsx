@@ -29,6 +29,7 @@ import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { hasNoUsableModel } from "~/common/utils/modelConstants.ts";
 import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
+import { hasRequiredCreationFields, WORKSPACE_MODE_RULES } from "~/common/utils/workspaceModeRules.ts";
 import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
@@ -214,6 +215,7 @@ export const NewWorkspaceForm = ({
   });
 
   const sourceBranch = useMemo(() => userSelectedBranch ?? repoInfo?.currentBranch, [userSelectedBranch, repoInfo]);
+  const modeRules = WORKSPACE_MODE_RULES[mode];
 
   // Effects — stash the form's entries whenever it unmounts, whatever closed
   // it (Escape, an overlay click, the X, the Settings CTAs), so the next open
@@ -404,13 +406,10 @@ export const NewWorkspaceForm = ({
   const isSubmitDisabled =
     selectedProjectId === null ||
     isCreating ||
-    (mode === WorkspaceInitializationStrategy.WORKTREE &&
-      (effectiveBranchName.trim() === "" || isBranchNamePreviewLoading)) ||
-    // Worktree and clone workspaces both base off a source branch; a create
-    // without a resolved one 400s on the backend. `sourceBranch` is undefined
-    // until `repoInfo` arrives (the selector shows a Skeleton meanwhile). In-place
-    // uses the repo's current branch and needs none, so only gate the other two.
-    (mode !== WorkspaceInitializationStrategy.IN_PLACE && sourceBranch === undefined) ||
+    // `sourceBranch` stays undefined until `repoInfo` arrives, so a mode that
+    // requires one waits for it.
+    !hasRequiredCreationFields({ mode, branchName: effectiveBranchName, sourceBranch }) ||
+    (modeRules.branchName === "required" && isBranchNamePreviewLoading) ||
     (repoInfo !== null && repoInfo.recentBranches?.length === 0) ||
     // A name the validator has flagged — illegal ref or existing branch — hard
     // blocks Create; the backend re-checks at create time as the backstop.
@@ -590,7 +589,7 @@ export const NewWorkspaceForm = ({
           <ModeSelect value={mode} onChange={handleModeChange} className={styles.toolbarPill} />
 
           {repoInfo ? (
-            mode === WorkspaceInitializationStrategy.IN_PLACE ? (
+            modeRules.sourceBranch === "unused" ? (
               <Tooltip content="In-place workspaces use the current branch in your repository">
                 <span style={{ display: "flex" }}>
                   <BranchSelector
@@ -634,8 +633,8 @@ export const NewWorkspaceForm = ({
             />
 
             {/* Borderless, iconless branch — reads as an editable subtitle of the
-                title (worktree/clone only; in-place uses the current branch). */}
-            {mode !== WorkspaceInitializationStrategy.IN_PLACE ? (
+                title. */}
+            {modeRules.branchName !== "unused" ? (
               <BranchNameField
                 mode={mode}
                 value={effectiveBranchName}
