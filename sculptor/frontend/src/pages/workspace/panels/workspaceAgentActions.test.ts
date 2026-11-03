@@ -16,6 +16,7 @@ import {
   activeChatAgentIdAtomFamily,
   canCommitAtomFamily,
   commitActionAtomFamily,
+  createPrActionAtomFamily,
   lastFocusedChatAgentAtomFamily,
 } from "./workspaceAgentActions.ts";
 
@@ -103,6 +104,7 @@ afterEach(() => {
     activeChatAgentIdAtomFamily.remove(workspaceId);
     canCommitAtomFamily.remove(workspaceId);
     commitActionAtomFamily.remove(workspaceId);
+    createPrActionAtomFamily.remove(workspaceId);
     lastFocusedChatAgentAtomFamily.remove(workspaceId);
   }
   localStorage.clear();
@@ -457,5 +459,51 @@ describe("commitActionAtomFamily terminal routing", () => {
     await store.set(commitActionAtomFamily(WS), "Stage every changed file");
 
     expect(store.get(terminalPromptRejectedToastAtom)).toMatchObject({ title: "Agent is busy" });
+  });
+});
+
+describe("createPrActionAtomFamily", () => {
+  it("sends the message to the resolved chat agent with its model", async () => {
+    const store = createStore();
+    seedAgent(store, createMockAgent({ id: "agent-a", model: LlmModel.CLAUDE_4_SONNET }));
+    seedLayout(store, {
+      placement: { [makeAgentPanelId("agent-a")]: "center" },
+      activePanel: { center: makeAgentPanelId("agent-a") },
+    });
+
+    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+
+    expect(sendMessagesMock).toHaveBeenCalledTimes(1);
+    expect(sendMessagesMock).toHaveBeenCalledWith({
+      path: { workspace_id: WS, agent_id: "agent-a" },
+      body: { message: "Open a pull request", model: LlmModel.CLAUDE_4_SONNET },
+    });
+  });
+
+  it("types and submits the prompt into a visible prompt-capable terminal", async () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
+
+    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+
+    expect(terminalInputMock).toHaveBeenCalledWith({
+      path: { agent_id: "terminal-agent" },
+      body: { text: "Open a pull request", submit: true },
+    });
+    expect(sendMessagesMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a pull-request toast when the chat-route send fails", async () => {
+    const store = createStore();
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
+    seedLayout(store, {
+      placement: { [makeAgentPanelId("agent-a")]: "center" },
+      activePanel: { center: makeAgentPanelId("agent-a") },
+    });
+    sendMessagesMock.mockRejectedValueOnce(new Error("network down"));
+
+    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+
+    expect(store.get(commitPromptSendFailedToastAtom)).toMatchObject({ title: "Couldn't send pull request prompt" });
   });
 });

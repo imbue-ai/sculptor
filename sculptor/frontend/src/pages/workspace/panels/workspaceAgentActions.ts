@@ -10,7 +10,7 @@
 // route's agent id goes stale. The section layout is the live source of which
 // agents the workspace is showing.
 
-import type { Getter } from "jotai";
+import type { Getter, Setter } from "jotai";
 import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 
@@ -227,48 +227,64 @@ export const canCommitAtomFamily = atomFamily((workspaceId: string) =>
   }),
 );
 
-/**
- * Send the commit prompt to the workspace's current agent. Chat agents get a
- * chat message via the send API directly, so committing works while no chat
- * panel is mounted; prompt-capable terminal agents get the prompt typed and
- * submitted through the terminal-input endpoint.
- */
-export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
-  atom(null, async (get, set, message: string): Promise<void> => {
-    const agentId = get(activeAgentIdAtomFamily(workspaceId));
-    if (agentId === undefined) return;
-    const route = promptRouteFor(get, agentId);
-    if (route === undefined) return;
-    if (route === "terminal") {
-      try {
-        await postAgentTerminalInput({ path: { agent_id: agentId }, body: { text: message, submit: true } });
-      } catch {
-        // The endpoint's authoritative guard fired: the program went busy (or
-        // its hooks are silent) between the click and the write. Surface it;
-        // do not retry (mirrors `useTerminalChatActions`).
-        set(terminalPromptRejectedToastAtom, {
-          title: "Agent is busy",
-          description: "Try again when it's at its prompt.",
-        });
-      }
-      return;
-    }
-    const model = get(agentModelAtomFamily(agentId));
+// Send an automated prompt to the workspace's current agent. Chat agents get a
+// chat message via the send API directly, so the prompt lands while no chat
+// panel is mounted; prompt-capable terminal agents get the prompt typed and
+// submitted through the terminal-input endpoint. `sendFailedTitle` heads the
+// toast shown when the chat-route send fails.
+const sendAutomatedPrompt = async (
+  get: Getter,
+  set: Setter,
+  inputs: { workspaceId: string; message: string; sendFailedTitle: string },
+): Promise<void> => {
+  const { workspaceId, message, sendFailedTitle } = inputs;
+  const agentId = get(activeAgentIdAtomFamily(workspaceId));
+  if (agentId === undefined) return;
+  const route = promptRouteFor(get, agentId);
+  if (route === undefined) return;
+  if (route === "terminal") {
     try {
-      await sendWorkspaceAgentMessages({
-        path: { workspace_id: workspaceId, agent_id: agentId },
-        body: { message, model: (model as LlmModel) || DEFAULT_LLM_MODEL },
-      });
+      await postAgentTerminalInput({ path: { agent_id: agentId }, body: { text: message, submit: true } });
     } catch {
-      // The send failed (network/HTTP). The button fires its onCommit callback
-      // without awaiting, so surface the failure here or it is silently dropped
-      // as an unhandled rejection with no user feedback.
-      set(commitPromptSendFailedToastAtom, {
-        title: "Couldn't send commit request",
-        description: "Check your connection and try again.",
+      // The endpoint's authoritative guard fired: the program went busy (or
+      // its hooks are silent) between the click and the write. Surface it;
+      // do not retry (mirrors `useTerminalChatActions`).
+      set(terminalPromptRejectedToastAtom, {
+        title: "Agent is busy",
+        description: "Try again when it's at its prompt.",
       });
     }
-  }),
+    return;
+  }
+  const model = get(agentModelAtomFamily(agentId));
+  try {
+    await sendWorkspaceAgentMessages({
+      path: { workspace_id: workspaceId, agent_id: agentId },
+      body: { message, model: (model as LlmModel) || DEFAULT_LLM_MODEL },
+    });
+  } catch {
+    // The send failed (network/HTTP). Callers fire the action without
+    // awaiting it, so surface the failure here or it is silently dropped as an
+    // unhandled rejection with no user feedback.
+    set(commitPromptSendFailedToastAtom, {
+      title: sendFailedTitle,
+      description: "Check your connection and try again.",
+    });
+  }
+};
+
+/** Send the commit prompt to the workspace's current agent. */
+export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
+  atom(null, (get, set, message: string): Promise<void> =>
+    sendAutomatedPrompt(get, set, { workspaceId, message, sendFailedTitle: "Couldn't send commit request" }),
+  ),
+);
+
+/** Send the create-pull-request prompt to the workspace's current agent. */
+export const createPrActionAtomFamily = atomFamily((workspaceId: string) =>
+  atom(null, (get, set, message: string): Promise<void> =>
+    sendAutomatedPrompt(get, set, { workspaceId, message, sendFailedTitle: "Couldn't send pull request prompt" }),
+  ),
 );
 
 /**
@@ -285,4 +301,5 @@ export const removeWorkspaceAgentActionState = (workspaceId: string): void => {
   activeAgentIdAtomFamily.remove(workspaceId);
   canCommitAtomFamily.remove(workspaceId);
   commitActionAtomFamily.remove(workspaceId);
+  createPrActionAtomFamily.remove(workspaceId);
 };
