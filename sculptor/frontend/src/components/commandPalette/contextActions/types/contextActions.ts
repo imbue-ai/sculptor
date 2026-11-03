@@ -132,9 +132,9 @@ export type WorkspaceActionRuntime = {
   beginRename: (workspace: Workspace) => void;
   beginDelete: (workspace: Workspace) => void;
 
-  /** Send the user's commit prompt to chat for the active agent. */
+  /** Send the user's commit prompt to this workspace's current agent. */
   commitChanges: (workspace: Workspace) => void;
-  /** Send the PR-creation prompt to chat (with target branch hint). */
+  /** Send the PR-creation prompt (with target branch hint) to this workspace's current agent. */
   createMergeRequest: (workspace: Workspace) => void;
   /** Open the existing PR's web URL in a new tab. */
   openMergeRequest: (workspace: Workspace) => void;

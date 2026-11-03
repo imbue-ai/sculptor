@@ -6,10 +6,10 @@ import { WorkspaceInitializationStrategy } from "../../../api";
 import { openPathInExternalApp } from "../../../common/openInApp/items.tsx";
 import { openInReusableTab } from "../../../common/reusableTabTarget.ts";
 import { getBackendCapabilities } from "../../../common/state/atoms/backendCapabilities.ts";
-import { chatActionsAtom } from "../../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../../common/state/atoms/prStatus.ts";
 import { repoInfoAtomFamily } from "../../../common/state/atoms/repoInfo.ts";
 import { commitPromptAtom, prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
+import { commitActionAtomFamily, createPrActionAtomFamily } from "../../../common/state/atoms/workspaceAgentActions.ts";
 import { getCachedWorkspaceDiff } from "../../../common/state/hooks/useWorkspaceDiff.ts";
 import { isMac } from "../../../electron/platform.ts";
 
@@ -52,20 +52,17 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
 
   return useMemo<GitAndOpenInRuntime>(
     () => ({
-      commitChanges: (_ws): void => {
-        const chatActions = store.get(chatActionsAtom);
-        const prompt = store.get(commitPromptAtom);
-        // sendMessage is null when no agent is mounted; the descriptor's
-        // `disabled` predicate already returns false in that case (no
-        // diff visible), so this path is unreachable from the UI.
-        void chatActions.sendMessage?.(prompt);
+      // The prompts go to the given workspace's current agent, which need not
+      // be the workspace on screen: the sidebar menu acts on whichever row
+      // was right-clicked.
+      commitChanges: (ws): void => {
+        void store.set(commitActionAtomFamily(ws.objectId), store.get(commitPromptAtom));
       },
       createMergeRequest: (ws): void => {
-        const chatActions = store.get(chatActionsAtom);
         const prompt = store.get(prCreationPromptAtom);
         const targetBranch = ws.targetBranch;
         const message = targetBranch ? `${prompt}\n\nTarget the pull request against \`${targetBranch}\`.` : prompt;
-        void chatActions.sendMessage?.(message);
+        void store.set(createPrActionAtomFamily(ws.objectId), message);
       },
       openMergeRequest: (ws): void => {
         const prStatus = store.get(prStatusAtomFamily(ws.objectId));
