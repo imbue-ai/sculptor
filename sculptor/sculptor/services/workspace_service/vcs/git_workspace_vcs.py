@@ -299,17 +299,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
         return result.returncode == 0
 
     def resolve_base_commit_id(self, repo_path: Path, base_ref: str) -> str | None:
-        try:
-            result = self._git.run_git(
-                ["rev-parse", "--verify"], repo_path, is_read_only=True, operands=[base_ref], is_checked=False
-            )
-        except VcsCommandError as e:
-            logger.debug("Failed to resolve {} in {}: {}", base_ref, repo_path, e)
-            return None
-        if result.returncode != 0:
-            logger.debug("Failed to resolve {} in {}: {}", base_ref, repo_path, result.stderr.strip())
-            return None
-        return result.stdout.strip()
+        return self._resolve_commit_id(repo_path, base_ref)
 
     def default_setup_command(self) -> str:
         return DEFAULT_GIT_WORKSPACE_SETUP_COMMAND
@@ -518,8 +508,8 @@ class GitWorkspaceVcs(WorkspaceVcs):
         if object_type.returncode != 0 or object_type.stdout.strip() != "commit":
             raise InvalidRevisionError(f"Not a valid commit: {commit_id}")
 
-        full_commit_id = self._rev_parse_or_none(checkout, commit_id) or commit_id
-        parent_commit_id = self._rev_parse_or_none(checkout, f"{full_commit_id}^")
+        full_commit_id = self._resolve_commit_id(checkout, commit_id) or commit_id
+        parent_commit_id = self._resolve_commit_id(checkout, f"{full_commit_id}^")
         if parent_commit_id is not None:
             options = ["--no-pager", "diff", "-M"]
             operand = f"{parent_commit_id}..{full_commit_id}"
@@ -535,11 +525,12 @@ class GitWorkspaceVcs(WorkspaceVcs):
             diff = result.stdout if result.returncode <= 1 else ""
         return RevisionDiff(diff=diff, commit_id=full_commit_id, parent_commit_id=parent_commit_id)
 
-    def _rev_parse_or_none(self, checkout: Path, revision: str) -> str | None:
+    def _resolve_commit_id(self, directory: Path, revision: str) -> str | None:
+        """The full commit id `revision` names, or None when it names none."""
         try:
             result = self._git.run_git(
                 ["rev-parse", "--verify", "--quiet"],
-                checkout,
+                directory,
                 is_read_only=True,
                 operands=[revision],
                 is_checked=False,
@@ -631,11 +622,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
         so PR polling reports no pull request rather than erroring.
         """
         checkout = location.checkout_path
-        try:
-            branch_name = read_head_identity(self._git, checkout).branch_name
-        except VcsCommandError as e:
-            logger.debug("Cannot read the branch of {}: {}", checkout, e)
-            branch_name = None
+        branch_name = self._read_checked_out_branch(checkout)
         try:
             origin_url = read_origin_url(self._git, checkout)
         except VcsCommandError as e:
