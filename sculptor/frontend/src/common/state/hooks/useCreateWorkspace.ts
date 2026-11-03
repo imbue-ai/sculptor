@@ -58,13 +58,8 @@ type CreateWorkspaceArgs = {
   enterPlanMode?: boolean;
 };
 
-type CreateWorkspaceErrorKind = "branch-collision" | "generic";
-
-export type CreateWorkspaceError = {
-  kind: CreateWorkspaceErrorKind;
-  branchName: string;
-  cause: unknown;
-};
+export type CreateWorkspaceError =
+  { kind: "branch-collision"; branchName: string } | { kind: "generic"; cause: unknown };
 
 type CreateWorkspaceResult = { ok: true; workspaceId: string } | { ok: false; error: CreateWorkspaceError };
 
@@ -226,9 +221,11 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         return { ok: true, workspaceId };
       } catch (error) {
         console.error("Failed to create workspace:", error);
-        const kind: CreateWorkspaceErrorKind =
-          error instanceof HTTPException && error.status === 409 ? "branch-collision" : "generic";
-        return { ok: false, error: { kind, branchName: requestFields.branchName ?? "", cause: error } };
+        // The backend answers 409 when the requested branch already exists.
+        if (error instanceof HTTPException && error.status === 409 && requestFields.branchName !== undefined) {
+          return { ok: false, error: { kind: "branch-collision", branchName: requestFields.branchName } };
+        }
+        return { ok: false, error: { kind: "generic", cause: error } };
       } finally {
         setIsCreating(false);
       }

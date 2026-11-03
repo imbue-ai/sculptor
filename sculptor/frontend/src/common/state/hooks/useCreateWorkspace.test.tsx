@@ -8,6 +8,7 @@ import { createWorkspaceAgent, createWorkspaceV2, EffortLevel, LlmModel, Workspa
 import type * as NavigationModule from "~/common/hooks/navigation.ts";
 import { encodeRegisteredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
+import { HTTPException } from "~/common/utils/errors.ts";
 import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 import { useCreateWorkspace } from "./useCreateWorkspace.ts";
@@ -104,6 +105,50 @@ describe("useCreateWorkspace", () => {
     const { posthog } = await import("posthog-js");
     await waitFor(() => expect(posthog.capture).toHaveBeenCalled());
     expect(navigateToAgent).not.toHaveBeenCalled();
+  });
+
+  describe("workspace-create failures", () => {
+    beforeEach(() => {
+      // The hook logs each failure; keep the test output clean.
+      vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.mocked(console.error).mockRestore();
+    });
+
+    it("reports a 409 as a collision on the branch name it sent", async () => {
+      vi.mocked(createWorkspaceV2).mockRejectedValue(new HTTPException(409, "Branch 'dev/ws' already exists"));
+      const { result } = renderCreateWorkspaceHook();
+
+      const createResult = await result.current.createWorkspace(CREATE_ARGS);
+
+      expect(createResult).toEqual({ ok: false, error: { kind: "branch-collision", branchName: "dev/ws" } });
+      expect(navigateToWorkspace).not.toHaveBeenCalled();
+    });
+
+    it("reports a 409 as a generic failure when no branch name was sent", async () => {
+      const conflict = new HTTPException(409, "Conflict");
+      vi.mocked(createWorkspaceV2).mockRejectedValue(conflict);
+      const { result } = renderCreateWorkspaceHook();
+
+      const createResult = await result.current.createWorkspace({
+        ...CREATE_ARGS,
+        mode: WorkspaceInitializationStrategy.IN_PLACE,
+      });
+
+      expect(createResult).toEqual({ ok: false, error: { kind: "generic", cause: conflict } });
+    });
+
+    it("reports any other failure as generic, with its cause", async () => {
+      const failure = new Error("boom");
+      vi.mocked(createWorkspaceV2).mockRejectedValue(failure);
+      const { result } = renderCreateWorkspaceHook();
+
+      const createResult = await result.current.createWorkspace(CREATE_ARGS);
+
+      expect(createResult).toEqual({ ok: false, error: { kind: "generic", cause: failure } });
+    });
   });
 
   it("reports a background agent-create failure via the global toast", async () => {
