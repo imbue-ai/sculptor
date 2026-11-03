@@ -52,7 +52,8 @@ _FINGERPRINT_TIMEOUT_SECONDS = 5.0
 _COMMIT_ID_PATTERN = re.compile(r"^[0-9a-f]{4,40}$")
 # Unit separator: cannot appear in commit subjects or author names.
 _LOG_FIELD_SEPARATOR = "\x1f"
-_COMMIT_METADATA_FIELD_COUNT = 7
+# One placeholder per field `_build_commit_record` unpacks, in the same order.
+_COMMIT_LOG_PLACEHOLDERS = ("%H", "%h", "%s", "%aN", "%aE", "%aI", "%P")
 _DEFAULT_REMOTE = "origin"
 _DEFAULT_BRANCH_NAMES = ("main", "master")
 
@@ -443,7 +444,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
             return GitCommitHistory(commits=[], fork_point=None)
         revision_range = f"{fork_point}..HEAD"
 
-        format_string = _LOG_FIELD_SEPARATOR.join(("%H", "%h", "%s", "%aN", "%aE", "%aI", "%P"))
+        format_string = _LOG_FIELD_SEPARATOR.join(_COMMIT_LOG_PLACEHOLDERS)
         try:
             result = self._git.run_git(
                 ["log", f"-n{_MAX_HISTORY_COMMITS}", f"--format={format_string}"],
@@ -461,7 +462,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
         metadata_rows = [
             fields
             for fields in (line.split(_LOG_FIELD_SEPARATOR) for line in result.stdout.strip().split("\n"))
-            if len(fields) == _COMMIT_METADATA_FIELD_COUNT
+            if len(fields) == len(_COMMIT_LOG_PLACEHOLDERS)
         ]
         if not metadata_rows:
             return GitCommitHistory(commits=[], fork_point=fork_point)
