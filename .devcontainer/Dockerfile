@@ -28,6 +28,24 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.22 /uv /usr/local/bin/uv
 # Install just
 RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
+# Install jj (Jujutsu) from its static musl release build. These ARGs mirror
+# sculptor/sculptor/services/jj_version.py; jj_version_test.py keeps them equal.
+ARG JJ_VERSION=0.46.0
+ARG JJ_SHA256_X86_64=fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08
+ARG JJ_SHA256_AARCH64=80e28f7501c11e50e0ca06cd6a1fa1d982cff9cc59bfe4411a9d36aa501d867e
+RUN case "$(uname -m)" in \
+        x86_64) triple=x86_64-unknown-linux-musl; sha256="$JJ_SHA256_X86_64" ;; \
+        aarch64) triple=aarch64-unknown-linux-musl; sha256="$JJ_SHA256_AARCH64" ;; \
+        *) echo "unsupported arch for jj: $(uname -m)" >&2; exit 1 ;; \
+    esac \
+    && mkdir /tmp/jj \
+    && curl -fsSL -o /tmp/jj/jj.tar.gz "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/jj-v${JJ_VERSION}-${triple}.tar.gz" \
+    && echo "${sha256}  /tmp/jj/jj.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/jj/jj.tar.gz -C /tmp/jj ./jj \
+    && install -m 0755 /tmp/jj/jj /usr/local/bin/jj \
+    && rm -rf /tmp/jj \
+    && jj --version
+
 # Node via nvm (needed for frontend unit tests and integration test frontend build)
 ENV NODE_VERSION="24.17.0"
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
