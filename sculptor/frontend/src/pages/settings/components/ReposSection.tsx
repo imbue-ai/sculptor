@@ -1,13 +1,13 @@
 import { Box, Button, Separator, Text } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { PlusIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { deleteProject, ElementIds, type Project, updateNamingPattern, updateWorkspaceSetupCommand } from "~/api";
+import { deleteProject, ElementIds, type Project } from "~/api";
 import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
-import { projectAtomFamily, removeProjectAtom } from "~/common/state/atoms/projects.ts";
+import { removeProjectAtom } from "~/common/state/atoms/projects.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useProjects } from "~/common/state/hooks/useProjects.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
@@ -29,7 +29,6 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
   const focusRepoId = searchParams.get("focusRepo");
   const allAgents = useAtomValue(agentsArrayAtom);
   const removeProjectFromState = useSetAtom(removeProjectAtom);
-  const store = useStore();
   const [removeDialogState, setRemoveDialogState] = useState<RemoveDialogState>({ status: "closed" });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
@@ -95,56 +94,6 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
     setRemoveDialogState({ status: "closed" });
   }, [removeDialogState.status]);
 
-  const handleSetupCommandSave = useCallback(
-    async (projectId: string, command: string | null) => {
-      try {
-        await updateWorkspaceSetupCommand({
-          path: { project_id: projectId },
-          body: { workspaceSetupCommand: command },
-        });
-        // Update the project atom so the UI reflects the saved value.
-        // null is preserved (tracking default); "" is preserved (explicit clear).
-        const currentProject = store.get(projectAtomFamily(projectId));
-        if (currentProject) {
-          store.set(projectAtomFamily(projectId), {
-            ...currentProject,
-            workspaceSetupCommand: command,
-          });
-        }
-      } catch (error) {
-        setToast({
-          type: ToastType.ERROR,
-          title: getErrorMessage(error, "Failed to save setup command"),
-        });
-      }
-    },
-    [store, setToast],
-  );
-
-  const handleNamingPatternSave = useCallback(
-    async (projectId: string, pattern: string) => {
-      try {
-        await updateNamingPattern({
-          path: { project_id: projectId },
-          body: { namingPattern: pattern },
-        });
-        const currentProject = store.get(projectAtomFamily(projectId));
-        if (currentProject) {
-          store.set(projectAtomFamily(projectId), {
-            ...currentProject,
-            namingPattern: pattern || null,
-          });
-        }
-      } catch (error) {
-        setToast({
-          type: ToastType.ERROR,
-          title: getErrorMessage(error, "Failed to save naming pattern"),
-        });
-      }
-    },
-    [store, setToast],
-  );
-
   return (
     <>
       <SettingsSectionLayout description="Add or remove repositories from Sculptor.">
@@ -161,6 +110,7 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
               return (
                 <RepoRow
                   key={project.objectId}
+                  projectId={project.objectId}
                   projectName={project.name}
                   projectPath={projectPath}
                   agentCount={count}
@@ -168,9 +118,8 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
                   onRemove={() => handleRemoveClick(project)}
                   shouldAutoFocusSetupCommand={shouldAutoFocusSetupCommand}
                   workspaceSetupCommand={project.workspaceSetupCommand ?? null}
-                  onSetupCommandSave={(cmd) => handleSetupCommandSave(project.objectId, cmd)}
                   namingPattern={project.namingPattern ?? ""}
-                  onNamingPatternSave={(pattern) => handleNamingPatternSave(project.objectId, pattern)}
+                  setToast={setToast}
                 />
               );
             })}

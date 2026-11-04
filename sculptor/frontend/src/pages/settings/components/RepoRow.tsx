@@ -5,12 +5,16 @@ import { useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useOnMountIf } from "~/common/hooks/useOnMountIf";
+import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import { useNamingPatternMutation, useWorkspaceSetupCommandMutation } from "~/common/state/mutations/projects.ts";
+import { getErrorMessage } from "~/common/utils/errors.ts";
 import { DEFAULT_WORKSPACE_SETUP_COMMAND } from "~/common/utils/setupDefaults";
 
 import styles from "./RepoRow.module.scss";
 
 type RepoRowProps = {
+  projectId: string;
   projectName: string;
   projectPath: string;
   agentCount: number;
@@ -20,12 +24,26 @@ type RepoRowProps = {
   // null: tracking the current default. "": user cleared (no command runs).
   // Any other string: user's custom command.
   workspaceSetupCommand: string | null;
-  onSetupCommandSave: (command: string | null) => void;
   namingPattern: string;
-  onNamingPatternSave: (pattern: string) => void;
+  setToast: (toast: ToastContent | null) => void;
+};
+
+type FieldElement = HTMLInputElement | HTMLTextAreaElement;
+
+// Returns the `onError` for a save sent from `field`: it writes the saved text
+// back over the rejected edit, unless the user has typed into the field since
+// or it has re-mounted (and so already shows the saved text).
+const revertOnError = (field: FieldElement | null, savedText: string): (() => void) => {
+  const sentText = field?.value;
+  return (): void => {
+    if (field?.isConnected && field.value === sentText) {
+      field.value = savedText;
+    }
+  };
 };
 
 export const RepoRow = ({
+  projectId,
   projectName,
   projectPath,
   agentCount,
@@ -33,40 +51,53 @@ export const RepoRow = ({
   onRemove,
   shouldAutoFocusSetupCommand = false,
   workspaceSetupCommand,
-  onSetupCommandSave,
   namingPattern,
-  onNamingPatternSave,
+  setToast,
 }: RepoRowProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
   const isTrackingDefault = workspaceSetupCommand === null;
   const displayValue = workspaceSetupCommand ?? DEFAULT_WORKSPACE_SETUP_COMMAND;
   const [isExpanded, setIsExpanded] = useState<boolean>(() => shouldAutoFocusSetupCommand);
   const setupCommandTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const { mutate: saveSetupCommand } = useWorkspaceSetupCommandMutation({
+    onError: (error): void => {
+      setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save setup command") });
+    },
+  });
+  const { mutate: saveNamingPattern } = useNamingPatternMutation({
+    onError: (error): void => {
+      setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save naming pattern") });
+    },
+  });
 
   useOnMountIf(shouldAutoFocusSetupCommand, () => {
     setupCommandTextareaRef.current?.focus();
   });
+
+  const handleSetupCommandSave = (command: string | null, field: HTMLTextAreaElement | null): void => {
+    saveSetupCommand({ projectId, command }, { onError: revertOnError(field, displayValue) });
+  };
 
   const handleSetupCommandBlur = (e: FocusEvent<HTMLTextAreaElement>): void => {
     const trimmed = e.target.value.trim();
     if (isTrackingDefault) {
       // Unchanged default text → remain tracking default. Otherwise freeze the edit.
       if (trimmed !== DEFAULT_WORKSPACE_SETUP_COMMAND) {
-        onSetupCommandSave(trimmed);
+        handleSetupCommandSave(trimmed, e.target);
       }
     } else if (trimmed !== workspaceSetupCommand) {
-      onSetupCommandSave(trimmed);
+      handleSetupCommandSave(trimmed, e.target);
     }
   };
 
   const handleReset = (): void => {
-    onSetupCommandSave(null);
+    handleSetupCommandSave(null, setupCommandTextareaRef.current);
   };
 
   const handleNamingPatternBlur = (e: FocusEvent<HTMLInputElement>): void => {
     const trimmed = e.target.value.trim();
     if (trimmed !== namingPattern) {
-      onNamingPatternSave(trimmed);
+      saveNamingPattern({ projectId, pattern: trimmed }, { onError: revertOnError(e.target, namingPattern) });
     }
   };
 
@@ -128,11 +159,11 @@ export const RepoRow = ({
                 </Button>
               )}
             </Box>
-            {/* Uncontrolled: `key` re-mounts the textarea when the saved value changes
+            {/* Uncontrolled: `key` re-mounts the textarea when the text it should show changes
                 (e.g. after blur-save or reset), so we never copy the prop into local state. */}
             <textarea
               ref={setupCommandTextareaRef}
-              key={workspaceSetupCommand}
+              key={displayValue}
               className={`${styles.setupCommandInput} ${
                 isTrackingDefault ? styles.setupCommandInputTrackingDefault : ""
               }`}
