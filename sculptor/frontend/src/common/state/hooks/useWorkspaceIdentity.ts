@@ -90,6 +90,6 @@ export const useWorkspaceIdentityLabel = ({
     liveBranch,
     fetchedBranch: fetchedBranch ?? null,
     requestedBranchName,
-    hasGraceElapsed: graceWindow.workspaceId === workspaceId && graceWindow.hasElapsed,
+    hasGraceElapsed: graceWindow.hasElapsed,
   });
 };
