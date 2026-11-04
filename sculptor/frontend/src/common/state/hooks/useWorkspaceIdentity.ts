@@ -76,20 +76,21 @@ export const useWorkspaceIdentityLabel = ({
   if (graceWindow.workspaceId !== workspaceId) {
     setGraceWindow({ workspaceId, hasElapsed: false });
   }
-  const isCurrentBranchKnown = liveBranch !== null || (fetchedBranch ?? null) !== null;
-
-  useEffect(() => {
-    if (isCurrentBranchKnown) {
-      return undefined;
-    }
-    const timer = setTimeout((): void => setGraceWindow({ workspaceId, hasElapsed: true }), IDENTITY_LABEL_GRACE_MS);
-    return (): void => clearTimeout(timer);
-  }, [workspaceId, isCurrentBranchKnown]);
-
-  return resolveWorkspaceIdentityLabel({
+  const label = resolveWorkspaceIdentityLabel({
     liveBranch,
     fetchedBranch: fetchedBranch ?? null,
     requestedBranchName,
     hasGraceElapsed: graceWindow.hasElapsed,
   });
+  const isLoading = label.status === "LOADING";
+
+  useEffect(() => {
+    if (!isLoading) {
+      return undefined;
+    }
+    const timer = setTimeout((): void => setGraceWindow({ workspaceId, hasElapsed: true }), IDENTITY_LABEL_GRACE_MS);
+    return (): void => clearTimeout(timer);
+  }, [workspaceId, isLoading]);
+
+  return label;
 };

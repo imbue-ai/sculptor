@@ -113,6 +113,21 @@ describe("useWorkspaceIdentityLabel", () => {
     expect(result.current).toMatchObject({ status: "READY", text: "dev/feature" });
   });
 
+  it("waits again before falling back when a known current branch goes away", () => {
+    const store = createStore();
+    setWorkspace(store, "ws1", { sourceBranch: "main", requestedBranchName: "dev/requested" });
+    setLiveBranch(store, "ws1", "dev/feature");
+    const { result } = renderHook(() => useWorkspaceIdentityLabel({ workspaceId: "ws1" }), {
+      wrapper: createWrapper(store),
+    });
+
+    act(() => store.set(workspaceBranchAtomFamily("ws1"), null));
+
+    expect(result.current).toEqual({ status: "LOADING" });
+    passGraceWindow();
+    expect(result.current).toMatchObject({ status: "READY", text: "dev/requested" });
+  });
+
   it("falls back to the requested branch name once the grace window passes", () => {
     const store = createStore();
     setWorkspace(store, "ws1", { sourceBranch: "main", requestedBranchName: "dev/requested" });
