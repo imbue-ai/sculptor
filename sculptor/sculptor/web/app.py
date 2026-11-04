@@ -28,6 +28,7 @@ from typing import Generator
 from typing import Iterator
 from typing import Literal
 from typing import TypeVar
+from typing import assert_never
 from uuid import uuid4
 
 import anyio
@@ -636,6 +637,50 @@ def _validate_prompt_model_selection(
         )
 
 
+def _validate_workspace_creation_request(
+    services: CompleteServiceCollection,
+    project: Project,
+    initialization_strategy: WorkspaceInitializationStrategy,
+    source_branch: str | None,
+    requested_branch_name: str | None,
+) -> None:
+    """Raise an HTTPException when a request to create a workspace breaks its mode's rules.
+
+    Run this before every request-driven `create_workspace`, so each entry point enforces the same rules.
+    """
+    match initialization_strategy:
+        case WorkspaceInitializationStrategy.IN_PLACE:
+            if requested_branch_name is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="requested_branch_name is not supported for IN_PLACE workspaces",
+                )
+        case WorkspaceInitializationStrategy.CLONE:
+            # A clone may check out a new branch or stay on the source branch.
+            pass
+        case WorkspaceInitializationStrategy.WORKTREE:
+            if requested_branch_name is None or not requested_branch_name.strip():
+                raise HTTPException(
+                    status_code=400, detail="requested_branch_name is required for WORKTREE workspaces"
+                )
+            if source_branch is None:
+                raise HTTPException(status_code=400, detail="source_branch is required for WORKTREE workspaces")
+        case _ as unreachable:
+            assert_never(unreachable)
+
+    if not requested_branch_name:
+        return
+    with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
+        if not repo.is_valid_branch_name(requested_branch_name):
+            # Reject illegal ref names here so the user gets an actionable
+            # error at creation, rather than an opaque WorktreeError raised
+            # later when `git worktree add -b` runs during async environment
+            # setup (and is surfaced only in the agent panel).
+            raise HTTPException(status_code=400, detail=f"'{requested_branch_name}' is not a valid git branch name")
+        if repo.is_branch_ref(requested_branch_name):
+            raise HTTPException(status_code=409, detail=f"Branch '{requested_branch_name}' already exists")
+
+
 @router.post("/api/v1/projects/{project_id}/tasks")
 def start_task(
     project_id: ProjectID,
@@ -686,7 +731,8 @@ def start_task(
         # little transaction here -- we don't want to span the whole thing bc then it will be slow
         with user_session.open_transaction(services) as transaction:
             project = transaction.get_project(project_id)
-            assert project is not None, f"Project {project_id} not found"
+            if project is None:
+                raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
 
             if workspace_id is not None:
                 # Use existing workspace
@@ -701,9 +747,17 @@ def start_task(
                 logger.debug("Using existing workspace {} for task {}", workspace.object_id, task_id)
             else:
                 # Create implicit workspace for this task
+                new_workspace_strategy = (
+                    WorkspaceInitializationStrategy.IN_PLACE
+                    if initialization_strategy is None
+                    else initialization_strategy
+                )
+                _validate_workspace_creation_request(
+                    services, project, new_workspace_strategy, source_branch, requested_branch_name=None
+                )
                 workspace = services.workspace_service.create_workspace(
                     project=project,
-                    initialization_strategy=initialization_strategy,
+                    initialization_strategy=new_workspace_strategy,
                     source_branch=source_branch,
                     requested_branch_name=None,
                     description=task_name,
@@ -847,38 +901,18 @@ def create_workspace_v2(
         if project is None:
             raise HTTPException(status_code=404, detail=f"Project {workspace_request.project_id} not found")
 
-        strategy = workspace_request.initialization_strategy
-        branch_name = workspace_request.requested_branch_name
-        if strategy == WorkspaceInitializationStrategy.IN_PLACE:
-            if branch_name is not None:
-                raise HTTPException(
-                    status_code=400,
-                    detail="requested_branch_name is not supported for IN_PLACE workspaces",
-                )
-        elif strategy == WorkspaceInitializationStrategy.WORKTREE:
-            if branch_name is None or not branch_name.strip():
-                raise HTTPException(
-                    status_code=400, detail="requested_branch_name is required for WORKTREE workspaces"
-                )
-            if workspace_request.source_branch is None:
-                raise HTTPException(status_code=400, detail="source_branch is required for WORKTREE workspaces")
-
-        if branch_name:
-            with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
-                if not repo.is_valid_branch_name(branch_name):
-                    # Reject illegal ref names here so the user gets an actionable
-                    # error at creation, rather than an opaque WorktreeError raised
-                    # later when `git worktree add -b` runs during async environment
-                    # setup (and is surfaced only in the agent panel).
-                    raise HTTPException(status_code=400, detail=f"'{branch_name}' is not a valid git branch name")
-                if repo.is_branch_ref(branch_name):
-                    raise HTTPException(status_code=409, detail=f"Branch '{branch_name}' already exists")
-
+        _validate_workspace_creation_request(
+            services,
+            project,
+            workspace_request.initialization_strategy,
+            workspace_request.source_branch,
+            workspace_request.requested_branch_name,
+        )
         workspace = services.workspace_service.create_workspace(
             project=project,
             initialization_strategy=workspace_request.initialization_strategy,
             source_branch=workspace_request.source_branch,
-            requested_branch_name=branch_name,
+            requested_branch_name=workspace_request.requested_branch_name,
             description=workspace_request.description,
             transaction=transaction,
             target_branch=workspace_request.target_branch,

@@ -7,6 +7,7 @@ NOTE: Endpoints are not currently tested for cross-user authorization (preventin
 """
 
 from pathlib import Path
+from typing import Callable
 from typing import Generator
 from unittest.mock import patch
 
@@ -226,41 +227,194 @@ def test_create_task_creates_task(
     assert len(response.json()) == 1
 
 
-def _post_create_worktree_workspace(client: TestClient, project: Project, branch_name: str) -> httpx.Response:
+def _post_create_workspace(
+    client: TestClient,
+    project: Project,
+    initialization_strategy: WorkspaceInitializationStrategy,
+    source_branch: str | None,
+    requested_branch_name: str | None = None,
+) -> httpx.Response:
     return client.post(
         "/api/v1/workspaces",
         json=model_dump(
             CreateWorkspaceRequestV2(
                 project_id=str(project.object_id),
-                initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
-                source_branch="main",
-                requested_branch_name=branch_name,
+                initialization_strategy=initialization_strategy,
+                source_branch=source_branch,
+                requested_branch_name=requested_branch_name,
             ),
             is_camel_case=True,
         ),
     )
 
 
-def test_create_worktree_workspace_rejects_invalid_branch_name(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    """An illegal git ref name must be rejected with 400 at creation, not surface
-    later as an opaque WorktreeError from `git worktree add -b` during async setup."""
-    # The exact shape that broke the manual test harness: a workspace-name field
-    # accidentally filled with a prompt, slugified into an illegal ref name.
-    bad_name = (
-        "imbue/board-demo-workspaceRun: git checkout -b dev/scu-1634-board-demo  (just create that branch, then stop)."
+def _post_start_task(
+    client: TestClient,
+    project: Project,
+    initialization_strategy: WorkspaceInitializationStrategy,
+    source_branch: str | None,
+) -> httpx.Response:
+    return client.post(
+        f"/api/v1/projects/{project.object_id}/tasks",
+        json=model_dump(
+            StartTaskRequest(
+                prompt="hello",
+                model=LLMModel.CLAUDE_4_SONNET,
+                initialization_strategy=initialization_strategy,
+                source_branch=source_branch,
+            ),
+            is_camel_case=True,
+        ),
     )
-    response = _post_create_worktree_workspace(client, test_project, bad_name)
-    assert response.status_code == 400, response.text
-    assert "not a valid git branch name" in response.json()["detail"]
 
 
-def test_create_worktree_workspace_accepts_valid_branch_name(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+@pytest.mark.parametrize(
+    ("initialization_strategy", "source_branch", "expected_status", "expected_detail"),
+    [
+        pytest.param(WorkspaceInitializationStrategy.IN_PLACE, None, 200, None, id="in-place"),
+        pytest.param(WorkspaceInitializationStrategy.CLONE, None, 200, None, id="clone"),
+        pytest.param(WorkspaceInitializationStrategy.CLONE, "main", 200, None, id="clone-from-source-branch"),
+        pytest.param(
+            WorkspaceInitializationStrategy.WORKTREE,
+            "main",
+            400,
+            "requested_branch_name is required for WORKTREE workspaces",
+            id="worktree-without-branch-name",
+        ),
+    ],
+)
+@pytest.mark.parametrize("post_create", [_post_create_workspace, _post_start_task], ids=["workspaces", "tasks"])
+def test_every_workspace_creation_endpoint_applies_the_per_mode_rules(
+    client: TestClient,
+    test_project: Project,
+    post_create: Callable[[TestClient, Project, WorkspaceInitializationStrategy, str | None], httpx.Response],
+    initialization_strategy: WorkspaceInitializationStrategy,
+    source_branch: str | None,
+    expected_status: int,
+    expected_detail: str | None,
 ) -> None:
-    response = _post_create_worktree_workspace(client, test_project, "imbue/board-demo-workspace")
-    assert response.status_code == 200, response.text
+    response = post_create(client, test_project, initialization_strategy, source_branch)
+    assert response.status_code == expected_status, response.text
+    if expected_detail is not None:
+        assert expected_detail in response.json()["detail"]
+
+
+# A workspace-name field filled with a prompt, slugified into an illegal ref name.
+_ILLEGAL_BRANCH_NAME = (
+    "imbue/board-demo-workspaceRun: git checkout -b dev/scu-1634-board-demo  (just create that branch, then stop)."
+)
+
+
+@pytest.mark.parametrize(
+    ("initialization_strategy", "source_branch", "requested_branch_name", "expected_status", "expected_detail"),
+    [
+        pytest.param(
+            WorkspaceInitializationStrategy.IN_PLACE,
+            None,
+            "imbue/new-branch",
+            400,
+            "requested_branch_name is not supported for IN_PLACE workspaces",
+            id="in-place-with-branch-name",
+        ),
+        pytest.param(
+            WorkspaceInitializationStrategy.WORKTREE,
+            "main",
+            "   ",
+            400,
+            "requested_branch_name is required for WORKTREE workspaces",
+            id="worktree-with-blank-branch-name",
+        ),
+        pytest.param(
+            WorkspaceInitializationStrategy.WORKTREE,
+            None,
+            "imbue/new-branch",
+            400,
+            "source_branch is required for WORKTREE workspaces",
+            id="worktree-without-source-branch",
+        ),
+        pytest.param(
+            WorkspaceInitializationStrategy.WORKTREE,
+            "main",
+            _ILLEGAL_BRANCH_NAME,
+            400,
+            "not a valid git branch name",
+            id="worktree-with-illegal-branch-name",
+        ),
+        pytest.param(
+            WorkspaceInitializationStrategy.CLONE,
+            "main",
+            _ILLEGAL_BRANCH_NAME,
+            400,
+            "not a valid git branch name",
+            id="clone-with-illegal-branch-name",
+        ),
+        pytest.param(
+            WorkspaceInitializationStrategy.WORKTREE,
+            "main",
+            "main",
+            409,
+            "Branch 'main' already exists",
+            id="worktree-with-existing-branch-name",
+        ),
+        pytest.param(WorkspaceInitializationStrategy.WORKTREE, "main", "imbue/new-branch", 200, None, id="worktree"),
+        pytest.param(
+            WorkspaceInitializationStrategy.CLONE, "main", "imbue/new-branch", 200, None, id="clone-with-branch-name"
+        ),
+    ],
+)
+def test_create_workspace_applies_the_branch_name_rules(
+    client: TestClient,
+    test_project: Project,
+    initialization_strategy: WorkspaceInitializationStrategy,
+    source_branch: str | None,
+    requested_branch_name: str,
+    expected_status: int,
+    expected_detail: str | None,
+) -> None:
+    response = _post_create_workspace(
+        client, test_project, initialization_strategy, source_branch, requested_branch_name
+    )
+    assert response.status_code == expected_status, response.text
+    if expected_detail is not None:
+        assert expected_detail in response.json()["detail"]
+
+
+def test_start_task_returns_404_for_a_missing_project(client: TestClient) -> None:
+    response = client.post(
+        f"/api/v1/projects/{ProjectID()}/tasks", json={"prompt": "hello", "model": LLMModel.CLAUDE_4_SONNET.value}
+    )
+    assert response.status_code == 404, response.text
+
+
+@pytest.mark.parametrize(
+    ("workspace_creation_fields", "expected_status"),
+    [
+        pytest.param({}, 200, id="existing-workspace-only"),
+        pytest.param({"initializationStrategy": WorkspaceInitializationStrategy.IN_PLACE.value}, 422, id="strategy"),
+        pytest.param({"sourceBranch": "main"}, 422, id="source-branch"),
+    ],
+)
+def test_start_task_rejects_workspace_creation_fields_alongside_an_existing_workspace(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    workspace_creation_fields: dict[str, str],
+    expected_status: int,
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = client.post(
+        f"/api/v1/projects/{test_project.object_id}/tasks",
+        json={
+            "prompt": "hello",
+            "model": LLMModel.CLAUDE_4_SONNET.value,
+            "workspaceId": str(workspace.object_id),
+            **workspace_creation_fields,
+        },
+    )
+    assert response.status_code == expected_status, response.text
 
 
 def test_workspace_working_directory_resolves_per_strategy() -> None:
