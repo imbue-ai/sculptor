@@ -68,8 +68,6 @@ const editAndBlur = (field: HTMLTextAreaElement | HTMLInputElement, value: strin
   fireEvent.blur(field);
 };
 
-// Lets every pending promise continuation run, so a write chained after the
-// request resolving would have landed by the time the test asserts.
 const flushMicrotasks = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };

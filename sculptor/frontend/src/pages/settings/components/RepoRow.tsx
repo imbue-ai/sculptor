@@ -159,7 +159,7 @@ export const RepoRow = ({
                 </Button>
               )}
             </Box>
-            {/* Uncontrolled: `key` re-mounts the textarea when the saved value changes
+            {/* Uncontrolled: `key` re-mounts the textarea when the text it should show changes
                 (e.g. after blur-save or reset), so we never copy the prop into local state. */}
             <textarea
               ref={setupCommandTextareaRef}

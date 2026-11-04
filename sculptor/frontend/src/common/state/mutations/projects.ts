@@ -1,14 +1,12 @@
 /**
  * TanStack Query mutation hooks for per-project (repository) settings.
  *
- * The WS stream is the only writer of project state (`updateProjectsAtom`), and
- * these requests resolve only once the frame carrying the updated project has
- * arrived, so no hook here writes a store: success is already on screen, and
- * failure leaves the store untouched for the caller to report.
+ * The WS stream is the only writer of project state (`updateProjectsAtom`), so
+ * no hook here writes a store: a successful save reaches the screen through the
+ * stream, and a failed one leaves the store untouched for the caller to report.
  *
- * The caller's `onError` is a mutation-level callback, so it still runs when
- * the calling component unmounts before the request fails (per-call `mutate`
- * callbacks do not).
+ * `onError` is a mutation-level callback so that it still runs if the caller
+ * unmounts before the request fails; per-call `mutate` callbacks do not.
  */
 
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
@@ -26,7 +24,6 @@ type WorkspaceSetupCommandVars = {
   command: string | null;
 };
 
-/** Save a project's workspace setup command. */
 export const useWorkspaceSetupCommandMutation = ({
   onError,
 }: ProjectSettingMutationOptions): UseMutationResult<unknown, Error, WorkspaceSetupCommandVars, unknown> =>
@@ -46,7 +43,6 @@ type NamingPatternVars = {
   pattern: string;
 };
 
-/** Save a project's branch-naming pattern override. */
 export const useNamingPatternMutation = ({
   onError,
 }: ProjectSettingMutationOptions): UseMutationResult<unknown, Error, NamingPatternVars, unknown> =>
