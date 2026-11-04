@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toBareRefName, toRemoteRefName } from "./refNames.ts";
+import { toPrBaseRefName, toRemoteRefName } from "./refNames.ts";
 
 describe("toRemoteRefName", () => {
   it("names the branch on the pull-request remote", () => {
@@ -12,24 +12,24 @@ describe("toRemoteRefName", () => {
   });
 });
 
-describe("toBareRefName", () => {
-  it("strips the pull-request remote", () => {
-    expect(toBareRefName("origin/main")).toBe("main");
+describe("toPrBaseRefName", () => {
+  it("drops the remote from a remote-tracking target", () => {
+    expect(toPrBaseRefName("origin/main")).toBe("main");
   });
 
-  it("strips only the remote from a nested remote branch", () => {
-    expect(toBareRefName("origin/feature/login")).toBe("feature/login");
+  it("keeps the rest of a nested remote branch", () => {
+    expect(toPrBaseRefName("origin/feature/login")).toBe("feature/login");
   });
 
-  it("keeps a local branch whose name contains a slash", () => {
-    expect(toBareRefName("feature/login")).toBe("feature/login");
+  it("leaves a target without a slash as it is", () => {
+    expect(toPrBaseRefName("main")).toBe("main");
   });
 
-  it("keeps a local branch without a slash", () => {
-    expect(toBareRefName("main")).toBe("main");
+  it("drops the first segment of a local target with a slash, as PR status does", () => {
+    expect(toPrBaseRefName("feature/login")).toBe("login");
   });
 
   it("inverts toRemoteRefName", () => {
-    expect(toBareRefName(toRemoteRefName("release/2.0"))).toBe("release/2.0");
+    expect(toPrBaseRefName(toRemoteRefName("release/2.0"))).toBe("release/2.0");
   });
 });

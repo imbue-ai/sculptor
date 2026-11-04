@@ -12,7 +12,7 @@ import { chatActionsAtom } from "../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../common/state/atoms/prStatus.ts";
 import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
-import { toBareRefName } from "../../common/utils/refNames.ts";
+import { toPrBaseRefName } from "../../common/utils/refNames.ts";
 import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
 import { PrPromptDialog } from "./PrPromptDialog.tsx";
@@ -483,7 +483,7 @@ export const PrButton = ({
     const isMismatchRelevant =
       prStatus.mismatchedPrIid != null &&
       prStatus.mismatchedPrTargetBranch != null &&
-      prStatus.mismatchedPrTargetBranch !== toBareRefName(targetBranch);
+      prStatus.mismatchedPrTargetBranch !== toPrBaseRefName(targetBranch);
     if (isMismatchRelevant) {
       return (
         <AssignPrButton

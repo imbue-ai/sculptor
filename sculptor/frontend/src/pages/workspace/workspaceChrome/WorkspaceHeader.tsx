@@ -11,7 +11,7 @@ import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
-import { toBareRefName, toRemoteRefName } from "~/common/utils/refNames.ts";
+import { toPrBaseRefName, toRemoteRefName } from "~/common/utils/refNames.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getCollapsedSidebarToggleClearance } from "~/electron/platform.ts";
 import { extensionWorkspaceWidgetsAtom } from "~/extensions/extensionRegistry.ts";
@@ -161,12 +161,12 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
 
   // JSX and rendering logic
   // Only show mismatch when the PR's target branch differs from the current
-  // workspace target, compared as the branch names the code host uses.
+  // workspace target, compared the way PR status matches them.
   const hasMismatch =
     prStatus?.prState === "none" &&
     prStatus.mismatchedPrIid != null &&
     prStatus.mismatchedPrTargetBranch != null &&
-    prStatus.mismatchedPrTargetBranch !== toBareRefName(currentTargetBranch);
+    prStatus.mismatchedPrTargetBranch !== toPrBaseRefName(currentTargetBranch);
   // Stable reference so the useMemo inside TargetBranchSelector doesn't thrash.
   const mismatchForSelector = useMemo(
     () =>
