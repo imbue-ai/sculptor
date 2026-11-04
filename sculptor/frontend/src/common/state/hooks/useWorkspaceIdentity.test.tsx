@@ -153,4 +153,22 @@ describe("useWorkspaceIdentityLabel", () => {
     passGraceWindow();
     expect(result.current).toMatchObject({ status: "READY", text: "dev/two" });
   });
+
+  it("waits afresh on returning to a workspace whose grace window already ran out", () => {
+    const store = createStore();
+    setWorkspace(store, "ws1", { sourceBranch: "main", requestedBranchName: "dev/one" });
+    setWorkspace(store, "ws2", { sourceBranch: "main", requestedBranchName: "dev/two" });
+    const { result, rerender } = renderHook(
+      ({ workspaceId }: { workspaceId: string }) => useWorkspaceIdentityLabel({ workspaceId }),
+      { wrapper: createWrapper(store), initialProps: { workspaceId: "ws1" } },
+    );
+    passGraceWindow();
+    rerender({ workspaceId: "ws2" });
+
+    rerender({ workspaceId: "ws1" });
+
+    expect(result.current).toEqual({ status: "LOADING" });
+    passGraceWindow();
+    expect(result.current).toMatchObject({ status: "READY", text: "dev/one" });
+  });
 });

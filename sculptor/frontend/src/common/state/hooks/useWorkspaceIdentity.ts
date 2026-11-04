@@ -66,15 +66,23 @@ export const useWorkspaceIdentityLabel = ({
   fetchedBranch?: string | null;
 }): WorkspaceIdentityLabel => {
   const { liveBranch, requestedBranchName } = useAtomValue(workspaceIdentitySourcesAtomFamily(workspaceId));
-  // Keyed by workspace so a surface that switches workspaces waits afresh.
-  const [graceElapsedWorkspaceId, setGraceElapsedWorkspaceId] = useState<string | null>(null);
+  // The workspace the grace window is running for. Moving to another workspace
+  // restarts it, so a reused surface waits afresh on every switch, including a
+  // return to a workspace it has already waited for.
+  const [graceWindow, setGraceWindow] = useState<{ workspaceId: string; hasElapsed: boolean }>({
+    workspaceId,
+    hasElapsed: false,
+  });
+  if (graceWindow.workspaceId !== workspaceId) {
+    setGraceWindow({ workspaceId, hasElapsed: false });
+  }
   const isCurrentBranchKnown = liveBranch !== null || (fetchedBranch ?? null) !== null;
 
   useEffect(() => {
     if (isCurrentBranchKnown) {
       return undefined;
     }
-    const timer = setTimeout((): void => setGraceElapsedWorkspaceId(workspaceId), IDENTITY_LABEL_GRACE_MS);
+    const timer = setTimeout((): void => setGraceWindow({ workspaceId, hasElapsed: true }), IDENTITY_LABEL_GRACE_MS);
     return (): void => clearTimeout(timer);
   }, [workspaceId, isCurrentBranchKnown]);
 
@@ -82,6 +90,6 @@ export const useWorkspaceIdentityLabel = ({
     liveBranch,
     fetchedBranch: fetchedBranch ?? null,
     requestedBranchName,
-    hasGraceElapsed: graceElapsedWorkspaceId === workspaceId,
+    hasGraceElapsed: graceWindow.workspaceId === workspaceId && graceWindow.hasElapsed,
   });
 };
