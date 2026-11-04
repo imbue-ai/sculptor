@@ -26,7 +26,6 @@ export const workspaceIdentitySourcesAtomFamily = atomFamily<string, Atom<Worksp
   })),
 );
 
-/** The identity sources of every workspace in the stream, by workspace id. */
 export const workspaceIdentitySourcesByIdAtom = atom<ReadonlyMap<string, WorkspaceIdentitySources>>(
   (get) => new Map((get(workspaceIdsAtom) ?? []).map((id) => [id, get(workspaceIdentitySourcesAtomFamily(id))])),
 );
