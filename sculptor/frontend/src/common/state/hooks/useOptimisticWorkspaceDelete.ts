@@ -4,8 +4,8 @@ import { posthog } from "posthog-js";
 import { useCallback, useEffect, useRef } from "react";
 
 import { ToastType } from "~/common/state/atoms/toasts.ts";
+import { removeWorkspaceAgentActionState } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { removeWorkspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
-import { removeWorkspaceAgentActionState } from "~/pages/workspace/panels/workspaceAgentActions.ts";
 
 import { deleteWorkspace } from "../../../api";
 import { HTTPException } from "../../utils/errors.ts";

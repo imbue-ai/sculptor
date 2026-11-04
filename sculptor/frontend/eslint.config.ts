@@ -233,7 +233,6 @@ export default tseslint.config(
                 "./workspace/layout",
                 "./workspace/diffPanel/atoms/diffPanel.ts",
                 "./workspace/panels/browser/atoms/browser.ts",
-                "./workspace/panels/workspaceAgentActions.ts",
                 "./workspace/panels/fileBrowser/types/fileBrowser.ts",
               ],
               message: "common/ is shared non-UI; it must not import from pages/. See frontend_structure.md.",

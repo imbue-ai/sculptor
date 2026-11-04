@@ -117,7 +117,7 @@ test. None is a swallowed rejection; the frozen budget documents them:
   on the remaining Jotai readers, which are no longer components but
   **atom graphs and the extension SDK**:
   - `state/atoms/workspaces.ts`, `state/atoms/mentionDetails.ts`,
-    `state/agentPanelPlacement.ts`, `pages/workspace/panels/workspaceAgentActions.ts`
+    `state/agentPanelPlacement.ts`, `state/atoms/workspaceAgentActions.ts`
     derive from `tasksArrayAtom` / `taskAtomFamily` / four surviving
     selector families inside Jotai `get(...)` graphs — migrating them means
     restructuring those derivations, not swapping a hook.

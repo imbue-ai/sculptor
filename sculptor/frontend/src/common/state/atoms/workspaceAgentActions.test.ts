@@ -6,6 +6,7 @@ import { LlmModel, TaskStatus } from "~/api";
 import { agentDetailStateAtomFamily, getEmptyAgentDetailState } from "~/common/state/atoms/agentDetails.ts";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
+import { tabsAtom } from "~/common/state/atoms/workspaces.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
@@ -16,6 +17,7 @@ import {
   activeChatAgentIdAtomFamily,
   canCommitAtomFamily,
   commitActionAtomFamily,
+  createPrActionAtomFamily,
   lastFocusedChatAgentAtomFamily,
 } from "./workspaceAgentActions.ts";
 
@@ -103,6 +105,7 @@ afterEach(() => {
     activeChatAgentIdAtomFamily.remove(workspaceId);
     canCommitAtomFamily.remove(workspaceId);
     commitActionAtomFamily.remove(workspaceId);
+    createPrActionAtomFamily.remove(workspaceId);
     lastFocusedChatAgentAtomFamily.remove(workspaceId);
   }
   localStorage.clear();
@@ -401,6 +404,28 @@ describe("activeAgentIdAtomFamily", () => {
   });
 });
 
+describe("activeAgentIdAtomFamily without agent panels", () => {
+  // The mobile shell shows the route's agent without seeding the panel layout.
+  it("resolves the workspace's last-viewed agent rather than its first agent", () => {
+    const store = createStore();
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
+    seedAgent(store, createMockAgent({ id: "agent-b" }));
+    seedLayout(store, {});
+    store.set(tabsAtom, { order: [{ tabId: WS, agentId: "agent-b" }], activeIndex: 0 });
+
+    expect(store.get(activeAgentIdAtomFamily(WS))).toBe("agent-b");
+  });
+
+  it("ignores a last-viewed agent that is no longer loaded", () => {
+    const store = createStore();
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
+    seedLayout(store, {});
+    store.set(tabsAtom, { order: [{ tabId: WS, agentId: "deleted-agent" }], activeIndex: 0 });
+
+    expect(store.get(activeAgentIdAtomFamily(WS))).toBe("agent-a");
+  });
+});
+
 describe("canCommitAtomFamily for terminal agents", () => {
   it("is true for a prompt-capable terminal at its prompt", () => {
     const store = createStore();
@@ -457,5 +482,51 @@ describe("commitActionAtomFamily terminal routing", () => {
     await store.set(commitActionAtomFamily(WS), "Stage every changed file");
 
     expect(store.get(terminalPromptRejectedToastAtom)).toMatchObject({ title: "Agent is busy" });
+  });
+});
+
+describe("createPrActionAtomFamily", () => {
+  it("sends the message to the resolved chat agent with its model", async () => {
+    const store = createStore();
+    seedAgent(store, createMockAgent({ id: "agent-a", model: LlmModel.CLAUDE_4_SONNET }));
+    seedLayout(store, {
+      placement: { [makeAgentPanelId("agent-a")]: "center" },
+      activePanel: { center: makeAgentPanelId("agent-a") },
+    });
+
+    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+
+    expect(sendMessagesMock).toHaveBeenCalledTimes(1);
+    expect(sendMessagesMock).toHaveBeenCalledWith({
+      path: { workspace_id: WS, agent_id: "agent-a" },
+      body: { message: "Open a pull request", model: LlmModel.CLAUDE_4_SONNET },
+    });
+  });
+
+  it("types and submits the prompt into a visible prompt-capable terminal", async () => {
+    const store = createStore();
+    seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
+
+    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+
+    expect(terminalInputMock).toHaveBeenCalledWith({
+      path: { agent_id: "terminal-agent" },
+      body: { text: "Open a pull request", submit: true },
+    });
+    expect(sendMessagesMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a pull-request toast when the chat-route send fails", async () => {
+    const store = createStore();
+    seedAgent(store, createMockAgent({ id: "agent-a" }));
+    seedLayout(store, {
+      placement: { [makeAgentPanelId("agent-a")]: "center" },
+      activePanel: { center: makeAgentPanelId("agent-a") },
+    });
+    sendMessagesMock.mockRejectedValueOnce(new Error("network down"));
+
+    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+
+    expect(store.get(commitPromptSendFailedToastAtom)).toMatchObject({ title: "Couldn't send pull request prompt" });
   });
 });
