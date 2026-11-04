@@ -8,7 +8,6 @@ import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { workspaceIdentitySourcesAtomFamily } from "~/common/state/atoms/workspaceIdentity.ts";
 import { asLiveWorkspace, workspaceAtomFamily, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import { resolveWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 import { useWorkspaceNavigation } from "~/common/state/hooks/useWorkspaceNavigation.ts";
 import { newWorkspaceDialogAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
@@ -50,18 +49,10 @@ const workspaceViewAtomFamily = atomFamily((id: string) =>
   atom((get): WorkspaceView | null => {
     const workspace = asLiveWorkspace(get(workspaceAtomFamily(id)));
     if (!workspace) return null;
-    // Extensions get only the branch the backend reports; the host's
-    // requested-name fallback is a stand-in for display, not the branch.
-    const identityLabel = resolveWorkspaceIdentityLabel({
-      liveBranch: get(workspaceIdentitySourcesAtomFamily(id)).liveBranch,
-      fetchedBranch: null,
-      requestedBranchName: null,
-      hasGraceElapsed: true,
-    });
     return {
       id: workspace.objectId,
       description: workspace.description,
-      branch: identityLabel.status === "READY" ? identityLabel.copyText : null,
+      branch: get(workspaceIdentitySourcesAtomFamily(id)).liveBranch,
       targetBranch: workspace.targetBranch ?? null,
       pullRequestUrl: get(prStatusAtomFamily(id))?.prWebUrl ?? null,
     };
