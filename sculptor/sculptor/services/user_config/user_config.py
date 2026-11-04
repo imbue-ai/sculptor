@@ -4,16 +4,19 @@ import threading
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
+from types import NoneType
 from typing import Any
 
 import tomlkit
 from loguru import logger
+from pydantic import BaseModel
 from pydantic import ValidationError
 
 from sculptor.config.user_config import PrivacySettings
 from sculptor.config.user_config import UserConfig
 from sculptor.foundation.pydantic_utils import model_update
 from sculptor.utils.build import get_internal_folder
+from sculptor.utils.type_utils import extract_leaf_types
 
 
 class InvalidConfigError(Exception):
@@ -83,6 +86,30 @@ def replace_config(new_config: UserConfig) -> UserConfig:
         return new_config
 
 
+def _get_sub_model_field_aliases() -> frozenset[str]:
+    """Return the aliases of the UserConfig fields declared as one sub-model, optionally nullable."""
+    aliases: set[str] = set()
+    for name, field in UserConfig.model_fields.items():
+        non_none_types = [leaf_type for leaf_type in extract_leaf_types(field.annotation) if leaf_type is not NoneType]
+        if (
+            len(non_none_types) == 1
+            and isinstance(non_none_types[0], type)
+            and issubclass(non_none_types[0], BaseModel)
+        ):
+            aliases.add(field.alias or name)
+    return frozenset(aliases)
+
+
+_SUB_MODEL_FIELD_ALIASES = _get_sub_model_field_aliases()
+
+
+def _merge_field_value(alias: str, current_value: Any, partial_value: Any) -> Any:
+    """Merge a partial sub-model into the current one key by key; replace any other value whole."""
+    if alias in _SUB_MODEL_FIELD_ALIASES and isinstance(current_value, Mapping) and isinstance(partial_value, Mapping):
+        return {**current_value, **partial_value}
+    return partial_value
+
+
 def merge_config(partial_fields: dict[str, Any]) -> UserConfig:
     """Merge partial fields into the current config, atomically.
 
@@ -95,12 +122,17 @@ def merge_config(partial_fields: dict[str, Any]) -> UserConfig:
 
     ``partial_fields`` keys must use camelCase aliases — the same shape the
     frontend sends in its JSON body. Keys absent from the dict are left
-    unchanged.
+    unchanged. That holds one level down for sub-model fields such as
+    ``dependencyPaths``: a partial sub-model leaves its absent keys
+    unchanged. Everything else is replaced whole — scalars, maps such as
+    ``keybindings`` (an absent key is a deleted entry), lists, and values
+    nested inside a sub-model such as ``ciBabysitter.agent``.
     """
     with _USER_CONFIG_LOCK:
         old = get_user_config_instance()
         merged = old.model_dump(by_alias=True) if old else {}
-        merged.update(partial_fields)
+        for alias, partial_value in partial_fields.items():
+            merged[alias] = _merge_field_value(alias, merged.get(alias), partial_value)
         new = UserConfig.model_validate(merged)
         save_config(new, get_config_path())
         set_user_config_instance(new)

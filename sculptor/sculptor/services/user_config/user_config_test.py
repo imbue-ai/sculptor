@@ -1,5 +1,6 @@
 import concurrent.futures
 import threading
+from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -7,6 +8,13 @@ from pathlib import Path
 import pytest
 
 import sculptor.services.user_config.user_config as user_config_module
+from sculptor.config.custom_actions import CustomAction
+from sculptor.config.custom_actions import CustomActionGroup
+from sculptor.config.custom_actions import CustomActionsConfig
+from sculptor.config.user_config import BabysitterAgentPi
+from sculptor.config.user_config import BabysitterAgentRegistered
+from sculptor.config.user_config import CIBabysitterConfig
+from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
 from sculptor.foundation.pydantic_utils import model_update
 from sculptor.services.user_config.user_config import canonicalize_telemetry_flags
@@ -212,6 +220,85 @@ def test_concurrent_partial_updates_preserve_both_fields(
         assert final_on_disk.user_id == "thread_b_user_id"
     finally:
         user_config_module.set_user_config_instance(None)
+
+
+@pytest.fixture
+def installed_config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Point the config file at ``tmp_path``, install a base config as the singleton, and clear it afterwards."""
+    config_path = tmp_path / "config.toml"
+    monkeypatch.setattr(user_config_module, "_CONFIG_PATH", config_path)
+    base = model_update(
+        _make_config(),
+        {
+            "dependency_paths": DependencyPaths(
+                git="/opt/bin/git", gh="/opt/bin/gh", claude="/opt/bin/claude", pi="MANAGED"
+            ),
+            "keybindings": {"openSearch": "Mod+K", "newAgent": "Mod+N"},
+            "ci_babysitter": CIBabysitterConfig(retry_cap=7, agent=BabysitterAgentRegistered(registration_id="reg_1")),
+            "custom_actions": CustomActionsConfig(
+                actions=[CustomAction(id="a1", name="Test", prompt="Run the tests")],
+                groups=[CustomActionGroup(id="g1", name="Checks", order=0)],
+            ),
+        },
+    )
+    save_config(base, config_path)
+    user_config_module.set_user_config_instance(base)
+    yield config_path
+    user_config_module.set_user_config_instance(None)
+
+
+def test_merge_config_changing_one_dependency_path_keeps_the_others(installed_config_path: Path) -> None:
+    merged = merge_config({"dependencyPaths": {"pi": "CUSTOM"}})
+
+    expected = DependencyPaths(git="/opt/bin/git", gh="/opt/bin/gh", claude="/opt/bin/claude", pi="CUSTOM")
+    assert merged.dependency_paths == expected
+    assert load_config(installed_config_path).dependency_paths == expected
+
+
+def test_merge_config_changing_claude_mode_keeps_pi(installed_config_path: Path) -> None:
+    merge_config({"dependencyPaths": {"pi": "/usr/local/bin/pi"}})
+
+    merged = merge_config({"dependencyPaths": {"claude": "MANAGED"}})
+
+    assert merged.dependency_paths.claude == "MANAGED"
+    assert merged.dependency_paths.pi == "/usr/local/bin/pi"
+
+
+def test_merge_config_can_clear_one_dependency_path(installed_config_path: Path) -> None:
+    merged = merge_config({"dependencyPaths": {"git": None}})
+
+    assert merged.dependency_paths.git is None
+    assert merged.dependency_paths.gh == "/opt/bin/gh"
+
+
+def test_merge_config_replaces_keybindings_whole(installed_config_path: Path) -> None:
+    """Keybindings is a map: a key left out of the PUT is a deleted override, not an unchanged one."""
+    merged = merge_config({"keybindings": {"openSearch": "Mod+P"}})
+
+    assert merged.keybindings == {"openSearch": "Mod+P"}
+
+
+def test_merge_config_replaces_the_babysitter_agent_choice_whole(installed_config_path: Path) -> None:
+    merged = merge_config({"ciBabysitter": {"agent": {"objectType": "pi"}}})
+
+    assert merged.ci_babysitter.agent == BabysitterAgentPi()
+    assert merged.ci_babysitter.retry_cap == 7
+
+
+def test_merge_config_partial_custom_actions_keeps_other_lists(installed_config_path: Path) -> None:
+    merged = merge_config({"customActions": {"groups": []}})
+
+    assert merged.custom_actions is not None
+    assert merged.custom_actions.groups == []
+    assert [action.id for action in merged.custom_actions.actions] == ["a1"]
+
+
+def test_merge_config_can_clear_and_reset_a_nullable_sub_model(installed_config_path: Path) -> None:
+    cleared = merge_config({"customActions": None})
+    assert cleared.custom_actions is None
+
+    reset = merge_config({"customActions": {"groups": [{"id": "g2", "name": "Ship", "order": 1}]}})
+    assert reset.custom_actions == CustomActionsConfig(groups=[CustomActionGroup(id="g2", name="Ship", order=1)])
 
 
 @pytest.mark.parametrize(
