@@ -3,7 +3,8 @@ import { GitBranchIcon, SparklesIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
-import { ElementIds, WorkspaceInitializationStrategy as Strategy } from "~/api";
+import { ElementIds } from "~/api";
+import { WORKSPACE_MODE_RULES } from "~/common/utils/workspaceModeRules.ts";
 
 import styles from "./BranchNameField.module.scss";
 import type { BranchNameStatus } from "./hooks/useBranchNamePreview.ts";
@@ -49,12 +50,12 @@ export const BranchNameField = ({
   disabled,
   variant = "chip",
 }: BranchNameFieldProps): ReactElement | undefined => {
-  // In-place workspaces use the current branch, so there is no field to render.
-  if (mode === Strategy.IN_PLACE) {
+  const branchNameRule = WORKSPACE_MODE_RULES[mode].branchName;
+  if (branchNameRule === "unused") {
     return undefined;
   }
 
-  const placeholder = mode === Strategy.WORKTREE ? "Branch name (required)" : "Branch name (optional)";
+  const placeholder = branchNameRule === "required" ? "Branch name (required)" : "Branch name (optional)";
   // The as-you-type sanitizer keeps most illegal characters out of `value`, so
   // "invalid" only fires on the residue it deliberately lets through (trailing
   // '.' or '/', a '.lock' suffix) — see sanitizeBranchName.ts.
