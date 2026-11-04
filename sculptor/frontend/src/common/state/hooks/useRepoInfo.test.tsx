@@ -89,6 +89,29 @@ describe("useRepoInfo", () => {
     expect(result.current.repoInfo?.repoPath).toBe("/tmp/test-repo");
   });
 
+  it("fetchCurrentBranch preserves isGithubOrigin and remoteBranches", async () => {
+    // The PR button is gated on isGithubOrigin, so dropping it on a branch
+    // refresh hides the button until the next full fetchRepoInfo.
+    const githubRepoInfo: RepoInfo = {
+      ...MOCK_REPO_INFO,
+      isGithubOrigin: true,
+      remoteBranches: ["origin/main", "origin/develop"],
+    };
+    store.set(repoInfoAtomFamily(PROJECT_ID), githubRepoInfo);
+
+    mockGetCurrentBranch.mockResolvedValue({
+      data: { currentBranch: "feature-branch" },
+    });
+
+    const { result } = renderHook(() => useRepoInfo(PROJECT_ID), { wrapper });
+
+    await act(async () => {
+      await result.current.fetchCurrentBranch();
+    });
+
+    expect(result.current.repoInfo).toEqual({ ...githubRepoInfo, currentBranch: "feature-branch" });
+  });
+
   it("retries when repoInfo is null after fetchRepoInfo failure", async () => {
     vi.useFakeTimers();
 
