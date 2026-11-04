@@ -30,29 +30,16 @@ type RepoRowProps = {
 
 type FieldElement = HTMLInputElement | HTMLTextAreaElement;
 
-type RevertibleField = {
-  key: string;
-  // Call as a save is sent from `field`. Returns that save's `onError`, which
-  // re-mounts the field with the saved value, unless the user has typed into it
-  // since (keeping the newer draft) or it has already re-mounted.
-  revertOnError: (field: FieldElement | null) => () => void;
-};
-
-// Keys an uncontrolled field on its saved value. A successful save re-keys it
-// once the stream delivers the new saved value; a failed save changes nothing
-// server-side, so `revertOnError` bumps a reset count to drop the rejected text.
-// JSON keeps a null saved value distinct from the string "null".
-const useRevertibleField = (savedValue: string | null): RevertibleField => {
-  const [resetCount, setResetCount] = useState(0);
-  const revertOnError = (field: FieldElement | null): (() => void) => {
-    const sentText = field?.value;
-    return (): void => {
-      if (field?.isConnected && field.value === sentText) {
-        setResetCount((count) => count + 1);
-      }
-    };
+// Returns the `onError` for a save sent from `field`: it writes the saved text
+// back over the rejected edit, unless the user has typed into the field since
+// or it has re-mounted (and so already shows the saved text).
+const revertOnError = (field: FieldElement | null, savedText: string): (() => void) => {
+  const sentText = field?.value;
+  return (): void => {
+    if (field?.isConnected && field.value === sentText) {
+      field.value = savedText;
+    }
   };
-  return { key: JSON.stringify([savedValue, resetCount]), revertOnError };
 };
 
 export const RepoRow = ({
@@ -72,8 +59,6 @@ export const RepoRow = ({
   const displayValue = workspaceSetupCommand ?? DEFAULT_WORKSPACE_SETUP_COMMAND;
   const [isExpanded, setIsExpanded] = useState<boolean>(() => shouldAutoFocusSetupCommand);
   const setupCommandTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const setupCommandField = useRevertibleField(workspaceSetupCommand);
-  const namingPatternField = useRevertibleField(namingPattern);
   const { mutate: saveSetupCommand } = useWorkspaceSetupCommandMutation({
     onError: (error): void => {
       setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save setup command") });
@@ -90,7 +75,7 @@ export const RepoRow = ({
   });
 
   const handleSetupCommandSave = (command: string | null, field: HTMLTextAreaElement | null): void => {
-    saveSetupCommand({ projectId, command }, { onError: setupCommandField.revertOnError(field) });
+    saveSetupCommand({ projectId, command }, { onError: revertOnError(field, displayValue) });
   };
 
   const handleSetupCommandBlur = (e: FocusEvent<HTMLTextAreaElement>): void => {
@@ -112,7 +97,7 @@ export const RepoRow = ({
   const handleNamingPatternBlur = (e: FocusEvent<HTMLInputElement>): void => {
     const trimmed = e.target.value.trim();
     if (trimmed !== namingPattern) {
-      saveNamingPattern({ projectId, pattern: trimmed }, { onError: namingPatternField.revertOnError(e.target) });
+      saveNamingPattern({ projectId, pattern: trimmed }, { onError: revertOnError(e.target, namingPattern) });
     }
   };
 
@@ -178,7 +163,7 @@ export const RepoRow = ({
                 (e.g. after blur-save or reset), so we never copy the prop into local state. */}
             <textarea
               ref={setupCommandTextareaRef}
-              key={setupCommandField.key}
+              key={displayValue}
               className={`${styles.setupCommandInput} ${
                 isTrackingDefault ? styles.setupCommandInputTrackingDefault : ""
               }`}
@@ -197,7 +182,7 @@ export const RepoRow = ({
           <Box className={styles.namingPatternSection}>
             <label className={styles.namingPatternLabel}>Branch-naming pattern</label>
             <input
-              key={namingPatternField.key}
+              key={namingPattern}
               className={styles.namingPatternInput}
               defaultValue={namingPattern}
               onBlur={handleNamingPatternBlur}
