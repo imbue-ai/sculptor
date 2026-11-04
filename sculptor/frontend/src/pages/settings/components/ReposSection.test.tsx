@@ -1,8 +1,9 @@
 import { Theme } from "@radix-ui/themes";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, type RenderResult, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
+import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "~/api";
@@ -40,8 +41,8 @@ const PROJECT: Project = {
 let store = createStore();
 const setToast = vi.fn();
 
-const renderSection = (): void => {
-  render(
+const renderSection = (): RenderResult => {
+  const result = render(
     <QueryClientProvider client={queryClient}>
       <Provider store={store}>
         <MemoryRouter>
@@ -53,6 +54,7 @@ const renderSection = (): void => {
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByTestId(ElementIds.SETTINGS_REPO_ROW_CONFIG_TOGGLE));
+  return result;
 };
 
 const getSetupCommandInput = (): HTMLTextAreaElement =>
@@ -72,6 +74,41 @@ const flushMicrotasks = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+// Holds the next save request open until the test rejects it, so the test can
+// act while the request is in flight.
+const holdNextSave = (save: Mock): { reject: (error: Error) => Promise<void> } => {
+  let rejectRequest: (error: Error) => void = () => {};
+  save.mockReturnValueOnce(
+    new Promise((_resolve, reject) => {
+      rejectRequest = reject;
+    }),
+  );
+  return {
+    reject: (error): Promise<void> =>
+      act(async () => {
+        rejectRequest(error);
+        await flushMicrotasks();
+      }),
+  };
+};
+
+const FIELDS = [
+  {
+    name: "setup command",
+    save: apiHarness.updateWorkspaceSetupCommand,
+    getInput: getSetupCommandInput,
+    savedValue: "make setup",
+  },
+  {
+    name: "naming pattern",
+    save: apiHarness.updateNamingPattern,
+    getInput: getNamingPatternInput,
+    savedValue: "dev/{slug}",
+  },
+];
+
+const REJECTION = { type: ToastType.ERROR, title: "rejected" };
+
 beforeEach(() => {
   store = createStore();
   store.set(updateProjectsAtom, [PROJECT]);
@@ -82,28 +119,57 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("ReposSection repo config saves", () => {
-  it("restores the saved setup command and shows a toast when the save fails", async () => {
-    apiHarness.updateWorkspaceSetupCommand.mockRejectedValue(new Error("disk full"));
+describe.each(FIELDS)("a failed $name save", ({ save, getInput, savedValue }) => {
+  it("restores the saved value and shows a toast", async () => {
+    const request = holdNextSave(save);
     renderSection();
 
-    editAndBlur(getSetupCommandInput(), "make broken");
+    editAndBlur(getInput(), "rejected edit");
+    await request.reject(new Error("rejected"));
 
-    await waitFor(() => expect(setToast).toHaveBeenCalledWith({ type: ToastType.ERROR, title: "disk full" }));
-    expect(getSetupCommandInput().value).toBe("make setup");
+    expect(getInput().value).toBe(savedValue);
+    expect(setToast).toHaveBeenCalledWith(REJECTION);
   });
 
-  it("restores the saved naming pattern and shows a toast when the save fails", async () => {
-    apiHarness.updateNamingPattern.mockRejectedValue(new Error("invalid pattern"));
+  it("keeps a newer draft typed while the request was in flight", async () => {
+    const request = holdNextSave(save);
     renderSection();
 
-    editAndBlur(getNamingPatternInput(), "bad/{");
+    editAndBlur(getInput(), "rejected edit");
+    fireEvent.change(getInput(), { target: { value: "newer draft" } });
+    await request.reject(new Error("rejected"));
 
-    await waitFor(() => expect(setToast).toHaveBeenCalledWith({ type: ToastType.ERROR, title: "invalid pattern" }));
-    expect(getNamingPatternInput().value).toBe("dev/{slug}");
+    expect(getInput().value).toBe("newer draft");
+    expect(setToast).toHaveBeenCalledWith(REJECTION);
   });
 
-  it("leaves the project atom to the stream when a save succeeds", async () => {
+  it("keeps a draft typed into the field after it re-mounted", async () => {
+    const request = holdNextSave(save);
+    renderSection();
+
+    editAndBlur(getInput(), "rejected edit");
+    fireEvent.click(screen.getByTestId(ElementIds.SETTINGS_REPO_ROW_CONFIG_TOGGLE));
+    fireEvent.click(screen.getByTestId(ElementIds.SETTINGS_REPO_ROW_CONFIG_TOGGLE));
+    fireEvent.change(getInput(), { target: { value: "newer draft" } });
+    await request.reject(new Error("rejected"));
+
+    expect(getInput().value).toBe("newer draft");
+  });
+
+  it("still shows a toast when the section unmounts before the request fails", async () => {
+    const request = holdNextSave(save);
+    const { unmount } = renderSection();
+
+    editAndBlur(getInput(), "rejected edit");
+    unmount();
+    await request.reject(new Error("rejected"));
+
+    expect(setToast).toHaveBeenCalledWith(REJECTION);
+  });
+});
+
+describe("a successful repo config save", () => {
+  it("leaves the project atom to the stream", async () => {
     apiHarness.updateWorkspaceSetupCommand.mockResolvedValue({ data: "make fast" });
     apiHarness.updateNamingPattern.mockResolvedValue({ data: "dev/{ticket}" });
     renderSection();

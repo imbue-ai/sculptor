@@ -28,12 +28,32 @@ type RepoRowProps = {
   setToast: (toast: ToastContent | null) => void;
 };
 
-// Key for an uncontrolled field. A successful save re-keys it once the stream
-// delivers the new saved value; a failed save changes nothing server-side, so
-// bumping `resetCount` re-mounts it to drop the rejected text. JSON keeps a null
-// saved value distinct from the string "null".
-const savedFieldKey = (savedValue: string | null, resetCount: number): string =>
-  JSON.stringify([savedValue, resetCount]);
+type FieldElement = HTMLInputElement | HTMLTextAreaElement;
+
+type RevertibleField = {
+  key: string;
+  // Call as a save is sent from `field`. Returns that save's `onError`, which
+  // re-mounts the field with the saved value, unless the user has typed into it
+  // since (keeping the newer draft) or it has already re-mounted.
+  revertOnError: (field: FieldElement | null) => () => void;
+};
+
+// Keys an uncontrolled field on its saved value. A successful save re-keys it
+// once the stream delivers the new saved value; a failed save changes nothing
+// server-side, so `revertOnError` bumps a reset count to drop the rejected text.
+// JSON keeps a null saved value distinct from the string "null".
+const useRevertibleField = (savedValue: string | null): RevertibleField => {
+  const [resetCount, setResetCount] = useState(0);
+  const revertOnError = (field: FieldElement | null): (() => void) => {
+    const sentText = field?.value;
+    return (): void => {
+      if (field?.isConnected && field.value === sentText) {
+        setResetCount((count) => count + 1);
+      }
+    };
+  };
+  return { key: JSON.stringify([savedValue, resetCount]), revertOnError };
+};
 
 export const RepoRow = ({
   projectId,
@@ -51,26 +71,26 @@ export const RepoRow = ({
   const isTrackingDefault = workspaceSetupCommand === null;
   const displayValue = workspaceSetupCommand ?? DEFAULT_WORKSPACE_SETUP_COMMAND;
   const [isExpanded, setIsExpanded] = useState<boolean>(() => shouldAutoFocusSetupCommand);
-  const [setupCommandResetCount, setSetupCommandResetCount] = useState(0);
-  const [namingPatternResetCount, setNamingPatternResetCount] = useState(0);
   const setupCommandTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const { mutate: saveSetupCommand } = useWorkspaceSetupCommandMutation();
-  const { mutate: saveNamingPattern } = useNamingPatternMutation();
+  const setupCommandField = useRevertibleField(workspaceSetupCommand);
+  const namingPatternField = useRevertibleField(namingPattern);
+  const { mutate: saveSetupCommand } = useWorkspaceSetupCommandMutation({
+    onError: (error): void => {
+      setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save setup command") });
+    },
+  });
+  const { mutate: saveNamingPattern } = useNamingPatternMutation({
+    onError: (error): void => {
+      setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save naming pattern") });
+    },
+  });
 
   useOnMountIf(shouldAutoFocusSetupCommand, () => {
     setupCommandTextareaRef.current?.focus();
   });
 
-  const handleSetupCommandSave = (command: string | null): void => {
-    saveSetupCommand(
-      { projectId, command },
-      {
-        onError: (error): void => {
-          setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save setup command") });
-          setSetupCommandResetCount((count) => count + 1);
-        },
-      },
-    );
+  const handleSetupCommandSave = (command: string | null, field: HTMLTextAreaElement | null): void => {
+    saveSetupCommand({ projectId, command }, { onError: setupCommandField.revertOnError(field) });
   };
 
   const handleSetupCommandBlur = (e: FocusEvent<HTMLTextAreaElement>): void => {
@@ -78,29 +98,21 @@ export const RepoRow = ({
     if (isTrackingDefault) {
       // Unchanged default text → remain tracking default. Otherwise freeze the edit.
       if (trimmed !== DEFAULT_WORKSPACE_SETUP_COMMAND) {
-        handleSetupCommandSave(trimmed);
+        handleSetupCommandSave(trimmed, e.target);
       }
     } else if (trimmed !== workspaceSetupCommand) {
-      handleSetupCommandSave(trimmed);
+      handleSetupCommandSave(trimmed, e.target);
     }
   };
 
   const handleReset = (): void => {
-    handleSetupCommandSave(null);
+    handleSetupCommandSave(null, setupCommandTextareaRef.current);
   };
 
   const handleNamingPatternBlur = (e: FocusEvent<HTMLInputElement>): void => {
     const trimmed = e.target.value.trim();
     if (trimmed !== namingPattern) {
-      saveNamingPattern(
-        { projectId, pattern: trimmed },
-        {
-          onError: (error): void => {
-            setToast({ type: ToastType.ERROR, title: getErrorMessage(error, "Failed to save naming pattern") });
-            setNamingPatternResetCount((count) => count + 1);
-          },
-        },
-      );
+      saveNamingPattern({ projectId, pattern: trimmed }, { onError: namingPatternField.revertOnError(e.target) });
     }
   };
 
@@ -166,7 +178,7 @@ export const RepoRow = ({
                 (e.g. after blur-save or reset), so we never copy the prop into local state. */}
             <textarea
               ref={setupCommandTextareaRef}
-              key={savedFieldKey(workspaceSetupCommand, setupCommandResetCount)}
+              key={setupCommandField.key}
               className={`${styles.setupCommandInput} ${
                 isTrackingDefault ? styles.setupCommandInputTrackingDefault : ""
               }`}
@@ -185,7 +197,7 @@ export const RepoRow = ({
           <Box className={styles.namingPatternSection}>
             <label className={styles.namingPatternLabel}>Branch-naming pattern</label>
             <input
-              key={savedFieldKey(namingPattern, namingPatternResetCount)}
+              key={namingPatternField.key}
               className={styles.namingPatternInput}
               defaultValue={namingPattern}
               onBlur={handleNamingPatternBlur}

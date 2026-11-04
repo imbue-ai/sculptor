@@ -24,6 +24,7 @@ vi.mock("../../../api", async () => {
 });
 
 const PROJECT_ID = "prj-1";
+const onError = vi.fn();
 
 const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
   createElement(QueryClientProvider, { client: queryClient }, children);
@@ -36,7 +37,7 @@ beforeEach(() => {
 
 describe("useWorkspaceSetupCommandMutation", () => {
   it("sends the command with the settle timeout", async () => {
-    const { result } = renderHook(() => useWorkspaceSetupCommandMutation(), { wrapper });
+    const { result } = renderHook(() => useWorkspaceSetupCommandMutation({ onError }), { wrapper });
 
     await act(() => result.current.mutateAsync({ projectId: PROJECT_ID, command: "make setup" }));
 
@@ -48,7 +49,7 @@ describe("useWorkspaceSetupCommandMutation", () => {
   });
 
   it("sends null to resume tracking the default", async () => {
-    const { result } = renderHook(() => useWorkspaceSetupCommandMutation(), { wrapper });
+    const { result } = renderHook(() => useWorkspaceSetupCommandMutation({ onError }), { wrapper });
 
     await act(() => result.current.mutateAsync({ projectId: PROJECT_ID, command: null }));
 
@@ -57,22 +58,24 @@ describe("useWorkspaceSetupCommandMutation", () => {
     );
   });
 
-  it("surfaces a rejected request as a mutation error", async () => {
-    mockUpdateSetupCommand.mockRejectedValueOnce(new Error("timeout"));
-    const { result } = renderHook(() => useWorkspaceSetupCommandMutation(), { wrapper });
+  it("reports a rejected request to onError", async () => {
+    const error = new Error("timeout");
+    mockUpdateSetupCommand.mockRejectedValueOnce(error);
+    const { result } = renderHook(() => useWorkspaceSetupCommandMutation({ onError }), { wrapper });
 
     act(() => {
       result.current.mutate({ projectId: PROJECT_ID, command: "make setup" });
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toBe("timeout");
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0][0]).toBe(error);
   });
 });
 
 describe("useNamingPatternMutation", () => {
   it("sends the pattern with the settle timeout", async () => {
-    const { result } = renderHook(() => useNamingPatternMutation(), { wrapper });
+    const { result } = renderHook(() => useNamingPatternMutation({ onError }), { wrapper });
 
     await act(() => result.current.mutateAsync({ projectId: PROJECT_ID, pattern: "dev/{slug}" }));
 
@@ -83,15 +86,17 @@ describe("useNamingPatternMutation", () => {
     });
   });
 
-  it("surfaces a rejected request as a mutation error", async () => {
-    mockUpdateNamingPattern.mockRejectedValueOnce(new Error("timeout"));
-    const { result } = renderHook(() => useNamingPatternMutation(), { wrapper });
+  it("reports a rejected request to onError", async () => {
+    const error = new Error("timeout");
+    mockUpdateNamingPattern.mockRejectedValueOnce(error);
+    const { result } = renderHook(() => useNamingPatternMutation({ onError }), { wrapper });
 
     act(() => {
       result.current.mutate({ projectId: PROJECT_ID, pattern: "dev/{slug}" });
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toBe("timeout");
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0][0]).toBe(error);
   });
 });
