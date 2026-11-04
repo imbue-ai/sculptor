@@ -6,7 +6,7 @@ import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
-import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
+import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 
 import { TerminalPanelView } from "../../panels/TerminalPanelView.tsx";
 import styles from "./Overlay.module.scss";
@@ -22,8 +22,8 @@ export const TerminalOverlay = ({ onBack }: { onBack: () => void }): ReactElemen
   const { workspaceID } = useWorkspacePageParams();
   const workspace = useWorkspace(workspaceID);
   const project = useProject(workspace?.projectId ?? "");
-  const branchInfo = useWorkspaceBranch(workspaceID);
-  const branch = branchInfo?.currentBranch ?? workspace?.sourceBranch ?? "";
+  const identityLabel = useWorkspaceIdentityLabel({ workspaceId: workspaceID });
+  const branch = identityLabel.status === "READY" ? identityLabel.text : "";
   const repoName = project?.name ?? "";
 
   return (

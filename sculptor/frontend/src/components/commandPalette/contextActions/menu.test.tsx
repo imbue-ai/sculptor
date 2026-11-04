@@ -1,10 +1,12 @@
 import { ContextMenu, DropdownMenu, Theme } from "@radix-ui/themes";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds, type Workspace } from "../../../api";
+import { workspaceBranchAtomFamily } from "../../../common/state/atoms/workspaceBranch.ts";
 import type { OpenInRuntime } from "./menu.tsx";
 import { WorkspaceContextMenuContent, WorkspaceDropdownMenuContent } from "./menu.tsx";
 import type { WorkspaceAction } from "./types/contextActions.ts";
@@ -33,8 +35,7 @@ const openInRuntime: OpenInRuntime = {
   isMacUi: () => false,
 };
 
-const renderInDropdown = (ui: ReactElement): void => {
-  const store = createStore();
+const renderInDropdown = (ui: ReactElement, store = createStore()): void => {
   render(
     <Provider store={store}>
       <Theme>
@@ -110,5 +111,41 @@ describe("WorkspaceContextMenuContent", () => {
     );
     expectPresent(ElementIds.TAB_CONTEXT_MENU_COPY_WORKSPACE_NAME);
     expectPresent(ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH);
+  });
+});
+
+describe("Copy branch", () => {
+  it("copies the workspace's live branch", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    store.set(workspaceBranchAtomFamily("w4"), { currentBranch: "dev/feature", workspaceId: "w4" });
+    renderInDropdown(
+      <WorkspaceDropdownMenuContent
+        actions={makeActions()}
+        workspace={fakeWorkspace("w4")}
+        destructiveColor="red"
+        openInRuntime={openInRuntime}
+      />,
+      store,
+    );
+
+    await user.click(screen.getAllByTestId(ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH)[0]);
+
+    expect(await navigator.clipboard.readText()).toBe("dev/feature");
+  });
+
+  it("does not offer the branch the workspace was created from while its own branch loads", () => {
+    renderInDropdown(
+      <WorkspaceDropdownMenuContent
+        actions={makeActions()}
+        workspace={fakeWorkspace("w5")}
+        destructiveColor="red"
+        openInRuntime={openInRuntime}
+      />,
+    );
+
+    expect(screen.getAllByTestId(ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH)[0].getAttribute("aria-disabled")).toBe(
+      "true",
+    );
   });
 });

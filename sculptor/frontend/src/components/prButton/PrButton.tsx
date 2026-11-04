@@ -12,6 +12,7 @@ import { chatActionsAtom } from "../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../common/state/atoms/prStatus.ts";
 import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
+import { toBareRefName } from "../../common/utils/refNames.ts";
 import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
 import { PrPromptDialog } from "./PrPromptDialog.tsx";
@@ -82,7 +83,7 @@ const getErrorContent = (category: PrErrorCategory): ErrorContent => {
 
 type PrButtonProps = {
   workspaceId: string;
-  targetBranch: string | null | undefined;
+  targetBranch: string;
   hideCreateAction?: boolean;
   gitProvider: GitProvider;
   onSwitchTarget?: (newTarget: string) => void;
@@ -479,22 +480,21 @@ export const PrButton = ({
       return null;
     }
 
-    const targetBare = (targetBranch ?? "").replace(/^[^/]+\//, "");
     const isMismatchRelevant =
       prStatus.mismatchedPrIid != null &&
       prStatus.mismatchedPrTargetBranch != null &&
-      prStatus.mismatchedPrTargetBranch !== targetBare;
+      prStatus.mismatchedPrTargetBranch !== toBareRefName(targetBranch);
     if (isMismatchRelevant) {
       return (
         <AssignPrButton
           prStatus={prStatus}
-          targetBranch={targetBranch ?? "origin/main"}
+          targetBranch={targetBranch}
           gitProvider={gitProvider}
           onSwitchTarget={onSwitchTarget}
         />
       );
     }
-    return <CreatePrButton targetBranch={targetBranch ?? "origin/main"} gitProvider={gitProvider} />;
+    return <CreatePrButton targetBranch={targetBranch} gitProvider={gitProvider} />;
   }
 
   if (prStatus.prState === "open") {

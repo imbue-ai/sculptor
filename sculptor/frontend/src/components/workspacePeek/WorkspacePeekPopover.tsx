@@ -1,6 +1,6 @@
 import { Skeleton } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import { FolderIcon, GitBranchIcon } from "lucide-react";
+import { FolderIcon } from "lucide-react";
 import { type CSSProperties, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CodingAgentTaskView, PrStatusInfo } from "~/api";
@@ -11,8 +11,9 @@ import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { useProject, useProjects } from "~/common/state/hooks/useProjects";
 import { useThemeDangerColor, useThemeSuccessColor, useThemeWarningColor } from "~/common/state/hooks/useThemeBuilder";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
-import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
+import type { WorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
+import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 import { useTimedLatch } from "~/pages/workspace/hooks/useTimedLatch.ts";
 import { revealPanelInWorkspaceAtom } from "~/pages/workspace/layout/atoms/sectionActions.ts";
 
@@ -263,7 +264,7 @@ const PeekHeader = ({
 
 const PeekFooter = ({
   projectName,
-  branchInfo,
+  identityLabel,
   diffStats,
   isShimmering,
   isCopied,
@@ -271,7 +272,7 @@ const PeekFooter = ({
   onDiffClick,
 }: {
   projectName: string | null;
-  branchInfo: { currentBranch: string } | null;
+  identityLabel: WorkspaceIdentityLabel;
   diffStats: { additions: number; deletions: number };
   isShimmering: boolean;
   isCopied: boolean;
@@ -288,18 +289,20 @@ const PeekFooter = ({
         </div>
       )}
       <div className={styles.footerRow}>
-        {branchInfo != null ? (
+        {identityLabel.status !== "LOADING" ? (
           <>
-            <div
-              className={styles.branchInfo}
-              onClick={onCopyBranch}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && onCopyBranch()}
-            >
-              <GitBranchIcon className={styles.branchIcon} />
-              <span className={styles.branchName}>{isCopied ? "Copied!" : branchInfo.currentBranch}</span>
-            </div>
+            {identityLabel.status === "READY" && (
+              <div
+                className={styles.branchInfo}
+                onClick={onCopyBranch}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === "Enter" && onCopyBranch()}
+              >
+                <identityLabel.icon className={styles.branchIcon} />
+                <span className={styles.branchName}>{isCopied ? "Copied!" : identityLabel.text}</span>
+              </div>
+            )}
             <span className={styles.spacer} />
             {hasChanges ? (
               <div
@@ -337,7 +340,7 @@ export const WorkspacePeekPopover = ({
   const project = useProject(workspace?.projectId ?? "");
   const projects = useProjects();
   const allAgents = useAtomValue(agentsArrayAtom);
-  const branchInfo = useWorkspaceBranch(workspaceId);
+  const identityLabel = useWorkspaceIdentityLabel({ workspaceId });
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceId));
   const { data: diff, isFetching } = useWorkspaceDiff(workspaceId);
   const isShimmering = useTimedLatch(isFetching, SHIMMER_MIN_HOLD_MS);
@@ -430,13 +433,14 @@ export const WorkspacePeekPopover = ({
     return (): void => clearTimeout(copyTimerRef.current);
   }, []);
 
+  const branchCopyText = identityLabel.status === "READY" ? identityLabel.copyText : null;
   const handleCopyBranch = useCallback(() => {
-    if (!branchInfo?.currentBranch) return;
-    navigator.clipboard.writeText(branchInfo.currentBranch);
+    if (branchCopyText === null) return;
+    navigator.clipboard.writeText(branchCopyText);
     setIsCopied(true);
     clearTimeout(copyTimerRef.current);
     copyTimerRef.current = setTimeout(() => setIsCopied(false), COPY_FEEDBACK_DURATION_MS);
-  }, [branchInfo?.currentBranch]);
+  }, [branchCopyText]);
 
   const handleDiffClick = useCallback(() => {
     onNavigate(workspaceId);
@@ -509,7 +513,7 @@ export const WorkspacePeekPopover = ({
 
       <PeekFooter
         projectName={showProjectName}
-        branchInfo={branchInfo}
+        identityLabel={identityLabel}
         diffStats={diffStats}
         isShimmering={isShimmering}
         isCopied={isCopied}

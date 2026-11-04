@@ -7,7 +7,7 @@ import { Fragment } from "react";
 import { ElementIds, type ExternalApp, type Workspace } from "../../../api";
 import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
-import { useWorkspaceBranch } from "../../../common/state/hooks/useWorkspaceBranch.ts";
+import { useWorkspaceIdentityLabel } from "../../../common/state/hooks/useWorkspaceIdentity.ts";
 import { pendingWorkspaceRenameIdAtom, renamingWorkspaceIdAtom } from "./atoms/contextActions.ts";
 import type { WorkspaceAction } from "./types/contextActions.ts";
 
@@ -142,10 +142,8 @@ const useWorkspaceMenuItems = (
     openInRuntime?: OpenInRuntime;
   },
 ): Array<ReactElement> => {
-  // Branch info is pushed over the WebSocket, so this is a plain atom read
-  // (no fetch). Fall back to the source branch when the live branch hasn't
-  // arrived yet.
-  const branch = useWorkspaceBranch(workspace.objectId)?.currentBranch ?? workspace.sourceBranch ?? null;
+  const identityLabel = useWorkspaceIdentityLabel({ workspaceId: workspace.objectId });
+  const branch = identityLabel.status === "READY" ? identityLabel.copyText : null;
   const isOpenInVisible =
     openInRuntime != null && openInRuntime.canOpenInOS() && openInRuntime.isMacUi() && getOpenWithItems().length > 0;
   // Render the Open-in submenu inline, immediately after the `open_pr`
