@@ -5,12 +5,10 @@ import { useEffect, useState } from "react";
 
 import { workspaceIdentitySourcesAtomFamily } from "../atoms/workspaceIdentity.ts";
 
-// How long to wait for a current branch before labelling a workspace with its
-// requested branch name. The current branch normally streams in well under
-// this, but the branch poller publishes one only for a workspace whose working
-// directory resolves: a workspace whose environment was never created, or whose
-// worktree is gone, never gets one. Waiting first avoids flashing a requested
-// name that an agent has since renamed.
+// How long to wait for a current branch before falling back to the requested
+// branch name. Waiting avoids flashing a name an agent has since renamed. The
+// wait is bounded because the branch poller never reports a branch for a
+// workspace without a working directory (no environment yet, or worktree gone).
 export const IDENTITY_LABEL_GRACE_MS = 2000;
 
 /**
@@ -31,10 +29,9 @@ const branchLabel = (branch: string): WorkspaceIdentityLabel => ({
 });
 
 /**
- * Resolve a workspace's identity label. The current branch wins, from the
- * stream or else from a REST read of the same scan cache. Only once the grace
- * window has passed does the requested branch name stand in. The source branch
- * never does: it is the base the workspace was created from, not its own branch.
+ * Resolve a workspace's identity label. A fetched branch is the same scan-cache
+ * value as the live one, read over REST. Never fall back to the source branch:
+ * it is the base the workspace was created from, not its own branch.
  */
 export const resolveWorkspaceIdentityLabel = (sources: {
   liveBranch: string | null;
@@ -66,22 +63,30 @@ export const useWorkspaceIdentityLabel = ({
   fetchedBranch?: string | null;
 }): WorkspaceIdentityLabel => {
   const { liveBranch, requestedBranchName } = useAtomValue(workspaceIdentitySourcesAtomFamily(workspaceId));
-  // Keyed by workspace so a surface that switches workspaces waits afresh.
-  const [graceElapsedWorkspaceId, setGraceElapsedWorkspaceId] = useState<string | null>(null);
-  const isCurrentBranchKnown = liveBranch !== null || (fetchedBranch ?? null) !== null;
-
-  useEffect(() => {
-    if (isCurrentBranchKnown) {
-      return undefined;
-    }
-    const timer = setTimeout((): void => setGraceElapsedWorkspaceId(workspaceId), IDENTITY_LABEL_GRACE_MS);
-    return (): void => clearTimeout(timer);
-  }, [workspaceId, isCurrentBranchKnown]);
-
-  return resolveWorkspaceIdentityLabel({
+  // The workspace the grace window is running for. Moving to another workspace
+  // restarts it, so a reused surface waits afresh on every switch.
+  const [graceWindow, setGraceWindow] = useState<{ workspaceId: string; hasElapsed: boolean }>({
+    workspaceId,
+    hasElapsed: false,
+  });
+  if (graceWindow.workspaceId !== workspaceId) {
+    setGraceWindow({ workspaceId, hasElapsed: false });
+  }
+  const label = resolveWorkspaceIdentityLabel({
     liveBranch,
     fetchedBranch: fetchedBranch ?? null,
     requestedBranchName,
-    hasGraceElapsed: graceElapsedWorkspaceId === workspaceId,
+    hasGraceElapsed: graceWindow.hasElapsed,
   });
+  const isLoading = label.status === "LOADING";
+
+  useEffect(() => {
+    if (!isLoading) {
+      return undefined;
+    }
+    const timer = setTimeout((): void => setGraceWindow({ workspaceId, hasElapsed: true }), IDENTITY_LABEL_GRACE_MS);
+    return (): void => clearTimeout(timer);
+  }, [workspaceId, isLoading]);
+
+  return label;
 };

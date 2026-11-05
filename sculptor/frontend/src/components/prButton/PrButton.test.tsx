@@ -80,10 +80,13 @@ describe("PrButton offers to adopt an existing PR only when it targets another b
     expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeTruthy();
   });
 
-  it("reads a local target with a slash as one branch name, not a remote and a branch", () => {
+  it("keeps offering the reported PR when the target is a local branch with a slash", () => {
+    // PR status matches `feature/login` as `login`, so it reports the PR based
+    // on `feature/login` as a mismatch. Answering that with "Create PR" would
+    // hide the PR that already exists.
     renderWithNoPr("feature/login", "feature/login");
 
-    expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeTruthy();
-    expect(screen.queryByTestId(ElementIds.PR_BUTTON_ASSIGN)).toBeNull();
+    expect(screen.getByTestId(ElementIds.PR_BUTTON_ASSIGN)).toBeTruthy();
+    expect(screen.queryByTestId(ElementIds.PR_BUTTON_CREATE)).toBeNull();
   });
 });
