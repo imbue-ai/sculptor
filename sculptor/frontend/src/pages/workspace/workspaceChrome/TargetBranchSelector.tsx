@@ -18,7 +18,7 @@ type MismatchInfo = {
 };
 
 type TargetBranchSelectorProps = {
-  currentTargetBranch: string;
+  currentTargetBranch: string | null;
   targetBranches: Array<string>;
   onBranchChange: (branch: string) => void;
   onOpenChange?: (open: boolean) => void;
@@ -41,7 +41,10 @@ export const TargetBranchSelector = ({
     }));
   }, [targetBranches, mismatch]);
 
-  const isAmber = variant === "amber";
+  // A missing target is shown as a warning: until the user picks one, the
+  // workspace has nothing to open a pull request into.
+  const isAmber = variant === "amber" || currentTargetBranch === null;
+  const label = currentTargetBranch ?? "No target branch";
 
   return (
     <BranchCombobox
@@ -54,12 +57,12 @@ export const TargetBranchSelector = ({
           <span className={styles.amberText}>
             <AlertCircle size={10} className={styles.amberIcon} />
             <Text size="1" truncate>
-              {currentTargetBranch}
+              {label}
             </Text>
           </span>
         ) : (
           <Text size="1" truncate>
-            {currentTargetBranch}
+            {label}
           </Text>
         )
       }

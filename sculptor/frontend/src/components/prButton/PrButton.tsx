@@ -83,11 +83,29 @@ const getErrorContent = (category: PrErrorCategory): ErrorContent => {
 
 type PrButtonProps = {
   workspaceId: string;
-  targetBranch: string;
+  targetBranch: string | null;
   hideCreateAction?: boolean;
   gitProvider: GitProvider;
   onSwitchTarget?: (newTarget: string) => void;
 };
+
+type CreatePrButtonFaceProps = {
+  onClick?: () => void;
+  isDisabled?: boolean;
+};
+
+const CreatePrButtonFace = ({ onClick, isDisabled = false }: CreatePrButtonFaceProps): ReactElement => (
+  <button
+    type="button"
+    className={styles.createButton}
+    onClick={onClick}
+    disabled={isDisabled}
+    data-testid={ElementIds.PR_BUTTON_CREATE}
+  >
+    <PlusIcon size={12} className={styles.plusIcon} />
+    <Text size="1">Create PR</Text>
+  </button>
+);
 
 type CreatePrButtonProps = {
   targetBranch: string;
@@ -113,15 +131,7 @@ const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): Rea
     <>
       <ContextMenu.Root>
         <ContextMenu.Trigger>
-          <button
-            type="button"
-            className={styles.createButton}
-            onClick={handleClick}
-            data-testid={ElementIds.PR_BUTTON_CREATE}
-          >
-            <PlusIcon size={12} className={styles.plusIcon} />
-            <Text size="1">Create PR</Text>
-          </button>
+          <CreatePrButtonFace onClick={handleClick} />
         </ContextMenu.Trigger>
         <ContextMenu.Content size="1">
           <ContextMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</ContextMenu.Item>
@@ -131,6 +141,17 @@ const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): Rea
     </>
   );
 };
+
+// Without a target branch there is nothing to open a pull request into, so
+// Create PR stays in place but disabled until the user picks a target.
+const NoTargetPrButton = (): ReactElement => (
+  <Tooltip content="Sculptor couldn't find a target branch for this workspace. Pick one from the target selector to create a PR.">
+    {/* Radix Tooltip does not fire on a disabled button, so the span carries the hover. */}
+    <span style={{ display: "inline-flex" }}>
+      <CreatePrButtonFace isDisabled />
+    </span>
+  </Tooltip>
+);
 
 // A PR waiting in the merge queue supersedes its pipeline status: the checks
 // have already gone green to be enqueued, so the dot reports "Merge queued"
@@ -478,6 +499,10 @@ export const PrButton = ({
   if (prStatus.prState === "none") {
     if (hideCreateAction) {
       return null;
+    }
+
+    if (targetBranch === null) {
+      return <NoTargetPrButton />;
     }
 
     const isMismatchRelevant =

@@ -42,9 +42,9 @@ describe("useWorkspaceTarget", () => {
     expect(result.current).toBe("origin/release");
   });
 
-  it("falls back to origin/main when the workspace has none", () => {
+  it("is null when the workspace has none", () => {
     const { result } = renderHook(() => useWorkspaceTarget("ws1"), { wrapper: createWrapper(storeWith(null)) });
 
-    expect(result.current).toBe("origin/main");
+    expect(result.current).toBeNull();
   });
 });

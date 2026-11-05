@@ -54,6 +54,8 @@ The default mode is **worktree** (above). Two other modes are available under
   **Settings > Repositories**.
 - **Target branch** — the branch your work merges back into. It starts as your
   repo's default branch, and you can change it per workspace from the top bar.
+  If Sculptor can't find a default branch, the top bar shows **No target
+  branch** until you pick one.
 - **Branch cleanup** — when you delete a worktree workspace, Sculptor can delete
   its branch (never, only when safe, or always) per your **Settings > Git** policy.
 

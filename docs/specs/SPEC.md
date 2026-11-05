@@ -536,7 +536,9 @@ target-branch selector itself is *not* gated this way — it appears on every re
 a PR requires a detected GitHub remote.) Given such a repo, once you've committed work on a workspace
 branch you can open a **pull request** straight from the workspace's top bar with **Create PR**.
 Clicking it pushes the branch and asks the agent to open the request against the workspace's target
-branch. If you'd rather adjust how that's done first, the button's chevron menu offers **Edit
+branch. A workspace with no target branch (Sculptor found no default branch when it created the
+workspace) shows **Create PR** disabled, and its target-branch selector reads **No target branch** in a
+warning color until you pick one. If you'd rather adjust how that's done first, the button's chevron menu offers **Edit
 prompt...**, which opens a dialog to revise the PR-creation prompt before you create anything. While
 Sculptor is looking up status, the button shows a spinner with "Checking PR...".
 

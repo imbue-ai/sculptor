@@ -40,4 +40,24 @@ describe("TargetBranchSelector", () => {
     expect(within(optionFor("origin/main")).queryByText("PR #847")).toBeNull();
     expect(within(optionFor("release")).queryByText("PR #847")).toBeNull();
   });
+
+  it("flags a workspace with no target branch and lets the user pick one", async () => {
+    const onBranchChange = vi.fn();
+    renderWithProviders(
+      <TargetBranchSelector
+        currentTargetBranch={null}
+        targetBranches={["origin/develop"]}
+        onBranchChange={onBranchChange}
+      />,
+      { store: createStore() },
+    );
+
+    const selector = screen.getByTestId(ElementIds.TARGET_BRANCH_SELECTOR);
+    expect(within(selector).getByText("No target branch")).toBeTruthy();
+
+    await userEvent.click(selector);
+    await userEvent.click(optionFor("origin/develop"));
+
+    expect(onBranchChange).toHaveBeenCalledWith("origin/develop");
+  });
 });
