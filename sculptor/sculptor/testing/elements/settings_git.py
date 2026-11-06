@@ -15,18 +15,8 @@ class PlaywrightGitSettingsElement(PlaywrightIntegrationTestElement):
         """Get the number input for poll interval."""
         return self._locator.get_by_test_id(ElementIDs.SETTINGS_POLL_INTERVAL_INPUT)
 
-    def get_default_target_branch_input(self) -> Locator:
-        """Get the text input for default target branch.
-
-        Looks up by data-testid; needed because Settings | Git also has a
-        "Default branch-naming pattern" text input (added with worktree mode),
-        so a section-wide ``input:not([type="number"])`` query is no longer
-        unique.
-        """
-        return self._locator.get_by_test_id(ElementIDs.SETTINGS_DEFAULT_TARGET_BRANCH_INPUT)
-
-    def set_default_target_branch(self, branch: str) -> None:
-        """Clear and fill the default target branch input."""
-        input_field = self.get_default_target_branch_input()
-        input_field.fill(branch)
+    def set_poll_interval(self, seconds: int) -> None:
+        """Clear and fill the poll interval input, then blur to save."""
+        input_field = self.get_poll_interval_input()
+        input_field.fill(str(seconds))
         input_field.blur()

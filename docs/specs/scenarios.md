@@ -2350,7 +2350,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **SET-023 — Git settings**
   - Given: the Git section.
-  - When: the user edits the PR-creation prompt, toggles PR status polling, sets poll interval (10–300s) and closed-workspace multiplier (1–120×), or sets the default target branch.
+  - When: the user edits the PR-creation prompt, toggles PR status polling, or sets poll interval (10–300s) and closed-workspace multiplier (1–120×).
   - Then: each saves with a toast; polling fields disable when polling is off; values are validated to their ranges; the PR prompt has a reset-to-default.
 
 - **SET-024 — Global defaults**

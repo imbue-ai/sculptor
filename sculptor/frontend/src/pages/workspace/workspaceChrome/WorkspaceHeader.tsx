@@ -163,6 +163,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   // Only show mismatch when the PR's target branch differs from the current
   // workspace target, compared the way PR status matches them.
   const hasMismatch =
+    currentTargetBranch !== null &&
     prStatus?.prState === "none" &&
     prStatus.mismatchedPrIid != null &&
     prStatus.mismatchedPrTargetBranch != null &&

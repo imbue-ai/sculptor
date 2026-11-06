@@ -118,6 +118,22 @@ def test_banner_target_branch_lists_local_branches_when_no_remote(
     expect(selector).to_contain_text("feature/demo-target")
 
 
+@user_story("to see that a workspace has no target branch when the repo has no default branch")
+def test_banner_flags_a_missing_target_branch(sculptor_instance_: SculptorInstance) -> None:
+    """With no remote and no main or master branch, Sculptor resolves no target.
+
+    The selector flags the missing target rather than showing a branch the repo
+    does not have.
+    """
+    page = sculptor_instance_.page
+    sculptor_instance_.repo.repo.run_git(("branch", "-m", "main", "trunk"))
+    _remove_origin_and_add_local_branches(sculptor_instance_, ())
+
+    task_page = start_task_and_wait_for_ready(page, "say hello")
+
+    expect(task_page.get_target_branch_selector()).to_contain_text("No target branch")
+
+
 @user_story("to configure PR settings in the Settings page")
 def test_settings_git_section(sculptor_instance_: SculptorInstance) -> None:
     """Navigate to Settings > Git, verify fields, edit and save."""
@@ -129,12 +145,11 @@ def test_settings_git_section(sculptor_instance_: SculptorInstance) -> None:
 
     expect(git_section.get_creation_prompt_textarea()).to_be_visible()
     expect(git_section.get_poll_interval_input()).to_be_visible()
-    expect(git_section.get_default_target_branch_input()).to_be_visible()
 
-    git_section.set_default_target_branch("develop")
+    git_section.set_poll_interval(60)
 
     toast = settings_page.get_toast()
     expect(toast).to_be_visible()
 
     config = load_config(config_path)
-    assert config.pr_default_target_branch == "develop"
+    assert config.pr_poll_interval_seconds == 60

@@ -237,10 +237,6 @@ class UserConfig(SerializableModel):
         default=0.8,
         description="Fraction of GitHub's hourly API budget PR polling may use before it automatically slows down. Lower this to leave more budget for other GitHub usage.",
     )
-    pr_default_target_branch: str = Field(
-        default="origin/main",
-        description="Default target branch for new workspaces",
-    )
     file_browser_line_wrapping: str = Field(
         default="wrap",
         description="Diff line wrapping: 'wrap' (soft wrap) or 'scroll' (horizontal scrollbar)",

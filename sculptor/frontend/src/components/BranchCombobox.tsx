@@ -9,6 +9,10 @@ import { ElementIds } from "~/api";
 
 import styles from "./BranchCombobox.module.scss";
 
+// Radix Select swaps the trigger content for its placeholder when the value is
+// empty, so "nothing selected" uses a value git forbids in branch names.
+const NO_SELECTION_VALUE = "~";
+
 export type BadgeInfo = {
   text: string;
   tooltip?: string;
@@ -65,7 +69,7 @@ const BranchOption = ({ branch, badges }: BranchOptionProps): ReactElement => {
 };
 
 type BranchComboboxProps = {
-  selectedBranch: string;
+  selectedBranch: string | null;
   onBranchSelected: (branch: string) => void;
   branches: Array<BranchWithBadges>;
   specialBranchFilter?: (branch: BranchWithBadges) => boolean;
@@ -167,7 +171,7 @@ export const BranchCombobox = ({
   return (
     <Select.Root
       size="1"
-      value={selectedBranch}
+      value={selectedBranch ?? NO_SELECTION_VALUE}
       onValueChange={(newBranch) => {
         onBranchSelected(newBranch);
         setSearchQuery("");

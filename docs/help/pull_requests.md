@@ -2,7 +2,8 @@
 
 Once you've committed changes on a workspace branch, click **Create PR** in the
 top bar. Sculptor pushes the branch and opens a pull request on GitHub against
-your target branch.
+your target branch. If the workspace has no target branch, **Create PR** is
+disabled until you pick one in the top bar.
 
 Sculptor uses the GitHub CLI (`gh`) under the hood. The first time, you may need
 to run `gh auth login` in a terminal.

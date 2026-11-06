@@ -20,7 +20,12 @@
   gap: var(--space-1);
   padding: 2px var(--space-2);
 
-  &:hover {
+  &:disabled {
+    color: var(--gray-8);
+    cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
     background: var(--gray-a4);
   }
 }

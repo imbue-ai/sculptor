@@ -536,7 +536,9 @@ target-branch selector itself is *not* gated this way — it appears on every re
 a PR requires a detected GitHub remote.) Given such a repo, once you've committed work on a workspace
 branch you can open a **pull request** straight from the workspace's top bar with **Create PR**.
 Clicking it pushes the branch and asks the agent to open the request against the workspace's target
-branch. If you'd rather adjust how that's done first, the button's chevron menu offers **Edit
+branch. A workspace with no target branch (Sculptor found no default branch when it created the
+workspace) shows **Create PR** disabled, and its target-branch selector reads **No target branch** in a
+warning color until you pick one. If you'd rather adjust how that's done first, the button's chevron menu offers **Edit
 prompt...**, which opens a dialog to revise the PR-creation prompt before you create anything. While
 Sculptor is looking up status, the button shows a spinner with "Checking PR...".
 
@@ -679,7 +681,7 @@ The repo-facing sections are **Repositories**, **Git**, and **CI**. Repositories
 repos with their paths and agent counts and lets you add or remove them and configure each one's
 **setup command** and **branch-naming pattern**. Git holds the cross-repo defaults: the pull-request
 creation prompt, PR-status polling and its interval (plus a multiplier that throttles polling for
-closed workspaces), the default target branch, the global
+closed workspaces), the global
 branch-naming pattern, and the branch-deletion policy. CI configures the **CI babysitter** that
 watches pipelines and asks an agent to fix failures — handing the fix prompt to the agent only once
 the workspace's agents are **idle**, so a failed pipeline never interrupts an agent mid-turn. The CI

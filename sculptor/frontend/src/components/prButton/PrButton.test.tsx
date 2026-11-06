@@ -61,6 +61,16 @@ describe("PrButton opens PRs in a reusable browser tab", () => {
   });
 });
 
+describe("PrButton without a target branch", () => {
+  it("disables Create PR", () => {
+    renderWithProviders(<PrButton workspaceId={WORKSPACE_ID} targetBranch={null} gitProvider="github" />, {
+      store: storeWith(prStatus({ prState: "none" })),
+    });
+
+    expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeDisabled();
+  });
+});
+
 describe("PrButton offers to adopt an existing PR only when it targets another branch", () => {
   const renderWithNoPr = (targetBranch: string, mismatchedPrTargetBranch: string): void => {
     renderWithProviders(<PrButton workspaceId={WORKSPACE_ID} targetBranch={targetBranch} gitProvider="github" />, {

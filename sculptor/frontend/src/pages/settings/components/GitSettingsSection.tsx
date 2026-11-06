@@ -7,7 +7,6 @@ import { ElementIds, UserConfigField } from "../../../api";
 import {
   isPrPollingEnabledAtom,
   prCreationPromptAtom,
-  prDefaultTargetBranchAtom,
   prPollClosedMultiplierAtom,
   prPollIntervalAtom,
 } from "../../../common/state/atoms/userConfig.ts";
@@ -33,7 +32,6 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
   const isPrPollingEnabled = useAtomValue(isPrPollingEnabledAtom);
   const prPollInterval = useAtomValue(prPollIntervalAtom);
   const prPollClosedMultiplier = useAtomValue(prPollClosedMultiplierAtom);
-  const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
 
   // Editable drafts resync to the atom whenever it changes (e.g. a save elsewhere),
   // tracking the previous atom value to reset the draft during render instead of in an effect.
@@ -49,13 +47,6 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
   if (prevClosedMultiplier !== prPollClosedMultiplier) {
     setPrevClosedMultiplier(prPollClosedMultiplier);
     setClosedMultiplierValue(String(prPollClosedMultiplier));
-  }
-
-  const [targetBranchValue, setTargetBranchValue] = useState(prDefaultTargetBranch);
-  const [prevTargetBranch, setPrevTargetBranch] = useState(prDefaultTargetBranch);
-  if (prevTargetBranch !== prDefaultTargetBranch) {
-    setPrevTargetBranch(prDefaultTargetBranch);
-    setTargetBranchValue(prDefaultTargetBranch);
   }
 
   const handlePollIntervalBlur = (): void => {
@@ -79,18 +70,6 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
 
     if (parsed !== prPollClosedMultiplier) {
       void onSettingChange(UserConfigField.PR_POLL_CLOSED_MULTIPLIER, parsed);
-    }
-  };
-
-  const handleTargetBranchBlur = (): void => {
-    const trimmed = targetBranchValue.trim();
-    if (!trimmed) {
-      setTargetBranchValue(prDefaultTargetBranch);
-      return;
-    }
-
-    if (trimmed !== prDefaultTargetBranch) {
-      void onSettingChange(UserConfigField.PR_DEFAULT_TARGET_BRANCH, trimmed);
     }
   };
 
@@ -159,19 +138,6 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
             </Text>
           </TextField.Slot>
         </TextField.Root>
-      </SettingRow>
-
-      <SettingRow
-        title="Default Target Branch"
-        description="The default target branch for new workspaces. Can be overridden per-workspace in the banner."
-      >
-        <TextField.Root
-          value={targetBranchValue}
-          onChange={(e) => setTargetBranchValue(e.target.value)}
-          onBlur={handleTargetBranchBlur}
-          data-testid={ElementIds.SETTINGS_DEFAULT_TARGET_BRANCH_INPUT}
-          style={{ width: 200 }}
-        />
       </SettingRow>
 
       <GlobalDefaultsSection onSettingChange={onSettingChange} />
