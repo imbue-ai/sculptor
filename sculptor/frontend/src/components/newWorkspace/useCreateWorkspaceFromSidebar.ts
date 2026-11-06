@@ -29,6 +29,32 @@ type UseCreateWorkspaceFromSidebarReturn = {
   createFromSidebar: (projectId: string) => Promise<void>;
 };
 
+// Each lookup resolves to "" when it fails, so one failure leaves only its own
+// field unresolved.
+const fetchCurrentBranchOrBlank = async (projectId: string): Promise<string> => {
+  try {
+    const { data } = await getCurrentBranch({ path: { project_id: projectId } });
+    return data?.currentBranch ?? "";
+  } catch {
+    return "";
+  }
+};
+
+const fetchFreshBranchNameOrBlank = async (inputs: {
+  projectId: string;
+  mode: WorkspaceInitializationStrategy;
+}): Promise<string> => {
+  try {
+    // A blank workspace name makes the backend roll a random slug.
+    const { data } = await previewBranchName({
+      query: { project_id: inputs.projectId, workspace_name: "", mode: inputs.mode },
+    });
+    return data?.branchName ?? "";
+  } catch {
+    return "";
+  }
+};
+
 /**
  * Decides between direct-create and opening the dialog for the repo group's
  * "+" button. Direct-create needs every field the mode requires — when one is
@@ -64,27 +90,15 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
         seedAgentType === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seedAgentType);
 
       const modeRules = WORKSPACE_MODE_RULES[mode];
+      const rememberedSourceBranch = sameRepoSettings?.sourceBranch ?? "";
       setIsPreparing(true);
-      let sourceBranch = sameRepoSettings?.sourceBranch ?? "";
-      let branchName = "";
-      try {
-        if (modeRules.sourceBranch !== "unused" && !sourceBranch) {
-          const branchInfo = await getCurrentBranch({ path: { project_id: projectId } });
-          sourceBranch = branchInfo.data?.currentBranch ?? "";
-        }
-
-        if (modeRules.branchName !== "unused") {
-          // A blank workspace name makes the backend roll a random slug.
-          const result = await previewBranchName({
-            query: { project_id: projectId, workspace_name: "", mode },
-          });
-          branchName = result.data?.branchName ?? "";
-        }
-      } catch {
-        // Fall through to the dialog below with whatever is missing.
-      } finally {
-        setIsPreparing(false);
-      }
+      const sourceBranch =
+        modeRules.sourceBranch !== "unused" && !rememberedSourceBranch
+          ? await fetchCurrentBranchOrBlank(projectId)
+          : rememberedSourceBranch;
+      const branchName =
+        modeRules.branchName !== "unused" ? await fetchFreshBranchNameOrBlank({ projectId, mode }) : "";
+      setIsPreparing(false);
 
       if (!hasRequiredCreationFields({ mode, branchName, sourceBranch })) {
         setModalState({ open: true, presetProjectId: projectId });
