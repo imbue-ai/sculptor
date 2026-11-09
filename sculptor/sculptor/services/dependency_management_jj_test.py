@@ -84,16 +84,18 @@ def jj_service() -> Iterator[DependencyManagementService]:
         yield DependencyManagementService(concurrency_group=concurrency_group)
 
 
-def _configure_jj(jj_value: str, git: str | None = None) -> UserConfig:
-    config = UserConfig(
+def _jj_user_config(jj_value: str, git: str | None = None) -> UserConfig:
+    return UserConfig(
         user_email="test@example.com",
         user_id=uuid4().hex,
         organization_id=uuid4().hex,
         instance_id=uuid4().hex,
         dependency_paths=DependencyPaths(git=git, claude="claude", pi="pi", jj=jj_value),
     )
-    set_user_config_instance(config)
-    return config
+
+
+def _configure_jj(jj_value: str, git: str | None = None) -> None:
+    set_user_config_instance(_jj_user_config(jj_value, git))
 
 
 def _stage_managed_jj(home: _JjTestHome, version: str, target: Path) -> Path:
@@ -117,11 +119,10 @@ def test_jj_snapshot_size_limit_defaults_to_ten_mebibytes() -> None:
 
 
 def test_every_managed_tool_has_a_configured_binary_value() -> None:
-    config = _configure_jj("/opt/jj")
-    try:
-        values = {tool: _configured_binary_value(config, tool) for tool in get_managed_tools()}
-    finally:
-        set_user_config_instance(None)
+    config = _jj_user_config("/opt/jj")
+
+    values = {tool: _configured_binary_value(config, tool) for tool in get_managed_tools()}
+
     assert values == {Dependency.CLAUDE: "claude", Dependency.PI: "pi", Dependency.JJ: "/opt/jj"}
 
 
