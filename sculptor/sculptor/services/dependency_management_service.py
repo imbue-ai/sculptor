@@ -118,8 +118,10 @@ def _configured_binary_value(config: UserConfig, tool: Dependency) -> str:
             assert_never(unreachable)
 
 
-def _first_line(text: str) -> str | None:
-    return next((line.strip() for line in text.splitlines() if line.strip()), None)
+def _describe_process_error(error: ProcessError) -> str | None:
+    """Summarize a failed command in one line: its first line of stderr, else how it failed."""
+    first_stderr_line = next((line.strip() for line in error.stderr.splitlines() if line.strip()), None)
+    return first_stderr_line or error.message
 
 
 def _parse_dependency_config(value: str) -> tuple[BinaryMode, str | None]:
@@ -855,7 +857,7 @@ class DependencyManagementService(Service):
                 timeout=5.0,
             )
         except ProcessError as e:
-            return DependencyCheckResult(installed=False, path=binary, probe_error=_first_line(e.stderr) or e.message)
+            return DependencyCheckResult(installed=False, path=binary, probe_error=_describe_process_error(e))
         # Tools differ in which channel carries --version (pi uses stderr), so read both.
         version = _parse_version_for_tool(tool, f"{result.stdout}\n{result.stderr}")
         return DependencyCheckResult(installed=True, path=binary, version=version)
@@ -1234,7 +1236,7 @@ class DependencyManagementService(Service):
         try:
             identity = self._read_jj_identity(check.path)
         except ProcessError as e:
-            return JjReadiness(blocker=JjBlocker.NOT_RUNNABLE, detail=_first_line(e.stderr) or e.message)
+            return JjReadiness(blocker=JjBlocker.NOT_RUNNABLE, detail=_describe_process_error(e))
         if identity.name and identity.email:
             return JjReadiness(identity=identity)
         git_identity = self._read_git_global_identity()
@@ -1301,7 +1303,7 @@ class DependencyManagementService(Service):
             try:
                 self._run_jj_outside_any_repo(binary, ["config", "set", "--user", key, value])
             except ProcessError as e:
-                raise JjIdentityError(_first_line(e.stderr) or e.message) from e
+                raise JjIdentityError(_describe_process_error(e)) from e
         return self.get_status()
 
     def _get_remote_cli_info(self, tool: Dependency) -> DependencyInfo:

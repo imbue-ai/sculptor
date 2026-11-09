@@ -324,6 +324,43 @@ def test_check_installed_keeps_the_first_stderr_line_of_a_failing_version_probe(
     assert check.probe_error == "first problem"
 
 
+def test_check_installed_falls_back_to_the_error_message_when_stderr_is_empty(
+    jj_test_home: _JjTestHome, jj_service: DependencyManagementService
+) -> None:
+    jj_test_home.write_stub("jj", "exit 1")
+    _configure_jj("MANAGED")
+
+    check = jj_service.check_installed(Dependency.JJ)
+
+    assert check.probe_error == "Command failed with non-zero exit code"
+
+
+def test_a_jj_whose_identity_probe_fails_is_not_runnable_with_the_first_stderr_line(
+    jj_test_home: _JjTestHome, jj_service: DependencyManagementService
+) -> None:
+    jj_test_home.write_stub(
+        "jj",
+        f'if [ "$1" = --version ]; then echo "jj {JJ_PINNED_VERSION}-{uuid4().hex}"; exit 0; fi\n'
+        + 'echo "Config error: unreadable user config" >&2\necho "more detail" >&2\nexit 1',
+    )
+    _configure_jj("MANAGED")
+
+    readiness = jj_service.get_jj_readiness()
+
+    assert readiness.blocker == JjBlocker.NOT_RUNNABLE
+    assert readiness.detail == "Config error: unreadable user config"
+
+
+def test_setting_the_jj_identity_reports_the_first_stderr_line_of_a_failed_write(
+    jj_test_home: _JjTestHome, jj_service: DependencyManagementService
+) -> None:
+    jj_test_home.write_stub("jj", 'echo "Config error: read-only config" >&2\necho "more detail" >&2\nexit 1')
+    _configure_jj("MANAGED")
+
+    with pytest.raises(JjIdentityError, match="^Config error: read-only config$"):
+        jj_service.set_jj_identity(JjIdentity(name="Grace Hopper", email="grace@example.com"))
+
+
 def test_check_installed_reads_a_version_printed_on_stderr_for_any_tool(
     jj_test_home: _JjTestHome, jj_service: DependencyManagementService
 ) -> None:
