@@ -1204,9 +1204,9 @@ compute-jj-pin version:
 
 # Apply a jj version bump end-to-end: recompute the per-platform sha256 pins
 # (cross-checked against the digests GitHub records per release asset, since jj
-# publishes no SHA256SUMS) and rewrite JJ_PINNED_VERSION, the digests, and the
-# offload image's copy. Bumps are manual: the pin is also the oldest jj Sculptor
-# accepts, so each bump raises the floor for anyone using their own jj.
+# publishes no SHA256SUMS) and rewrite JJ_PINNED_VERSION plus every hardcoded
+# copy. Bumps are manual: the pin is also the oldest jj Sculptor accepts, so each
+# bump raises the floor for anyone using their own jj.
 [group("install")]
 bump-jj version:
     uv run python "{{justfile_directory()}}/scripts/bump_pin.py" jj "{{version}}"

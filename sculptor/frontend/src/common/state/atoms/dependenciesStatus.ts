@@ -18,7 +18,7 @@ export const isPiAvailableAtom = atom<boolean>((get) => {
 });
 
 /** JJ_AVAILABLE: whether Sculptor can use jj, as derived by the backend's readiness
- * check (`jjReadiness`). Gates every jj control.
+ * check (`jjReadiness`).
  *
  * Fails closed while the status is still unknown: what it gates writes to the
  * user's repository, so it must never assume jj works. */

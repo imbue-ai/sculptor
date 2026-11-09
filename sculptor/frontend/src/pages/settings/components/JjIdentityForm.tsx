@@ -12,7 +12,6 @@ type JjIdentityFormProps = {
   onSave: (identity: JjIdentity) => Promise<void>;
 };
 
-/** One-click form that writes jj's `user.name` and `user.email` into the user's jj config. */
 export const JjIdentityForm = ({ suggestion, onSave }: JjIdentityFormProps): ReactElement => {
   const [name, setName] = useState(suggestion.name);
   const [email, setEmail] = useState(suggestion.email);

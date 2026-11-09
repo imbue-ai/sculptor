@@ -81,8 +81,7 @@ class DependencyCheckResult(FrozenModel):
     installed: bool
     path: str | None = None
     version: str | None = None
-    # The first stderr line of a resolved binary whose ``--version`` failed, so a broken
-    # binary reads as "not runnable" with the real message rather than "not installed".
+    # How a resolved binary's ``--version`` failed, in one line.
     probe_error: str | None = None
 
 
@@ -778,7 +777,7 @@ class DependencyManagementService(Service):
         return shutil.which("gh")
 
     def _resolve_optional_tool_path(self, tool: Dependency) -> str | None:
-        """Resolve an optional managed tool (pi, jj), whose MANAGED mode can fall back to PATH."""
+        """Resolve an optional managed tool, whose MANAGED mode can fall back to PATH."""
         config = get_user_config_instance()
         mode, custom_path = _parse_dependency_config(_configured_binary_value(config, tool))
         command_name = tool.value.lower()
@@ -1195,7 +1194,7 @@ class DependencyManagementService(Service):
         progress_by_tool: Mapping[Dependency, InstallProgress],
         error_by_tool: Mapping[Dependency, str],
     ) -> DependencyInfo:
-        """Status of an optional managed tool (pi, jj)."""
+        """Status of an optional managed tool."""
         mode, _ = _parse_dependency_config(_configured_binary_value(config, tool))
         # MANAGED mode falls back to a PATH binary, so the source is decided by which
         # binary actually resolved rather than by the configured mode.

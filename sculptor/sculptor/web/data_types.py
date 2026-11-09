@@ -860,7 +860,7 @@ class SubmitAuthCodeRequest(RequestModel):
 
 
 class JjBlocker(UpperCaseStrEnum):
-    """Why jj is unavailable, listed in the order the readiness checks run."""
+    """Why jj is unavailable to Sculptor."""
 
     NOT_INSTALLED = auto()
     NOT_RUNNABLE = auto()
@@ -922,8 +922,8 @@ class JjNoIdentity(SerializableModel):
     suggested_identity: JjIdentity
 
 
-# JJ_AVAILABLE: jj is available to Sculptor exactly when ``blocker`` is None. Derived from
-# the resolved jj binary on every status read and never stored.
+# JJ_AVAILABLE: jj is available to Sculptor exactly when ``blocker`` is None. It is derived
+# on demand and never stored.
 JjReadiness = TypeAliasType(
     "JjReadiness", JjAvailable | JjNotInstalled | JjNotRunnable | JjUnsupportedVersion | JjNoIdentity
 )

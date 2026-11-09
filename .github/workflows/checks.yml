@@ -134,7 +134,7 @@ jobs:
         run: python3 scripts/check_pin_freshness.py pi --emit-github-warning
 
       # jj has no bump workflow: each bump raises the oldest jj Sculptor accepts, so
-      # a human decides when to run `just bump-jj`. This only annotates.
+      # a human decides when to run `just bump-jj`.
       - name: Warn when the jj pin is stale
         continue-on-error: true
         env:

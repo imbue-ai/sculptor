@@ -26,8 +26,7 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
   const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
   const snapshotSizeMib = useAtomValue(jjSnapshotMaxNewFileSizeMibAtom);
 
-  // The draft resyncs to the atom whenever it changes (e.g. a save elsewhere), tracking
-  // the previous atom value to reset the draft during render instead of in an effect.
+  // Reset the draft when the saved value changes, during render rather than in an effect.
   const [snapshotSizeValue, setSnapshotSizeValue] = useState(String(snapshotSizeMib));
   const [prevSnapshotSizeMib, setPrevSnapshotSizeMib] = useState(snapshotSizeMib);
   if (prevSnapshotSizeMib !== snapshotSizeMib) {

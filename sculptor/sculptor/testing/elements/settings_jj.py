@@ -26,7 +26,7 @@ class PlaywrightJjSettingsElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.JJ_STATUS)
 
     def get_up_to_date(self) -> Locator:
-        """Get the in-range status text (shown when jj is installed at or above the minimum)."""
+        """Get the in-range status text (shown when the installed jj is a supported version)."""
         return self.get_by_test_id(ElementIDs.JJ_UP_TO_DATE)
 
     def get_install_button(self) -> Locator:

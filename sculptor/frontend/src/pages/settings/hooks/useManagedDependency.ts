@@ -57,12 +57,10 @@ type UseManagedDependencyResult = {
 };
 
 /**
- * Shared install/mode/status lifecycle for a managed dependency (Claude, pi or jj) as
- * surfaced in its Settings section: the optimistic MANAGED/CUSTOM mode switch, the
- * background managed install (with status polling as a WebSocket fallback), the
- * custom-path entry, and the derived install progress/error state. The settings
- * sections are identical in this respect apart from which tool they manage, so they
- * share this hook rather than each keeping a copy of the logic.
+ * Shared install/mode/status lifecycle for a managed dependency as surfaced in its
+ * Settings section: the optimistic MANAGED/CUSTOM mode switch, the background managed
+ * install (with status polling as a WebSocket fallback), the custom-path entry, and
+ * the derived install progress/error state.
  */
 export const useManagedDependency = ({
   tool,

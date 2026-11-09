@@ -32,7 +32,7 @@ const BLOCKER_COPY = {
   },
 } as const satisfies Record<JjBlocker, BlockerCopy>;
 
-/** What the failing check found beyond its blocker, for the blockers that find something. */
+/** The failing check's finding, for the blockers that carry one. */
 const describeFinding = (readiness: Exclude<JjReadiness, JjAvailable>): string | null => {
   switch (readiness.blocker) {
     case "NOT_RUNNABLE":

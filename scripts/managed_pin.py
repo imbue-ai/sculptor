@@ -2,8 +2,7 @@
 
 Sculptor pins each managed tool to one exact version and bakes its own
 per-platform sha256 digests into the tool's pin (``PI_PIN`` in
-``sculptor/sculptor/services/managed_tools.py``, jj's digests in
-``sculptor/sculptor/services/jj_version.py``); upstream's published digests
+``sculptor/sculptor/services/managed_tools.py``); upstream's published digests
 are only ever a cross-check, never the source of truth. The entry points
 ``compute_pin.py``, ``bump_pin.py`` and ``check_pin_freshness.py`` take a tool
 name and look its ``ToolPinSpec`` up in ``TOOL_PIN_SPECS``; whatever differs

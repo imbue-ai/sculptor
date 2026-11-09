@@ -2,8 +2,7 @@
 """Report whether a managed tool's pinned version lags its latest upstream release.
 
 Sculptor pins each managed tool to one exact version (for pi, ``PI_PINNED_VERSION``
-in ``sculptor/sculptor/services/pi_version.py``; for jj, ``JJ_PINNED_VERSION`` in
-``sculptor/sculptor/services/jj_version.py``) while upstream keeps releasing,
+in ``sculptor/sculptor/services/pi_version.py``) while upstream keeps releasing,
 so the pin goes stale by design. This tool fetches the tool's latest release tag
 from the GitHub API and compares it with the pin. CI consumes it two ways:
 

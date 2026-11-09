@@ -2,16 +2,15 @@
 """Recompute a managed tool's per-platform sha256 pin for a given version.
 
 Sculptor bakes its own per-platform digests into each managed tool's pin (``PI_PIN``
-in ``sculptor/services/managed_tools.py``, jj's in ``sculptor/services/jj_version.py``);
-upstream's published digests are only ever a cross-check, never the source of truth.
-This dev tool downloads each supported-platform release tarball, hashes it, and
-prints the digests in the shape the pin holds them, ready to paste.
-``scripts/bump_pin.py`` (``just bump-pi`` / ``just bump-jj``) wraps it end-to-end at
-a version bump; run this directly to print the block without editing files.
+in ``sculptor/services/managed_tools.py``); upstream's published digests are only
+ever a cross-check, never the source of truth. This dev tool downloads each
+supported-platform release tarball, hashes it, and prints the digests in the shape
+the pin holds them, ready to paste. ``scripts/bump_pin.py`` (``just bump-pi``) wraps
+it end-to-end at a version bump; run this directly to print the block without
+editing files.
 
 Usage:
     just compute-pi-pin 0.78.0
-    just compute-jj-pin 0.47.0
     uv run python scripts/compute_pin.py pi 0.78.0
 
 Network is required; the runtime install path never fetches checksums, only the

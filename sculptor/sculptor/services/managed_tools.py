@@ -53,9 +53,9 @@ class PlatformPin(FrozenModel):
 class ReleasePin(FrozenModel):
     """The static, in-repo source of truth for a tool published as per-platform release assets.
 
-    Sculptor computes the digests itself per version (``just bump-pi`` / ``just bump-jj``,
-    which cross-check what upstream publishes) and bakes them in; the install path
-    verifies downloads against these pinned values only.
+    Sculptor computes the digests itself at each version bump, cross-checking what
+    upstream publishes, and bakes them in; the install path verifies downloads against
+    these pinned values only.
     """
 
     version: str
@@ -63,8 +63,6 @@ class ReleasePin(FrozenModel):
 
 
 class PiPin(ReleasePin):
-    """The managed pi distribution's pin."""
-
     # Reserved slot, not read from user config: a constant sentinel until a pi
     # plugin set needs pinning.
     plugin_set_revision: str = "bundled"
@@ -244,8 +242,8 @@ _JJ_TARGET_TRIPLE_BY_PLATFORM_KEY: dict[str, str] = {
     "linux-arm64": "aarch64-unknown-linux-musl",
 }
 
-# The digests live in the import-free ``jj_version`` module, which ``just install-jj``
-# and the offload image check also read, so the pin is assembled from it here.
+# The digests live in the import-free ``jj_version`` module, which tooling reads without
+# importing this one, so the pin is assembled from it here.
 JJ_PIN = ReleasePin(
     version=JJ_PINNED_VERSION,
     platforms={
@@ -280,11 +278,7 @@ _JJ_VERSION_LINE_PATTERN = re.compile(r"^jj (\d+\.\d+\.\d+)(?:-\S+)?$", re.MULTI
 
 
 class JjManagedTool(ManagedTool):
-    """Managed-install conformer for jj (Jujutsu).
-
-    Like pi, the distribution is built from the static ``JJ_PIN`` and the managed copy
-    is downloaded only on explicit user action.
-    """
+    """Managed-install conformer for jj (Jujutsu)."""
 
     tool = Dependency.JJ
     version_range = JJ_VERSION_RANGE

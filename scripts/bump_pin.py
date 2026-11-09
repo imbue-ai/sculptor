@@ -3,13 +3,9 @@
 
 ``compute_pin`` prints the sha block for a human to paste; this tool goes the
 rest of the way. It downloads and hashes the target release's tarballs (reusing
-``managed_pin``), cross-checks the digests against what upstream publishes (pi's
-``SHA256SUMS`` asset when one exists; for jj, which publishes none, the GitHub
-release API's per-asset digest), and rewrites the pin plus every hardcoded copy
-the tool's spec lists in ``managed_pin``: for pi, the version constant, the
-baked sha256s, the backend/frontend test literals, the Storybook fixture, and
-the requirements doc; for jj, the version constant, the digests, and the
-offload image's copy.
+``managed_pin``), cross-checks the digests against the ones upstream publishes,
+and rewrites the pin plus every hardcoded copy the tool's spec lists in
+``managed_pin``.
 
 Two tripwires keep a bump honest. Every rewrite asserts an exact occurrence
 count, so a pinned literal that moves or multiplies fails the bump instead of
@@ -19,12 +15,11 @@ know about yet surfaces as an error naming the file.
 
 Usage:
     just bump-pi 0.81.0
-    just bump-jj 0.47.0
     python3 scripts/bump_pin.py pi 0.81.0
 
 The ``pi-bump`` workflow runs this on its daily schedule (target version from
-``check_pin_freshness``) and opens a PR with the result; jj is bumped by hand.
-Network is required. Stdlib-only, like its ``scripts/`` siblings.
+``check_pin_freshness``) and opens a PR with the result. Network is
+required. Stdlib-only, like its ``scripts/`` siblings.
 """
 
 import argparse
