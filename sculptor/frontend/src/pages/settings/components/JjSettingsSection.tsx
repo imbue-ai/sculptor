@@ -100,7 +100,7 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
   return (
     <SettingsSectionLayout description="Jujutsu (jj) is a version control system that works on top of git. Sculptor uses it only when the check below passes.">
       <Flex direction="column" gap="3" mb="4">
-        {dependenciesStatus === null || jj === null ? (
+        {dependenciesStatus === null ? (
           <Flex align="center" gap="2" data-testid={ElementIds.JJ_AVAILABILITY}>
             <Spinner size="1" />
             <Text size="2">Checking jj…</Text>
@@ -108,7 +108,7 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
         ) : (
           <JjAvailabilityCallout
             readiness={dependenciesStatus.jjReadiness}
-            jj={jj}
+            jj={dependenciesStatus.jj}
             minimumVersion={minimumVersion ?? "—"}
           />
         )}
