@@ -35,3 +35,12 @@ def test_terminal_agents_get_the_jj_plugin_dir_only_in_jj_workspaces() -> None:
         "SCULPT_PLUGINS_DIR": str(base),
         "SCULPT_JJ_PLUGIN_DIR": str(base / "sculptor-jj"),
     }
+
+
+def test_every_bundled_plugin_is_packaged_into_the_sidecar_and_the_linux_image() -> None:
+    repo_root = get_plugins_base_dir().parent
+    sidecar_build = (repo_root / "sculptor" / "builder" / "build-sidecar.sh").read_text()
+    linux_image = (repo_root / "container" / "build-backend-linux.dockerfile").read_text()
+    for plugin_dir in get_plugin_dirs("jj"):
+        assert f'--add-data "{plugin_dir.name}:{plugin_dir.name}"' in sidecar_build
+        assert f"COPY sculptor/{plugin_dir.name}/ sculptor/{plugin_dir.name}/" in linux_image

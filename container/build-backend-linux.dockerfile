@@ -50,6 +50,7 @@ RUN mkdir -p sculptor/frontend-dist && \
 COPY sculptor/sculptor-plugin/ sculptor/sculptor-plugin/
 COPY sculptor/sculptor-workflow/ sculptor/sculptor-workflow/
 COPY sculptor/sculptor-experimental/ sculptor/sculptor-experimental/
+COPY sculptor/sculptor-jj/ sculptor/sculptor-jj/
 
 # Build the backend sidecar
 WORKDIR /build/sculptor
