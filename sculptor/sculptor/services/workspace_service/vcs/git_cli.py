@@ -1,7 +1,9 @@
 """How the VCS seam runs git and gh.
 
-Binaries come from the dependency service, so `dependency_paths.git` and
-`dependency_paths.gh` are honoured. Every failure, including a timeout, is a
+Binaries come from a resolver callable: Sculptor's own calls pass the
+dependency service's `resolve_binary_path`, so `dependency_paths.git` and
+`dependency_paths.gh` are honoured, and agent-side calls pass their execution
+environment's `get_tool_binary_path`. Every failure, including a timeout, is a
 `VcsCommandError`. Only read-only commands are retried. Operands (refs,
 revisions, destinations) go after `--end-of-options` and paths after `--`, so
 a value starting with `-` is never parsed as an option.
@@ -9,6 +11,7 @@ a value starting with `-` is never parsed as an option.
 
 import os
 from pathlib import Path
+from typing import Callable
 from typing import Mapping
 from typing import Sequence
 
@@ -21,7 +24,6 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.retry_utils import log_before_sleep
 from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
-from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundError
@@ -30,6 +32,10 @@ from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandTimeoutError
 
 DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS = 30.0
+
+# Both `DependencyManagementService.resolve_binary_path` and
+# `AgentExecutionEnvironment.get_tool_binary_path` have this shape.
+BinaryResolver = Callable[[Dependency], str | None]
 
 
 _retry_read_only_command = retry(
@@ -61,13 +67,9 @@ def find_jj_workspace_root(directory: Path) -> Path | None:
 class GitCli:
     """Runs git and gh with the user's configured binaries."""
 
-    def __init__(
-        self,
-        concurrency_group: ConcurrencyGroup,
-        dependency_management_service: DependencyManagementService,
-    ) -> None:
+    def __init__(self, concurrency_group: ConcurrencyGroup, resolve_binary: BinaryResolver) -> None:
         self._concurrency_group = concurrency_group
-        self._dependency_management_service = dependency_management_service
+        self._resolve_binary_path = resolve_binary
 
     def run_git(
         self,
@@ -79,12 +81,15 @@ class GitCli:
         paths: Sequence[str] = (),
         is_checked: bool = True,
         timeout: float | None = DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS,
+        extra_env: Mapping[str, str] | None = None,
     ) -> VcsCommandResult:
         """Run `git <options> --end-of-options <operands> -- <paths>` in `cwd`.
 
         Raises `GitCommandInJjWorkspaceError` when `cwd` is inside a jj workspace.
         With `is_checked`, a non-zero exit raises `VcsCommandExitError`; without
-        it, the result is returned whatever its exit code.
+        it, the result is returned whatever its exit code. `extra_env` is laid
+        over the process environment, for callers that steer git with variables
+        such as `GIT_INDEX_FILE`.
         """
         jj_workspace_root = find_jj_workspace_root(cwd)
         if jj_workspace_root is not None:
@@ -93,7 +98,7 @@ class GitCli:
             self._resolve_binary(Dependency.GIT),
             *_build_arguments(options, operands, paths),
         ]
-        return self._run(command, cwd, is_read_only, is_checked, timeout, extra_env=None)
+        return self._run(command, cwd, is_read_only, is_checked, timeout, extra_env)
 
     def run_gh(
         self,
@@ -114,7 +119,7 @@ class GitCli:
         return self._run(command, cwd, is_read_only, is_checked, timeout, extra_env)
 
     def _resolve_binary(self, tool: Dependency) -> str:
-        binary = self._dependency_management_service.resolve_binary_path(tool)
+        binary = self._resolve_binary_path(tool)
         if binary is None:
             raise VcsBinaryNotFoundError(
                 f"{tool.value.lower()} binary not found",

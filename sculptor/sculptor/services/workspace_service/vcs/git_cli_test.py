@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 
 from sculptor.config.user_config import DependencyPaths
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
@@ -207,3 +209,34 @@ def test_mutating_command_is_not_retried(git_cli: GitCli, tmp_path: Path) -> Non
         git_cli.run_git(["commit"], tmp_path, is_read_only=False)
 
     assert len(attempts_file.read_text().splitlines()) == 1
+
+
+def test_run_git_passes_extra_env_to_git(git_cli: GitCli, tmp_path: Path) -> None:
+    fake_git = _write_script(tmp_path / "fake-git", 'echo "${GIT_INDEX_FILE-unset}"')
+    _use_dependency_paths(DependencyPaths(git=str(fake_git)))
+
+    result = git_cli.run_git(
+        ["write-tree"], tmp_path, is_read_only=False, extra_env={"GIT_INDEX_FILE": str(tmp_path / "index")}
+    )
+
+    assert result.stdout.strip() == str(tmp_path / "index")
+
+
+def test_a_git_cli_built_from_a_resolver_runs_the_resolved_binary(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    fake_git = _write_script(tmp_path / "fake-git", 'echo "resolved:$*"')
+    git_cli = GitCli(test_root_concurrency_group, lambda tool: str(fake_git) if tool is Dependency.GIT else None)
+
+    result = git_cli.run_git(["status"], tmp_path, is_read_only=True)
+
+    assert result.stdout.strip() == "resolved:status"
+
+
+def test_a_resolver_that_returns_none_raises_vcs_binary_not_found(
+    test_root_concurrency_group: ConcurrencyGroup, git_repo: Path
+) -> None:
+    git_cli = GitCli(test_root_concurrency_group, lambda tool: None)
+
+    with pytest.raises(VcsBinaryNotFoundError):
+        git_cli.run_git(["status"], git_repo, is_read_only=True)
