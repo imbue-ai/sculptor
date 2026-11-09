@@ -257,13 +257,16 @@ _PI_REQUIREMENTS_FILE = "docs/specs/requirements.md"
 _PI_PLATFORM_KEYS = ("darwin-arm64", "darwin-x64", "linux-x64")
 
 
-def _pi_asset_name_for_platform(platform_key: str, version: str) -> str:
-    """Return pi's release asset filename for a platform key (e.g. ``pi-darwin-arm64.tar.gz``)."""
+def _pi_asset(platform_key: str) -> str:
+    """Return pi's release asset filename for a platform key (e.g. ``pi-darwin-arm64.tar.gz``).
+
+    pi's asset names carry no version.
+    """
     return f"pi-{platform_key}.tar.gz"
 
 
 def _pi_baked_sha256_pattern(platform_key: str) -> str:
-    asset = re.escape(f"pi-{platform_key}.tar.gz")
+    asset = re.escape(_pi_asset(platform_key))
     return rf'"{re.escape(platform_key)}": PlatformPin\(\s*asset="{asset}",\s*sha256="([0-9a-f]{{64}})"'
 
 
@@ -271,7 +274,7 @@ def _format_pi_pin_block(shas: Mapping[str, str]) -> str:
     """Render ``PI_PIN``'s ``platforms={...}`` block."""
     lines = ["    platforms={"]
     for platform_key in _PI_PLATFORM_KEYS:
-        asset = _pi_asset_name_for_platform(platform_key, "")
+        asset = _pi_asset(platform_key)
         lines.append(f'        "{platform_key}": PlatformPin(asset="{asset}", sha256="{shas[platform_key]}"),')
     lines.append("    },")
     return "\n".join(lines)
@@ -319,7 +322,7 @@ PI_PIN_SPEC = ToolPinSpec(
     version_constant="PI_PINNED_VERSION",
     pin_file="sculptor/sculptor/services/managed_tools.py",
     platform_keys=_PI_PLATFORM_KEYS,
-    asset_name_for_platform=_pi_asset_name_for_platform,
+    asset_name_for_platform=lambda platform_key, version: _pi_asset(platform_key),
     baked_sha256_pattern_for_platform=_pi_baked_sha256_pattern,
     format_pin_block=_format_pi_pin_block,
     published_digest_source=PublishedDigestSource.SHA256SUMS_ASSET,
