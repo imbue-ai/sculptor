@@ -1,0 +1,5 @@
+{
+  "name": "sculptor-jj",
+  "description": "The jujutsu (jj) skill, loaded only in Sculptor workspaces that use jj",
+  "version": "1.0.0"
+}
