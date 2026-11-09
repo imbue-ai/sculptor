@@ -1,8 +1,8 @@
 import { createStore } from "jotai";
 import { describe, expect, it } from "vitest";
 
-import type { DependenciesStatus, DependencyInfo } from "~/api";
-import { dependenciesStatusAtom, isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus";
+import type { DependenciesStatus, DependencyInfo, JjBlocker } from "~/api";
+import { dependenciesStatusAtom, isJjAvailableAtom, isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus";
 
 const makeInfo = (overrides: Partial<DependencyInfo>): DependencyInfo => ({ installed: false, ...overrides });
 
@@ -42,4 +42,31 @@ describe("isPiAvailableAtom", () => {
     );
     expect(store.get(isPiAvailableAtom)).toBe(false);
   });
+});
+
+describe("isJjAvailableAtom", () => {
+  const makeStatusWithJjBlocker = (blocker: JjBlocker | null): DependenciesStatus => ({
+    ...makeStatus(makeInfo({})),
+    jjReadiness: { blocker },
+  });
+
+  it("fails closed while the dependencies status is still unknown", () => {
+    const store = createStore();
+    expect(store.get(isJjAvailableAtom)).toBe(false);
+  });
+
+  it("is available when the backend reports no blocker", () => {
+    const store = createStore();
+    store.set(dependenciesStatusAtom, makeStatusWithJjBlocker(null));
+    expect(store.get(isJjAvailableAtom)).toBe(true);
+  });
+
+  it.each(["NOT_INSTALLED", "NOT_RUNNABLE", "UNSUPPORTED_VERSION", "NO_IDENTITY"] as const)(
+    "is unavailable when the backend reports %s",
+    (blocker) => {
+      const store = createStore();
+      store.set(dependenciesStatusAtom, makeStatusWithJjBlocker(blocker));
+      expect(store.get(isJjAvailableAtom)).toBe(false);
+    },
+  );
 });

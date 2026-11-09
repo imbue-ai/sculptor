@@ -11,6 +11,7 @@ from sculptor.testing.elements.settings_experimental import PlaywrightExperiment
 from sculptor.testing.elements.settings_extensions import PlaywrightExtensionsSettingsElement
 from sculptor.testing.elements.settings_general import PlaywrightGeneralSettingsElement
 from sculptor.testing.elements.settings_git import PlaywrightGitSettingsElement
+from sculptor.testing.elements.settings_jj import PlaywrightJjSettingsElement
 from sculptor.testing.elements.settings_keybindings import PlaywrightKeybindingsSettingsElement
 from sculptor.testing.elements.settings_pi import PlaywrightPiSettingsElement
 from sculptor.testing.elements.settings_privacy import PlaywrightPrivacySettingsElement
@@ -85,6 +86,11 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         self._get_git_nav().click()
         return PlaywrightGitSettingsElement(locator=self._get_settings_content(), page=self._page)
 
+    def click_on_jj(self) -> PlaywrightJjSettingsElement:
+        """Navigate to Jujutsu settings and return the section element."""
+        self._get_jj_nav().click()
+        return PlaywrightJjSettingsElement(locator=self._get_settings_content(), page=self._page)
+
     def click_on_ci(self) -> PlaywrightCIBabysitterSettingsElement:
         """Navigate to CI Babysitter settings and return the section element."""
         self._get_ci_nav().click()
@@ -148,6 +154,10 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
     def _get_git_nav(self) -> Locator:
         """Get the Git navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_GIT)
+
+    def _get_jj_nav(self) -> Locator:
+        """Get the Jujutsu navigation item."""
+        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_JJ)
 
     def _get_ci_nav(self) -> Locator:
         """Get the CI Babysitter navigation item."""

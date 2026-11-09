@@ -44,6 +44,7 @@ import { EnvironmentVariablesSection } from "./components/EnvironmentVariablesSe
 import { ExtensionsSettingsSection } from "./components/ExtensionsSettingsSection.tsx";
 import { FileBrowserSettingsSection } from "./components/FileBrowserSettingsSection.tsx";
 import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
+import { JjSettingsSection } from "./components/JjSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
 import { NamingConventionsRows } from "./components/NamingConventionsRows.tsx";
 import { NightModeSettingRow } from "./components/NightModeSettingRow.tsx";
@@ -438,6 +439,7 @@ export const SettingsPage = (): ReactElement => {
               {activeSection === SettingsSection.REPOSITORIES && <ReposSection setToast={setToast} />}
               {activeSection === SettingsSection.ACTIONS && <ActionsSettingsSection setToast={setToast} />}
               {activeSection === SettingsSection.GIT && <GitSettingsSection onSettingChange={handleSettingChange} />}
+              {activeSection === SettingsSection.JJ && <JjSettingsSection onSettingChange={handleSettingChange} />}
               {activeSection === SettingsSection.CI && (
                 <CIBabysitterSettingsSection onSettingChange={handleSettingChange} />
               )}

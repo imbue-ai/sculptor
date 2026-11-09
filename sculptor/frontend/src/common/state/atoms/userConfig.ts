@@ -113,6 +113,10 @@ export const prPollIntervalAtom = atom<number>((get) => get(userConfigAtom)?.prP
 
 export const prPollClosedMultiplierAtom = atom<number>((get) => get(userConfigAtom)?.prPollClosedMultiplier ?? 6);
 
+export const jjSnapshotMaxNewFileSizeMibAtom = atom<number>(
+  (get) => get(userConfigAtom)?.jjSnapshotMaxNewFileSizeMib ?? 10,
+);
+
 // CI Babysitter settings (experimental). The full nested config lives under
 // userConfig.ciBabysitter on the backend; individual atoms below derive from
 // that object with sensible per-field defaults for when the config hasn't
