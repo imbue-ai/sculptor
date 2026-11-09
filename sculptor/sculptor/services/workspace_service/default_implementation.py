@@ -1,4 +1,3 @@
-import base64
 import json
 import threading
 import uuid
@@ -50,7 +49,6 @@ from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.workspace_service.api import CommitRecord
 from sculptor.services.workspace_service.api import FileAtRefResult
-from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.api import GitOperationResult
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -75,6 +73,7 @@ from sculptor.services.workspace_service.setup_command_runner import SetupStateC
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.services.workspace_service.vcs.checkout_paths import workspace_checkout_path
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
@@ -874,17 +873,6 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace.object_id)
         return workspace_checkout_path(workspace, project.get_local_user_path())
 
-    def _get_workspace_working_dir(
-        self,
-        workspace: Workspace,
-        transaction: DataModelTransaction,
-    ) -> Path:
-        """Get the working directory for a workspace (where git operations run)."""
-        working_dir = self.get_workspace_working_directory(workspace, transaction)
-        if working_dir is None:
-            raise WorkspaceNotFoundError(workspace.object_id)
-        return working_dir
-
     def _get_checkout_location(self, workspace: Workspace, transaction: DataModelTransaction) -> CheckoutLocation:
         """Where the workspace's checkout lives; raises WorkspaceNotFoundError until it has one."""
         project = transaction.get_project(workspace.project_id)
@@ -1056,85 +1044,11 @@ class DefaultWorkspaceService(WorkspaceService):
         if workspace is None:
             raise WorkspaceNotFoundError(workspace_id)
 
-        working_dir = self._get_workspace_working_dir(workspace, transaction)
-
-        # Path validation: reject path traversal and absolute paths
-        validation_error = self._validate_file_path(file_path, working_dir)
-        if validation_error is not None:
-            return GitOperationResult(
-                success=False,
-                stdout="",
-                stderr="",
-                error_message=validation_error,
-            )
-
-        # Check if the file is tracked
-        is_tracked = self._is_file_tracked(file_path, working_dir)
-
-        if is_tracked:
-            command = ["git", "checkout", "HEAD", "--", file_path]
-        else:
-            command = ["git", "clean", "-f", "--", file_path]
-
-        try:
-            returncode, stdout, stderr = run_git_command_local(
-                self.concurrency_group,
-                command,
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=False,
-            )
-
-            success = returncode == 0
-            error_message = None if success else f"Git command failed with exit code {returncode}"
-
-            result = GitOperationResult(
-                success=success,
-                stdout=stdout,
-                stderr=stderr,
-                error_message=error_message,
-            )
-
-            self.maybe_refresh_workspace_diff(workspace_id)
-            return result
-
-        except GitCommandFailure as e:
-            self.maybe_refresh_workspace_diff(workspace_id)
-            return GitOperationResult(
-                success=False,
-                stdout=e.stdout,
-                stderr=e.stderr,
-                error_message=str(e),
-            )
-
-    @staticmethod
-    def _validate_file_path(file_path: str, working_dir: Path) -> str | None:
-        """Validate a file path is safe and within the workspace. Returns error message or None."""
-        if file_path.startswith("/"):
-            return "Absolute paths are not allowed"
-
-        # Check for path traversal via .. components
-        resolved = (working_dir / file_path).resolve()
-        if not resolved.is_relative_to(working_dir.resolve()):
-            return "Path traversal is not allowed"
-
-        return None
-
-    def _is_file_tracked(self, file_path: str, working_dir: Path) -> bool:
-        """Check if a file is tracked by git."""
-        try:
-            returncode, _stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "ls-files", "--error-unmatch", file_path],
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            return returncode == 0
-        except GitCommandFailure:
-            return False
+        location = self._get_checkout_location(workspace, transaction)
+        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        result = vcs.discard_file_changes(location, file_path)
+        self.maybe_refresh_workspace_diff(workspace_id)
+        return result
 
     def get_commit_diff(
         self,
@@ -1181,33 +1095,13 @@ class DefaultWorkspaceService(WorkspaceService):
         if workspace is None:
             raise WorkspaceNotFoundError(workspace_id)
 
-        working_dir = self._get_workspace_working_dir(workspace, transaction)
-
+        location = self._get_checkout_location(workspace, transaction)
+        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
         try:
-            returncode, stdout, stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-                cwd=working_dir,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-                check_output=False,
-            )
-        except GitCommandFailure as e:
-            # `git_retry` already retried any transient process-level failures;
-            # surface what's left as a typed error rather than a silent empty list.
-            logger.info("git ls-files failed for workspace {}: {}", workspace_id, e)
+            return vcs.list_files(location)
+        except CheckoutFilesUnavailableError as e:
+            logger.debug("Files unavailable for workspace {}: {}", workspace_id, e)
             raise WorkspaceFilesUnavailableError(workspace_id, str(e)) from e
-
-        if returncode != 0:
-            # Non-zero exit (e.g. index lock contention) is indistinguishable from
-            # an empty workspace at the protocol level if we swallow it. Raise a
-            # typed error so callers can surface a retryable signal.
-            logger.info("git ls-files failed for workspace {}: rc={} stderr={}", workspace_id, returncode, stderr)
-            raise WorkspaceFilesUnavailableError(workspace_id, stderr.strip() or f"git ls-files exited {returncode}")
-
-        file_paths = [f for f in stdout.split("\0") if f.strip()]
-        file_paths = [f for f in file_paths if not f.startswith(".git/")]
-        return sorted(file_paths)
 
     def read_file_at_ref(
         self,
@@ -1221,23 +1115,6 @@ class DefaultWorkspaceService(WorkspaceService):
         if workspace is None:
             raise WorkspaceNotFoundError(workspace_id)
 
-        working_dir = self._get_workspace_working_dir(workspace, transaction)
-
-        returncode, stdout, stderr = run_git_command_local(
-            self.concurrency_group,
-            ["git", "--no-pager", "show", f"{git_ref}:{file_path}"],
-            cwd=working_dir,
-            check_output=False,
-            timeout=_GIT_COMMAND_TIMEOUT,
-            is_retry_safe=True,
-        )
-
-        if returncode != 0:
-            raise FileNotFoundAtRefError(file_path, git_ref, stderr)
-
-        # Detect binary content (null bytes) and base64-encode
-        if "\0" in stdout:
-            encoded = base64.b64encode(stdout.encode("utf-8", errors="surrogateescape")).decode("ascii")
-            return FileAtRefResult(content=encoded, encoding="base64")
-
-        return FileAtRefResult(content=stdout, encoding="utf-8")
+        location = self._get_checkout_location(workspace, transaction)
+        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        return vcs.read_file_at_revision(location, file_path, git_ref)

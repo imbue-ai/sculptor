@@ -27,6 +27,9 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.workspace_service.api import FileAtRefResult
+from sculptor.services.workspace_service.api import FileNotFoundAtRefError
+from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.environment_manager import (
@@ -1326,6 +1329,91 @@ def test_get_commit_diff_resolves_an_abbreviated_hash_and_its_parent(
     assert "+++ b/added.txt" in diff_text
     assert resolved_hash == commit_hash
     assert resolved_parent == parent_hash
+
+
+def test_read_file_at_ref_reads_a_ref_starting_with_a_dash_as_a_revision_not_an_option(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        content_at_head = test_service_collection.workspace_service.read_file_at_ref(
+            workspace_id, "README.md", "HEAD", transaction
+        )
+        with pytest.raises(FileNotFoundAtRefError):
+            test_service_collection.workspace_service.read_file_at_ref(
+                workspace_id, "README.md", "--format=format:injected", transaction
+            )
+
+    assert content_at_head == FileAtRefResult(content="test", encoding="utf-8")
+
+
+def test_discard_file_restores_tracked_files_deletes_untracked_ones_and_rejects_paths_outside_the_checkout(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    (repo_path / "README.md").write_text("edited")
+    (repo_path / "untracked.txt").write_text("untracked")
+    workspace_service = test_service_collection.workspace_service
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        tracked_result = workspace_service.discard_file(workspace_id, "README.md", transaction)
+        untracked_result = workspace_service.discard_file(workspace_id, "untracked.txt", transaction)
+        traversal_result = workspace_service.discard_file(workspace_id, "../outside.txt", transaction)
+
+    assert tracked_result.success
+    assert (repo_path / "README.md").read_text() == "test"
+    assert untracked_result.success
+    assert not (repo_path / "untracked.txt").exists()
+    assert not traversal_result.success
+    assert traversal_result.error_message == "Path traversal is not allowed"
+
+
+def test_get_workspace_files_lists_tracked_and_untracked_files_but_not_ignored_ones(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    (repo_path / ".gitignore").write_text("ignored.txt\n")
+    (repo_path / "ignored.txt").write_text("ignored")
+    (repo_path / "nested").mkdir()
+    (repo_path / "nested" / "untracked.txt").write_text("untracked")
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        file_paths = test_service_collection.workspace_service.get_workspace_files(workspace_id, transaction)
+
+    assert file_paths == [".gitignore", "README.md", "nested/untracked.txt"]
+
+
+def test_get_workspace_files_raises_files_unavailable_when_the_checkout_is_not_a_repository(
+    test_service_collection: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+) -> None:
+    environment_dir = tmp_path / f"environment-{uuid4().hex}"
+    (environment_dir / "code").mkdir(parents=True)
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = test_service_collection.workspace_service.create_workspace(
+            project=test_project,
+            initialization_strategy=WorkspaceInitializationStrategy.CLONE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="Checkout without a repository",
+            transaction=transaction,
+        )
+        transaction.update_workspace_fields(workspace.object_id, environment_id=str(environment_dir))
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        with pytest.raises(WorkspaceFilesUnavailableError):
+            test_service_collection.workspace_service.get_workspace_files(workspace.object_id, transaction)
 
 
 def test_get_cached_current_branch_does_not_create_the_branch_poller(

@@ -8,10 +8,10 @@ Tests cover:
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Project
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
@@ -19,6 +19,8 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.data_model_service.data_types import DataModelTransaction
+from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.web.auth import authenticate_anonymous
 
 
@@ -120,6 +122,7 @@ def test_workspace_files_returns_503_when_git_command_fails(
     client: TestClient,
     test_services: CompleteServiceCollection,
     test_project: Project,
+    tmp_path: Path,
 ) -> None:
     """When `git ls-files` fails (e.g. transient lock contention), the endpoint
     must return 503 — not 200 with an empty list — so callers can distinguish
@@ -129,21 +132,23 @@ def test_workspace_files_returns_503_when_git_command_fails(
     with user_session.open_transaction(test_services) as transaction:
         workspace = _create_workspace(transaction, test_services, test_project)
 
-    # `get_workspace_files` only runs a single git invocation (`git ls-files`),
-    # so we can stub the whole helper with a constant non-zero-return triple
-    # rather than reaching for a passthrough that would re-trigger the
-    # `*args, **kwargs` ratchet.
-    failure_triple = (
-        128,
-        "",
-        "fatal: Unable to read index: another git process seems to be running in this repository",
+    # The configured git fails the way `git ls-files` does while another process holds the index lock.
+    failing_git = tmp_path / "failing-git"
+    failing_git.write_text(
+        "#!/bin/bash\n"
+        + "echo 'fatal: Unable to read index: another git process seems to be running in this repository' >&2\n"
+        + "exit 128\n"
     )
-
-    with patch(
-        "sculptor.services.workspace_service.default_implementation.run_git_command_local",
-        return_value=failure_triple,
-    ):
+    failing_git.chmod(0o755)
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(
+            update={"dependency_paths": DependencyPaths(git=str(failing_git))}
+        )
+    )
+    try:
         response = client.get(f"/api/v1/workspaces/{workspace.object_id}/files")
+    finally:
+        set_user_config_instance(None)
 
     assert response.status_code == 503, (
         f"Expected 503 on transient git failure, got {response.status_code}: {response.text}"
