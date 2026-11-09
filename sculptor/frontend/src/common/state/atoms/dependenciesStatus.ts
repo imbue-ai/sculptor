@@ -25,5 +25,5 @@ export const isPiAvailableAtom = atom<boolean>((get) => {
 export const isJjAvailableAtom = atom<boolean>((get) => {
   const status = get(dependenciesStatusAtom);
   if (status === null) return false;
-  return !status.jjReadiness.blocker;
+  return status.jjReadiness.blocker === null;
 });

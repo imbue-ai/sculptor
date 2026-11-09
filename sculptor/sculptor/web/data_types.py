@@ -11,6 +11,7 @@ from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
 from pydantic import model_validator
+from typing_extensions import TypeAliasType
 
 from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.config.naming_convention_files import NamingConventionTier
@@ -881,21 +882,51 @@ class SetJjIdentityRequest(RequestModel):
     email: str = Field(min_length=1)
 
 
-class JjReadiness(SerializableModel):
-    """JJ_AVAILABLE: jj is available to Sculptor exactly when ``blocker`` is None.
+class JjAvailable(SerializableModel):
+    """jj passed every readiness check."""
 
-    Derived from the resolved jj binary on every status read and never stored.
-    """
+    blocker: None
+    # The identity jj gives agents.
+    identity: JjIdentity
 
-    blocker: JjBlocker | None = None
-    # What the failing check found: the first stderr line of a failing ``jj --version``,
-    # or the binary and the version it reported.
-    detail: str | None = None
-    # The identity jj gives agents, once every check has passed.
-    identity: JjIdentity | None = None
-    # Prefill for the identity form under NO_IDENTITY: whatever half jj already has,
-    # completed from git's global identity. Either half may be empty.
-    suggested_identity: JjIdentity | None = None
+
+class JjNotInstalled(SerializableModel):
+    """No jj binary resolves from the configured binary source."""
+
+    blocker: Literal[JjBlocker.NOT_INSTALLED]
+
+
+class JjNotRunnable(SerializableModel):
+    """A jj binary resolves, but running it fails."""
+
+    blocker: Literal[JjBlocker.NOT_RUNNABLE]
+    # The first line jj printed to stderr, else how the command failed.
+    error: str | None
+
+
+class JjUnsupportedVersion(SerializableModel):
+    """The resolved jj is outside the versions Sculptor supports."""
+
+    blocker: Literal[JjBlocker.UNSUPPORTED_VERSION]
+    path: str
+    # None when ``jj --version`` printed no recognizable version.
+    version: str | None
+
+
+class JjNoIdentity(SerializableModel):
+    """jj runs, but its ``user.name`` or ``user.email`` is unset."""
+
+    blocker: Literal[JjBlocker.NO_IDENTITY]
+    # Prefill for the identity form: whatever half jj already has, completed from
+    # git's global identity. Either half may be empty.
+    suggested_identity: JjIdentity
+
+
+# JJ_AVAILABLE: jj is available to Sculptor exactly when ``blocker`` is None. Derived from
+# the resolved jj binary on every status read and never stored.
+JjReadiness = TypeAliasType(
+    "JjReadiness", JjAvailable | JjNotInstalled | JjNotRunnable | JjUnsupportedVersion | JjNoIdentity
+)
 
 
 class DependenciesStatus(SerializableModel):

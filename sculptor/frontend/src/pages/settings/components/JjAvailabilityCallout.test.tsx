@@ -45,7 +45,7 @@ describe("JjAvailabilityCallout", () => {
   it("shows an unsupported version's detail and asks for a compatible jj", () => {
     render(
       renderCallout(
-        { blocker: "UNSUPPORTED_VERSION", detail: "/usr/bin/jj reports jj 0.28.2" },
+        { blocker: "UNSUPPORTED_VERSION", path: "/usr/bin/jj", version: "0.28.2" },
         { installed: true, version: "0.28.2", path: "/usr/bin/jj" },
       ),
     );
@@ -56,7 +56,7 @@ describe("JjAvailabilityCallout", () => {
   it("does not ask a jj that is too new to be newer", () => {
     render(
       renderCallout(
-        { blocker: "UNSUPPORTED_VERSION", detail: "/usr/bin/jj reports jj 1.0.0" },
+        { blocker: "UNSUPPORTED_VERSION", path: "/usr/bin/jj", version: "1.0.0" },
         { installed: true, version: "1.0.0", path: "/usr/bin/jj" },
       ),
     );
@@ -64,10 +64,20 @@ describe("JjAvailabilityCallout", () => {
     expect(availabilityText()).not.toContain("a newer jj");
   });
 
+  it("names the binary whose version output it could not read", () => {
+    render(
+      renderCallout(
+        { blocker: "UNSUPPORTED_VERSION", path: "/usr/bin/jj", version: null },
+        { installed: true, version: null, path: "/usr/bin/jj" },
+      ),
+    );
+    expect(availabilityText()).toContain("/usr/bin/jj reports no recognizable jj version");
+  });
+
   it("shows why jj does not run", () => {
     render(
       renderCallout(
-        { blocker: "NOT_RUNNABLE", detail: "Config error: Configuration cannot be parsed as TOML document" },
+        { blocker: "NOT_RUNNABLE", error: "Config error: Configuration cannot be parsed as TOML document" },
         { installed: false, path: "/usr/bin/jj" },
       ),
     );
@@ -75,7 +85,12 @@ describe("JjAvailabilityCallout", () => {
   });
 
   it("points a missing identity at the identity form", () => {
-    render(renderCallout({ blocker: "NO_IDENTITY" }, { installed: true, version: "0.46.0", path: "/usr/bin/jj" }));
+    render(
+      renderCallout(
+        { blocker: "NO_IDENTITY", suggestedIdentity: { name: "", email: "" } },
+        { installed: true, version: "0.46.0", path: "/usr/bin/jj" },
+      ),
+    );
     expect(availabilityText()).toContain("author identity");
   });
 

@@ -58,9 +58,14 @@ from sculptor.web.data_types import BinarySource
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import DependencyInfo
 from sculptor.web.data_types import InstallProgress
+from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjIdentity
+from sculptor.web.data_types import JjNoIdentity
+from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
+from sculptor.web.data_types import JjUnsupportedVersion
 from sculptor.web.data_types import VersionRangeInfo
 
 
@@ -1222,25 +1227,19 @@ class DependencyManagementService(Service):
 
     def _jj_readiness_from_check(self, check: DependencyCheckResult) -> JjReadiness:
         if check.path is None:
-            return JjReadiness(blocker=JjBlocker.NOT_INSTALLED)
+            return JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
         if not check.installed:
-            return JjReadiness(blocker=JjBlocker.NOT_RUNNABLE, detail=check.probe_error)
-        if check.version is None:
-            return JjReadiness(
-                blocker=JjBlocker.UNSUPPORTED_VERSION, detail=f"{check.path} reports no recognizable jj version"
-            )
-        if not self.is_version_in_range(check.version, Dependency.JJ):
-            return JjReadiness(
-                blocker=JjBlocker.UNSUPPORTED_VERSION, detail=f"{check.path} reports jj {check.version}"
-            )
+            return JjNotRunnable(blocker=JjBlocker.NOT_RUNNABLE, error=check.probe_error)
+        if check.version is None or not self.is_version_in_range(check.version, Dependency.JJ):
+            return JjUnsupportedVersion(blocker=JjBlocker.UNSUPPORTED_VERSION, path=check.path, version=check.version)
         try:
             identity = self._read_jj_identity(check.path)
         except ProcessError as e:
-            return JjReadiness(blocker=JjBlocker.NOT_RUNNABLE, detail=_describe_process_error(e))
+            return JjNotRunnable(blocker=JjBlocker.NOT_RUNNABLE, error=_describe_process_error(e))
         if identity.name and identity.email:
-            return JjReadiness(identity=identity)
+            return JjAvailable(blocker=None, identity=identity)
         git_identity = self._read_git_global_identity()
-        return JjReadiness(
+        return JjNoIdentity(
             blocker=JjBlocker.NO_IDENTITY,
             suggested_identity=JjIdentity(
                 name=identity.name or git_identity.name, email=identity.email or git_identity.email

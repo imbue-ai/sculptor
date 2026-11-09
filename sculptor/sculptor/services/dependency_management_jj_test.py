@@ -38,8 +38,13 @@ from sculptor.utils.build import SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG
 from sculptor.utils.build import get_sculptor_folder
 from sculptor.web.data_types import BinaryMode
 from sculptor.web.data_types import BinarySource
+from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjIdentity
+from sculptor.web.data_types import JjNoIdentity
+from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.data_types import JjNotRunnable
+from sculptor.web.data_types import JjUnsupportedVersion
 
 
 class _JjTestHome(FrozenModel):
@@ -143,7 +148,7 @@ def test_jj_custom_mode_with_no_path_is_not_installed(
     assert jj_service.resolve_binary_path(Dependency.JJ) is None
     assert status.jj.installed is False
     assert status.jj.mode == BinaryMode.CUSTOM
-    assert status.jj_readiness.blocker == JjBlocker.NOT_INSTALLED
+    assert status.jj_readiness == JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
 
 
 def test_jj_managed_mode_without_a_download_falls_back_to_jj_on_path(
@@ -161,8 +166,9 @@ def test_jj_managed_mode_without_a_download_falls_back_to_jj_on_path(
     assert status.jj.version == jj_binary.version
     assert status.jj.is_version_in_range is True
     assert status.jj.managed_version is None
-    assert status.jj_readiness.blocker is None
-    assert status.jj_readiness.identity == JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL)
+    assert status.jj_readiness == JjAvailable(
+        blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL)
+    )
 
 
 def test_jj_managed_mode_prefers_the_downloaded_copy(
@@ -177,7 +183,7 @@ def test_jj_managed_mode_prefers_the_downloaded_copy(
     assert status.jj.path == str(staged)
     assert status.jj.source == BinarySource.MANAGED
     assert status.jj.managed_version == JJ_PINNED_VERSION
-    assert status.jj_readiness.blocker is None
+    assert isinstance(status.jj_readiness, JjAvailable)
 
 
 def test_jj_custom_path_resolves_the_configured_binary(
@@ -190,7 +196,7 @@ def test_jj_custom_path_resolves_the_configured_binary(
     assert status.jj.path == str(jj_binary.path)
     assert status.jj.mode == BinaryMode.CUSTOM
     assert status.jj.source == BinarySource.EXTERNAL
-    assert status.jj_readiness.blocker is None
+    assert isinstance(status.jj_readiness, JjAvailable)
 
 
 def test_jj_that_fails_to_run_is_not_runnable_with_the_first_stderr_line(
@@ -204,8 +210,9 @@ def test_jj_that_fails_to_run_is_not_runnable_with_the_first_stderr_line(
 
     readiness = jj_service.get_jj_readiness()
 
-    assert readiness.blocker == JjBlocker.NOT_RUNNABLE
-    assert readiness.detail == "Config error: Configuration cannot be parsed as TOML document"
+    assert readiness == JjNotRunnable(
+        blocker=JjBlocker.NOT_RUNNABLE, error="Config error: Configuration cannot be parsed as TOML document"
+    )
 
 
 def test_an_old_jj_is_unsupported_and_reports_its_path_and_version(
@@ -217,8 +224,9 @@ def test_an_old_jj_is_unsupported_and_reports_its_path_and_version(
     status = jj_service.get_status()
 
     assert status.jj.is_version_in_range is False
-    assert status.jj_readiness.blocker == JjBlocker.UNSUPPORTED_VERSION
-    assert status.jj_readiness.detail == f"{stub} reports jj 0.45.0"
+    assert status.jj_readiness == JjUnsupportedVersion(
+        blocker=JjBlocker.UNSUPPORTED_VERSION, path=str(stub), version="0.45.0"
+    )
 
 
 def test_a_jj_with_unrecognized_version_output_is_unsupported(
@@ -229,8 +237,7 @@ def test_a_jj_with_unrecognized_version_output_is_unsupported(
 
     readiness = jj_service.get_jj_readiness()
 
-    assert readiness.blocker == JjBlocker.UNSUPPORTED_VERSION
-    assert readiness.detail == f"{stub} reports no recognizable jj version"
+    assert readiness == JjUnsupportedVersion(blocker=JjBlocker.UNSUPPORTED_VERSION, path=str(stub), version=None)
 
 
 def test_jj_without_an_identity_suggests_the_global_git_identity(
@@ -245,9 +252,10 @@ def test_jj_without_an_identity_suggests_the_global_git_identity(
 
     readiness = jj_service.get_jj_readiness()
 
-    assert readiness.blocker == JjBlocker.NO_IDENTITY
-    assert readiness.identity is None
-    assert readiness.suggested_identity == JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL)
+    assert readiness == JjNoIdentity(
+        blocker=JjBlocker.NO_IDENTITY,
+        suggested_identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL),
+    )
 
 
 def test_jj_with_half_an_identity_keeps_its_own_half_in_the_suggestion(
@@ -262,8 +270,9 @@ def test_jj_with_half_an_identity_keeps_its_own_half_in_the_suggestion(
 
     readiness = jj_service.get_jj_readiness()
 
-    assert readiness.blocker == JjBlocker.NO_IDENTITY
-    assert readiness.suggested_identity == JjIdentity(name="Ada Lovelace", email=JJ_TEST_USER_EMAIL)
+    assert readiness == JjNoIdentity(
+        blocker=JjBlocker.NO_IDENTITY, suggested_identity=JjIdentity(name="Ada Lovelace", email=JJ_TEST_USER_EMAIL)
+    )
 
 
 def test_jj_identity_set_in_the_sculptor_env_file_counts(
@@ -279,8 +288,9 @@ def test_jj_identity_set_in_the_sculptor_env_file_counts(
 
     readiness = jj_service.get_jj_readiness()
 
-    assert readiness.blocker is None
-    assert readiness.identity == JjIdentity(name="Env File User", email="env-file@example.com")
+    assert readiness == JjAvailable(
+        blocker=None, identity=JjIdentity(name="Env File User", email="env-file@example.com")
+    )
 
 
 def test_setting_the_jj_identity_writes_the_user_config_and_makes_jj_available(
@@ -297,8 +307,7 @@ def test_setting_the_jj_identity_writes_the_user_config_and_makes_jj_available(
 
     status = jj_service.set_jj_identity(identity)
 
-    assert status.jj_readiness.blocker is None
-    assert status.jj_readiness.identity == identity
+    assert status.jj_readiness == JjAvailable(blocker=None, identity=identity)
     assert "Grace Hopper" in jj_isolated_env.jj_config_path.read_text()
 
 
@@ -347,8 +356,7 @@ def test_a_jj_whose_identity_probe_fails_is_not_runnable_with_the_first_stderr_l
 
     readiness = jj_service.get_jj_readiness()
 
-    assert readiness.blocker == JjBlocker.NOT_RUNNABLE
-    assert readiness.detail == "Config error: unreadable user config"
+    assert readiness == JjNotRunnable(blocker=JjBlocker.NOT_RUNNABLE, error="Config error: unreadable user config")
 
 
 def test_setting_the_jj_identity_reports_the_first_stderr_line_of_a_failed_write(

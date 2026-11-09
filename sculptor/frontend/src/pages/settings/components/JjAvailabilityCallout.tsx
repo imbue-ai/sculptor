@@ -2,8 +2,10 @@ import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@ra
 import { Callout, Code, Flex, Strong } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
-import type { DependencyInfo, JjBlocker, JjReadiness } from "../../../api";
+import type { DependencyInfo, JjAvailable, JjReadiness } from "../../../api";
 import { ElementIds } from "../../../api";
+
+type JjBlocker = NonNullable<JjReadiness["blocker"]>;
 
 type BlockerCopy = {
   title: string;
@@ -30,6 +32,21 @@ const BLOCKER_COPY = {
   },
 } as const satisfies Record<JjBlocker, BlockerCopy>;
 
+/** What the failing check found beyond its blocker, for the blockers that find something. */
+const describeFinding = (readiness: Exclude<JjReadiness, JjAvailable>): string | null => {
+  switch (readiness.blocker) {
+    case "NOT_RUNNABLE":
+      return readiness.error;
+    case "UNSUPPORTED_VERSION":
+      return readiness.version === null
+        ? `${readiness.path} reports no recognizable jj version`
+        : `${readiness.path} reports jj ${readiness.version}`;
+    case "NOT_INSTALLED":
+    case "NO_IDENTITY":
+      return null;
+  }
+};
+
 type JjAvailabilityCalloutProps = {
   readiness: JjReadiness;
   jj: DependencyInfo;
@@ -38,7 +55,7 @@ type JjAvailabilityCalloutProps = {
 
 /** JJ_AVAILABLE as the user sees it: which jj Sculptor uses, or what stops it and how to fix that. */
 export const JjAvailabilityCallout = ({ readiness, jj, minimumVersion }: JjAvailabilityCalloutProps): ReactElement => {
-  if (!readiness.blocker) {
+  if (readiness.blocker === null) {
     const source = jj.source === "MANAGED" ? "managed by Sculptor" : `from ${jj.path}`;
     return (
       <Callout.Root color="green" data-testid={ElementIds.JJ_AVAILABILITY}>
@@ -53,6 +70,7 @@ export const JjAvailabilityCallout = ({ readiness, jj, minimumVersion }: JjAvail
   }
 
   const copy = BLOCKER_COPY[readiness.blocker];
+  const finding = describeFinding(readiness);
   const isIdentityOnly = readiness.blocker === "NO_IDENTITY";
   return (
     <Callout.Root color={isIdentityOnly ? "orange" : "red"} data-testid={ElementIds.JJ_AVAILABILITY}>
@@ -61,9 +79,9 @@ export const JjAvailabilityCallout = ({ readiness, jj, minimumVersion }: JjAvail
         <Callout.Text>
           <Strong>{copy.title}</Strong>
         </Callout.Text>
-        {readiness.detail && (
+        {finding && (
           <Callout.Text>
-            <Code size="2">{readiness.detail}</Code>
+            <Code size="2">{finding}</Code>
           </Callout.Text>
         )}
         <Callout.Text>{copy.action(minimumVersion)}</Callout.Text>
