@@ -2,7 +2,8 @@
 """Report whether a managed tool's pinned version lags its latest upstream release.
 
 Sculptor pins each managed tool to one exact version (for pi, ``PI_PINNED_VERSION``
-in ``sculptor/sculptor/services/pi_version.py``) while upstream keeps releasing,
+in ``sculptor/sculptor/services/pi_version.py``; for jj, ``JJ_PINNED_VERSION`` in
+``sculptor/sculptor/services/jj_version.py``) while upstream keeps releasing,
 so the pin goes stale by design. This tool fetches the tool's latest release tag
 from the GitHub API and compares it with the pin. CI consumes it two ways:
 
@@ -22,18 +23,14 @@ works but is rate-limited per IP. Stdlib-only, like its ``scripts/`` siblings.
 """
 
 import argparse
-import json
 import os
 import sys
-import urllib.error
-import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 
 import managed_pin
 
 _LATEST_RELEASE_API_URL_TEMPLATE = "https://api.github.com/repos/{repo}/releases/latest"
-_REQUEST_TIMEOUT_SECONDS = 30
 
 
 def latest_release_api_url(spec: managed_pin.ToolPinSpec) -> str:
@@ -43,20 +40,9 @@ def latest_release_api_url(spec: managed_pin.ToolPinSpec) -> str:
 
 def fetch_latest_release_version(spec: managed_pin.ToolPinSpec) -> str:
     """Return the tool's latest release version (its tag without the leading ``v``)."""
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    headers = {
-        "Accept": "application/vnd.github+json",
-        # The GitHub API rejects requests that send no User-Agent.
-        "User-Agent": f"sculptor-{spec.name}-pin-freshness",
-    }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(latest_release_api_url(spec), headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT_SECONDS) as response:
-            payload = json.load(response)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
-        raise managed_pin.PinError(f"Could not fetch the latest {spec.name} release: {error}") from error
+    payload = managed_pin.fetch_github_api_json(spec, latest_release_api_url(spec))
+    if not isinstance(payload, dict):
+        raise managed_pin.PinError(f"Latest-release response is not an object: {str(payload)[:200]}")
     tag = payload.get("tag_name")
     if not isinstance(tag, str) or not tag:
         raise managed_pin.PinError(f"Latest-release response has no tag_name: {str(payload)[:200]}")

@@ -3,11 +3,13 @@
 
 ``compute_pin`` prints the sha block for a human to paste; this tool goes the
 rest of the way. It downloads and hashes the target release's tarballs (reusing
-``managed_pin``), cross-checks the digests against the release's published
-``SHA256SUMS`` when one exists, and rewrites the pin plus every hardcoded copy
+``managed_pin``), cross-checks the digests against what upstream publishes (pi's
+``SHA256SUMS`` asset when one exists; for jj, which publishes none, the GitHub
+release API's per-asset digest), and rewrites the pin plus every hardcoded copy
 the tool's spec lists in ``managed_pin``: for pi, the version constant, the
 baked sha256s, the backend/frontend test literals, the Storybook fixture, and
-the requirements doc.
+the requirements doc; for jj, the version constant, the digests, and the
+offload image's copy.
 
 Two tripwires keep a bump honest. Every rewrite asserts an exact occurrence
 count, so a pinned literal that moves or multiplies fails the bump instead of
@@ -17,11 +19,12 @@ know about yet surfaces as an error naming the file.
 
 Usage:
     just bump-pi 0.81.0
+    just bump-jj 0.47.0
     python3 scripts/bump_pin.py pi 0.81.0
 
 The ``pi-bump`` workflow runs this on its daily schedule (target version from
-``check_pin_freshness``) and opens a PR with the result. Network is
-required. Stdlib-only, like its ``scripts/`` siblings.
+``check_pin_freshness``) and opens a PR with the result; jj is bumped by hand.
+Network is required. Stdlib-only, like its ``scripts/`` siblings.
 """
 
 import argparse
@@ -31,10 +34,13 @@ import urllib.request
 from collections.abc import Mapping
 from collections.abc import Sequence
 from pathlib import Path
+from typing import assert_never
 
 import managed_pin
 
 _REQUEST_TIMEOUT_SECONDS = 30
+_SHA256SUMS_ASSET = "SHA256SUMS"
+_RELEASE_BY_TAG_API_URL_TEMPLATE = "https://api.github.com/repos/{repo}/releases/tags/v{version}"
 
 
 def parse_sha256sums(text: str) -> dict[str, str]:
@@ -53,7 +59,7 @@ def parse_sha256sums(text: str) -> dict[str, str]:
 
 def fetch_published_sha256sums(spec: managed_pin.ToolPinSpec, version: str) -> dict[str, str] | None:
     """Fetch upstream's ``SHA256SUMS`` for a release, or None when it publishes none."""
-    url = managed_pin.release_url(spec, version, spec.published_sha256sums_asset)
+    url = managed_pin.release_url(spec, version, _SHA256SUMS_ASSET)
     request = urllib.request.Request(url, headers={"User-Agent": f"sculptor-{spec.name}-bump"})
     try:
         with urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT_SECONDS) as response:
@@ -67,23 +73,59 @@ def fetch_published_sha256sums(spec: managed_pin.ToolPinSpec, version: str) -> d
     return parse_sha256sums(text)
 
 
+def parse_release_api_digests(payload: object) -> dict[str, str]:
+    """Map each release asset's name to the sha256 GitHub recorded for it.
+
+    Assets GitHub has no digest for are left out, so the cross-check reports them
+    as missing.
+    """
+    if not isinstance(payload, dict) or not isinstance(payload.get("assets"), list):
+        raise managed_pin.PinError(f"Release response has no assets: {str(payload)[:200]}")
+    digests: dict[str, str] = {}
+    for asset in payload["assets"]:
+        digest = asset.get("digest")
+        if isinstance(digest, str) and digest.startswith("sha256:"):
+            digests[asset["name"]] = digest.removeprefix("sha256:")
+    return digests
+
+
+def fetch_release_api_digests(spec: managed_pin.ToolPinSpec, version: str) -> dict[str, str]:
+    """Fetch the per-asset digests GitHub records for a release."""
+    url = _RELEASE_BY_TAG_API_URL_TEMPLATE.format(repo=spec.github_repo, version=version)
+    return parse_release_api_digests(managed_pin.fetch_github_api_json(spec, url))
+
+
+def fetch_published_digests(spec: managed_pin.ToolPinSpec, version: str) -> dict[str, str] | None:
+    """Fetch the digests upstream publishes for a release, or None when it publishes none."""
+    match spec.published_digest_source:
+        case managed_pin.PublishedDigestSource.SHA256SUMS_ASSET:
+            return fetch_published_sha256sums(spec, version)
+        case managed_pin.PublishedDigestSource.RELEASE_API:
+            return fetch_release_api_digests(spec, version)
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 def verify_computed_against_published(
-    spec: managed_pin.ToolPinSpec, computed: Mapping[str, str], published: Mapping[str, str] | None
+    spec: managed_pin.ToolPinSpec,
+    version: str,
+    computed: Mapping[str, str],
+    published: Mapping[str, str] | None,
 ) -> None:
     """Fail when upstream's published digests disagree with what we downloaded.
 
     A mismatch means the tarball we hashed is not the one upstream published —
     do not bake it. The repo's own computed digests stay the source of truth
-    either way, so a release without ``SHA256SUMS`` just skips the cross-check.
+    either way, so a release that publishes no digests just skips the cross-check.
     """
     if published is None:
-        print(f"No published {spec.published_sha256sums_asset} for this release; skipping the cross-check.")
+        print(f"{spec.name} {version} publishes no digests; skipping the cross-check.")
         return
     for platform_key, digest in computed.items():
-        asset = spec.asset_name_for_platform(platform_key)
+        asset = spec.asset_name_for_platform(platform_key, version)
         upstream_digest = published.get(asset)
         if upstream_digest is None:
-            raise managed_pin.PinError(f"Upstream {spec.published_sha256sums_asset} is missing {asset}")
+            raise managed_pin.PinError(f"Upstream's published digests are missing {asset}")
         if upstream_digest != digest:
             raise managed_pin.PinError(
                 f"Digest mismatch for {asset}: computed {digest}, upstream publishes {upstream_digest}"
@@ -118,7 +160,9 @@ def main(argv: Sequence[str]) -> int:
     print(f"Bumping {spec.name} {current_version} -> {target_version}")
     old_shas = managed_pin.read_baked_shas(spec, arguments.repo_root)
     new_shas = managed_pin.compute_platform_shas(spec, target_version)
-    verify_computed_against_published(spec, new_shas, fetch_published_sha256sums(spec, target_version))
+    verify_computed_against_published(
+        spec, target_version, new_shas, fetch_published_digests(spec, target_version)
+    )
 
     edits = managed_pin.plan_edits(spec, current_version, target_version, old_shas, new_shas)
     contents = managed_pin.apply_edits_in_memory(arguments.repo_root, edits)

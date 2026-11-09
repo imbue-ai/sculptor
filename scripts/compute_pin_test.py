@@ -15,7 +15,7 @@ _PI = managed_pin.PI_PIN_SPEC
 
 def test_format_pin_block_renders_pasteable_platformpin_lines_for_every_platform() -> None:
     shas = {platform_key: platform_key.replace("-", "") for platform_key in _PI.platform_keys}
-    block = compute_pin.format_pin_block(_PI, shas)
+    block = _PI.format_pin_block(shas)
     assert block.startswith("    platforms={")
     assert block.rstrip().endswith("},")
     for platform_key, sha256 in shas.items():

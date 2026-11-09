@@ -2,7 +2,8 @@
 
 Sculptor pins each managed tool to one exact version and bakes its own
 per-platform sha256 digests into the tool's pin (``PI_PIN`` in
-``sculptor/sculptor/services/managed_tools.py``); upstream's published digests
+``sculptor/sculptor/services/managed_tools.py``, jj's digests in
+``sculptor/sculptor/services/jj_version.py``); upstream's published digests
 are only ever a cross-check, never the source of truth. The entry points
 ``compute_pin.py``, ``bump_pin.py`` and ``check_pin_freshness.py`` take a tool
 name and look its ``ToolPinSpec`` up in ``TOOL_PIN_SPECS``; whatever differs
@@ -13,6 +14,8 @@ import the sculptor package.
 """
 
 import hashlib
+import json
+import os
 import re
 import sys
 import urllib.error
@@ -21,9 +24,12 @@ from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import Enum
+from enum import auto
 from pathlib import Path
 
 _RELEASE_URL_TEMPLATE = "https://github.com/{repo}/releases/download/v{version}/{asset}"
+_GITHUB_API_TIMEOUT_SECONDS = 30
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _DOWNLOAD_TIMEOUT_SECONDS = 30
 
@@ -42,16 +48,26 @@ class PlannedEdit:
     count: int
 
 
+class PublishedDigestSource(Enum):
+    """Where upstream publishes a release's digests for the bump to cross-check against."""
+
+    SHA256SUMS_ASSET = auto()
+    RELEASE_API = auto()
+
+
 @dataclass(frozen=True)
 class ToolPinSpec:
     """Everything the pin scripts need to know about one managed tool.
 
-    Paths are relative to the repository root. ``hardcoded_copy_edits`` takes
-    ``(old_version, new_version, old_shas, new_shas)`` and returns the rewrites
-    for the copies of the version and digests hardcoded in tests, fixtures and
-    docs; ``plan_edits`` adds the version constant and the baked digests.
-    ``stale_pin_advice_template`` is formatted with ``latest`` and closes the
-    staleness warning.
+    Paths are relative to the repository root. ``asset_name_for_platform`` takes
+    ``(platform_key, version)``. ``baked_sha256_pattern_for_platform`` returns a
+    regex whose one group captures that platform's digest in ``pin_file``, and
+    ``format_pin_block`` renders the digests the way ``pin_file`` holds them.
+    ``hardcoded_copy_edits`` takes ``(old_version, new_version, old_shas, new_shas)``
+    and returns the rewrites for the copies of the version and digests hardcoded
+    in tests, fixtures, docs and images; ``plan_edits`` adds the version constant
+    and the baked digests. ``stale_pin_advice_template`` is formatted with
+    ``latest`` and closes the staleness warning.
     """
 
     name: str
@@ -60,8 +76,10 @@ class ToolPinSpec:
     version_constant: str
     pin_file: str
     platform_keys: tuple[str, ...]
-    asset_name_for_platform: Callable[[str], str]
-    published_sha256sums_asset: str
+    asset_name_for_platform: Callable[[str, str], str]
+    baked_sha256_pattern_for_platform: Callable[[str], str]
+    format_pin_block: Callable[[Mapping[str, str]], str]
+    published_digest_source: PublishedDigestSource
     hardcoded_copy_edits: Callable[[str, str, Mapping[str, str], Mapping[str, str]], tuple[PlannedEdit, ...]]
     stale_pin_advice_template: str
 
@@ -86,11 +104,32 @@ def compute_asset_sha256(url: str) -> str:
     return digest.hexdigest()
 
 
+def fetch_github_api_json(spec: ToolPinSpec, url: str) -> object:
+    """GET a GitHub API URL, authenticating with ``GH_TOKEN`` or ``GITHUB_TOKEN`` when set.
+
+    Anonymous requests work but are rate-limited per IP.
+    """
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    headers = {
+        "Accept": "application/vnd.github+json",
+        # The GitHub API rejects requests that send no User-Agent.
+        "User-Agent": f"sculptor-{spec.name}-pin",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=_GITHUB_API_TIMEOUT_SECONDS) as response:
+            return json.load(response)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise PinError(f"Could not fetch {url}: {error}") from error
+
+
 def compute_platform_shas(spec: ToolPinSpec, version: str) -> dict[str, str]:
     """Download every supported-platform tarball and return ``{platform_key: sha256}``."""
     shas: dict[str, str] = {}
     for platform_key in spec.platform_keys:
-        asset = spec.asset_name_for_platform(platform_key)
+        asset = spec.asset_name_for_platform(platform_key, version)
         print(f"Downloading {asset} ...", file=sys.stderr)
         shas[platform_key] = compute_asset_sha256(release_url(spec, version, asset))
     return shas
@@ -132,11 +171,7 @@ def read_baked_shas(spec: ToolPinSpec, repo_root: Path) -> dict[str, str]:
     source = (repo_root / spec.pin_file).read_text()
     shas: dict[str, str] = {}
     for platform_key in spec.platform_keys:
-        asset = spec.asset_name_for_platform(platform_key)
-        pattern = re.compile(
-            rf'"{re.escape(platform_key)}": PlatformPin\(\s*asset="{re.escape(asset)}",\s*sha256="([0-9a-f]{{64}})"'
-        )
-        match = pattern.search(source)
+        match = re.search(spec.baked_sha256_pattern_for_platform(platform_key), source)
         if match is None:
             raise PinError(f"Could not locate the {spec.name} {platform_key} pin in {spec.pin_file}")
         shas[platform_key] = match.group(1)
@@ -159,7 +194,7 @@ def plan_edits(
             1,
         ),
         *(
-            PlannedEdit(spec.pin_file, f'sha256="{old_shas[platform_key]}"', f'sha256="{new_shas[platform_key]}"', 1)
+            PlannedEdit(spec.pin_file, f'"{old_shas[platform_key]}"', f'"{new_shas[platform_key]}"', 1)
             for platform_key in spec.platform_keys
         ),
         *spec.hardcoded_copy_edits(old_version, new_version, old_shas, new_shas),
@@ -217,9 +252,29 @@ _PI_DEPENDENCIES_STORY_FILE = "sculptor/frontend/src/pages/settings/components/D
 _PI_REQUIREMENTS_FILE = "docs/specs/requirements.md"
 
 
-def _pi_asset_name_for_platform(platform_key: str) -> str:
+# Duplicated from ``PI_PIN.platforms``, since these scripts must not import the
+# sculptor package. Keep the two sets in sync.
+_PI_PLATFORM_KEYS = ("darwin-arm64", "darwin-x64", "linux-x64")
+
+
+def _pi_asset_name_for_platform(platform_key: str, version: str) -> str:
     """Return pi's release asset filename for a platform key (e.g. ``pi-darwin-arm64.tar.gz``)."""
     return f"pi-{platform_key}.tar.gz"
+
+
+def _pi_baked_sha256_pattern(platform_key: str) -> str:
+    asset = re.escape(f"pi-{platform_key}.tar.gz")
+    return rf'"{re.escape(platform_key)}": PlatformPin\(\s*asset="{asset}",\s*sha256="([0-9a-f]{{64}})"'
+
+
+def _format_pi_pin_block(shas: Mapping[str, str]) -> str:
+    """Render ``PI_PIN``'s ``platforms={...}`` block."""
+    lines = ["    platforms={"]
+    for platform_key in _PI_PLATFORM_KEYS:
+        asset = _pi_asset_name_for_platform(platform_key, "")
+        lines.append(f'        "{platform_key}": PlatformPin(asset="{asset}", sha256="{shas[platform_key]}"),')
+    lines.append("    },")
+    return "\n".join(lines)
 
 
 def _pi_hardcoded_copy_edits(
@@ -263,13 +318,85 @@ PI_PIN_SPEC = ToolPinSpec(
     version_file="sculptor/sculptor/services/pi_version.py",
     version_constant="PI_PINNED_VERSION",
     pin_file="sculptor/sculptor/services/managed_tools.py",
-    # Duplicated from ``PI_PIN.platforms``, since these scripts must not import
-    # the sculptor package. Keep the two sets in sync.
-    platform_keys=("darwin-arm64", "darwin-x64", "linux-x64"),
+    platform_keys=_PI_PLATFORM_KEYS,
     asset_name_for_platform=_pi_asset_name_for_platform,
-    published_sha256sums_asset="SHA256SUMS",
+    baked_sha256_pattern_for_platform=_pi_baked_sha256_pattern,
+    format_pin_block=_format_pi_pin_block,
+    published_digest_source=PublishedDigestSource.SHA256SUMS_ASSET,
     hardcoded_copy_edits=_pi_hardcoded_copy_edits,
     stale_pin_advice_template="The pi-bump workflow opens a bump PR daily, or run `just bump-pi {latest}`.",
 )
 
-TOOL_PIN_SPECS: Mapping[str, ToolPinSpec] = {PI_PIN_SPEC.name: PI_PIN_SPEC}
+
+_JJ_VERSION_FILE = "sculptor/sculptor/services/jj_version.py"
+_JJ_OFFLOAD_DOCKERFILE = ".devcontainer/Dockerfile"
+
+# Duplicated from ``_JJ_TARGET_TRIPLE_BY_PLATFORM_KEY`` in managed_tools.py, since these
+# scripts must not import the sculptor package. Ordered as jj_version.py lists them.
+_JJ_TARGET_TRIPLE_BY_PLATFORM_KEY = {
+    "darwin-arm64": "aarch64-apple-darwin",
+    "darwin-x64": "x86_64-apple-darwin",
+    "linux-arm64": "aarch64-unknown-linux-musl",
+    "linux-x64": "x86_64-unknown-linux-musl",
+}
+
+
+def _jj_asset_name_for_platform(platform_key: str, version: str) -> str:
+    """Return jj's release asset filename (e.g. ``jj-v0.46.0-aarch64-apple-darwin.tar.gz``)."""
+    return f"jj-v{version}-{_JJ_TARGET_TRIPLE_BY_PLATFORM_KEY[platform_key]}.tar.gz"
+
+
+def _jj_baked_sha256_pattern(platform_key: str) -> str:
+    return rf'"{re.escape(_JJ_TARGET_TRIPLE_BY_PLATFORM_KEY[platform_key])}": "([0-9a-f]{{64}})"'
+
+
+def _format_jj_pin_block(shas: Mapping[str, str]) -> str:
+    """Render jj_version.py's ``JJ_PINNED_SHA256_BY_TARGET_TRIPLE`` dict."""
+    lines = ["JJ_PINNED_SHA256_BY_TARGET_TRIPLE = {"]
+    for platform_key, target_triple in _JJ_TARGET_TRIPLE_BY_PLATFORM_KEY.items():
+        lines.append(f'    "{target_triple}": "{shas[platform_key]}",')
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _jj_hardcoded_copy_edits(
+    old_version: str, new_version: str, old_shas: Mapping[str, str], new_shas: Mapping[str, str]
+) -> tuple[PlannedEdit, ...]:
+    """The offload image's own copy of the version and the Linux digests."""
+    return (
+        PlannedEdit(_JJ_OFFLOAD_DOCKERFILE, f"ARG JJ_VERSION={old_version}\n", f"ARG JJ_VERSION={new_version}\n", 1),
+        PlannedEdit(
+            _JJ_OFFLOAD_DOCKERFILE,
+            f"ARG JJ_SHA256_X86_64={old_shas['linux-x64']}\n",
+            f"ARG JJ_SHA256_X86_64={new_shas['linux-x64']}\n",
+            1,
+        ),
+        PlannedEdit(
+            _JJ_OFFLOAD_DOCKERFILE,
+            f"ARG JJ_SHA256_AARCH64={old_shas['linux-arm64']}\n",
+            f"ARG JJ_SHA256_AARCH64={new_shas['linux-arm64']}\n",
+            1,
+        ),
+    )
+
+
+JJ_PIN_SPEC = ToolPinSpec(
+    name="jj",
+    github_repo="jj-vcs/jj",
+    version_file=_JJ_VERSION_FILE,
+    version_constant="JJ_PINNED_VERSION",
+    pin_file=_JJ_VERSION_FILE,
+    platform_keys=tuple(_JJ_TARGET_TRIPLE_BY_PLATFORM_KEY),
+    asset_name_for_platform=_jj_asset_name_for_platform,
+    baked_sha256_pattern_for_platform=_jj_baked_sha256_pattern,
+    format_pin_block=_format_jj_pin_block,
+    # jj publishes no SHA256SUMS; GitHub records a digest for every release asset.
+    published_digest_source=PublishedDigestSource.RELEASE_API,
+    hardcoded_copy_edits=_jj_hardcoded_copy_edits,
+    stale_pin_advice_template=(
+        "Bumps are manual: run `just bump-jj {latest}`. The pin is also the oldest jj Sculptor accepts, "
+        + "so a bump raises the floor for anyone using their own jj."
+    ),
+)
+
+TOOL_PIN_SPECS: Mapping[str, ToolPinSpec] = {PI_PIN_SPEC.name: PI_PIN_SPEC, JJ_PIN_SPEC.name: JJ_PIN_SPEC}

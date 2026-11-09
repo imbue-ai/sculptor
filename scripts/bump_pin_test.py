@@ -191,21 +191,105 @@ def test_parse_sha256sums_rejects_a_malformed_line() -> None:
 
 def test_verify_accepts_matching_published_digests() -> None:
     published = {f"pi-{key}.tar.gz": sha for key, sha in _NEW_SHAS.items()}
-    bump_pin.verify_computed_against_published(_PI, _NEW_SHAS, published)
+    bump_pin.verify_computed_against_published(_PI, _NEW_VERSION, _NEW_SHAS, published)
 
 
 def test_verify_rejects_a_digest_mismatch() -> None:
     published = {f"pi-{key}.tar.gz": sha for key, sha in _NEW_SHAS.items()}
     published["pi-linux-x64.tar.gz"] = "00" * 32
     with pytest.raises(managed_pin.PinError, match="Digest mismatch"):
-        bump_pin.verify_computed_against_published(_PI, _NEW_SHAS, published)
+        bump_pin.verify_computed_against_published(_PI, _NEW_VERSION, _NEW_SHAS, published)
 
 
 def test_verify_rejects_a_missing_asset() -> None:
     published = {"pi-darwin-arm64.tar.gz": _NEW_SHAS["darwin-arm64"]}
     with pytest.raises(managed_pin.PinError, match="missing"):
-        bump_pin.verify_computed_against_published(_PI, _NEW_SHAS, published)
+        bump_pin.verify_computed_against_published(_PI, _NEW_VERSION, _NEW_SHAS, published)
 
 
 def test_verify_skips_the_cross_check_when_upstream_publishes_no_sums() -> None:
-    bump_pin.verify_computed_against_published(_PI, _NEW_SHAS, None)
+    bump_pin.verify_computed_against_published(_PI, _NEW_VERSION, _NEW_SHAS, None)
+
+
+_JJ = managed_pin.JJ_PIN_SPEC
+_JJ_OLD_VERSION = "0.46.0"
+_JJ_NEW_VERSION = "0.47.0"
+_JJ_TARGET_TRIPLES = {
+    "darwin-arm64": "aarch64-apple-darwin",
+    "darwin-x64": "x86_64-apple-darwin",
+    "linux-x64": "x86_64-unknown-linux-musl",
+    "linux-arm64": "aarch64-unknown-linux-musl",
+}
+_JJ_OLD_SHAS = {key: f"{index}a" * 32 for index, key in enumerate(_JJ_TARGET_TRIPLES)}
+_JJ_NEW_SHAS = {key: f"{index}b" * 32 for index, key in enumerate(_JJ_TARGET_TRIPLES)}
+
+
+def _jj_release_api_digests(version: str, shas: Mapping[str, str]) -> dict[str, str]:
+    return {f"jj-v{version}-{_JJ_TARGET_TRIPLES[key]}.tar.gz": sha for key, sha in shas.items()}
+
+
+@pytest.fixture
+def mini_jj_repo(tmp_path: Path) -> Path:
+    """jj's version module and the offload image's copy of the Linux pin, as they appear in the real files."""
+    _write(
+        tmp_path,
+        _JJ.version_file,
+        f'"""The pin."""\n\nJJ_PINNED_VERSION = "{_JJ_OLD_VERSION}"\n\n' + _JJ.format_pin_block(_JJ_OLD_SHAS) + "\n",
+    )
+    _write(
+        tmp_path,
+        managed_pin._JJ_OFFLOAD_DOCKERFILE,
+        f"ARG JJ_VERSION={_JJ_OLD_VERSION}\n"
+        + f"ARG JJ_SHA256_X86_64={_JJ_OLD_SHAS['linux-x64']}\n"
+        + f"ARG JJ_SHA256_AARCH64={_JJ_OLD_SHAS['linux-arm64']}\n",
+    )
+    return tmp_path
+
+
+def test_main_rewrites_every_pinned_jj_copy(mini_jj_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(managed_pin, "compute_platform_shas", lambda spec, version: dict(_JJ_NEW_SHAS))
+    monkeypatch.setattr(
+        bump_pin,
+        "fetch_release_api_digests",
+        lambda spec, version: _jj_release_api_digests(version, _JJ_NEW_SHAS),
+    )
+
+    assert bump_pin.main(["jj", _JJ_NEW_VERSION, "--repo-root", str(mini_jj_repo)]) == 0
+
+    assert managed_pin.read_pinned_version(_JJ, mini_jj_repo) == _JJ_NEW_VERSION
+    assert managed_pin.read_baked_shas(_JJ, mini_jj_repo) == _JJ_NEW_SHAS
+    assert _read(mini_jj_repo, managed_pin._JJ_OFFLOAD_DOCKERFILE) == (
+        f"ARG JJ_VERSION={_JJ_NEW_VERSION}\n"
+        + f"ARG JJ_SHA256_X86_64={_JJ_NEW_SHAS['linux-x64']}\n"
+        + f"ARG JJ_SHA256_AARCH64={_JJ_NEW_SHAS['linux-arm64']}\n"
+    )
+
+
+def test_main_refuses_a_jj_bump_the_release_api_disagrees_with(
+    mini_jj_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(managed_pin, "compute_platform_shas", lambda spec, version: dict(_JJ_NEW_SHAS))
+    monkeypatch.setattr(
+        bump_pin,
+        "fetch_release_api_digests",
+        lambda spec, version: _jj_release_api_digests(version, _JJ_OLD_SHAS),
+    )
+
+    with pytest.raises(managed_pin.PinError, match="Digest mismatch"):
+        bump_pin.main(["jj", _JJ_NEW_VERSION, "--repo-root", str(mini_jj_repo)])
+    assert managed_pin.read_pinned_version(_JJ, mini_jj_repo) == _JJ_OLD_VERSION
+
+
+def test_parse_release_api_digests_strips_the_algorithm_and_skips_undigested_assets() -> None:
+    payload = {
+        "assets": [
+            {"name": "jj-v0.47.0-aarch64-apple-darwin.tar.gz", "digest": f"sha256:{'ab' * 32}"},
+            {"name": "jj-v0.47.0-docs-html.tar.gz", "digest": None},
+        ]
+    }
+    assert bump_pin.parse_release_api_digests(payload) == {"jj-v0.47.0-aarch64-apple-darwin.tar.gz": "ab" * 32}
+
+
+def test_parse_release_api_digests_rejects_a_payload_without_assets() -> None:
+    with pytest.raises(managed_pin.PinError, match="assets"):
+        bump_pin.parse_release_api_digests({"message": "Not Found"})
