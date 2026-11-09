@@ -397,11 +397,12 @@ class WorkspaceService(Service, ABC):
         transaction: DataModelTransaction | None = None,
     ) -> Path | None:
         """
-        Get the git working directory for a workspace.
+        Get the checkout directory for a workspace.
 
         For IN_PLACE workspaces, returns the project's local path.
-        For CLONE workspaces, returns the cloned repository path inside the environment.
+        For CLONE and WORKTREE workspaces, returns the checkout inside the environment.
         Returns None if the workspace's environment hasn't been initialized yet.
+        Never resumes the environment, so it is cheap enough to call on every poll.
 
         Args:
             workspace: The workspace to get the working directory for.

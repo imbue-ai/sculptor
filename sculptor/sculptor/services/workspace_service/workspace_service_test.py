@@ -20,7 +20,9 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.git import get_repo_base_path
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.interfaces.environments.base import Environment
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
@@ -717,6 +719,69 @@ def test_delete_workspace_offloads_environment_teardown_off_request_thread(
     assert teardown_thread is not request_thread, (
         "environment teardown ran on the request thread; it must run on a background thread (SCU-1374)"
     )
+
+
+class _ResumeCountingEnvironmentManager(DefaultEnvironmentManager):
+    """Environment manager that counts `resume_environment` calls."""
+
+    _resume_count: int = PrivateAttr(default=0)
+
+    def resume_environment(
+        self,
+        environment_id: str,
+        project_path: Path,
+        project_id: ProjectID,
+        concurrency_group: ConcurrencyGroup,
+        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
+        env_var_override: bool = False,
+        sculptor_folder: Path | None = None,
+    ) -> Environment:
+        self._resume_count += 1
+        return super().resume_environment(
+            environment_id,
+            project_path,
+            project_id,
+            concurrency_group,
+            initialization_strategy,
+            env_var_override,
+            sculptor_folder,
+        )
+
+
+@pytest.mark.parametrize(
+    "initialization_strategy", [WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE]
+)
+def test_get_workspace_working_directory_finds_the_checkout_without_resuming_the_environment(
+    test_service_collection: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+    initialization_strategy: WorkspaceInitializationStrategy,
+) -> None:
+    """The branch poller calls this for every workspace on every cycle, so it must not resume environments."""
+    workspace_service = test_service_collection.workspace_service
+    assert isinstance(workspace_service, DefaultWorkspaceService)
+    existing_manager = workspace_service.environment_manager
+    assert isinstance(existing_manager, DefaultEnvironmentManager)
+    counting_manager = _ResumeCountingEnvironmentManager(data_model_service=existing_manager.data_model_service)
+    workspace_service.environment_manager = counting_manager
+
+    environment_dir = tmp_path / f"environment-{uuid4().hex}"
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = workspace_service.create_workspace(
+            project=test_project,
+            initialization_strategy=initialization_strategy,
+            source_branch="main",
+            requested_branch_name=f"working-dir-{uuid4().hex[:8]}",
+            description="Working directory lookup",
+            transaction=transaction,
+        )
+        workspace = transaction.update_workspace_fields(workspace.object_id, environment_id=str(environment_dir))
+    assert workspace is not None
+
+    working_directory = workspace_service.get_workspace_working_directory(workspace)
+
+    assert working_directory == environment_dir / "code"
+    assert counting_manager._resume_count == 0
 
 
 def _wait_for_dead(pid: int, timeout: float = 1.0) -> bool:

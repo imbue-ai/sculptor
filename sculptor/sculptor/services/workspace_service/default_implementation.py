@@ -75,6 +75,7 @@ from sculptor.services.workspace_service.setup_command_runner import DefaultSetu
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.services.workspace_service.vcs.checkout_paths import workspace_checkout_path
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
@@ -854,12 +855,9 @@ class DefaultWorkspaceService(WorkspaceService):
         workspace: Workspace,
         transaction: DataModelTransaction | None = None,
     ) -> Path | None:
-        """Get the git working directory for a workspace.
+        """Get the checkout directory for a workspace without resuming its environment.
 
-        Delegates to the Environment abstraction so IN_PLACE vs CLONE path logic
-        lives in one place (LocalEnvironment.get_working_directory).
-
-        Returns None if the workspace's environment hasn't been initialized yet.
+        Returns None if a clone or worktree workspace has no environment yet.
         """
         if transaction is not None:
             project = transaction.get_project(workspace.project_id)
@@ -868,20 +866,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 project = txn.get_project(workspace.project_id)
         if project is None:
             raise WorkspaceNotFoundError(workspace.object_id)
-
-        if workspace.environment_id is None:
-            if workspace.initialization_strategy == WorkspaceInitializationStrategy.IN_PLACE:
-                return project.get_local_user_path()
-            return None
-
-        environment = self.environment_manager.resume_environment(
-            environment_id=workspace.environment_id,
-            project_path=project.get_local_user_path(),
-            project_id=project.object_id,
-            concurrency_group=self.concurrency_group,
-            initialization_strategy=workspace.initialization_strategy,
-        )
-        return environment.get_working_directory()
+        return workspace_checkout_path(workspace, project.get_local_user_path())
 
     def _get_workspace_working_dir(
         self,
