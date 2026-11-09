@@ -1107,6 +1107,24 @@ def test_create_workspace_auto_resolves_target_branch_with_origin(
     assert workspace.target_branch == "origin/main"
 
 
+def test_create_workspace_resolves_target_branch_to_what_origin_head_points_at(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_repo_with_origin_and_feature_branch(tmp_path, test_root_concurrency_group)
+    subprocess.run(["git", "-C", str(repo_path), "push", "origin", "feature"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_path), "remote", "set-head", "origin", "feature"], check=True)
+
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = transaction.get_workspace(workspace_id)
+    assert workspace is not None
+    assert workspace.target_branch == "origin/feature"
+    assert workspace.source_git_hash == _read_head_commit(repo_path)
+
+
 def test_create_workspace_uses_explicit_target_branch_over_auto_resolution(
     test_service_collection: CompleteServiceCollection,
     test_root_concurrency_group: ConcurrencyGroup,

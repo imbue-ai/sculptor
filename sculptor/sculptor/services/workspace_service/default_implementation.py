@@ -43,8 +43,6 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
-from sculptor.services.git_repo_service.git_commands import run_git_command_local
-from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.workspace_service.api import CommitRecord
@@ -84,7 +82,6 @@ from sculptor.web.data_types import StreamingUpdateSourceTypes
 
 _ENVIRONMENT_CREATION_TIMEOUT_SECONDS = 60
 _DIFF_METADATA_FILENAME = "DIFF.meta.json"
-_GIT_COMMAND_TIMEOUT = 30.0
 
 # Number of unchanged context lines shown around each diff hunk by default, and
 # the maximum a caller is allowed to request.
@@ -290,134 +287,6 @@ class DefaultWorkspaceService(WorkspaceService):
 
     # Workspace Operations
 
-    def _get_current_git_hash(self, project_path: Path) -> str | None:
-        """Get the current HEAD git hash for a project."""
-        try:
-            returncode, stdout, stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "rev-parse", "HEAD"],
-                cwd=project_path,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode == 0:
-                return stdout.strip()
-            else:
-                logger.warning("Failed to get git hash: {}", stderr)
-                return None
-        except GitCommandFailure as e:
-            logger.warning("Failed to get git hash: {}", e)
-            return None
-
-    def _resolve_default_target_branch(
-        self,
-        project_path: Path,
-        initialization_strategy: WorkspaceInitializationStrategy,
-    ) -> str | None:
-        """Detect the best default target branch for a new workspace.
-
-        Checks the user's local repo for a suitable remote-tracking branch to
-        use as the diff target.  When no remote-tracking branch is present
-        (e.g. a local-only repo with no ``origin``), falls back to the local
-        ``main``/``master`` ref:
-
-        * For CLONE workspaces, returns ``origin/<branch>``: clone_strategy
-          creates a synthetic ``origin`` remote pointing at the source and
-          seeds ``refs/remotes/origin/<branch>`` from the source's local
-          branches, so the ref resolves inside the clone.
-        * For IN_PLACE and WORKTREE workspaces, returns the bare branch
-          name (``main``/``master``): these workspaces share ``.git`` with
-          the user's repo, so the local branch resolves directly.
-        """
-        # Try origin first (most common case)
-        branch = self._detect_default_branch_for_remote(project_path, "origin")
-        if branch is not None:
-            return branch
-
-        if initialization_strategy == WorkspaceInitializationStrategy.CLONE:
-            return self._detect_fallback_branch_for_clone_target(project_path)
-
-        return self._detect_local_main_or_master(project_path)
-
-    def _detect_default_branch_for_remote(self, project_path: Path, remote: str) -> str | None:
-        """Try to find the default branch for a given remote.
-
-        Resolution order:
-        1. ``git symbolic-ref refs/remotes/<remote>/HEAD`` (e.g. ``origin/main``)
-        2. ``<remote>/main`` if it exists
-        3. ``<remote>/master`` if it exists
-        """
-        # 1. Try symbolic-ref (set by `git remote set-head --auto`)
-        try:
-            returncode, stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "symbolic-ref", f"refs/remotes/{remote}/HEAD"],
-                cwd=project_path,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode == 0 and stdout.strip():
-                # Output is like "refs/remotes/origin/main" → strip to "origin/main"
-                full_ref = stdout.strip()
-                prefix = "refs/remotes/"
-                if full_ref.startswith(prefix):
-                    return full_ref[len(prefix) :]
-                return full_ref
-        except GitCommandFailure:
-            pass
-
-        # 2. Check for common default branch names
-        for branch_name in ("main", "master"):
-            candidate = f"{remote}/{branch_name}"
-            try:
-                returncode, _stdout, _stderr = run_git_command_local(
-                    self.concurrency_group,
-                    ["git", "rev-parse", "--verify", f"refs/remotes/{candidate}"],
-                    cwd=project_path,
-                    check_output=False,
-                    timeout=_GIT_COMMAND_TIMEOUT,
-                    is_retry_safe=True,
-                )
-                if returncode == 0:
-                    return candidate
-            except GitCommandFailure:
-                continue
-
-        return None
-
-    def _detect_local_main_or_master(self, project_path: Path) -> str | None:
-        """Return the bare local default branch name (``"main"`` or ``"master"``).
-
-        Returns ``None`` if neither local branch exists.
-        """
-        for branch_name in ("main", "master"):
-            try:
-                returncode, _stdout, _stderr = run_git_command_local(
-                    self.concurrency_group,
-                    ["git", "rev-parse", "--verify", f"refs/heads/{branch_name}"],
-                    cwd=project_path,
-                    check_output=False,
-                    timeout=_GIT_COMMAND_TIMEOUT,
-                    is_retry_safe=True,
-                )
-                if returncode == 0:
-                    return branch_name
-            except GitCommandFailure:
-                continue
-        return None
-
-    def _detect_fallback_branch_for_clone_target(self, project_path: Path) -> str | None:
-        """Return ``origin/main`` or ``origin/master`` for CLONE targets.
-
-        clone_strategy creates a synthetic ``origin`` remote pointing at the
-        source path and seeds ``refs/remotes/origin/<branch>`` from the
-        source's local branches, so we want the ``origin/<branch>`` form.
-        """
-        local = self._detect_local_main_or_master(project_path)
-        return f"origin/{local}" if local is not None else None
-
     def create_workspace(
         self,
         project: Project,
@@ -437,12 +306,13 @@ class DefaultWorkspaceService(WorkspaceService):
         # from it when the target branch has no merge base. None if git is not
         # available or HEAD doesn't exist.
         project_path = project.get_local_user_path()
-        source_git_hash = self._get_current_git_hash(project_path)
+        vcs = self._get_workspace_vcs(initialization_strategy)
+        source_git_hash = vcs.resolve_base_commit_id(project_path, "HEAD")
 
         # Use the caller-provided target branch if given, otherwise resolve a
         # sensible default from the user's repo.
         if target_branch is None:
-            target_branch = self._resolve_default_target_branch(project_path, initialization_strategy)
+            target_branch = vcs.resolve_default_target(project_path)
 
         # Resolve through the project's tri-state default helper: `None` means
         # "use the current default", `""` means "user cleared", and any other
