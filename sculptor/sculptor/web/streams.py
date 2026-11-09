@@ -764,6 +764,10 @@ def _notify_pr_polling_service(
         elif isinstance(item, WorkspaceBranchInfo):
             if not is_workspace_in_scope(item.workspace_id):
                 continue
+            # A checkout whose branch cannot be read is not ready for PR polling,
+            # and keeping its last branch means recovering on that branch is a no-op.
+            if item.current_branch is None:
+                continue
             prev = last_branch_by_workspace.get(item.workspace_id)
             last_branch_by_workspace[item.workspace_id] = item.current_branch
             if prev is None:

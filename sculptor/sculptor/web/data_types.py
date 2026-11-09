@@ -53,10 +53,19 @@ class AgentTypeName(StrEnum):
 
 
 class WorkspaceBranchInfo(SerializableModel):
-    """Current branch for a workspace's working directory."""
+    """Current branch for a workspace's working directory, or why it cannot be read."""
 
-    current_branch: str
+    current_branch: str | None = Field(description="None exactly when checkout_problem is set")
     workspace_id: WorkspaceID
+    checkout_problem: str | None = Field(
+        default=None, description="Why the checkout's branch cannot be read, e.g. it is not a git checkout"
+    )
+
+    @model_validator(mode="after")
+    def _require_exactly_one_of_branch_and_checkout_problem(self) -> "WorkspaceBranchInfo":
+        if (self.current_branch is None) == (self.checkout_problem is None):
+            raise ValueError("exactly one of current_branch and checkout_problem must be set")
+        return self
 
 
 class WorkspaceTargetBranchesInfo(SerializableModel):

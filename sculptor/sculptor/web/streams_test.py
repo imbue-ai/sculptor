@@ -1,3 +1,4 @@
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,11 +21,14 @@ from sculptor.state.workflow_state import WorkflowTaskState
 from sculptor.web.data_types import OpenFileUiAction
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import UserUpdateSourceTypes
+from sculptor.web.data_types import WorkspaceBranchInfo
 from sculptor.web.derived import TaskUpdate
+from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.streams import LEGACY_SETUP_PLACEHOLDER_BYTES
 from sculptor.web.streams import _convert_to_streaming_update
 from sculptor.web.streams import _convert_to_user_update
 from sculptor.web.streams import _extract_changed_tasks
+from sculptor.web.streams import _notify_pr_polling_service
 from sculptor.web.streams import _snapshot_setup_state
 
 
@@ -257,3 +261,60 @@ def test_extract_changed_tasks_suppresses_empty_map_after_first_send() -> None:
         sent_workflow_states_by_task_id=sent_workflow_states_by_task_id,
     )
     assert second[task_id].workflow_task_states is None
+
+
+class _RecordingPrPollingService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, WorkspaceID]] = []
+
+    def on_workspace_ready(self, workspace_id: WorkspaceID) -> None:
+        self.calls.append(("on_workspace_ready", workspace_id))
+
+    def on_branch_changed(self, workspace_id: WorkspaceID) -> None:
+        self.calls.append(("on_branch_changed", workspace_id))
+
+
+def _notify_branch_infos(
+    pr_polling_service: _RecordingPrPollingService,
+    branch_infos: list[WorkspaceBranchInfo],
+    last_branch_by_workspace: dict[WorkspaceID, str],
+) -> list[StreamingUpdateSourceTypes]:
+    data: list[StreamingUpdateSourceTypes] = list(branch_infos)
+    _notify_pr_polling_service(
+        cast(PrPollingService, pr_polling_service), data, last_branch_by_workspace, lambda _workspace_id: True
+    )
+    return data
+
+
+def test_notify_does_not_start_pr_polling_for_a_checkout_that_cannot_be_read() -> None:
+    pr_polling_service = _RecordingPrPollingService()
+    workspace_id = WorkspaceID()
+    last_branch_by_workspace: dict[WorkspaceID, str] = {}
+    flagged = WorkspaceBranchInfo(current_branch=None, checkout_problem="no .git", workspace_id=workspace_id)
+
+    _notify_branch_infos(pr_polling_service, [flagged], last_branch_by_workspace)
+
+    assert pr_polling_service.calls == []
+    assert last_branch_by_workspace == {}
+
+    _notify_branch_infos(
+        pr_polling_service,
+        [WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id)],
+        last_branch_by_workspace,
+    )
+
+    assert pr_polling_service.calls == [("on_workspace_ready", workspace_id)]
+
+
+def test_notify_keeps_the_last_branch_while_a_checkout_cannot_be_read() -> None:
+    pr_polling_service = _RecordingPrPollingService()
+    workspace_id = WorkspaceID()
+    last_branch_by_workspace: dict[WorkspaceID, str] = {workspace_id: "feat-1"}
+    flagged = WorkspaceBranchInfo(current_branch=None, checkout_problem="no .git", workspace_id=workspace_id)
+    recovered = WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id)
+
+    data = _notify_branch_infos(pr_polling_service, [flagged, recovered], last_branch_by_workspace)
+
+    assert pr_polling_service.calls == []
+    assert data == [flagged, recovered]
+    assert last_branch_by_workspace == {workspace_id: "feat-1"}
