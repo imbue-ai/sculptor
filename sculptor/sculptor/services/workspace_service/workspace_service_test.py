@@ -49,6 +49,9 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.testing.git_snapshot import FullLocalGitRepo
 from sculptor.testing.git_snapshot import GitCommitSnapshot
 from sculptor.testing.git_snapshot import create_repo_from_snapshot
@@ -724,6 +727,67 @@ def test_delete_workspace_offloads_environment_teardown_off_request_thread(
     )
 
 
+def test_delete_worktree_workspace_removes_the_worktree_and_its_merged_branch(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    workspace_service = test_service_collection.workspace_service
+    assert isinstance(workspace_service, DefaultWorkspaceService)
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    branch_name = f"worktree-{uuid4().hex[:8]}"
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        initialized_project = test_service_collection.project_service.initialize_project(
+            project_path=repo_path,
+            organization_reference=ANONYMOUS_ORGANIZATION_REFERENCE,
+            transaction=transaction,
+        )
+        test_service_collection.project_service.activate_project(initialized_project)
+        # No setup command, so no background setup process outlives the test.
+        project = transaction.update_project_fields(initialized_project.object_id, workspace_setup_command="")
+        assert project is not None
+        workspace = workspace_service.create_workspace(
+            project=project,
+            initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+            source_branch="main",
+            requested_branch_name=branch_name,
+            description="Worktree deletion",
+            transaction=transaction,
+        )
+    with test_root_concurrency_group.make_concurrency_group("env_test") as concurrency_group:
+        with workspace_service.agent_environment_context(
+            project=project,
+            workspace_id=workspace.object_id,
+            task_id=TaskID(),
+            concurrency_group=concurrency_group,
+            root_progress_handle=RootProgressHandle(),
+            shutdown_event=GLOBAL_SHUTDOWN_EVENT,
+        ):
+            pass
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace_with_environment = transaction.get_workspace(workspace.object_id)
+    assert workspace_with_environment is not None and workspace_with_environment.environment_id is not None
+    checkout_path = Path(workspace_with_environment.environment_id) / "code"
+    assert (checkout_path / ".git").is_file()
+
+    existing_manager = workspace_service.environment_manager
+    assert isinstance(existing_manager, DefaultEnvironmentManager)
+    recording_manager = _ThreadRecordingEnvironmentManager(data_model_service=existing_manager.data_model_service)
+    workspace_service.environment_manager = recording_manager
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace_service.delete_workspace(workspace.object_id, transaction)
+    assert recording_manager._teardown_done.wait(timeout=10.0), "environment teardown never ran"
+
+    worktree_list = subprocess.run(
+        ["git", "-C", str(repo_path), "worktree", "list", "--porcelain"], check=True, capture_output=True, text=True
+    ).stdout
+    branch_list = subprocess.run(
+        ["git", "-C", str(repo_path), "branch", "--list", branch_name], check=True, capture_output=True, text=True
+    ).stdout
+    assert str(checkout_path) not in worktree_list
+    assert branch_list == ""
+
+
 class _ResumeCountingEnvironmentManager(DefaultEnvironmentManager):
     """Environment manager that counts `resume_environment` calls."""
 
@@ -809,8 +873,8 @@ def test_delete_worktree_workspace_stops_terminals_before_removing_worktree(
 ) -> None:
     """A workspace terminal's child process must be killed before its worktree is removed.
 
-    Regression test for SCU-1424: deleting a WORKTREE workspace ran
-    ``remove_worktree`` (which deletes the ``<environment_id>/code`` checkout a
+    Regression test for SCU-1424: deleting a WORKTREE workspace removed the
+    worktree (which deletes the ``<environment_id>/code`` checkout a
     running terminal uses as its working directory) *before*
     ``stop_terminals_for_environment``.  A process running in the terminal then
     had its working directory yanked out from under it, producing the messy
@@ -825,7 +889,7 @@ def test_delete_worktree_workspace_stops_terminals_before_removing_worktree(
     real pty and assert the terminal child is already dead at the moment the
     worktree-removal step runs.
     """
-    # Create a WORKTREE workspace so the remove_worktree branch of the deletion
+    # Create a WORKTREE workspace so the worktree-removal step of the deletion
     # callback runs.
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         workspace = test_service_collection.workspace_service.create_workspace(
@@ -871,21 +935,16 @@ def test_delete_worktree_workspace_stops_terminals_before_removing_worktree(
             # Spy on the worktree-removal step to record whether the terminal's
             # child process is already gone when it runs.  We deliberately skip
             # the real git worktree removal — its git behaviour is irrelevant to
-            # the ordering under test.  The signature mirrors remove_worktree so
-            # the keyword call site still binds.
+            # the ordering under test.
             def _record_terminal_liveness(
-                user_repo_path: Path,
-                destination: Path,
-                branch_name: str,
-                deletion_policy: str,
-                concurrency_group: ConcurrencyGroup,
+                self: GitWorkspaceVcs,
+                location: CheckoutLocation,
+                created_ref_name: str | None,
+                deletion_policy: BranchDeletionPolicy,
             ) -> None:
                 shell_dead_when_worktree_removed.append(_wait_for_dead(shell_pid))
 
-            monkeypatch.setattr(
-                "sculptor.services.workspace_service.default_implementation.remove_worktree",
-                _record_terminal_liveness,
-            )
+            monkeypatch.setattr(GitWorkspaceVcs, "remove_checkout", _record_terminal_liveness)
 
             # Delete the workspace.  The post-commit callback fires when the
             # transaction commits on block exit, but it offloads the actual

@@ -66,7 +66,6 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
-from sculptor.services.workspace_service.environment_manager.environments.worktree_strategy import remove_worktree
 from sculptor.services.workspace_service.setup_command_runner import DefaultSetupStateProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
@@ -535,9 +534,12 @@ class DefaultWorkspaceService(WorkspaceService):
         if workspace.environment_id is not None:
             environment_id = workspace.environment_id
             environment_manager = self.environment_manager
-            initialization_strategy = workspace.initialization_strategy
             requested_branch_name = workspace.requested_branch_name
-            project = transaction.get_project(workspace.project_id)
+            vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+            try:
+                checkout_location: CheckoutLocation | None = self._get_checkout_location(workspace, transaction)
+            except WorkspaceNotFoundError:
+                checkout_location = None
             concurrency_group = self.concurrency_group
 
             setup_runner = self.setup_runner
@@ -546,7 +548,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 # Stop all terminals (all tab indices) first, before any of the
                 # directory teardown below.  A terminal's child process uses the
                 # `<environment_id>/code` worktree checkout as its working
-                # directory; removing that directory (via remove_worktree or the
+                # directory; removing that directory (via remove_checkout or the
                 # rmtree in delete_environment) out from under a live process is
                 # what causes the messy "Electron quit unexpectedly" shutdown in
                 # SCU-1424.  Without an active agent, destroy() won't be called,
@@ -557,37 +559,17 @@ class DefaultWorkspaceService(WorkspaceService):
                 # Cancel any in-flight setup-command subprocess before the
                 # environment directory is removed.
                 setup_runner.cancel(str(workspace_id))
-                # For WORKTREE workspaces, run `git worktree remove` in the user's
-                # repo before rmtree so the gitfile entry is cleaned up and the
-                # tri-state branch deletion policy is applied.
-                if initialization_strategy == WorkspaceInitializationStrategy.WORKTREE:
-                    if project is not None and requested_branch_name is not None:
-                        user_config = get_user_config_instance()
-                        deletion_policy = (
-                            user_config.workspace_branch_deletion_policy
-                            if user_config is not None
-                            else "delete_if_safe"
-                        )
-                        try:
-                            # The worktree checkout lives at `<environment_id>/code/`,
-                            # not at `<environment_id>` itself (which is the workspace dir
-                            # containing state/, artifacts/, and code/).
-                            remove_worktree(
-                                user_repo_path=project.get_local_user_path(),
-                                destination=Path(environment_id) / "code",
-                                branch_name=requested_branch_name,
-                                deletion_policy=deletion_policy,
-                                concurrency_group=concurrency_group,
-                            )
-                        except Exception as e:
-                            logger.info("Failed to remove worktree for workspace {}: {}", workspace_id, e)
-                    else:
-                        logger.info(
-                            "Skipping worktree removal for workspace {} (project={}, branch={})",
-                            workspace_id,
-                            project,
-                            requested_branch_name,
-                        )
+                # Detach the checkout from the user's repository before the rmtree
+                # below, so a worktree's gitfile entry is cleaned up and the branch
+                # deletion policy is applied.
+                if checkout_location is None:
+                    logger.info("Skipping checkout removal for workspace {}: its project is gone", workspace_id)
+                else:
+                    vcs.remove_checkout(
+                        checkout_location,
+                        requested_branch_name,
+                        get_user_config_instance().workspace_branch_deletion_policy,
+                    )
                 environment_manager.delete_environment(environment_id)
                 logger.info("Deleted environment {} for workspace {}", environment_id, workspace_id)
 
