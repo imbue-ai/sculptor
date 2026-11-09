@@ -7,11 +7,16 @@ subscriber queues:
   every worktree has its own ``HEAD``), which also drives a side effect —
   regenerating the diff when the branch changes out from under us; and
 - the workspace's **target branches** (the merge/diff candidates the selector
-  offers), projected from the repo's remote-tracking branches, falling back to
-  local branches minus the workspace's own when the repo has no remote.
+  offers), projected from the repo's target candidates minus the workspace's own
+  branch.
 
-Remote-tracking refs are a property of the *repo*, not the workspace, so they are
-scanned once per **common git dir** and reused across every workspace sharing it.
+Both are read through the VCS seam (``services/workspace_service/vcs``). A
+checkout that is not a git checkout (no ``.git``, e.g. a vanished directory or a
+jj workspace) is flagged in its published ``WorkspaceBranchInfo`` and logged once.
+
+Target candidates are a property of the *repo*, not the workspace, so they are
+read once per **common git dir**, in that repo's main checkout, and reused across
+every workspace sharing it.
 This is the right key — not the project: an IN_PLACE workspace and the project's
 worktrees share one common dir, but each CLONE-mode workspace is an independent
 clone with its own ``refs/remotes``, so a ref freshly fetched into one clone is
@@ -19,15 +24,14 @@ invisible from any other repo (including the project's own). Keying on the commo
 dir scans each distinct repo exactly once and lets a clone see its own fetches.
 
 Both scans are stat-first: a cycle stats the relevant ref files (``HEAD`` for the
-branch; ``packed-refs`` + ``refs/remotes`` for the targets) and only reads/forks
-``git`` when a signature actually moved, so an idle cycle forks nothing. A
+branch; ``packed-refs`` + ``refs/remotes`` for the targets) and only forks ``git``
+when a signature actually moved, so an idle cycle forks nothing. A
 periodic forced recompute covers ref-mutation shapes that leave the signature
 unchanged (e.g. a loose ref being packed).
 
-Results are fanned out as ``WorkspaceBranchInfo`` / ``WorkspaceTargetBranchesInfo``
-— the same streaming types as before — so the downstream stream conversion and
-PR-polling coupling are unchanged. A single loop serves the whole process;
-websocket connections subscribe rather than each starting their own pollers.
+Results are fanned out as ``WorkspaceBranchInfo`` / ``WorkspaceTargetBranchesInfo``,
+which the stream conversion and PR polling consume. A single loop serves the whole
+process; websocket connections subscribe rather than each starting their own pollers.
 """
 
 import threading
@@ -43,15 +47,16 @@ from sculptor.foundation.errors import ExpectedError
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import DataModelService
-from sculptor.services.git_repo_service.default_implementation import LocalReadOnlyGitRepo
-from sculptor.services.git_repo_service.error_types import GitRepoError
-from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_ref_scanning import RemoteRefsSignature
 from sculptor.services.git_repo_service.git_ref_scanning import StatSignature
-from sculptor.services.git_repo_service.git_ref_scanning import read_current_branch
 from sculptor.services.git_repo_service.git_ref_scanning import remote_refs_signature
 from sculptor.services.git_repo_service.git_ref_scanning import resolve_git_dirs
 from sculptor.services.git_repo_service.git_ref_scanning import stat_signature
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
+from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceBranchInfo
 from sculptor.web.data_types import WorkspaceTargetBranchesInfo
@@ -62,6 +67,8 @@ _BRANCH_POLL_INTERVAL_IN_SECONDS = 3.0
 # Periodic forced re-read even when the HEAD stat signature looks unchanged — the
 # backstop for filesystems with coarse mtime granularity. ~20 cycles ≈ 60s.
 _FALLBACK_RECOMPUTE_EVERY_CYCLES = 20
+# What clients receive as the current branch of a checkout with a detached HEAD.
+_DETACHED_HEAD_LABEL = "HEAD"
 
 
 class WorkspaceBranchPoller:
@@ -72,11 +79,13 @@ class WorkspaceBranchPoller:
         *,
         concurrency_group: ConcurrencyGroup,
         data_model_service: DataModelService,
+        git_cli: GitCli,
         resolve_working_dir: Callable[[Workspace], Path | None],
         refresh_diff_on_branch_change: Callable[[WorkspaceID], None],
     ) -> None:
         self._concurrency_group = concurrency_group
         self._data_model_service = data_model_service
+        self._git = git_cli
         self._resolve_working_dir = resolve_working_dir
         self._refresh_diff_on_branch_change = refresh_diff_on_branch_change
 
@@ -103,8 +112,7 @@ class WorkspaceBranchPoller:
         # lock — the backfill never reads these (it reads the per-workspace
         # projection in ``_target_info_by_workspace``).
         self._remote_signature_by_common_dir: dict[Path, RemoteRefsSignature] = {}
-        self._remote_branches_by_common_dir: dict[Path, tuple[str, ...]] = {}
-        self._local_branches_by_common_dir: dict[Path, tuple[str, ...]] = {}
+        self._target_candidates_by_common_dir: dict[Path, tuple[str, ...]] = {}
 
         self._cycle = 0
 
@@ -128,7 +136,10 @@ class WorkspaceBranchPoller:
             self._observers = [observer for observer in self._observers if observer is not queue]
 
     def get_current_branch(self, workspace_id: WorkspaceID) -> str | None:
-        """Return the last-scanned current branch for a workspace, or None if not yet scanned."""
+        """Return the last-scanned current branch for a workspace.
+
+        None if it has not been scanned yet or its checkout is not a git checkout.
+        """
         with self._observer_lock:
             info = self._branch_info_by_workspace.get(workspace_id)
         return info.current_branch if info is not None else None
@@ -179,9 +190,9 @@ class WorkspaceBranchPoller:
             workspaces = list(transaction.get_workspaces())
 
         live_workspace_ids: set[WorkspaceID] = set()
-        # Group live workspaces by the common git dir they share so the repo-level
-        # remote scan runs once per repo, not once per workspace. ``working_dir``
-        # is a representative checkout to fork git from for that repo.
+        # Group live git workspaces by the common git dir they share so the
+        # repo-level target scan runs once per repo, not once per workspace.
+        # ``working_dir`` is a representative checkout of that repo.
         members_by_common_dir: dict[Path, list[Workspace]] = {}
         working_dir_by_common_dir: dict[Path, Path] = {}
 
@@ -191,23 +202,40 @@ class WorkspaceBranchPoller:
             working_dir = self._resolve_working_dir(workspace)
             if working_dir is None:
                 continue
+            live_workspace_ids.add(workspace.object_id)
             git_dirs = resolve_git_dirs(working_dir)
             if git_dirs is None:
+                self._flag_non_git_checkout(workspace.object_id, working_dir)
                 continue
             git_dir, common_dir = git_dirs
-            live_workspace_ids.add(workspace.object_id)
-            # Branch first: the target projection's no-remote fallback excludes the
-            # workspace's own (current) branch, so the branch cache must be current.
+            # Branch first: the target projection excludes the workspace's own
+            # (current) branch, so the branch cache must be current.
             self._update_branch(workspace, working_dir, git_dir, force_recompute)
             members_by_common_dir.setdefault(common_dir, []).append(workspace)
             working_dir_by_common_dir.setdefault(common_dir, working_dir)
 
         for common_dir, members in members_by_common_dir.items():
-            self._scan_remote_branches(common_dir, working_dir_by_common_dir[common_dir], force_recompute)
+            self._scan_target_candidates(
+                common_dir, members[0], working_dir_by_common_dir[common_dir], force_recompute
+            )
             for workspace in members:
                 self._update_target_branches(workspace, common_dir)
 
-        self._prune(live_workspace_ids, set(members_by_common_dir))
+        git_workspace_ids = {
+            workspace.object_id for members in members_by_common_dir.values() for workspace in members
+        }
+        self._prune(live_workspace_ids, git_workspace_ids, set(members_by_common_dir))
+
+    def _flag_non_git_checkout(self, workspace_id: WorkspaceID, working_dir: Path) -> None:
+        """Publish that the workspace's branch cannot be read, logging only when it first happens."""
+        checkout_problem = f"{working_dir} is not a git checkout"
+        previous = self._branch_info_by_workspace.get(workspace_id)
+        if previous is not None and previous.checkout_problem == checkout_problem:
+            return
+        logger.warning("Cannot read the branch of workspace {}: {}", workspace_id, checkout_problem)
+        self._publish_branch_info(
+            WorkspaceBranchInfo(current_branch=None, checkout_problem=checkout_problem, workspace_id=workspace_id)
+        )
 
     def _update_branch(self, workspace: Workspace, working_dir: Path, git_dir: Path, force_recompute: bool) -> None:
         workspace_id = workspace.object_id
@@ -221,9 +249,12 @@ class WorkspaceBranchPoller:
         ):
             return  # Fast path: HEAD unchanged since last scan — no read, no fork.
 
-        current_branch = read_current_branch(working_dir, git_dir, self._concurrency_group)
-        if current_branch is None:
-            return  # No current branch yet (unborn HEAD) or repo transiently unreadable.
+        try:
+            identity = read_head_identity(self._git, working_dir)
+        except VcsCommandError as e:
+            logger.debug("Cannot read the current branch of {}; retrying next cycle: {}", working_dir, e)
+            return
+        current_branch = _DETACHED_HEAD_LABEL if identity.branch_name is None else identity.branch_name
 
         self._head_signature_by_workspace[workspace_id] = head_signature
         previous = self._branch_info_by_workspace.get(workspace_id)
@@ -236,49 +267,40 @@ class WorkspaceBranchPoller:
             self._refresh_diff_safely(workspace_id)
         self._publish_branch_info(WorkspaceBranchInfo(current_branch=current_branch, workspace_id=workspace_id))
 
-    def _scan_remote_branches(self, common_dir: Path, working_dir: Path, force_recompute: bool) -> None:
+    def _scan_target_candidates(
+        self, common_dir: Path, workspace: Workspace, working_dir: Path, force_recompute: bool
+    ) -> None:
         """Refresh the cached merge-target candidates for the repo at ``common_dir``.
 
         Stat-first: an unchanged remote-ref signature skips the git fork. Computed
         once per common dir per cycle and reused for every workspace on that repo.
         """
         signature = remote_refs_signature(common_dir)
-        already_scanned = common_dir in self._remote_branches_by_common_dir
+        already_scanned = common_dir in self._target_candidates_by_common_dir
         unchanged = self._remote_signature_by_common_dir.get(common_dir) == signature
         if not force_recompute and already_scanned and unchanged:
             return  # Stat fast-path: remote refs unchanged since last scan — no fork.
 
-        repo = LocalReadOnlyGitRepo(
-            repo_path=working_dir, concurrency_group=self._concurrency_group, log_command=False
-        )
+        vcs = GitWorkspaceVcs(workspace.initialization_strategy, self._git, self._concurrency_group)
         try:
-            remote_branches = tuple(repo.get_remote_branches())
-            # Only need local branches as the fallback when there is no remote.
-            local_branches = () if remote_branches else tuple(repo.get_all_branches())
-        except GitRepoNotFoundError:
-            return  # Repo vanished mid-scan; a later cycle prunes it.
-        except GitRepoError as e:
-            logger.warning("Failed to list remote branches for {}: {}", common_dir, e)
+            main_repo_path = resolve_main_repo_path(self._git, working_dir)
+            target_candidates = tuple(vcs.list_target_candidates(main_repo_path))
+        except VcsCommandError as e:
+            logger.warning("Failed to list target candidates for {}: {}", common_dir, e)
             return
 
         self._remote_signature_by_common_dir[common_dir] = signature
-        self._remote_branches_by_common_dir[common_dir] = remote_branches
-        self._local_branches_by_common_dir[common_dir] = local_branches
+        self._target_candidates_by_common_dir[common_dir] = target_candidates
 
     def _update_target_branches(self, workspace: Workspace, common_dir: Path) -> None:
-        if common_dir not in self._remote_branches_by_common_dir:
+        target_candidates = self._target_candidates_by_common_dir.get(common_dir)
+        if target_candidates is None:
             return  # Repo not scanned yet (transient git error); a later cycle emits.
 
-        remote_branches = self._remote_branches_by_common_dir[common_dir]
-        if remote_branches:
-            target_branches = remote_branches
-        else:
-            current = self._branch_info_by_workspace.get(workspace.object_id)
-            current_branch = current.current_branch if current is not None else None
-            # Exclude the workspace's own branch — diffing a branch against itself
-            # is a no-op.
-            local_branches = self._local_branches_by_common_dir.get(common_dir, ())
-            target_branches = tuple(branch for branch in local_branches if branch != current_branch)
+        current = self._branch_info_by_workspace.get(workspace.object_id)
+        current_branch = current.current_branch if current is not None else None
+        # Exclude the workspace's own branch — diffing a branch against itself is a no-op.
+        target_branches = tuple(branch for branch in target_candidates if branch != current_branch)
 
         previous = self._target_info_by_workspace.get(workspace.object_id)
         if previous is not None and previous.target_branches == target_branches:
@@ -296,18 +318,27 @@ class WorkspaceBranchPoller:
             # until the next branch change or an agent-initiated refresh.
             logger.warning("Failed to refresh workspace diff on branch change: {}", e)
 
-    def _prune(self, live_workspace_ids: set[WorkspaceID], live_common_dirs: set[Path]) -> None:
-        stale_ids = (set(self._branch_info_by_workspace) | set(self._target_info_by_workspace)) - live_workspace_ids
+    def _prune(
+        self, live_workspace_ids: set[WorkspaceID], git_workspace_ids: set[WorkspaceID], live_common_dirs: set[Path]
+    ) -> None:
+        """Drop state for workspaces that are gone, and git state for those that are no longer git checkouts.
+
+        A flagged non-git checkout keeps its published flag for backfill, but loses
+        its target branches and HEAD signature, so its branch is re-read once it has
+        a ``.git`` again.
+        """
+        stale_branch_ids = set(self._branch_info_by_workspace) - live_workspace_ids
+        stale_target_ids = set(self._target_info_by_workspace) - git_workspace_ids
         # Pop from the observer-visible caches under the lock (add_observer may be
         # iterating them); the head-signature cache is scan-thread-only.
         with self._observer_lock:
-            for workspace_id in stale_ids:
+            for workspace_id in stale_branch_ids:
                 self._branch_info_by_workspace.pop(workspace_id, None)
+            for workspace_id in stale_target_ids:
                 self._target_info_by_workspace.pop(workspace_id, None)
-        for workspace_id in stale_ids:
+        for workspace_id in set(self._head_signature_by_workspace) - git_workspace_ids:
             self._head_signature_by_workspace.pop(workspace_id, None)
-        stale_common_dirs = set(self._remote_branches_by_common_dir) - live_common_dirs
+        stale_common_dirs = set(self._target_candidates_by_common_dir) - live_common_dirs
         for common_dir in stale_common_dirs:
             self._remote_signature_by_common_dir.pop(common_dir, None)
-            self._remote_branches_by_common_dir.pop(common_dir, None)
-            self._local_branches_by_common_dir.pop(common_dir, None)
+            self._target_candidates_by_common_dir.pop(common_dir, None)

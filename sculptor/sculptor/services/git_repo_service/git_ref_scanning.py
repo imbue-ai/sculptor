@@ -1,24 +1,17 @@
 """Low-level, domain-agnostic primitives for cheaply detecting git ref changes.
 
-These are the mechanics behind ``WorkspaceService``'s branch poller, which watches
-two facts per live workspace: its current branch (its ``HEAD``) and its repo's
-remote-tracking branches (keyed by common git dir, so each repo is scanned once).
+These are the stat fast path behind ``WorkspaceService``'s branch poller, which
+watches two facts per live workspace: its current branch (its ``HEAD``) and its
+repo's target candidates (keyed by common git dir, so each repo is scanned once).
 
-Everything here returns plain values (paths, strings, change-signatures) and
-forks ``git`` only as a fallback — it has no notion of workspaces, projects, or
-the streaming types, so it does not pull the web layer into the services.
-
-The "stat-first" idea: stat the ref files and compare a cheap signature; only
-read/fork when it moved. An idle scan touches the filesystem but forks nothing.
+Everything here reads the filesystem and returns plain values (paths and
+change-signatures); it never forks ``git``. The poller reads the facts themselves
+through the VCS seam, and only when a signature moved. An idle scan touches the
+filesystem but forks nothing.
 """
 
 import os
 from pathlib import Path
-
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.services.git_repo_service.default_implementation import LocalReadOnlyGitRepo
-from sculptor.services.git_repo_service.error_types import GitRepoError
-from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 
 # A cheap "did this file change" signature: modification time + size. Compared by
 # value, never interpreted — any change in either field forces a re-read.
@@ -94,28 +87,3 @@ def remote_refs_signature(common_dir: Path) -> RemoteRefsSignature:
     except OSError:
         pass
     return (packed, loose_count, newest_mtime_ns)
-
-
-def read_current_branch(working_dir: Path, git_dir: Path, concurrency_group: ConcurrencyGroup) -> str | None:
-    """Read the current branch, parsing ``HEAD`` directly and only forking git when needed.
-
-    The overwhelmingly common case — ``HEAD`` is a symbolic ref to a local branch
-    — is satisfied by a single file read. Detached HEAD and other shapes fall back
-    to ``git`` so edge cases stay correct. Returns None when there is no current
-    branch yet (unborn HEAD) or the repo is transiently unreadable.
-    """
-    try:
-        head_text = (git_dir / "HEAD").read_text().strip()
-    except OSError:
-        head_text = ""
-    symbolic_ref_prefix = "ref: refs/heads/"
-    if head_text.startswith(symbolic_ref_prefix):
-        return head_text[len(symbolic_ref_prefix) :].strip() or None
-
-    repo = LocalReadOnlyGitRepo(repo_path=working_dir, concurrency_group=concurrency_group, log_command=False)
-    try:
-        return repo.get_current_git_branch()
-    except GitRepoNotFoundError:
-        return None
-    except GitRepoError:
-        return None
