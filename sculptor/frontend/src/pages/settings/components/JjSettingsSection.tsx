@@ -163,7 +163,7 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
             <Flex align="center" gap="2">
               <ExclamationTriangleIcon color="var(--orange-9)" />
               <Text size="2" color="orange">
-                v{jj.version} — Needs {minimumVersion} or later
+                v{jj.version} — Needs {minimumVersion} or a newer compatible version
               </Text>
             </Flex>
           ) : displayMode === "CUSTOM" && !jj?.path ? (

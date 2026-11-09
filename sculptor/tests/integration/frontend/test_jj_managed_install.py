@@ -99,8 +99,10 @@ def test_jj_settings_report_an_old_jj_as_unsupported(
         jj_section = navigate_to_settings_page(page=instance.page).click_on_jj()
 
         expect(jj_section.get_availability()).to_contain_text(f"{old_jj} reports jj 0.45.0")
-        expect(jj_section.get_availability()).to_contain_text(f"Sculptor needs jj {JJ_PINNED_VERSION} or later")
-        expect(jj_section.get_status()).to_contain_text(f"Needs {JJ_PINNED_VERSION} or later")
+        expect(jj_section.get_availability()).to_contain_text(
+            f"Sculptor needs jj {JJ_PINNED_VERSION} or a newer compatible version"
+        )
+        expect(jj_section.get_status()).to_contain_text(f"Needs {JJ_PINNED_VERSION} or a newer compatible version")
 
 
 @user_story("to set the author identity jj needs with one click")

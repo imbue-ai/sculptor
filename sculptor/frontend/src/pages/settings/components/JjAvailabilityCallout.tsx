@@ -22,7 +22,7 @@ const BLOCKER_COPY = {
   UNSUPPORTED_VERSION: {
     title: "This jj version is not supported.",
     action: (minimumVersion) =>
-      `Sculptor needs jj ${minimumVersion} or later. Install the managed copy below, or point Sculptor at a newer jj.`,
+      `Sculptor needs jj ${minimumVersion} or a newer compatible version. Install the managed copy below, or point Sculptor at a compatible jj.`,
   },
   NO_IDENTITY: {
     title: "jj has no author identity.",

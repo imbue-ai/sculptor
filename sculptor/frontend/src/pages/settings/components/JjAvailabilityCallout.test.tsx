@@ -42,7 +42,7 @@ describe("JjAvailabilityCallout", () => {
     expect(availabilityText()).toContain("/opt/homebrew/bin/jj");
   });
 
-  it("shows an unsupported version's detail with the minimum it must reach", () => {
+  it("shows an unsupported version's detail and asks for a compatible jj", () => {
     render(
       renderCallout(
         { blocker: "UNSUPPORTED_VERSION", detail: "/usr/bin/jj reports jj 0.28.2" },
@@ -50,7 +50,18 @@ describe("JjAvailabilityCallout", () => {
       ),
     );
     expect(availabilityText()).toContain("/usr/bin/jj reports jj 0.28.2");
-    expect(availabilityText()).toContain("0.46.0 or later");
+    expect(availabilityText()).toContain("Sculptor needs jj 0.46.0 or a newer compatible version");
+  });
+
+  it("does not ask a jj that is too new to be newer", () => {
+    render(
+      renderCallout(
+        { blocker: "UNSUPPORTED_VERSION", detail: "/usr/bin/jj reports jj 1.0.0" },
+        { installed: true, version: "1.0.0", path: "/usr/bin/jj" },
+      ),
+    );
+    expect(availabilityText()).not.toContain("or later");
+    expect(availabilityText()).not.toContain("a newer jj");
   });
 
   it("shows why jj does not run", () => {
