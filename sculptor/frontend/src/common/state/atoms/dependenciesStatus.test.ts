@@ -11,6 +11,8 @@ const makeStatus = (pi: DependencyInfo): DependenciesStatus => ({
   claude: makeInfo({ installed: true }),
   pi,
   gh: makeInfo({}),
+  jj: makeInfo({}),
+  jjReadiness: { blocker: "NOT_INSTALLED" },
   voiceModels: makeInfo({}),
 });
 

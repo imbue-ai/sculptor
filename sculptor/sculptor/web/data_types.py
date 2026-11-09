@@ -858,6 +858,46 @@ class SubmitAuthCodeRequest(RequestModel):
     tool: str = "CLAUDE"
 
 
+class JjBlocker(UpperCaseStrEnum):
+    """Why jj is unavailable, listed in the order the readiness checks run."""
+
+    NOT_INSTALLED = auto()
+    NOT_RUNNABLE = auto()
+    UNSUPPORTED_VERSION = auto()
+    NO_IDENTITY = auto()
+
+
+class JjIdentity(SerializableModel):
+    """The author jj records on changes: its ``user.name`` and ``user.email``."""
+
+    name: str
+    email: str
+
+
+class SetJjIdentityRequest(RequestModel):
+    """Write the author identity into the user's jj config."""
+
+    name: str = Field(min_length=1)
+    email: str = Field(min_length=1)
+
+
+class JjReadiness(SerializableModel):
+    """JJ_AVAILABLE: jj is available to Sculptor exactly when ``blocker`` is None.
+
+    Derived from the resolved jj binary on every status read and never stored.
+    """
+
+    blocker: JjBlocker | None = None
+    # What the failing check found: the first stderr line of a failing ``jj --version``,
+    # or the binary and the version it reported.
+    detail: str | None = None
+    # The identity jj gives agents, once every check has passed.
+    identity: JjIdentity | None = None
+    # Prefill for the identity form under NO_IDENTITY: whatever half jj already has,
+    # completed from git's global identity. Either half may be empty.
+    suggested_identity: JjIdentity | None = None
+
+
 class DependenciesStatus(SerializableModel):
     """Status of required dependencies with path/version info."""
 
@@ -865,6 +905,8 @@ class DependenciesStatus(SerializableModel):
     claude: DependencyInfo
     pi: DependencyInfo
     gh: DependencyInfo
+    jj: DependencyInfo
+    jj_readiness: JjReadiness
     # The renderer's speech-to-text model bundle — a managed artifact (data
     # files, no binary), so only its installed/version/progress/error fields
     # are meaningful.

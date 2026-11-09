@@ -32,6 +32,8 @@ const makeStatus = (overrides: Partial<DependenciesStatus>): DependenciesStatus 
   claude: makeInfo({}),
   pi: makeInfo({}),
   gh: makeInfo({}),
+  jj: makeInfo({}),
+  jjReadiness: { blocker: "NOT_INSTALLED" },
   voiceModels: makeInfo({}),
   ...overrides,
 });

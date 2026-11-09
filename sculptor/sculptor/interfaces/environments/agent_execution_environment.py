@@ -41,6 +41,7 @@ class Dependency(UpperCaseStrEnum):
     GIT = auto()
     PI = auto()
     GH = auto()
+    JJ = auto()
 
 
 @runtime_checkable

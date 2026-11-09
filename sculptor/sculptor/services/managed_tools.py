@@ -24,6 +24,8 @@ import httpx
 
 from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.services.jj_version import JJ_PINNED_SHA256_BY_TARGET_TRIPLE
+from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.pi_version import PI_PINNED_VERSION
 
 
@@ -42,22 +44,27 @@ class VersionRange(FrozenModel):
 
 
 class PlatformPin(FrozenModel):
-    """One platform's pinned pi artifact: the release asset and its expected sha256."""
+    """One platform's pinned release artifact: the asset name and its expected sha256."""
 
     asset: str
     sha256: str
 
 
-class PiPin(FrozenModel):
-    """The static, in-repo source of truth for the managed pi distribution.
+class ReleasePin(FrozenModel):
+    """The static, in-repo source of truth for a tool published as per-platform release assets.
 
-    Sculptor computes pi's digests itself per version (``just bump-pi``, which
-    cross-checks upstream's published ``SHA256SUMS``) and bakes them here; the
-    install path verifies downloads against these pinned values only.
+    Sculptor computes the digests itself per version (``just bump-pi`` / ``just bump-jj``,
+    which cross-check what upstream publishes) and bakes them in; the install path
+    verifies downloads against these pinned values only.
     """
 
     version: str
     platforms: dict[str, PlatformPin]
+
+
+class PiPin(ReleasePin):
+    """The managed pi distribution's pin."""
+
     # Reserved slot, not read from user config: a constant sentinel until a pi
     # plugin set needs pinning.
     plugin_set_revision: str = "bundled"
@@ -228,6 +235,90 @@ class PiManagedTool(ManagedTool):
         return binary
 
 
+# jj names its release assets after Rust target triples; the Linux builds are the static
+# musl ones, so they run on any distribution.
+_JJ_TARGET_TRIPLE_BY_PLATFORM_KEY: dict[str, str] = {
+    "darwin-arm64": "aarch64-apple-darwin",
+    "darwin-x64": "x86_64-apple-darwin",
+    "linux-x64": "x86_64-unknown-linux-musl",
+    "linux-arm64": "aarch64-unknown-linux-musl",
+}
+
+# The digests live in the import-free ``jj_version`` module, which ``just install-jj``
+# and the offload image check also read, so the pin is assembled from it here.
+JJ_PIN = ReleasePin(
+    version=JJ_PINNED_VERSION,
+    platforms={
+        platform_key: PlatformPin(
+            asset=f"jj-v{JJ_PINNED_VERSION}-{target_triple}.tar.gz",
+            sha256=JJ_PINNED_SHA256_BY_TARGET_TRIPLE[target_triple],
+        )
+        for platform_key, target_triple in _JJ_TARGET_TRIPLE_BY_PLATFORM_KEY.items()
+    },
+)
+
+_JJ_PLATFORM_MAP: dict[tuple[str, str], str] = {
+    ("darwin", "arm64"): "darwin-arm64",
+    ("darwin", "x86_64"): "darwin-x64",
+    ("linux", "x86_64"): "linux-x64",
+    ("linux", "aarch64"): "linux-arm64",
+}
+
+_JJ_RELEASE_BASE_URL = "https://github.com/jj-vcs/jj/releases/download"
+
+# The pin is also the floor, and any later 0.x is accepted so a system jj from a
+# package manager keeps working; bumping the pin raises the floor.
+JJ_VERSION_RANGE = VersionRange(
+    min_version=JJ_PINNED_VERSION,
+    max_version="0.999.999",
+    recommended_version=JJ_PINNED_VERSION,
+)
+
+# `jj --version` prints `jj 0.46.0-<40-hex commit hash>`; the shared parser would keep
+# the hash suffix, which ``packaging.Version`` rejects.
+_JJ_VERSION_LINE_PATTERN = re.compile(r"^jj (\d+\.\d+\.\d+)(?:-\S+)?$", re.MULTILINE)
+
+
+class JjManagedTool(ManagedTool):
+    """Managed-install conformer for jj (Jujutsu).
+
+    Like pi, the distribution is built from the static ``JJ_PIN`` and the managed copy
+    is downloaded only on explicit user action.
+    """
+
+    tool = Dependency.JJ
+    version_range = JJ_VERSION_RANGE
+    platform_keys = frozenset(_JJ_TARGET_TRIPLE_BY_PLATFORM_KEY)
+    retention_keep = 1
+    binary_subpath = "jj"
+    installs_on_startup_when_missing = False
+
+    def resolve_distribution(self) -> ResolvedDistribution:
+        platform_key = _resolve_platform_key(_JJ_PLATFORM_MAP, "jj")
+        pin = JJ_PIN.platforms[platform_key]
+        return ResolvedDistribution(
+            version=JJ_PIN.version,
+            url=f"{_JJ_RELEASE_BASE_URL}/v{JJ_PIN.version}/{pin.asset}",
+            checksum_sha256=pin.sha256,
+            size=None,
+            archive="tarball",
+            binary_subpath=self.binary_subpath,
+        )
+
+    def stage(self, downloaded: Path, version_dir: Path) -> Path:
+        # The tarball holds ``./jj`` beside its LICENSE and README; only the binary is kept.
+        version_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(downloaded, "r:gz") as tar:
+            tar.extract("./jj", version_dir, filter="data")
+        binary = version_dir / self.binary_subpath
+        binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        return binary
+
+    def parse_version(self, output: str) -> str | None:
+        match = _JJ_VERSION_LINE_PATTERN.search(output)
+        return match.group(1) if match else None
+
+
 GCP_BUCKET_BASE_URL = (
     "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
 )
@@ -361,11 +452,11 @@ class ClaudeManagedTool(ManagedTool):
         return staged
 
 
-# Both Claude and pi conform to the seam; unmanaged tools (e.g. ``GIT``) stay absent
-# so ``get_managed_tool`` returns None for them.
+# Unmanaged tools (e.g. ``GIT``) stay absent so ``get_managed_tool`` returns None for them.
 _MANAGED_TOOL_REGISTRY: dict[Dependency, ManagedTool] = {
     Dependency.CLAUDE: ClaudeManagedTool(),
     Dependency.PI: PiManagedTool(),
+    Dependency.JJ: JjManagedTool(),
 }
 
 
