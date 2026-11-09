@@ -470,10 +470,11 @@ class WorkspaceService(Service, ABC):
             transaction: Database transaction for atomicity.
 
         Returns:
-            Tuple of (diff_text, commit_hash, parent_hash).
+            Tuple of (diff_text, full commit_hash, parent_hash); parent_hash is None for a root commit.
 
         Raises:
             WorkspaceNotFoundError: If the workspace does not exist.
+            ValueError: If commit_hash is malformed or names no commit.
         """
 
     @abstractmethod
@@ -484,16 +485,15 @@ class WorkspaceService(Service, ABC):
     ) -> tuple[list[CommitRecord], str | None]:
         """Get the commit history for the workspace branch.
 
-        Returns commits from HEAD back to the fork point (source_git_hash) where
-        the workspace was created.
+        Returns commits from HEAD back to the fork point: the merge base with the
+        workspace's target branch, or source_git_hash when there is none.
 
         Args:
             workspace_id: The workspace to get commit history for.
             transaction: Database transaction for atomicity.
 
         Returns:
-            Tuple of (commits, fork_point_hash) where commits is a list of dicts
-            with commit metadata and file changes.
+            Tuple of (commits, fork_point_hash), newest commit first.
 
         Raises:
             WorkspaceNotFoundError: If the workspace does not exist.

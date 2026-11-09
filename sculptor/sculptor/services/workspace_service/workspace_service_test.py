@@ -1235,12 +1235,7 @@ def test_diff_skipped_when_no_target_branch(
     assert diff.target_branch_diff == ""
 
 
-def _create_in_place_workspace_on_isolated_repo(
-    test_service_collection: CompleteServiceCollection,
-    concurrency_group: ConcurrencyGroup,
-    repo_path: Path,
-) -> tuple[Path, WorkspaceID]:
-    repo_path = _create_isolated_git_repo(repo_path, concurrency_group)
+def _create_in_place_workspace(test_service_collection: CompleteServiceCollection, repo_path: Path) -> WorkspaceID:
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         project = test_service_collection.project_service.initialize_project(
             project_path=repo_path,
@@ -1256,7 +1251,7 @@ def _create_in_place_workspace_on_isolated_repo(
             description="Isolated repo workspace",
             transaction=transaction,
         )
-    return repo_path, workspace.object_id
+    return workspace.object_id
 
 
 def test_workspace_diff_includes_untracked_files_whose_names_start_with_a_dash(
@@ -1264,9 +1259,8 @@ def test_workspace_diff_includes_untracked_files_whose_names_start_with_a_dash(
     test_root_concurrency_group: ConcurrencyGroup,
     tmp_path: Path,
 ) -> None:
-    repo_path, workspace_id = _create_in_place_workspace_on_isolated_repo(
-        test_service_collection, test_root_concurrency_group, tmp_path / "repo"
-    )
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
     (repo_path / "-dash.txt").write_text("dash content\n")
 
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
@@ -1279,26 +1273,59 @@ def test_workspace_diff_includes_untracked_files_whose_names_start_with_a_dash(
     assert "+++ b/-dash.txt" in diff.target_branch_diff
 
 
-class TestExpandNumstatRenamePath:
-    """Tests for _expand_numstat_rename_path which resolves git's compact rename notation."""
+def _read_head_commit(repo_path: Path) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo_path), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
 
-    def test_folder_rename_brace_notation(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("{src => lib}/a.py") == "lib/a.py"
 
-    def test_folder_rename_with_prefix(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("pkg/{old => new}/file.py") == "pkg/new/file.py"
+def _commit_all(repo_path: Path, message: str) -> str:
+    subprocess.run(["git", "-C", str(repo_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", message], check=True, capture_output=True)
+    return _read_head_commit(repo_path)
 
-    def test_move_from_root_to_folder(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("{ => lib}/file.py") == "lib/file.py"
 
-    def test_move_from_folder_to_root(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("{src => }/file.py") == "file.py"
+def test_commit_history_reports_a_file_type_change_as_modified(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    subprocess.run(["git", "-C", str(repo_path), "checkout", "-b", "feature"], check=True, capture_output=True)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    (repo_path / "README.md").unlink()
+    (repo_path / "README.md").symlink_to("elsewhere.md")
+    commit_hash = _commit_all(repo_path, "Turn the readme into a symlink")
 
-    def test_simple_file_rename(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("old.py => new.py") == "new.py"
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        commits, fork_point = test_service_collection.workspace_service.get_commit_history(workspace_id, transaction)
 
-    def test_no_rename(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("src/file.py") == "src/file.py"
+    assert [commit.hash for commit in commits] == [commit_hash]
+    assert [(change.path, change.status) for change in commits[0].files] == [("README.md", "M")]
+    assert fork_point is not None
+
+
+def test_get_commit_diff_resolves_an_abbreviated_hash_and_its_parent(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    parent_hash = _read_head_commit(repo_path)
+    (repo_path / "added.txt").write_text("added\n")
+    commit_hash = _commit_all(repo_path, "Add a file")
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        diff_text, resolved_hash, resolved_parent = test_service_collection.workspace_service.get_commit_diff(
+            workspace_id, commit_hash[:10], transaction
+        )
+        with pytest.raises(ValueError):
+            test_service_collection.workspace_service.get_commit_diff(workspace_id, "not-a-hash", transaction)
+
+    assert "+++ b/added.txt" in diff_text
+    assert resolved_hash == commit_hash
+    assert resolved_parent == parent_hash
 
 
 def test_get_cached_current_branch_does_not_create_the_branch_poller(

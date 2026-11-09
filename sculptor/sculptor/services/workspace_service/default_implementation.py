@@ -1,9 +1,7 @@
 import base64
 import json
-import re
 import threading
 import uuid
-from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Queue
@@ -50,7 +48,6 @@ from sculptor.services.git_repo_service.git_commands import run_git_command_loca
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
-from sculptor.services.workspace_service.api import CommitFileChange
 from sculptor.services.workspace_service.api import CommitRecord
 from sculptor.services.workspace_service.api import FileAtRefResult
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
@@ -899,23 +896,6 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace.object_id)
         return CheckoutLocation(repo_path=repo_path, checkout_path=checkout_path)
 
-    def _get_merge_base(self, working_dir: Path, target_branch: str) -> str | None:
-        """Return the merge-base of HEAD and *target_branch*, or ``None`` on failure."""
-        try:
-            returncode, stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "merge-base", "HEAD", target_branch],
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode != 0 or not stdout.strip():
-                return None
-            return stdout.strip()
-        except GitCommandFailure:
-            return None
-
     def refresh_workspace_diff(
         self,
         workspace_id: WorkspaceID,
@@ -1156,8 +1136,6 @@ class DefaultWorkspaceService(WorkspaceService):
         except GitCommandFailure:
             return False
 
-    _COMMIT_HASH_PATTERN = re.compile(r"^[0-9a-f]{4,40}$")
-
     def get_commit_diff(
         self,
         workspace_id: WorkspaceID,
@@ -1169,81 +1147,10 @@ class DefaultWorkspaceService(WorkspaceService):
         if workspace is None:
             raise WorkspaceNotFoundError(workspace_id)
 
-        working_dir = self._get_workspace_working_dir(workspace, transaction)
-
-        # Validate commit hash format
-        if not self._COMMIT_HASH_PATTERN.match(commit_hash):
-            raise ValueError(f"Invalid commit hash: {commit_hash}")
-
-        # Validate it's actually a commit object and resolve to full hash
-        try:
-            returncode, stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "cat-file", "-t", commit_hash],
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode != 0 or stdout.strip() != "commit":
-                raise ValueError(f"Not a valid commit: {commit_hash}")
-        except GitCommandFailure as e:
-            raise ValueError(f"Not a valid commit: {commit_hash}") from e
-
-        # Resolve to full hash so callers always get a canonical 40-char SHA
-        try:
-            returncode, stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "rev-parse", commit_hash],
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode == 0 and stdout.strip():
-                commit_hash = stdout.strip()
-        except GitCommandFailure:
-            pass
-
-        # Try to get parent hash
-        parent_hash: str | None = None
-        try:
-            returncode, stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "rev-parse", f"{commit_hash}^"],
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode == 0 and stdout.strip():
-                parent_hash = stdout.strip()
-        except GitCommandFailure:
-            pass
-
-        # Generate the diff
-        if parent_hash is not None:
-            diff_command = ["git", "--no-pager", "diff", "-M", f"{parent_hash}..{commit_hash}"]
-        else:
-            # Root commit — no parent
-            diff_command = ["git", "--no-pager", "diff-tree", "-p", "--root", "-M", commit_hash]
-
-        try:
-            returncode, stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                diff_command,
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            diff_text = stdout if returncode <= 1 else ""
-        except GitCommandFailure:
-            diff_text = ""
-
-        return (diff_text, commit_hash, parent_hash)
-
-    _MAX_COMMITS = 500
+        location = self._get_checkout_location(workspace, transaction)
+        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        revision_diff = vcs.get_revision_diff(location, commit_hash)
+        return (revision_diff.diff, revision_diff.commit_id, revision_diff.parent_commit_id)
 
     def get_commit_history(
         self,
@@ -1255,227 +1162,12 @@ class DefaultWorkspaceService(WorkspaceService):
         if workspace is None:
             raise WorkspaceNotFoundError(workspace_id)
 
-        working_dir = self._get_workspace_working_dir(workspace, transaction)
-
-        # Determine fork point
-        fork_point = self._resolve_fork_point(workspace, working_dir)
-        if fork_point is None:
-            return ([], None)
-
-        # Get commit metadata (using unit separator \x1f to avoid collisions)
-        separator = "\x1f"
-        format_str = f"%H{separator}%h{separator}%s{separator}%aN{separator}%aE{separator}%aI{separator}%P"
-        try:
-            returncode, stdout, stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "log", f"-n{self._MAX_COMMITS}", f"--format={format_str}", f"{fork_point}..HEAD"],
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-        except GitCommandFailure:
-            return ([], fork_point)
-
-        if returncode != 0 or not stdout.strip():
-            return ([], fork_point)
-
-        # Parse commit metadata
-        commit_meta: list[dict] = []
-        for line in stdout.strip().split("\n"):
-            parts = line.split(separator)
-            if len(parts) != 7:
-                continue
-            parent_hashes = parts[6].split() if parts[6] else []
-            commit_meta.append(
-                {
-                    "hash": parts[0],
-                    "short_hash": parts[1],
-                    "message": parts[2],
-                    "author_name": parts[3],
-                    "author_email": parts[4],
-                    "timestamp": parts[5],
-                    "parent_hashes": parent_hashes,
-                }
-            )
-
-        if not commit_meta:
-            return ([], fork_point)
-
-        # Get file stats (numstat) for all commits in one command
-        numstat_by_hash = self._parse_log_file_data(working_dir, fork_point, "--numstat", self._parse_numstat_lines)
-
-        # Get file statuses (name-status) for all commits in one command
-        status_by_hash = self._parse_log_file_data(
-            working_dir, fork_point, "--name-status", self._parse_name_status_lines
+        location = self._get_checkout_location(workspace, transaction)
+        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        history = vcs.get_revision_history(
+            location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
         )
-
-        # Combine into final commit list
-        commits: list[CommitRecord] = []
-        for meta in commit_meta:
-            commit_hash = meta["hash"]
-            numstat = numstat_by_hash.get(commit_hash, {})
-            statuses = status_by_hash.get(commit_hash, {})
-
-            files = []
-            all_paths = set(numstat.keys()) | set(statuses.keys())
-            for path in sorted(all_paths):
-                stats = numstat.get(path, (0, 0))
-                status_info = statuses.get(path, ("M", None))
-                files.append(
-                    CommitFileChange(
-                        path=path,
-                        status=status_info[0],
-                        old_path=status_info[1],
-                        additions=stats[0],
-                        deletions=stats[1],
-                    )
-                )
-
-            commits.append(
-                CommitRecord(
-                    hash=meta["hash"],
-                    short_hash=meta["short_hash"],
-                    message=meta["message"],
-                    author_name=meta["author_name"],
-                    author_email=meta["author_email"],
-                    timestamp=meta["timestamp"],
-                    parent_hashes=meta["parent_hashes"],
-                    files=files,
-                )
-            )
-
-        return (commits, fork_point)
-
-    def _resolve_fork_point(self, workspace: Workspace, working_dir: Path) -> str | None:
-        """Determine the fork point hash for commit history.
-
-        Uses ``git merge-base HEAD <target_branch>`` so the history correctly
-        excludes commits reachable from the target branch — even after merges
-        or rebases that move the common ancestor forward.  Falls back to
-        ``source_git_hash`` when no target branch is configured or when the
-        merge-base command fails.
-        """
-        target_branch = workspace.target_branch
-        if target_branch is None:
-            return workspace.source_git_hash
-
-        return self._get_merge_base(working_dir, target_branch) or workspace.source_git_hash
-
-    def _parse_log_file_data(
-        self,
-        working_dir: Path,
-        fork_point: str,
-        flag: str,
-        parser: "Callable[[list[str]], dict]",
-    ) -> dict[str, dict]:
-        """Run git log with a file-data flag and parse results by commit hash."""
-        try:
-            returncode, stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "log", f"-n{self._MAX_COMMITS}", "--format=COMMIT_SEP:%H", flag, "-M", f"{fork_point}..HEAD"],
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-        except GitCommandFailure:
-            return {}
-
-        if returncode != 0 or not stdout.strip():
-            return {}
-
-        result: dict[str, dict] = {}
-        current_hash = None
-        current_lines: list[str] = []
-
-        for line in stdout.split("\n"):
-            if line.startswith("COMMIT_SEP:"):
-                if current_hash is not None:
-                    result[current_hash] = parser(current_lines)
-                current_hash = line[len("COMMIT_SEP:") :]
-                current_lines = []
-            elif line.strip():
-                current_lines.append(line)
-
-        if current_hash is not None:
-            result[current_hash] = parser(current_lines)
-
-        return result
-
-    @staticmethod
-    def _expand_numstat_rename_path(path: str) -> str:
-        """Expand git's compact rename notation into the new path.
-
-        git log --numstat -M uses compact notation for renames:
-        - ``{old => new}/file.py`` → ``new/file.py``
-        - ``prefix/{old => new}/file.py`` → ``prefix/new/file.py``
-        - ``old.py => new.py`` → ``new.py``
-        - ``{ => new}/file.py`` → ``new/file.py``
-        - ``{old => }/file.py`` → ``file.py``
-        """
-        # Brace notation: {old => new}
-        brace_start = path.find("{")
-        if brace_start != -1:
-            brace_end = path.find("}", brace_start)
-            arrow = path.find(" => ", brace_start)
-            if brace_end != -1 and arrow != -1 and arrow < brace_end:
-                prefix = path[:brace_start]
-                new_part = path[arrow + 4 : brace_end]
-                suffix = path[brace_end + 1 :]
-                result = prefix + new_part + suffix
-                return result.lstrip("/")
-
-        # Simple rename: old => new
-        arrow = path.find(" => ")
-        if arrow != -1:
-            return path[arrow + 4 :]
-
-        return path
-
-    @staticmethod
-    def _parse_numstat_lines(lines: list[str]) -> dict[str, tuple[int, int]]:
-        """Parse numstat lines into {path: (additions, deletions)}."""
-        result: dict[str, tuple[int, int]] = {}
-        for line in lines:
-            parts = line.split("\t")
-            if len(parts) < 3:
-                continue
-            add_str, del_str = parts[0], parts[1]
-            # Binary files show as "-\t-\tpath"
-            additions = 0 if add_str == "-" else int(add_str)
-            deletions = 0 if del_str == "-" else int(del_str)
-            # Renames show as "old_path\tnew_path" in the path portion
-            if len(parts) == 4:
-                # Rename: additions\tdeletions\told_path\tnew_path
-                path = parts[3]
-            else:
-                path = parts[2]
-            # Expand compact rename notation ({old => new}/file) to the new path
-            if "=>" in path:
-                path = DefaultWorkspaceService._expand_numstat_rename_path(path)
-            result[path] = (additions, deletions)
-        return result
-
-    @staticmethod
-    def _parse_name_status_lines(lines: list[str]) -> dict[str, tuple[str, str | None]]:
-        """Parse name-status lines into {path: (status, old_path)}."""
-        result: dict[str, tuple[str, str | None]] = {}
-        for line in lines:
-            parts = line.split("\t")
-            if len(parts) < 2:
-                continue
-            status = parts[0]
-            if status.startswith("R"):
-                # Rename: R100\told_path\tnew_path
-                if len(parts) >= 3:
-                    old_path = parts[1]
-                    new_path = parts[2]
-                    result[new_path] = ("R", old_path)
-            else:
-                # Normalize status to single letter
-                result[parts[1]] = (status[0] if status else "M", None)
-        return result
+        return (history.commits, history.fork_point)
 
     # Workspace File Operations
 
