@@ -31,7 +31,7 @@ def git_cli(test_root_concurrency_group: ConcurrencyGroup) -> GitCli:
     dependency_management_service = DependencyManagementService(
         concurrency_group=test_root_concurrency_group.make_concurrency_group("dependency_management_service"),
     )
-    return GitCli(test_root_concurrency_group, dependency_management_service)
+    return GitCli(test_root_concurrency_group, dependency_management_service.resolve_binary_path)
 
 
 @pytest.fixture
