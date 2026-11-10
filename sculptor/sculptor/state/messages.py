@@ -29,8 +29,8 @@ class LLMModel(StrEnum):
       - previous: the pinned generation before it. Haiku has none for now: the Haiku
         before 5.5 is 4.5, which has a 200K window and no effort support, so Haiku 5.5
         becomes the first previous Haiku once a newer Haiku ships.
-    The picker (frontend ``PRODUCTION_MODELS``) offers current and previous for each
-    family; older pinned generations stay defined but leave the picker.
+    The picker (frontend ``PRODUCTION_MODELS``) offers these for each family, in that
+    order; older pinned generations stay defined but leave the picker.
 
     One member per model: current models run a native 1M context window, so no model
     gets a 1M/200K pair. The ``_200K`` members stay defined for old rows, but new
@@ -40,8 +40,8 @@ class LLMModel(StrEnum):
       1. Add a member named after the real model, and map it to its exact ``--model`` id.
       2. Label + capability-gate it (``modelConstants.ts``, ``modelCapabilities.ts``, and
          ``FAST_MODE_MODELS`` in constants.py) and add it to ``derived.py``'s streaming list.
-      3. Put it first in its family's block in ``PRODUCTION_MODELS`` and drop that
-         family's old previous generation — from the picker only; its enum value, label,
+      3. Put it right after its family's latest entry in ``PRODUCTION_MODELS`` and drop
+         that family's old previous generation — from the picker only; its enum value, label,
          capabilities and streaming all stay, so a stored selection still works.
       4. Repoint the pinned pointers the family holds: for Opus, ``DEFAULT_LLM_MODEL``
          (constants.py and ``modelConstants.ts``) and ``sculpt``'s ``DEFAULT_CLAUDE_MODEL``;
@@ -61,12 +61,10 @@ class LLMModel(StrEnum):
          editing it after generating leaves them stale.
     """
 
-    # Rolling "latest Opus" alias (shortnames `opus[1m]` / `opus`). Retired from the
-    # GUI picker in favor of the explicit per-generation members below, but kept
-    # defined: old persisted rows still deserialize, and `sculpt --model opus`
-    # resolves through it to whatever the managed CLI treats as the newest Opus.
-    # Bumping CLAUDE_VERSION_RANGE can therefore land these members on a new
-    # generation with nothing in this repo changing.
+    # Rolling "latest Opus" alias (shortnames `opus[1m]` / `opus`). The picker's
+    # "Opus (latest)" entry and `sculpt --model opus` both run whatever the managed CLI
+    # treats as the newest Opus, so bumping CLAUDE_VERSION_RANGE can land these members
+    # on a new generation with nothing in this repo changing.
     CLAUDE_4_OPUS = "CLAUDE-4-OPUS"
     CLAUDE_4_OPUS_200K = "CLAUDE-4-OPUS-200K"
     # Pinned Opus generations (explicit `--model` ids), newest first. Opus 4.7 and later
@@ -84,8 +82,8 @@ class LLMModel(StrEnum):
     CLAUDE_4_6_OPUS = "CLAUDE-4-6-OPUS"
     CLAUDE_4_6_OPUS_200K = "CLAUDE-4-6-OPUS-200K"
     # Rolling "latest Sonnet" / "latest Haiku" aliases (shortnames `sonnet[1m]` /
-    # `sonnet` / `haiku`). Like the rolling Opus alias, they are retired from the GUI
-    # picker but kept defined, and a managed CLI bump can move them to a new generation.
+    # `sonnet` / `haiku`). Like the rolling Opus alias, the picker offers them, and a
+    # managed CLI bump can move them to a new generation.
     CLAUDE_4_SONNET = "CLAUDE-4-SONNET"
     CLAUDE_4_SONNET_200K = "CLAUDE-4-SONNET-200K"
     CLAUDE_4_HAIKU = "CLAUDE-4-HAIKU"

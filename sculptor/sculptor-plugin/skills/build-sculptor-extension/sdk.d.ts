@@ -485,8 +485,8 @@ declare const LlmModel: {
  * - previous: the pinned generation before it. Haiku has none for now: the Haiku
  * before 5.5 is 4.5, which has a 200K window and no effort support, so Haiku 5.5
  * becomes the first previous Haiku once a newer Haiku ships.
- * The picker (frontend ``PRODUCTION_MODELS``) offers current and previous for each
- * family; older pinned generations stay defined but leave the picker.
+ * The picker (frontend ``PRODUCTION_MODELS``) offers these for each family, in that
+ * order; older pinned generations stay defined but leave the picker.
  *
  * One member per model: current models run a native 1M context window, so no model
  * gets a 1M/200K pair. The ``_200K`` members stay defined for old rows, but new
@@ -496,8 +496,8 @@ declare const LlmModel: {
  * 1. Add a member named after the real model, and map it to its exact ``--model`` id.
  * 2. Label + capability-gate it (``modelConstants.ts``, ``modelCapabilities.ts``, and
  * ``FAST_MODE_MODELS`` in constants.py) and add it to ``derived.py``'s streaming list.
- * 3. Put it first in its family's block in ``PRODUCTION_MODELS`` and drop that
- * family's old previous generation — from the picker only; its enum value, label,
+ * 3. Put it right after its family's latest entry in ``PRODUCTION_MODELS`` and drop
+ * that family's old previous generation — from the picker only; its enum value, label,
  * capabilities and streaming all stay, so a stored selection still works.
  * 4. Repoint the pinned pointers the family holds: for Opus, ``DEFAULT_LLM_MODEL``
  * (constants.py and ``modelConstants.ts``) and ``sculpt``'s ``DEFAULT_CLAUDE_MODEL``;

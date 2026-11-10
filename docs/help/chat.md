@@ -11,9 +11,11 @@ progress appear in the panel above.
 ## Model picker
 
 The model picker sits in the chat input toolbar, to the left of the send button.
-For Claude agents it lists the current and previous generation of Fable, Opus,
-and Sonnet, and the current Haiku. Click it to switch the model for the
-current agent session. The change takes
+For Claude agents it lists each model family (Fable, Opus, Sonnet, and Haiku) as
+a "latest" entry, then the current and previous generation; Haiku has no previous
+entry yet. A "latest" entry runs the newest model your Claude CLI knows, so it
+moves to each new model as it ships; a numbered entry stays on that version.
+Click the picker to switch the model for the current agent session. The change takes
 effect on the next message you send. You can set the default model for new
 agents under **Settings > Claude**; until you do, new agents use the model you
 picked most recently, or Opus 5.5 if you haven't picked one yet.

@@ -14,8 +14,7 @@ export const hasNoUsableModel = (
 
 const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   // Rolling "latest" members: they run the Claude CLI's own family aliases, so the
-  // label can't name a version. `sculpt`'s family shortcuts use them; the picker
-  // doesn't offer them.
+  // label can't name a version.
   [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
   [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
   [LlmModel.CLAUDE_4_SONNET]: { short: "Sonnet (latest)", long: "Claude Sonnet (latest)" },
@@ -69,15 +68,19 @@ export const DEFAULT_LLM_MODEL: LlmModel = LlmModel.CLAUDE_5_5_OPUS;
 export const modelForNewRecord = (model: LlmModel): LlmModel => model.replace(/-200K$/, "") as LlmModel;
 
 // Models offered in production model pickers (desktop selector + mobile `+` menu):
-// the current and previous pinned generation of each family, grouped by family. Haiku
-// has no previous entry yet (see `LLMModel`).
+// each family's rolling latest entry, then its current and previous pinned generation.
+// Haiku has no previous entry yet (see `LLMModel`).
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
+  LlmModel.CLAUDE_FABLE_LATEST,
   LlmModel.CLAUDE_FABLE_5_2,
   LlmModel.CLAUDE_FABLE_5_1,
+  LlmModel.CLAUDE_4_OPUS,
   LlmModel.CLAUDE_5_5_OPUS,
   LlmModel.CLAUDE_5_OPUS,
+  LlmModel.CLAUDE_4_SONNET,
   LlmModel.CLAUDE_5_5_SONNET,
   LlmModel.CLAUDE_5_SONNET,
+  LlmModel.CLAUDE_4_HAIKU,
   LlmModel.CLAUDE_5_5_HAIKU,
 ];
 
