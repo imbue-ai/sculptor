@@ -66,9 +66,11 @@ approval before making any changes. Useful for larger tasks where you want to
 review the approach first. Toggle off to return to the default "act first"
 behavior.
 
-**Fast mode** (lightning-bolt icon) — Toggle on for faster output. Trades some
-depth for speed; useful for quick iteration. You can set the default for new
-agents under **Settings > Claude**.
+**Fast mode** (lightning-bolt icon) — Toggle on for faster output from the same
+model, at a higher per-token price; useful for quick iteration. It appears only
+for models that support it: Opus 5.5, Opus 5, and Fable 5.2. On Claude
+subscription plans, fast mode draws on usage credits even when your plan has
+usage left. You can set the default for new agents under **Settings > Claude**.
 
 **Effort level** (brain icon with a fill bar) — Click to pick how much thinking
 the agent budgets for each step: **Low**, **Medium**, **High**, **Extra High**

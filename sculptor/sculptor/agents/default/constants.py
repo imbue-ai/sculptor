@@ -37,6 +37,22 @@ MODEL_SHORTNAME_MAP: Final[dict[LLMModel, str]] = {
     LLMModel.CLAUDE_FABLE_5_2: "claude-fable-5-2",
 }
 
+# Models a turn may launch in fast mode. Opus 4.8 is left out on purpose: its fast mode
+# is deprecated upstream, and the API rejects it once removed. The frontend's
+# `supportsFastMode` (modelCapabilities.ts) must offer the toggle on the same models.
+FAST_MODE_MODELS: Final[frozenset[LLMModel]] = frozenset(
+    {
+        LLMModel.CLAUDE_4_OPUS,
+        LLMModel.CLAUDE_4_OPUS_200K,
+        LLMModel.CLAUDE_5_5_OPUS,
+        LLMModel.CLAUDE_5_5_OPUS_200K,
+        LLMModel.CLAUDE_5_OPUS,
+        LLMModel.CLAUDE_5_OPUS_200K,
+        LLMModel.CLAUDE_FABLE_5_2,
+        LLMModel.FAKE_CLAUDE,
+    }
+)
+
 
 ENTITY_MENTIONS_SYSTEM_PROMPT: Final[str] = """
 <Entity mentions>

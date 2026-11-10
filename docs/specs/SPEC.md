@@ -351,8 +351,8 @@ no provider is authenticated, including when a model had previously been selecte
 choice is dropped rather than shown; the action to fix it lives on the Send button (above). Changing a Pi agent's model takes
 effect in-session (a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
 selector budgets how much thinking it spends per step (Low, Medium, High, Extra High, Max — Extra High
-by default); a **fast mode** toggle trades some depth for quicker output on the models that support it
-(the pinned Opus generations) and is disabled for the rest; and **plan mode** makes the agent
+by default); a **fast mode** toggle trades a higher per-token price for quicker output on the models that support it
+(Opus 5.5, Opus 5, and Fable 5.2) and is disabled for the rest; and **plan mode** makes the agent
 investigate and propose a plan for your approval before it changes anything. The **+** button opens a
 menu for adding context — point the agent at specific **files and folders**, attach **images** (you
 can also drag-and-drop or paste them), or start a **skill** (→ §7.8 Skills); with the **Entity
@@ -1083,7 +1083,7 @@ used throughout:
 
 - **Target branch** — the branch a workspace's changes and pull request are measured against.
 - **Plan mode** — an agent investigates and proposes a plan for your approval before changing files.
-- **Fast mode** — trades some response depth for quicker output.
+- **Fast mode** — runs the same model faster at a higher per-token price, on the models that support it.
 - **Effort** — how much thinking an agent spends per step (Low … Max).
 - **Peek** — the hover popover previewing another workspace's agents, branch, and status.
 - **CI babysitter** — an opt-in helper that watches a pull request's CI and asks an agent to fix

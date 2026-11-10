@@ -5,6 +5,8 @@ from datetime import timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
@@ -46,6 +48,7 @@ from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.claude_state import ParsedAssistantResponse
 from sculptor.state.claude_state import ParsedToolResultResponse
 from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
 from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
 
 
@@ -824,25 +827,52 @@ def test_parse_lines_tool_result_missing_content_does_not_crash() -> None:
 
 def test_resolve_fast_mode_night_mode_off_honours_the_request() -> None:
     now = datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)
-    assert resolve_fast_mode(True, NIGHT_MODE_OFF, now) is True
-    assert resolve_fast_mode(False, NIGHT_MODE_OFF, now) is False
+    assert resolve_fast_mode(True, LLMModel.CLAUDE_5_5_OPUS, NIGHT_MODE_OFF, now) is True
+    assert resolve_fast_mode(False, LLMModel.CLAUDE_5_5_OPUS, NIGHT_MODE_OFF, now) is False
 
 
 def test_resolve_fast_mode_night_mode_on_overrides_the_request() -> None:
     now = datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)
-    assert resolve_fast_mode(True, NIGHT_MODE_ON, now) is False
+    assert resolve_fast_mode(True, LLMModel.CLAUDE_5_5_OPUS, NIGHT_MODE_ON, now) is False
 
 
 def test_resolve_fast_mode_until_overrides_only_before_it_expires() -> None:
     until = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)
-    assert resolve_fast_mode(True, until, until - timedelta(hours=1)) is False
-    assert resolve_fast_mode(True, until, until + timedelta(hours=1)) is True
+    assert resolve_fast_mode(True, LLMModel.CLAUDE_5_5_OPUS, until, until - timedelta(hours=1)) is False
+    assert resolve_fast_mode(True, LLMModel.CLAUDE_5_5_OPUS, until, until + timedelta(hours=1)) is True
+
+
+@pytest.mark.parametrize(
+    "model",
+    [LLMModel.CLAUDE_FABLE_5_2, LLMModel.CLAUDE_5_5_OPUS, LLMModel.CLAUDE_5_OPUS, LLMModel.CLAUDE_4_OPUS],
+)
+def test_resolve_fast_mode_honours_the_request_on_models_with_fast_mode(model: LLMModel) -> None:
+    now = datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)
+    assert resolve_fast_mode(True, model, NIGHT_MODE_OFF, now) is True
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        LLMModel.CLAUDE_4_8_OPUS,
+        LLMModel.CLAUDE_4_8_OPUS_200K,
+        LLMModel.CLAUDE_4_7_OPUS,
+        LLMModel.CLAUDE_5_5_SONNET,
+        LLMModel.CLAUDE_5_5_HAIKU,
+        LLMModel.CLAUDE_FABLE_5_1,
+        None,
+    ],
+)
+def test_resolve_fast_mode_drops_the_request_on_models_without_fast_mode(model: LLMModel | None) -> None:
+    """Opus 4.8 is excluded on purpose: its fast mode is deprecated upstream, and the API rejects it once removed."""
+    now = datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)
+    assert resolve_fast_mode(True, model, NIGHT_MODE_OFF, now) is False
 
 
 def test_get_claude_command_omits_settings_flag_when_night_mode_suppresses_fast_mode() -> None:
     """The launch flag, not just the boolean, has to drop out under night mode."""
     now = datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)
-    cmd = _get_command_string(fast_mode=resolve_fast_mode(True, NIGHT_MODE_ON, now))
+    cmd = _get_command_string(fast_mode=resolve_fast_mode(True, LLMModel.CLAUDE_5_5_OPUS, NIGHT_MODE_ON, now))
     assert "--settings" not in cmd
     assert "fastMode" not in cmd
 

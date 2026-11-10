@@ -6,14 +6,6 @@ type ModelCapabilities = {
 };
 
 const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
-  [LlmModel.CLAUDE_4_7_OPUS]: {
-    supportsFileAttachments: true,
-    supportsFastMode: true,
-  },
-  [LlmModel.CLAUDE_4_7_OPUS_200K]: {
-    supportsFileAttachments: true,
-    supportsFastMode: true,
-  },
   // The rolling "latest" aliases resolve through the managed Claude CLI's own
   // `opus` / `sonnet` / `haiku` aliases, so bumping CLAUDE_VERSION_RANGE can move them
   // onto a new generation without this file changing. Re-check the new CLI's alias
@@ -39,6 +31,9 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFileAttachments: true,
     supportsFastMode: false,
   },
+  // Fast mode is offered on exactly the models the backend launches it on
+  // (FAST_MODE_MODELS in sculptor/agents/default/constants.py). Opus 4.8 is left out on
+  // purpose: its fast mode is deprecated upstream, and the API rejects it once removed.
   [LlmModel.CLAUDE_5_5_OPUS]: {
     supportsFileAttachments: true,
     supportsFastMode: true,
@@ -57,19 +52,27 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
   },
   [LlmModel.CLAUDE_4_8_OPUS]: {
     supportsFileAttachments: true,
-    supportsFastMode: true,
+    supportsFastMode: false,
   },
   [LlmModel.CLAUDE_4_8_OPUS_200K]: {
     supportsFileAttachments: true,
-    supportsFastMode: true,
+    supportsFastMode: false,
+  },
+  [LlmModel.CLAUDE_4_7_OPUS]: {
+    supportsFileAttachments: true,
+    supportsFastMode: false,
+  },
+  [LlmModel.CLAUDE_4_7_OPUS_200K]: {
+    supportsFileAttachments: true,
+    supportsFastMode: false,
   },
   [LlmModel.CLAUDE_4_6_OPUS]: {
     supportsFileAttachments: true,
-    supportsFastMode: true,
+    supportsFastMode: false,
   },
   [LlmModel.CLAUDE_4_6_OPUS_200K]: {
     supportsFileAttachments: true,
-    supportsFastMode: true,
+    supportsFastMode: false,
   },
   [LlmModel.CLAUDE_5_5_SONNET]: {
     supportsFileAttachments: true,
@@ -89,7 +92,7 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
   },
   [LlmModel.CLAUDE_FABLE_5_2]: {
     supportsFileAttachments: true,
-    supportsFastMode: false,
+    supportsFastMode: true,
   },
   // Test-only models. FAKE_CLAUDE supports fast mode so fast-mode tests using
   // the default test model work out of the box. FAKE_CLAUDE_2 does NOT support

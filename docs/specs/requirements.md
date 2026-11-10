@@ -176,8 +176,10 @@ and flags the targets it does not currently define.
   the switcher, is not the default). Effort = **Extra High (`xhigh`)**, fast mode
   = **off** (`sculptor/sculptor/config/user_config.py`, `sculptor/sculptor/web/derived.py`). All three
   are user-overridable in Settings → Agent (`SPEC.md` §7.10). **Fast mode** is offered only on models
-  that support it — the pinned Opus generations, in both their 1M and 200K variants — and is
-  disabled for Sonnet/Haiku/Fable (`sculptor/frontend/src/common/utils/modelCapabilities.ts`).
+  that support it — Opus 5.5, Opus 5, and Fable 5.2; Opus 4.8 is excluded because its upstream fast mode is
+  deprecated — and is disabled for the rest (`sculptor/frontend/src/common/utils/modelCapabilities.ts`).
+  The backend applies the same rule when it launches a turn, whatever sent it
+  (`FAST_MODE_MODELS`, `sculptor/sculptor/agents/default/constants.py`).
 
 ---
 
