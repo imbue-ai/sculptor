@@ -50,6 +50,20 @@ def test_changed_file_paths_are_measured_from_the_last_rebaseline(
     assert tracker.get_changed_file_paths() == ["second.txt"]
 
 
+def test_changed_file_paths_after_rebaselining_on_uncommitted_changes(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+    tracker = make_turn_diff_tracker(environment)
+    (git_repo / "first.txt").write_text("first\n")
+    assert tracker.get_changed_file_paths() == ["first.txt"]
+
+    tracker.rebaseline()
+    (git_repo / "second.txt").write_text("second\n")
+
+    assert tracker.get_changed_file_paths() == ["second.txt"]
+
+
 def test_to_repo_relative_path_strips_the_checkout_root_and_keeps_outside_paths(
     git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:

@@ -1,6 +1,8 @@
+import os
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
+from subprocess import TimeoutExpired
 from typing import Any
 
 from loguru import logger
@@ -104,25 +106,19 @@ class DiffTracker(TurnDiffTracker):
             environment.concurrency_group, environment.get_tool_binary_path, environment.get_project_env_overrides
         )
         self.file_snapshot_by_path: dict[str, str | bytes | None] = {}
-        # Stable temp directory for git objects written by _get_tree_hash.
-        # Kept alive so tree SHAs remain resolvable for get_changed_file_paths()
-        # at turn end. Cleaned up at the start of the next _get_tree_hash call.
-        self._temp_objects_dir: Path | None = None
-        self.initial_tree_sha = _get_tree_hash(self)
+        # The temp objects directory holding the baseline tree, or None when the
+        # repository's own objects hold it. Kept until the next rebaseline so the
+        # baseline stays resolvable for the whole turn.
+        self.initial_tree_sha, self._baseline_objects_dir = _get_tree_hash(self)
 
     def rebaseline(self) -> None:
         """Update the initial git tree SHA and clear snapshots."""
         logger.info("Reinitializing diff tracker, getting new tree hash")
-        initial_tree_sha = _get_tree_hash(self)
-        self.initial_tree_sha = initial_tree_sha
+        previous_baseline_objects_dir = self._baseline_objects_dir
+        self.initial_tree_sha, self._baseline_objects_dir = _get_tree_hash(self)
+        _remove_temp_objects_dir(self.environment, previous_baseline_objects_dir)
         self.file_snapshot_by_path.clear()
         logger.debug("Updated initial_tree_sha to {}, cleared file snapshots", self.initial_tree_sha)
-
-    def _get_alternate_objects_env(self) -> dict[str, str] | None:
-        """Return env dict with GIT_ALTERNATE_OBJECT_DIRECTORIES if a temp objects dir exists."""
-        if self._temp_objects_dir is None:
-            return None
-        return {"GIT_ALTERNATE_OBJECT_DIRECTORIES": str(self._temp_objects_dir)}
 
     def _get_file_from_git_tree(self, file_path: str) -> str | bytes | None:
         """Get file content from the initial git tree SHA."""
@@ -137,7 +133,7 @@ class DiffTracker(TurnDiffTracker):
             )
             return None
 
-        env = self._get_alternate_objects_env()
+        env = _alternate_objects_env([self._baseline_objects_dir])
 
         if not _is_file_present_at_commit_hash(
             git=self._git,
@@ -250,17 +246,17 @@ class DiffTracker(TurnDiffTracker):
         if not self.initial_tree_sha:
             return []
 
+        current_tree_sha, current_objects_dir = _get_tree_hash(self)
         try:
-            current_tree_sha = _get_tree_hash(self)
             if not current_tree_sha:
                 return []
 
             if self.initial_tree_sha == current_tree_sha:
                 return []
 
-            # Both tree SHAs may reference objects in the temp directory,
-            # so we need GIT_ALTERNATE_OBJECT_DIRECTORIES for git diff-tree.
-            env = self._get_alternate_objects_env()
+            # Either tree SHA may reference objects in a temp objects directory,
+            # so git diff-tree needs both directories as alternates.
+            env = _alternate_objects_env([self._baseline_objects_dir, current_objects_dir])
 
             result = _run_read_only_git_and_log_failure(
                 self._git,
@@ -283,6 +279,8 @@ class DiffTracker(TurnDiffTracker):
                 priority=ExceptionPriority.LOW_PRIORITY,
             )
             return []
+        finally:
+            _remove_temp_objects_dir(self.environment, current_objects_dir)
 
 
 def create_unified_diff(
@@ -414,24 +412,50 @@ def _resolve_git_path(git: GitCli, checkout: Path, rev_parse_flag: str) -> str:
     return str(path)
 
 
-def _get_tree_hash(diff_tracker: DiffTracker) -> str | None:
-    """Get a tree SHA representing the current working tree state.
+def _get_tree_hash(diff_tracker: DiffTracker) -> tuple[str | None, Path | None]:
+    """Get a tree SHA representing the current working tree state, and the temp objects directory holding it.
 
-    Objects are written to a stable temp directory owned by the DiffTracker,
-    so tree SHAs remain resolvable for later git diff-tree calls.
+    The directory is None when the repository's own objects hold the tree.
+    Otherwise the caller owns it and removes it once the tree SHA is no longer
+    needed. Both are None when the tree cannot be read.
     """
     try:
         if _has_untracked_or_unstaged_changes(diff_tracker._git, diff_tracker.code_directory):
             return _get_tree_hash_with_untracked_and_unstaged_changes(diff_tracker)
         else:
-            return _get_tree_hash_from_staged_changes(diff_tracker._git, diff_tracker.code_directory)
+            return _get_tree_hash_from_staged_changes(diff_tracker._git, diff_tracker.code_directory), None
     except Exception as e:
         log_exception(
             e,
             "Failed to get git tree SHA",
             priority=ExceptionPriority.LOW_PRIORITY,
         )
+        return None, None
+
+
+def _alternate_objects_env(objects_dirs: Sequence[Path | None]) -> dict[str, str] | None:
+    """The environment that lets git read objects from `objects_dirs`, or None when there are none."""
+    existing_objects_dirs = [str(objects_dir) for objects_dir in objects_dirs if objects_dir is not None]
+    if not existing_objects_dirs:
         return None
+    return {"GIT_ALTERNATE_OBJECT_DIRECTORIES": os.pathsep.join(existing_objects_dirs)}
+
+
+def _remove_temp_objects_dir(environment: AgentExecutionEnvironment, objects_dir: Path | None) -> None:
+    """Delete a temp objects directory along with the temporary git directory around it."""
+    if objects_dir is None:
+        return
+    try:
+        environment.run_process_in_background(["rm", "-rf", str(objects_dir.parent)], {}).wait(
+            timeout=DEFAULT_WAIT_TIMEOUT
+        )
+    except (ProcessError, TimeoutExpired) as e:
+        log_exception(
+            e,
+            "Failed to remove temporary git objects",
+            priority=ExceptionPriority.LOW_PRIORITY,
+            extra=dict(objects_dir=objects_dir),
+        )
 
 
 def _has_untracked_or_unstaged_changes(git: GitCli, checkout: Path) -> bool:
@@ -454,23 +478,14 @@ def _get_tree_hash_from_staged_changes(git: GitCli, checkout: Path) -> str | Non
 
 
 @log_runtime_decorator()
-def _get_tree_hash_with_untracked_and_unstaged_changes(diff_tracker: DiffTracker) -> str | None:
+def _get_tree_hash_with_untracked_and_unstaged_changes(diff_tracker: DiffTracker) -> tuple[str, Path]:
     environment = diff_tracker.environment
-
-    # Clean up the previous temp objects directory if one exists.
-    # The old tree SHAs are no longer needed once we're computing a new snapshot.
-    prev_temp_dir = diff_tracker._temp_objects_dir
-    if prev_temp_dir is not None:
-        diff_tracker._temp_objects_dir = None
-        environment.run_process_in_background(["rm", "-rf", str(prev_temp_dir.parent)], {}).wait(
-            timeout=DEFAULT_WAIT_TIMEOUT
-        )
 
     # Slow path: include untracked and unstaged changes.
     # Use a temporary index (to avoid mutating the real index) and a temporary
     # objects directory (to avoid polluting the real git objects dir). The temp
-    # objects dir is kept alive on the DiffTracker so tree SHAs remain resolvable
-    # for get_changed_file_paths() at turn end.
+    # objects dir is returned to the caller, which keeps it while the tree SHA
+    # must stay resolvable.
     #
     # Resolve the real git paths via git rev-parse instead of hardcoding
     # `.git/index` / `.git/objects`. In a worktree checkout `.git` is a gitfile
@@ -510,12 +525,10 @@ def _get_tree_hash_with_untracked_and_unstaged_changes(diff_tracker: DiffTracker
         tree_sha = result.stdout.strip()
         logger.debug("Created tree SHA including all changes: {}", tree_sha)
 
-        # Keep the temp objects dir alive so the tree SHA remains resolvable.
         # The temp index is no longer needed — only the objects matter.
-        diff_tracker._temp_objects_dir = temp_objects
         environment.run_process_in_background(["rm", "-f", str(temp_index)], {}).wait(timeout=DEFAULT_WAIT_TIMEOUT)
 
-        return tree_sha
+        return tree_sha, temp_objects
     except Exception:
         # On failure, clean up everything
         environment.run_process_in_background(["rm", "-rf", str(temp_git_dir)], {}).wait(timeout=DEFAULT_WAIT_TIMEOUT)

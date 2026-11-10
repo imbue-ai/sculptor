@@ -246,6 +246,21 @@ def test_compute_diff_for_unchanged_file_with_trailing_newline(
     assert diff is None or diff == "", f"Expected no diff for unchanged file, got:\n{diff}"
 
 
+def test_temp_git_directories_do_not_accumulate_across_turns(
+    clone_mode_environment_and_initial_repo_commit_hash: tuple[AgentExecutionEnvironment, str],
+) -> None:
+    environment, _ = clone_mode_environment_and_initial_repo_commit_hash
+    working_dir = environment.get_working_directory()
+    diff_tracker = DiffTracker(environment=environment)
+
+    for turn in range(3):
+        (working_dir / f"untracked_{turn}.txt").write_text("content\n")
+        assert diff_tracker.get_changed_file_paths() == [f"untracked_{turn}.txt"]
+        diff_tracker.rebaseline()
+
+    assert len(list(environment.get_root_path().glob(".git_*"))) == 1
+
+
 def test_attempt_to_compute_diff_for_non_existent_file(
     environment_and_initial_repo_commit_hash: tuple[AgentExecutionEnvironment, str],
 ) -> None:
