@@ -21,6 +21,7 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   [LlmModel.CLAUDE_4_SONNET]: { short: "Sonnet (latest)", long: "Claude Sonnet (latest)" },
   [LlmModel.CLAUDE_4_SONNET_200K]: { short: "Sonnet (latest)", long: "Claude Sonnet (latest)" },
   [LlmModel.CLAUDE_4_HAIKU]: { short: "Haiku (latest)", long: "Claude Haiku (latest)" },
+  [LlmModel.CLAUDE_FABLE_LATEST]: { short: "Fable (latest)", long: "Fable (latest)" },
   // Pinned Opus generations. Opus 4.7 and later run a native 1M window whatever the
   // id says, so each `_200K` member shares its sibling's label; only Opus 4.6 has a
   // real 1M/200K split.

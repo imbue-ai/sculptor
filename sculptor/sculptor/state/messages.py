@@ -79,6 +79,9 @@ class LLMModel(StrEnum):
     CLAUDE_4_SONNET = "CLAUDE-4-SONNET"
     CLAUDE_4_SONNET_200K = "CLAUDE-4-SONNET-200K"
     CLAUDE_4_HAIKU = "CLAUDE-4-HAIKU"
+    # Rolling "latest Fable" alias (`--model fable`), the Fable counterpart of the rolling
+    # members above.
+    CLAUDE_FABLE_LATEST = "CLAUDE-FABLE-LATEST"
     # Pinned Sonnet and Haiku generations. Their 1M context is native, so each is a
     # single entry with no 1M/200K split.
     CLAUDE_5_5_SONNET = "CLAUDE-5-5-SONNET"

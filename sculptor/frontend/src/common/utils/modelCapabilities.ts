@@ -31,6 +31,10 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFileAttachments: true,
     supportsFastMode: false,
   },
+  [LlmModel.CLAUDE_FABLE_LATEST]: {
+    supportsFileAttachments: true,
+    supportsFastMode: true,
+  },
   // Fast mode is offered on exactly the models the backend launches it on
   // (FAST_MODE_MODELS in sculptor/agents/default/constants.py). Opus 4.8 is left out on
   // purpose: its fast mode is deprecated upstream, and the API rejects it once removed.

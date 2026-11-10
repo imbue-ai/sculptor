@@ -14,6 +14,7 @@ const FAST_MODE_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_5_OPUS,
   LlmModel.CLAUDE_5_OPUS_200K,
   LlmModel.CLAUDE_FABLE_5_2,
+  LlmModel.CLAUDE_FABLE_LATEST,
   LlmModel.FAKE_CLAUDE,
 ];
 

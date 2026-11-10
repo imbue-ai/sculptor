@@ -499,6 +499,7 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             LLMModel.CLAUDE_FABLE_5,
             LLMModel.CLAUDE_FABLE_5_1,
             LLMModel.CLAUDE_FABLE_5_2,
+            LLMModel.CLAUDE_FABLE_LATEST,
             LLMModel.FAKE_CLAUDE,
             LLMModel.FAKE_CLAUDE_2,
         )

@@ -1,6 +1,7 @@
 """Authentication and shared configuration for the sculpt CLI."""
 
 import os
+import re
 
 import httpx
 
@@ -30,14 +31,58 @@ def build_client(base_url: str) -> Client:
     return Client(base_url=base_url, timeout=httpx.Timeout(_HTTP_TIMEOUT_SECONDS))
 
 
+# Family shortcuts name each family's rolling "latest" member, which the Claude CLI
+# resolves to whatever it treats as the newest model of that family. The `[1m]`
+# spellings are accepted synonyms: these models already run a 1M context window.
 MODEL_MAPPING: dict[str, LLMModel] = {
     "haiku": LLMModel.CLAUDE_4_HAIKU,
-    "sonnet": LLMModel.CLAUDE_4_SONNET_200K,
+    "sonnet": LLMModel.CLAUDE_4_SONNET,
     "sonnet[1m]": LLMModel.CLAUDE_4_SONNET,
-    "opus": LLMModel.CLAUDE_4_OPUS_200K,
+    "opus": LLMModel.CLAUDE_4_OPUS,
     "opus[1m]": LLMModel.CLAUDE_4_OPUS,
-    "fable": LLMModel.CLAUDE_FABLE_5_2,
+    "fable": LLMModel.CLAUDE_FABLE_LATEST,
 }
+
+# A pinned member's name spells its Claude CLI `--model` id: CLAUDE_5_5_OPUS is
+# claude-opus-5-5 and CLAUDE_FABLE_5_2 is claude-fable-5-2. The fullmatch leaves out
+# the `_200K` members, which new records never use.
+_PINNED_NAME = re.compile(
+    r"CLAUDE_(?:(?P<version>\d+(?:_\d+)*)_(?P<family>OPUS|SONNET|HAIKU)|FABLE_(?P<fable>\d+(?:_\d+)*))"
+)
+
+
+def _pinned_model_id(model: LLMModel) -> str | None:
+    match = _PINNED_NAME.fullmatch(model.name)
+    if match is None or model in MODEL_MAPPING.values():
+        return None
+    if match["fable"] is not None:
+        return "claude-fable-" + match["fable"].replace("_", "-")
+    return f"claude-{match['family'].lower()}-{match['version'].replace('_', '-')}"
+
+
+def _pinned_model_ids() -> dict[str, LLMModel]:
+    model_ids: dict[str, LLMModel] = {}
+    for model in LLMModel:
+        model_id = _pinned_model_id(model)
+        if model_id is not None:
+            model_ids[model_id] = model
+    return model_ids
+
+
+# Every pinned model, by the `--model` id the Claude CLI knows it as.
+PINNED_MODEL_IDS: dict[str, LLMModel] = _pinned_model_ids()
+
+
+def resolve_claude_model(name: str) -> LLMModel | None:
+    """The member a `--model` value names: a family shortcut, or a pinned model id (`[1m]` optional)."""
+    lowered = name.lower()
+    return MODEL_MAPPING.get(lowered) or PINNED_MODEL_IDS.get(lowered.removesuffix("[1m]"))
+
+
+def invalid_model_message(name: str) -> str:
+    shortcuts = ", ".join(MODEL_MAPPING)
+    return f"Invalid model '{name}'. Use a family shortcut ({shortcuts}) or a model id such as claude-opus-5-5."
+
 
 # What an unspecified --model resolves to, kept out of MODEL_MAPPING on purpose. The
 # `opus` entry above is the Claude CLI's rolling alias, which lands on a different

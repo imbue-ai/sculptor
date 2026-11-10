@@ -30,6 +30,7 @@ MODEL_SHORTNAME_MAP: Final[dict[LLMModel, str]] = {
     LLMModel.CLAUDE_4_SONNET: "sonnet[1m]",
     LLMModel.CLAUDE_4_SONNET_200K: "sonnet",
     LLMModel.CLAUDE_4_HAIKU: "haiku",
+    LLMModel.CLAUDE_FABLE_LATEST: "fable",
     LLMModel.CLAUDE_5_5_SONNET: "claude-sonnet-5-5",
     LLMModel.CLAUDE_5_5_HAIKU: "claude-haiku-5-5",
     LLMModel.CLAUDE_FABLE_5: "claude-fable-5",
@@ -49,6 +50,7 @@ FAST_MODE_MODELS: Final[frozenset[LLMModel]] = frozenset(
         LLMModel.CLAUDE_5_OPUS,
         LLMModel.CLAUDE_5_OPUS_200K,
         LLMModel.CLAUDE_FABLE_5_2,
+        LLMModel.CLAUDE_FABLE_LATEST,
         LLMModel.FAKE_CLAUDE,
     }
 )
