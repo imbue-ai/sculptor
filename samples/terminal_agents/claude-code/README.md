@@ -25,8 +25,8 @@ The installed copy is **yours**:
   without a restart.
 
 (Manual install, e.g. after deleting it: copy both files into
-`<sculptor folder>/terminal_agents/` and point the two `--settings` paths in
-the TOML at the copied hooks file.)
+`<sculptor folder>/terminal_agents/`. The TOML finds the hooks file through
+the `{terminal_agents_directory}` placeholder, so no paths need editing.)
 
 ## How it works
 
@@ -41,7 +41,12 @@ the TOML at the copied hooks file.)
     `claude` from PATH);
   - `$SCULPT_PLUGINS_DIR` — the bundled Sculptor plugin directories, loaded
     via `--plugin-dir` (same plugins chat agents get: `sculptor-plugin`,
-    `sculptor-workflow`, `sculptor-experimental`).
+    `sculptor-workflow`, `sculptor-experimental`);
+  - `$SCULPT_JJ_PLUGIN_DIR` — the bundled `sculptor-jj` plugin (the jujutsu
+    skill), set only in workspaces that use jj.
+    `${SCULPT_JJ_PLUGIN_DIR:+--plugin-dir="$SCULPT_JJ_PLUGIN_DIR"}` adds the
+    flag only when the variable is set; the `--plugin-dir=` form keeps it one
+    word, which zsh needs.
 - It launches with `--dangerously-skip-permissions` (matching how Sculptor
   runs Claude for chat agents); the settings file skips the one-time
   bypass-permissions disclaimer so the TUI lands directly at its prompt. This
