@@ -1,7 +1,9 @@
 """Tests for the terminal-agent registration loader."""
 
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -115,6 +117,7 @@ def test_bundled_claude_code_sample_round_trips_through_loader(registrations_dir
     # terminal-agent PTY injects — never baked-in absolutes.
     assert '"$SCULPT_CLAUDE_BIN"' in registration.launch_command
     assert "$SCULPT_PLUGINS_DIR" in registration.launch_command
+    assert '${SCULPT_JJ_PLUGIN_DIR:+--plugin-dir="$SCULPT_JJ_PLUGIN_DIR"}' in registration.launch_command
     assert "--dangerously-skip-permissions" in registration.launch_command
     # The hooks path uses the {terminal_agents_directory} placeholder, resolved
     # at command-render time (not baked in), and the loader accepts it verbatim.
@@ -145,6 +148,46 @@ def test_loader_validates_command_placeholders(registrations_dir: Path) -> None:
         registry_module.TerminalAgentRegistration(
             registration_id="bad", display_name="Bad", launch_command="c --resume {session_id}"
         )
+
+
+def test_shell_parameter_expansions_are_not_placeholders() -> None:
+    registration = registry_module.TerminalAgentRegistration(
+        registration_id="good",
+        display_name="Good",
+        launch_command='c ${EXTRA_DIR:+--dir="$EXTRA_DIR"}',
+        resume_command_template='c ${EXTRA_DIR:+--dir="$EXTRA_DIR"} --resume {session_id}',
+    )
+    assert registration.launch_command == 'c ${EXTRA_DIR:+--dir="$EXTRA_DIR"}'
+
+
+@pytest.mark.parametrize("shell", ["sh", "bash"])
+def test_bundled_launch_command_passes_the_jj_plugin_dir_only_when_it_is_exported(
+    registrations_dir: Path, tmp_path: Path, shell: str
+) -> None:
+    # The command is typed into the user's shell. The jj flag must reach the
+    # program as one argument (zsh never splits the expansion into two) and
+    # vanish when SCULPT_JJ_PLUGIN_DIR is unset.
+    sample_dir = get_bundled_claude_code_dir()
+    assert sample_dir is not None
+    (registrations_dir / "claude-code.toml").write_text((sample_dir / "claude-code.toml").read_text())
+    registration = load_registrations()[0]
+    print_arguments = tmp_path / "print-arguments"
+    print_arguments.write_text('#!/bin/sh\nfor argument in "$@"; do echo "$argument"; done\n')
+    print_arguments.chmod(0o755)
+    shell_env = {"PATH": os.environ["PATH"], "SCULPT_CLAUDE_BIN": str(print_arguments), "SCULPT_PLUGINS_DIR": "/p"}
+    jj_plugin_dir = "/Applications/My Sculptor.app/sculptor-jj"
+
+    def launched_arguments(env: dict[str, str]) -> list[str]:
+        completed = subprocess.run(
+            [shell, "-c", registration.launch_command], env=env, capture_output=True, text=True, check=True
+        )
+        return completed.stdout.splitlines()
+
+    with_jj = launched_arguments({**shell_env, "SCULPT_JJ_PLUGIN_DIR": jj_plugin_dir})
+    without_jj = launched_arguments(shell_env)
+
+    assert with_jj == [*without_jj, f"--plugin-dir={jj_plugin_dir}"]
+    assert without_jj[-2:] == ["--plugin-dir", "/p/sculptor-experimental"]
 
 
 def test_bundled_claude_cli_hooks_only_signal_waiting_for_genuine_attention() -> None:
