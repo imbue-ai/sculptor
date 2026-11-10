@@ -75,6 +75,7 @@ from sculptor.services.workspace_service.setup_command_runner import DefaultSetu
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.timeout import timeout_monitor
@@ -145,6 +146,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 self._branch_poller_instance = WorkspaceBranchPoller(
                     concurrency_group=self.concurrency_group,
                     data_model_service=self.data_model_service,
+                    git_cli=GitCli(self.concurrency_group, self.dependency_management_service.resolve_binary_path),
                     resolve_working_dir=self.get_workspace_working_directory,
                     refresh_diff_on_branch_change=self.maybe_refresh_workspace_diff,
                 )
