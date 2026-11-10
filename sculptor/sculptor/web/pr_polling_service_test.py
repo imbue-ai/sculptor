@@ -248,6 +248,56 @@ def test_round_reads_the_origin_from_the_main_repo_not_the_checkout(
 
 
 @pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_fallback_matches_a_pr_against_a_local_target_whose_name_has_a_slash(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", _GITHUB_ORIGIN)
+    gh = _make_fake_gh(tmp_path, [_open_search_node(7, base="release/1.0")])
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh))
+    workspace_id, state = _register_checkout(svc, repo, checkout, target_branch="release/1.0")
+
+    status = svc._fetch_status(workspace_id, state)
+
+    assert isinstance(status, PrStatusInfo)
+    assert status.pr_state == "open"
+    assert status.pr_iid == 7
+    assert status.mismatched_pr_iid is None
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_fallback_strips_any_remote_of_the_main_repo_from_the_target(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    run_blocking(["git", "remote", "add", "upstream", "https://github.com/upstream/repo.git"], cwd=repo)
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", _GITHUB_ORIGIN)
+    gh = _make_fake_gh(tmp_path, [_open_search_node(8, base="main")])
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh))
+    workspace_id, state = _register_checkout(svc, repo, checkout, target_branch="upstream/main")
+
+    status = svc._fetch_status(workspace_id, state)
+
+    assert isinstance(status, PrStatusInfo)
+    assert status.pr_state == "open"
+    assert status.pr_iid == 8
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_round_short_circuits_a_checkout_on_its_local_target_whose_name_has_a_slash(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    checkout = _make_repo(tmp_path / "checkout", "release/1.0", _GITHUB_ORIGIN)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    ws, _ = _register_checkout(svc, repo, checkout, target_branch="release/1.0")
+
+    svc._run_round(_make_user_config())
+
+    assert svc._cache[ws] == PrStatusInfo(workspace_id=ws, pr_state="none")
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
 def test_fallback_raises_for_a_jj_checkout_instead_of_reporting_no_pr(
     test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
 ) -> None:
@@ -923,7 +973,7 @@ def _candidate(
         working_dir=_WORKING_DIR,
         gh_env={},
         head_ref_name=head_ref_name,
-        target_branch=target_branch,
+        base_ref_name=target_branch,
         host=host,
         name_with_owner=repo,
     )

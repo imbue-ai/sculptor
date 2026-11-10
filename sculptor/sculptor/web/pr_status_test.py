@@ -109,9 +109,7 @@ def _captured_query(arguments: Sequence[str]) -> str:
 
 
 def test_open_pr_matching_target() -> None:
-    result = fetch_pr_status(
-        _graphql_handler([_open_node(100, base_ref="main")]), WORKSPACE_ID, "feat-1", "origin/main"
-    )
+    result = fetch_pr_status(_graphql_handler([_open_node(100, base_ref="main")]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 100
@@ -119,9 +117,7 @@ def test_open_pr_matching_target() -> None:
 
 
 def test_open_pr_mismatched_target() -> None:
-    result = fetch_pr_status(
-        _graphql_handler([_open_node(200, base_ref="develop")]), WORKSPACE_ID, "feat-1", "origin/main"
-    )
+    result = fetch_pr_status(_graphql_handler([_open_node(200, base_ref="develop")]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid == 200
@@ -130,16 +126,14 @@ def test_open_pr_mismatched_target() -> None:
 
 
 def test_no_prs_at_all() -> None:
-    result = fetch_pr_status(_graphql_handler([]), WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler([]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid is None
 
 
 def test_merged_pr_matching_target() -> None:
-    result = fetch_pr_status(
-        _graphql_handler([_merged_node(300, base_ref="main")]), WORKSPACE_ID, "feat-1", "origin/main"
-    )
+    result = fetch_pr_status(_graphql_handler([_merged_node(300, base_ref="main")]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "merged"
     assert result.pr_iid == 300
@@ -152,7 +146,7 @@ def test_multiple_open_prs_one_matches() -> None:
         _open_node(401, base_ref="main"),
     ]
 
-    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 401
@@ -165,7 +159,7 @@ def test_multiple_open_prs_none_match() -> None:
         _open_node(501, base_ref="staging"),
     ]
 
-    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid == 500
@@ -173,9 +167,7 @@ def test_multiple_open_prs_none_match() -> None:
 
 
 def test_closed_pr_matching_target() -> None:
-    result = fetch_pr_status(
-        _graphql_handler([_closed_node(800, base_ref="main")]), WORKSPACE_ID, "feat-1", "origin/main"
-    )
+    result = fetch_pr_status(_graphql_handler([_closed_node(800, base_ref="main")]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "closed"
     assert result.pr_iid == 800
@@ -191,7 +183,7 @@ def test_merged_takes_precedence_over_closed() -> None:
         _closed_node(810, base_ref="main"),
     ]
 
-    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "merged"
     assert result.pr_iid == 820
@@ -216,7 +208,7 @@ def test_open_pr_details_fetched_in_single_graphql_call() -> None:
         calls.append(list(arguments))
         return _make_finished(_graphql_stdout([node]))
 
-    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "open"
     assert result.pipeline_status == "passed"
@@ -237,7 +229,7 @@ def test_open_pr_details_fetched_in_single_graphql_call() -> None:
 
 def test_open_pr_in_merge_queue() -> None:
     result = fetch_pr_status(
-        _graphql_handler([_open_node(55, is_in_merge_queue=True)]), WORKSPACE_ID, "feat-1", "origin/main"
+        _graphql_handler([_open_node(55, is_in_merge_queue=True)]), WORKSPACE_ID, "feat-1", "main"
     )
 
     assert result.pr_state == "open"
@@ -254,7 +246,7 @@ def test_open_pr_in_merge_queue() -> None:
 
 def test_failed_check_rollup_surfaces_as_failed_pipeline() -> None:
     node = _open_node(59, check_state="FAILURE")
-    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 59
@@ -275,7 +267,7 @@ def test_failed_check_rollup_surfaces_as_failed_pipeline() -> None:
 )
 def test_status_check_rollup_state_maps_to_pipeline_status(rollup_state: str | None, expected: str | None) -> None:
     node = _open_node(10, check_state=rollup_state)
-    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pipeline_status == expected
 
@@ -290,7 +282,7 @@ def test_status_check_rollup_state_maps_to_pipeline_status(rollup_state: str | N
 
 def test_open_pr_has_conflicts_flag_flows_through() -> None:
     result = fetch_pr_status(
-        _graphql_handler([_open_node(700, mergeable="CONFLICTING")]), WORKSPACE_ID, "feat-1", "origin/main"
+        _graphql_handler([_open_node(700, mergeable="CONFLICTING")]), WORKSPACE_ID, "feat-1", "main"
     )
 
     assert result.pr_state == "open"
@@ -311,9 +303,7 @@ def test_open_pr_has_conflicts_flag_flows_through() -> None:
     ],
 )
 def test_mergeable_state_maps_to_has_conflicts(mergeable: str | None, expected: bool | None) -> None:
-    result = fetch_pr_status(
-        _graphql_handler([_open_node(10, mergeable=mergeable)]), WORKSPACE_ID, "feat-1", "origin/main"
-    )
+    result = fetch_pr_status(_graphql_handler([_open_node(10, mergeable=mergeable)]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.has_conflicts is expected
 
@@ -332,7 +322,7 @@ def test_graphql_query_requests_the_fields_the_parser_reads() -> None:
         captured.append(list(arguments))
         return _make_finished(_graphql_stdout([]))
 
-    fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
+    fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "main")
 
     assert len(captured) == 1
     arguments = captured[0]
@@ -367,7 +357,7 @@ def test_transient_cli_failure_surfaces_error() -> None:
     def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr="HTTP 500 Internal Server Error")
 
-    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "none"
     assert result.error_category == "transient"
@@ -389,7 +379,7 @@ def test_open_pr_with_missing_detail_degrades_gracefully() -> None:
         "state": "OPEN",
         "baseRefName": "main",
     }
-    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 65
@@ -410,7 +400,7 @@ def test_unknown_field_usage_error_not_classified_as_not_authenticated() -> None
     def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr=stderr)
 
-    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "main")
 
     assert result.error_category != "not_authenticated"
     assert result.error_category == "transient"
@@ -420,7 +410,7 @@ def test_rate_limit_surfaces_error() -> None:
     def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr="HTTP 403: API rate limit exceeded for user")
 
-    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "none"
     assert result.error_category == "rate_limited"
@@ -430,7 +420,7 @@ def test_secondary_rate_limit_surfaces_error() -> None:
     def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr="You have exceeded a secondary rate limit.")
 
-    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "main")
 
     assert result.error_category == "rate_limited"
 
@@ -444,7 +434,7 @@ def test_null_repository_in_payload_returns_none() -> None:
     def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished(json.dumps({"data": {"repository": None}}))
 
-    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "main")
 
     assert result.pr_state == "none"
     assert result.error_category is None
@@ -640,7 +630,7 @@ def test_build_status_from_open_nodes_open_match() -> None:
         mergeable="MERGEABLE",
     )
 
-    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "origin/main")
+    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 100
@@ -653,7 +643,7 @@ def test_build_status_from_open_nodes_open_match() -> None:
 def test_build_status_from_open_nodes_mismatched_target() -> None:
     node = _search_node(200, base_ref="develop")
 
-    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "origin/main")
+    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "main")
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid == 200
@@ -662,7 +652,7 @@ def test_build_status_from_open_nodes_mismatched_target() -> None:
 
 
 def test_build_status_from_open_nodes_empty() -> None:
-    result = build_status_from_open_nodes(WORKSPACE_ID, [], "origin/main")
+    result = build_status_from_open_nodes(WORKSPACE_ID, [], "main")
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid is None
@@ -674,7 +664,7 @@ def test_build_status_from_open_nodes_picks_matching_among_two() -> None:
     # _first_matching_target, which relies on sort:updated ordering).
     nodes = [_search_node(300, base_ref="develop"), _search_node(301, base_ref="main")]
 
-    result = build_status_from_open_nodes(WORKSPACE_ID, nodes, "origin/main")
+    result = build_status_from_open_nodes(WORKSPACE_ID, nodes, "main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 301
@@ -683,7 +673,7 @@ def test_build_status_from_open_nodes_picks_matching_among_two() -> None:
 def test_build_status_from_open_nodes_conflicting_sets_has_conflicts() -> None:
     node = _search_node(400, base_ref="main", mergeable="CONFLICTING")
 
-    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "origin/main")
+    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "main")
 
     assert result.pr_state == "open"
     assert result.has_conflicts is True
@@ -694,7 +684,7 @@ def test_build_status_from_open_nodes_in_merge_queue_sets_flag() -> None:
     # must carry its merge-queue membership through to is_in_merge_queue.
     node = _search_node(410, base_ref="main", is_in_merge_queue=True)
 
-    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "origin/main")
+    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "main")
 
     assert result.pr_state == "open"
     assert result.is_in_merge_queue is True

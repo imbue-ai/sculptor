@@ -8,6 +8,7 @@ from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.cli_status_utils import classify_cli_error
 from sculptor.web.cli_status_utils import run_gh_with_retry
+from sculptor.web.cli_status_utils import strip_remote_prefix
 
 
 def _write_script(path: Path, body: str) -> Path:
@@ -196,6 +197,29 @@ def test_cli_status_error_stderr_is_message() -> None:
     """str(error) should return the stderr, so it can be passed as error_message."""
     error = CliStatusError("no_access", "HTTP 403 Forbidden")
     assert str(error) == "HTTP 403 Forbidden"
+
+
+# --- strip_remote_prefix ---
+
+
+def test_strip_remote_prefix_drops_the_remote_from_a_remote_tracking_target() -> None:
+    assert strip_remote_prefix("origin/main", frozenset({"origin"})) == "main"
+
+
+def test_strip_remote_prefix_keeps_the_rest_of_a_nested_remote_branch() -> None:
+    assert strip_remote_prefix("origin/feature/foo", frozenset({"origin"})) == "feature/foo"
+
+
+def test_strip_remote_prefix_drops_any_remote_of_the_repository() -> None:
+    assert strip_remote_prefix("upstream/main", frozenset({"origin", "upstream"})) == "main"
+
+
+def test_strip_remote_prefix_keeps_a_local_branch_whose_name_has_a_slash() -> None:
+    assert strip_remote_prefix("release/1.0", frozenset({"origin"})) == "release/1.0"
+
+
+def test_strip_remote_prefix_keeps_a_branch_without_a_slash() -> None:
+    assert strip_remote_prefix("main", frozenset({"origin"})) == "main"
 
 
 # --- run_gh_with_retry ---

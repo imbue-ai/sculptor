@@ -291,18 +291,24 @@ class _PullRequestLookup:
     without re-reading git: the workspace's repo identity (``name_with_owner``,
     ``None`` if the origin couldn't be parsed into owner/repo — such a workspace
     is always unmatched and falls back) and its ``head_ref_name`` (the index
-    key), its ``target_branch`` for the per-workspace derivation, and the
-    checkout and environment gh runs with. Short-circuited workspaces (no PR head
-    / on target / non-GitHub) never get one.
+    key), the PR base its target names (``base_ref_name``) for the per-workspace
+    derivation, and the checkout and environment gh runs with. Short-circuited
+    workspaces (no PR head / on target / non-GitHub) never get one.
     """
 
     workspace_id: WorkspaceID
     working_dir: Path
     gh_env: Mapping[str, str]
     head_ref_name: str
-    target_branch: str
+    base_ref_name: str
     host: str
     name_with_owner: str | None
+
+
+def _read_remote_names(git: GitCli, repo_path: Path) -> frozenset[str]:
+    """The names of the repository's remotes, such as ``origin``."""
+    output = git.run_git(["remote"], repo_path, is_read_only=True).stdout
+    return frozenset(line.strip() for line in output.splitlines() if line.strip())
 
 
 def _build_pr_index(nodes: Sequence[dict]) -> dict[tuple[str, str], list[dict]]:
@@ -728,7 +734,7 @@ class PrPollingService(Service):
                 # resolves it for free; mark it so its per-workspace fallback
                 # stops rescheduling.
                 self._matched_workspaces.add(candidate.workspace_id)
-                status = build_status_from_open_nodes(candidate.workspace_id, nodes, candidate.target_branch)
+                status = build_status_from_open_nodes(candidate.workspace_id, nodes, candidate.base_ref_name)
                 self._emit_status(candidate.workspace_id, status)
             else:
                 # No open authored PR on this branch — terminal (merged/closed),
@@ -801,9 +807,9 @@ class PrPollingService(Service):
 
         Applies the short-circuits *before* a workspace can enter a round or
         fallback: not ready (no checkout) → ``None``; no PR head (e.g. a detached
-        HEAD) or no target / on the target branch / non-GitHub origin → ``none``
-        with zero gh calls. The origin is read from the main repository, which
-        exists even when a checkout has no ``.git`` of its own.
+        HEAD) or no target / non-GitHub origin / on the target branch → ``none``
+        with zero gh calls. The origin and remote names are read from the main
+        repository, which exists even when a checkout has no ``.git`` of its own.
         """
         location = self._resolve_checkout_location(workspace_id, state)
         if location is None:
@@ -814,10 +820,13 @@ class PrPollingService(Service):
             return no_pr_status
         vcs = self._get_workspace_vcs(state.initialization_strategy)
         head_ref_names = vcs.get_pull_request_refs(location).head_ref_names
-        if not head_ref_names or head_ref_names[0] == strip_remote_prefix(target_branch):
+        if not head_ref_names:
             return no_pr_status
         origin_url = read_origin_url(self._git, location.repo_path)
         if origin_url is None or not is_github_remote_url(origin_url):
+            return no_pr_status
+        base_ref_name = strip_remote_prefix(target_branch, _read_remote_names(self._git, location.repo_path))
+        if head_ref_names[0] == base_ref_name:
             return no_pr_status
         owner_and_name = parse_remote_owner_and_name(origin_url)
         return _PullRequestLookup(
@@ -825,7 +834,7 @@ class PrPollingService(Service):
             working_dir=location.checkout_path,
             gh_env=vcs.agent_environment(location).environment_variables,
             head_ref_name=head_ref_names[0],
-            target_branch=target_branch,
+            base_ref_name=base_ref_name,
             host=extract_remote_hostname(origin_url),
             name_with_owner=f"{owner_and_name[0]}/{owner_and_name[1]}" if owner_and_name is not None else None,
         )
@@ -1112,6 +1121,6 @@ class PrPollingService(Service):
         deferred = self._respect_throttle()
         if deferred is not None:
             return deferred
-        status = fetch_pr_status(self._gh_runner(lookup), workspace_id, lookup.head_ref_name, lookup.target_branch)
+        status = fetch_pr_status(self._gh_runner(lookup), workspace_id, lookup.head_ref_name, lookup.base_ref_name)
         self._note_rate_limit(status)
         return status

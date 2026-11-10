@@ -81,14 +81,16 @@ def classify_cli_error(stderr: str) -> CliErrorCategory:
     return "transient"
 
 
-def strip_remote_prefix(branch: str) -> str:
-    """Strip a single remote prefix (e.g. "origin/", "local/") from a branch ref.
+def strip_remote_prefix(branch: str, remote_names: frozenset[str]) -> str:
+    """The branch a target ref names on its remote: "origin/feature/foo" → "feature/foo".
 
-    Returns the branch unchanged if it has no slash. Only strips the first
-    path segment, so nested branch names like "feature/foo" are preserved
-    (e.g. "origin/feature/foo" → "feature/foo").
+    Only a first path segment that names one of `remote_names` is stripped, so a
+    local branch such as "release/1.0" is returned unchanged.
     """
-    return branch.split("/", 1)[-1] if "/" in branch else branch
+    remote_name, separator, remote_branch = branch.partition("/")
+    if separator and remote_name in remote_names:
+        return remote_branch
+    return branch
 
 
 def run_gh_with_retry(
