@@ -32,6 +32,7 @@ MODEL_SHORTNAME_MAP: Final[dict[LLMModel, str]] = {
     LLMModel.CLAUDE_4_HAIKU: "haiku",
     LLMModel.CLAUDE_FABLE_LATEST: "fable",
     LLMModel.CLAUDE_5_5_SONNET: "claude-sonnet-5-5",
+    LLMModel.CLAUDE_5_SONNET: "claude-sonnet-5",
     LLMModel.CLAUDE_5_5_HAIKU: "claude-haiku-5-5",
     LLMModel.CLAUDE_FABLE_5: "claude-fable-5",
     LLMModel.CLAUDE_FABLE_5_1: "claude-fable-5-1",

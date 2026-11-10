@@ -13,9 +13,9 @@ export const hasNoUsableModel = (
 ): boolean => sourcesBackendModels && Array.isArray(backendModels) && backendModels.length === 0;
 
 const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
-  // Retired rolling "latest" aliases — kept for load-compat and internal callers,
-  // not shown in the picker. Labeled honestly so a lingering selection doesn't
-  // masquerade as a pinned version.
+  // Rolling "latest" members: they run the Claude CLI's own family aliases, so the
+  // label can't name a version. `sculpt`'s family shortcuts use them; the picker
+  // doesn't offer them.
   [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
   [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
   [LlmModel.CLAUDE_4_SONNET]: { short: "Sonnet (latest)", long: "Claude Sonnet (latest)" },
@@ -37,6 +37,7 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   [LlmModel.CLAUDE_4_6_OPUS_200K]: { short: "Opus 4.6", long: "Claude 4.6 Opus" },
   // Pinned Sonnet and Haiku generations.
   [LlmModel.CLAUDE_5_5_SONNET]: { short: "Sonnet 5.5", long: "Claude 5.5 Sonnet" },
+  [LlmModel.CLAUDE_5_SONNET]: { short: "Sonnet 5", long: "Claude 5 Sonnet" },
   [LlmModel.CLAUDE_5_5_HAIKU]: { short: "Haiku 5.5", long: "Claude 5.5 Haiku" },
   [LlmModel.CLAUDE_FABLE_5]: { short: "Fable 5", long: "Fable 5" },
   [LlmModel.CLAUDE_FABLE_5_1]: { short: "Fable 5.1", long: "Fable 5.1" },
@@ -67,14 +68,16 @@ export const DEFAULT_LLM_MODEL: LlmModel = LlmModel.CLAUDE_5_5_OPUS;
  */
 export const modelForNewRecord = (model: LlmModel): LlmModel => model.replace(/-200K$/, "") as LlmModel;
 
-// Models offered in production model pickers (desktop selector + mobile `+` menu).
+// Models offered in production model pickers (desktop selector + mobile `+` menu):
+// the current and previous pinned generation of each family, grouped by family. Haiku
+// has no previous entry yet (see `LLMModel`).
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_FABLE_5_2,
   LlmModel.CLAUDE_FABLE_5_1,
   LlmModel.CLAUDE_5_5_OPUS,
   LlmModel.CLAUDE_5_OPUS,
-  LlmModel.CLAUDE_4_8_OPUS,
   LlmModel.CLAUDE_5_5_SONNET,
+  LlmModel.CLAUDE_5_SONNET,
   LlmModel.CLAUDE_5_5_HAIKU,
 ];
 

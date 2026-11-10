@@ -3,7 +3,6 @@
 Verifies that:
 - The fast mode toggle is capability-gated: visible for the fast-mode-capable
   models (e.g. Opus 5.5 and Opus 5) and hidden for models without it (e.g. Sonnet)
-  and for Opus 4.8, whose fast mode Sculptor no longer offers
 - The fast mode draft state is preserved when switching away from a fast-mode model
   and back
 - The model selector is isolated per agent (changing one agent's model doesn't bleed to others)
@@ -21,7 +20,6 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 # Long display names as they appear in the model selector dropdown (ModelSelectOptions uses getModelLongName).
-_OPUS_48_MODEL_NAME = "Claude 4.8 Opus"
 _SONNET_MODEL_NAME = "Claude 5.5 Sonnet"
 _OPUS_5_MODEL_NAME = "Claude 5 Opus"
 _OPUS_55_MODEL_NAME = "Claude 5.5 Opus"
@@ -57,35 +55,6 @@ def test_fast_mode_toggle_gated_by_model(sculptor_instance_: SculptorInstance) -
     # Switch to Opus 5.5 — fast mode is supported, toggle must reappear.
     select_model_by_name(chat_panel, _OPUS_55_MODEL_NAME)
     expect(chat_panel.get_fast_mode_toggle()).to_be_visible()
-
-
-@user_story("to not be offered fast mode on Opus 4.8, whose fast mode is being retired")
-def test_fast_mode_toggle_hidden_for_opus_48(sculptor_instance_: SculptorInstance) -> None:
-    """Fast mode toggle must be absent for Opus 4.8.
-
-    Opus 4.8's fast mode is deprecated upstream, and the API rejects it once
-    removed, so Sculptor offers Opus 4.8 at standard speed only.
-
-    Steps:
-    1. Start with Fake Claude (supports fast mode) — toggle visible.
-    2. Switch to Opus 4.8 — toggle must disappear.
-    """
-    page = sculptor_instance_.page
-
-    task_page = start_task_and_wait_for_ready(
-        page,
-        prompt='fake_claude:text `{"text": "ready"}`',
-        workspace_name="Opus 4.8 Fast Mode WS",
-    )
-    chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
-
-    # Fake Claude supports fast mode — toggle should be visible.
-    expect(chat_panel.get_fast_mode_toggle()).to_be_visible()
-
-    # Switch to Opus 4.8 — fast mode is not offered, toggle must disappear.
-    select_model_by_name(chat_panel, _OPUS_48_MODEL_NAME)
-    expect(chat_panel.get_fast_mode_toggle()).not_to_be_visible()
 
 
 @user_story("to see the fast mode toggle when Opus 5 is selected")

@@ -82,6 +82,10 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFileAttachments: true,
     supportsFastMode: false,
   },
+  [LlmModel.CLAUDE_5_SONNET]: {
+    supportsFileAttachments: true,
+    supportsFastMode: false,
+  },
   [LlmModel.CLAUDE_5_5_HAIKU]: {
     supportsFileAttachments: true,
     supportsFastMode: false,

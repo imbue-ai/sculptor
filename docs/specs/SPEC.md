@@ -343,7 +343,7 @@ span several lines while still sending as one message.
 The input toolbar shapes how the agent handles your next message. A **model** picker chooses which
 model answers — present only for agents whose harness supports model selection (a Claude or Pi chat
 agent), and shown disabled with the current model for those that don't; the list it offers comes from
-the agent's own harness, so a **Claude** agent picks from the Claude models while a **Pi** agent
+the agent's own harness, so a **Claude** agent picks from the Claude models (the current and previous generation of Fable, Opus, and Sonnet, and the current Haiku) while a **Pi** agent
 surfaces Pi's live catalog grouped by provider — a single provider lists its models flat, while two or
 more providers cascade into a per-provider submenu, and a Pi agent with no authenticated providers
 shows the model picker **disabled** ("No models available") in place of the list — reached whenever

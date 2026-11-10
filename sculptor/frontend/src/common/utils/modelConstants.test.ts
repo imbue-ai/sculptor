@@ -33,14 +33,15 @@ describe("Opus 5.5", () => {
 });
 
 describe("the picker", () => {
-  it("offers one accurately labelled entry per current model", () => {
+  it("offers the current and previous generation of each family, one labelled entry each", () => {
+    // Haiku has no previous entry: the Haiku before 5.5 is 4.5 (see LLMModel).
     expect(PRODUCTION_MODELS.map(getModelLongName)).toEqual([
       "Fable 5.2",
       "Fable 5.1",
       "Claude 5.5 Opus",
       "Claude 5 Opus",
-      "Claude 4.8 Opus",
       "Claude 5.5 Sonnet",
+      "Claude 5 Sonnet",
       "Claude 5.5 Haiku",
     ]);
   });
@@ -65,14 +66,20 @@ describe("Sonnet 5.5 and Haiku 5.5", () => {
   });
 
   it("follow the Opus block in the picker, Sonnet before Haiku", () => {
-    expect(PRODUCTION_MODELS.slice(-2)).toEqual([LlmModel.CLAUDE_5_5_SONNET, LlmModel.CLAUDE_5_5_HAIKU]);
+    expect(PRODUCTION_MODELS.slice(-3)).toEqual([
+      LlmModel.CLAUDE_5_5_SONNET,
+      LlmModel.CLAUDE_5_SONNET,
+      LlmModel.CLAUDE_5_5_HAIKU,
+    ]);
   });
 });
 
 describe("retired models", () => {
-  it("keeps Opus 4.7 out of the picker while leaving it selectable by a stored value", () => {
-    expect(PRODUCTION_MODELS).not.toContain(LlmModel.CLAUDE_4_7_OPUS);
-    expect(PRODUCTION_MODELS).not.toContain(LlmModel.CLAUDE_4_7_OPUS_200K);
+  it("keeps Opus 4.8 and 4.7 out of the picker while leaving them selectable by a stored value", () => {
+    for (const model of [LlmModel.CLAUDE_4_8_OPUS, LlmModel.CLAUDE_4_7_OPUS, LlmModel.CLAUDE_4_7_OPUS_200K]) {
+      expect(PRODUCTION_MODELS).not.toContain(model);
+    }
+    expect(getModelShortName(LlmModel.CLAUDE_4_8_OPUS)).toBe("Opus 4.8");
     expect(getModelShortName(LlmModel.CLAUDE_4_7_OPUS_200K)).toBe("Opus 4.7");
   });
 
