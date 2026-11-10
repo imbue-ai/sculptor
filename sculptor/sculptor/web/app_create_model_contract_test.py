@@ -11,6 +11,7 @@ that case.
 from unittest.mock import patch
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from sculptor.database.models import AgentTaskInputsV2
@@ -33,10 +34,10 @@ from sculptor.web.data_types import StartTaskRequest
 _OPUS = ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8")
 
 
-def _post_task(client: TestClient, project: Project, request: StartTaskRequest) -> httpx.Response:
+def _post_task(client: TestClient, workspace: Workspace, request: StartTaskRequest) -> httpx.Response:
     return client.post(
-        f"/api/v1/projects/{project.object_id}/tasks",
-        json=model_dump(request, is_camel_case=True),
+        f"/api/v1/projects/{workspace.project_id}/tasks",
+        json={**model_dump(request, is_camel_case=True), "workspaceId": str(workspace.object_id)},
     )
 
 
@@ -55,13 +56,20 @@ def _create_workspace(
     )
 
 
+@pytest.fixture
+def test_workspace(test_services: CompleteServiceCollection, test_project: Project) -> Workspace:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        return _create_workspace(transaction, test_services, test_project)
+
+
 def test_pi_prompt_with_authenticated_backend_model_seeds_current_model(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+    client: TestClient, test_services: CompleteServiceCollection, test_workspace: Workspace
 ) -> None:
     with patch("sculptor.web.app.compute_authenticated_provider_ids", return_value={"anthropic"}):
         response = _post_task(
             client,
-            test_project,
+            test_workspace,
             StartTaskRequest(prompt="hello pi", backend_model=_OPUS, agent_type=AgentTypeName.PI),
         )
     assert response.status_code == 200, response.text
@@ -79,32 +87,32 @@ def test_pi_prompt_with_authenticated_backend_model_seeds_current_model(
     assert task.input_data.default_model is None
 
 
-def test_pi_prompt_without_backend_model_is_rejected(client: TestClient, test_project: Project) -> None:
+def test_pi_prompt_without_backend_model_is_rejected(client: TestClient, test_workspace: Workspace) -> None:
     response = _post_task(
         client,
-        test_project,
+        test_workspace,
         StartTaskRequest(prompt="hello pi", agent_type=AgentTypeName.PI),
     )
     assert response.status_code == 422
     assert "backend_model" in response.text
 
 
-def test_pi_prompt_with_unauthenticated_provider_is_rejected(client: TestClient, test_project: Project) -> None:
+def test_pi_prompt_with_unauthenticated_provider_is_rejected(client: TestClient, test_workspace: Workspace) -> None:
     with patch("sculptor.web.app.compute_authenticated_provider_ids", return_value=set()):
         response = _post_task(
             client,
-            test_project,
+            test_workspace,
             StartTaskRequest(prompt="hello pi", backend_model=_OPUS, agent_type=AgentTypeName.PI),
         )
     assert response.status_code == 422
     assert "not authenticated" in response.text
 
 
-def test_model_and_backend_model_together_are_rejected(client: TestClient, test_project: Project) -> None:
+def test_model_and_backend_model_together_are_rejected(client: TestClient, test_workspace: Workspace) -> None:
     with patch("sculptor.web.app.compute_authenticated_provider_ids", return_value={"anthropic"}):
         response = _post_task(
             client,
-            test_project,
+            test_workspace,
             StartTaskRequest(
                 prompt="hello",
                 model=LLMModel.CLAUDE_4_SONNET,
@@ -137,10 +145,10 @@ def test_promptless_backend_model_is_rejected(
     assert "backend_model requires a prompt" in response.text
 
 
-def test_claude_prompt_without_model_is_rejected(client: TestClient, test_project: Project) -> None:
+def test_claude_prompt_without_model_is_rejected(client: TestClient, test_workspace: Workspace) -> None:
     response = _post_task(
         client,
-        test_project,
+        test_workspace,
         StartTaskRequest(prompt="hello claude", agent_type=AgentTypeName.CLAUDE),
     )
     assert response.status_code == 422
@@ -148,11 +156,11 @@ def test_claude_prompt_without_model_is_rejected(client: TestClient, test_projec
 
 
 def test_claude_prompt_with_model_is_unchanged(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+    client: TestClient, test_services: CompleteServiceCollection, test_workspace: Workspace
 ) -> None:
     response = _post_task(
         client,
-        test_project,
+        test_workspace,
         StartTaskRequest(prompt="hello claude", model=LLMModel.CLAUDE_4_SONNET, agent_type=AgentTypeName.CLAUDE),
     )
     assert response.status_code == 200, response.text

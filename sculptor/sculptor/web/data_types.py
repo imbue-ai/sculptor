@@ -149,12 +149,8 @@ class StartTaskRequest(RequestModel):
     model: LLMModel | None = None
     backend_model: ModelOption | None = None
     files: list[str] = Field(default_factory=list)
-    # Strategy for the workspace this task creates; IN_PLACE when omitted.
-    initialization_strategy: WorkspaceInitializationStrategy | None = None
     name: str | None = None
-    source_branch: str | None = None
-    # Runs the task in this existing workspace instead of creating one, so it is
-    # mutually exclusive with initialization_strategy and source_branch.
+    # Optional in the type, but `start_task` rejects a request without one.
     workspace_id: WorkspaceID | None = None
     enter_plan_mode: bool = False
     fast_mode: bool = False
@@ -164,14 +160,6 @@ class StartTaskRequest(RequestModel):
     # resolves it). Prompt-ful creation is always a chat agent; terminal types
     # are rejected (422).
     agent_type: AgentTypeName | None = None
-
-    @model_validator(mode="after")
-    def _reject_workspace_creation_fields_with_workspace_id(self) -> "StartTaskRequest":
-        if self.workspace_id is not None and (
-            self.initialization_strategy is not None or self.source_branch is not None
-        ):
-            raise ValueError("workspace_id is mutually exclusive with initialization_strategy and source_branch")
-        return self
 
 
 class CreateWorkspaceRequestV2(RequestModel):

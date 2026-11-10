@@ -696,9 +696,7 @@ def start_task(
     prompt = task_request.prompt
     interface = task_request.interface
     model = task_request.model
-    initialization_strategy = task_request.initialization_strategy
     task_name = task_request.name
-    source_branch = task_request.source_branch
     workspace_id = task_request.workspace_id
     task_id = TaskID()
 
@@ -708,6 +706,13 @@ def start_task(
             raise HTTPException(
                 status_code=422,
                 detail=[{"loc": ["body", "prompt"], "msg": "Prompt is required", "type": "value_error.missing"}],
+            )
+        if workspace_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {"loc": ["body", "workspace_id"], "msg": "Workspace is required", "type": "value_error.missing"}
+                ],
             )
 
         services = get_services_from_request_or_websocket(request)
@@ -721,9 +726,7 @@ def start_task(
                 detail=f"Invalid interface: {interface}. Must be 'terminal' or 'api'",
             ) from e
 
-        logger.info(
-            "Starting new task with interface {} and initialization_strategy {}", interface, initialization_strategy
-        )
+        logger.info("Starting new task with interface {} in workspace {}", interface, workspace_id)
 
         if model in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2) and not settings.TESTING.INTEGRATION_ENABLED:
             raise HTTPException(
@@ -737,36 +740,14 @@ def start_task(
             if project is None:
                 raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
 
-            if workspace_id is not None:
-                # Use existing workspace
-                workspace = transaction.get_workspace(workspace_id)
-                if workspace is None or workspace.is_deleted:
-                    raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
-                if workspace.project_id != project_id:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Workspace {workspace_id} belongs to a different project",
-                    )
-                logger.debug("Using existing workspace {} for task {}", workspace.object_id, task_id)
-            else:
-                # Create implicit workspace for this task
-                new_workspace_strategy = (
-                    WorkspaceInitializationStrategy.IN_PLACE
-                    if initialization_strategy is None
-                    else initialization_strategy
+            workspace = transaction.get_workspace(workspace_id)
+            if workspace is None or workspace.is_deleted:
+                raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
+            if workspace.project_id != project_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Workspace {workspace_id} belongs to a different project",
                 )
-                _validate_workspace_creation_request(
-                    services, project, new_workspace_strategy, source_branch, requested_branch_name=None
-                )
-                workspace = services.workspace_service.create_workspace(
-                    project=project,
-                    initialization_strategy=new_workspace_strategy,
-                    source_branch=source_branch,
-                    requested_branch_name=None,
-                    description=task_name,
-                    transaction=transaction,
-                )
-                logger.debug("Created workspace {} for task {}", workspace.object_id, task_id)
 
             # Prompt-ful creation is always a chat agent — terminal agents have
             # no chat stream to deliver the prompt to. Reject only an EXPLICIT
