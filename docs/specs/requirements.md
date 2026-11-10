@@ -172,7 +172,7 @@ and flags the targets it does not currently define.
 - **REQ-NFR-070 (MUST).** New-agent defaults: model = the user's **configured Settings default** if
   set, else the **most-recently-used** model (recorded whenever the user switches model in chat;
   `lastUsedModelAtom`, `sculptor/frontend/src/common/state/atoms/userConfig.ts`), else a hardcoded
-  fallback of **`CLAUDE_5_5_OPUS` ("Opus 5.5 (1M)")**, the pinned 1M-context Opus 5.5 variant (Fable, though listed in
+  fallback of **`CLAUDE_5_5_OPUS` ("Opus 5.5")**, the newest pinned Opus (Fable, though listed in
   the switcher, is not the default). Effort = **Extra High (`xhigh`)**, fast mode
   = **off** (`sculptor/sculptor/config/user_config.py`, `sculptor/sculptor/web/derived.py`). All three
   are user-overridable in Settings → Agent (`SPEC.md` §7.10). **Fast mode** is offered only on models

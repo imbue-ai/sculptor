@@ -6,11 +6,11 @@ import { getModelCapabilities } from "./modelCapabilities";
 import { DEFAULT_LLM_MODEL, getModelLongName, getModelShortName, PRODUCTION_MODELS } from "./modelConstants";
 
 describe("Opus 5.5", () => {
-  it("is labelled by its pinned generation in both context sizes", () => {
-    expect(getModelShortName(LlmModel.CLAUDE_5_5_OPUS)).toBe("Opus 5.5 (1M)");
-    expect(getModelShortName(LlmModel.CLAUDE_5_5_OPUS_200K)).toBe("Opus 5.5");
-    expect(getModelLongName(LlmModel.CLAUDE_5_5_OPUS)).toBe("Claude 5.5 Opus (1M)");
-    expect(getModelLongName(LlmModel.CLAUDE_5_5_OPUS_200K)).toBe("Claude 5.5 Opus");
+  it("is labelled by its pinned generation, with no context suffix on either member", () => {
+    for (const model of [LlmModel.CLAUDE_5_5_OPUS, LlmModel.CLAUDE_5_5_OPUS_200K]) {
+      expect(getModelShortName(model)).toBe("Opus 5.5");
+      expect(getModelLongName(model)).toBe("Claude 5.5 Opus");
+    }
   });
 
   it("supports fast mode and file attachments", () => {
@@ -20,13 +20,27 @@ describe("Opus 5.5", () => {
   });
 
   it("leads the Opus block in the picker without displacing Fable", () => {
-    const opusStart = PRODUCTION_MODELS.indexOf(LlmModel.CLAUDE_5_5_OPUS_200K);
-    expect(opusStart).toBeGreaterThan(PRODUCTION_MODELS.indexOf(LlmModel.CLAUDE_FABLE_5));
-    expect(PRODUCTION_MODELS.slice(opusStart, opusStart + 2)).toEqual([
-      LlmModel.CLAUDE_5_5_OPUS_200K,
-      LlmModel.CLAUDE_5_5_OPUS,
+    const opusStart = PRODUCTION_MODELS.indexOf(LlmModel.CLAUDE_5_5_OPUS);
+    expect(opusStart).toBeGreaterThan(PRODUCTION_MODELS.indexOf(LlmModel.CLAUDE_FABLE_5_1));
+    expect(PRODUCTION_MODELS.indexOf(LlmModel.CLAUDE_5_OPUS)).toBe(opusStart + 1);
+  });
+});
+
+describe("the picker", () => {
+  it("offers one accurately labelled entry per current model", () => {
+    expect(PRODUCTION_MODELS.map(getModelLongName)).toEqual([
+      "Fable 5.2",
+      "Fable 5.1",
+      "Claude 5.5 Opus",
+      "Claude 5 Opus",
+      "Claude 4.8 Opus",
+      "Claude 5.5 Sonnet",
+      "Claude 5.5 Haiku",
     ]);
-    expect(PRODUCTION_MODELS.indexOf(LlmModel.CLAUDE_5_OPUS_200K)).toBeGreaterThan(opusStart);
+  });
+
+  it("offers no 200K member, since from Opus 4.7 on those ids run the same 1M window", () => {
+    expect(PRODUCTION_MODELS.filter((model) => model.endsWith("-200K"))).toEqual([]);
   });
 });
 
@@ -69,11 +83,6 @@ describe("DEFAULT_LLM_MODEL", () => {
     // A default the picker does not list is a selection the user cannot get back to
     // after switching away from it.
     expect(PRODUCTION_MODELS).toContain(DEFAULT_LLM_MODEL);
-  });
-
-  it("is a large-context variant", () => {
-    // New agents get the 1M window; the 200K variants are opt-in from the picker.
-    expect(getModelShortName(DEFAULT_LLM_MODEL)).toMatch(/\(1M\)$/);
   });
 
   it("supports the capabilities a default needs", () => {

@@ -20,12 +20,10 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 # Long display names as they appear in the model selector dropdown (ModelSelectOptions uses getModelLongName).
-_OPUS_48_1M_MODEL_NAME = "Claude 4.8 Opus (1M)"
 _OPUS_48_MODEL_NAME = "Claude 4.8 Opus"
 _SONNET_MODEL_NAME = "Claude 5.5 Sonnet"
-_OPUS_5_1M_MODEL_NAME = "Claude 5 Opus (1M)"
 _OPUS_5_MODEL_NAME = "Claude 5 Opus"
-_OPUS_55_1M_MODEL_NAME = "Claude 5.5 Opus (1M)"
+_OPUS_55_MODEL_NAME = "Claude 5.5 Opus"
 
 
 @user_story("to see the fast mode toggle only for models that support fast mode")
@@ -56,7 +54,7 @@ def test_fast_mode_toggle_gated_by_model(sculptor_instance_: SculptorInstance) -
     expect(chat_panel.get_fast_mode_toggle()).not_to_be_visible()
 
     # Switch to Opus 5.5 — fast mode is supported, toggle must reappear.
-    select_model_by_name(chat_panel, _OPUS_55_1M_MODEL_NAME)
+    select_model_by_name(chat_panel, _OPUS_55_MODEL_NAME)
     expect(chat_panel.get_fast_mode_toggle()).to_be_visible()
 
 
@@ -64,14 +62,10 @@ def test_fast_mode_toggle_gated_by_model(sculptor_instance_: SculptorInstance) -
 def test_fast_mode_toggle_visible_for_opus_48(sculptor_instance_: SculptorInstance) -> None:
     """Fast mode toggle must be present for the pinned Opus 4.8.
 
-    Both pinned 4.8 variants set supportsFastMode: true in modelCapabilities.ts, so
-    the toggle appears for each.
-
     Steps:
     1. Start with Fake Claude (supports fast mode) — toggle visible.
     2. Switch to Sonnet — toggle must disappear (clean baseline).
-    3. Switch to Opus 4.8 (1M) — toggle must reappear.
-    4. Switch to Opus 4.8 (200K) — toggle must remain visible.
+    3. Switch to Opus 4.8 — toggle must reappear.
     """
     page = sculptor_instance_.page
 
@@ -90,28 +84,19 @@ def test_fast_mode_toggle_visible_for_opus_48(sculptor_instance_: SculptorInstan
     select_model_by_name(chat_panel, _SONNET_MODEL_NAME)
     expect(chat_panel.get_fast_mode_toggle()).not_to_be_visible()
 
-    # Switch to Opus 4.8 (1M) — fast mode is supported, toggle must reappear.
-    select_model_by_name(chat_panel, _OPUS_48_1M_MODEL_NAME)
-    expect(chat_panel.get_fast_mode_toggle()).to_be_visible()
-
-    # Switch to Opus 4.8 (200K) — fast mode is supported, toggle must stay visible.
+    # Switch to Opus 4.8 — fast mode is supported, toggle must reappear.
     select_model_by_name(chat_panel, _OPUS_48_MODEL_NAME)
     expect(chat_panel.get_fast_mode_toggle()).to_be_visible()
 
 
 @user_story("to see the fast mode toggle when Opus 5 is selected")
 def test_fast_mode_toggle_visible_for_opus_5(sculptor_instance_: SculptorInstance) -> None:
-    """Fast mode toggle must be present for the pinned Opus 5 entries.
-
-    CLAUDE_5_OPUS / CLAUDE_5_OPUS_200K are the pinned explicit "Opus 5" entries
-    (surfaced as "Claude 5 Opus"). Fast mode is supported on Opus 5, so the
-    toggle must appear for both the 1M and 200K variants.
+    """Fast mode toggle must be present for the pinned Opus 5.
 
     Steps:
     1. Start with Fake Claude (supports fast mode) — toggle visible.
     2. Switch to Sonnet — toggle must disappear (clean baseline).
-    3. Switch to Opus 5 (1M) — toggle must reappear.
-    4. Switch to Opus 5 (200K) — toggle must remain visible.
+    3. Switch to Opus 5 — toggle must reappear.
     """
     page = sculptor_instance_.page
 
@@ -130,11 +115,7 @@ def test_fast_mode_toggle_visible_for_opus_5(sculptor_instance_: SculptorInstanc
     select_model_by_name(chat_panel, _SONNET_MODEL_NAME)
     expect(chat_panel.get_fast_mode_toggle()).not_to_be_visible()
 
-    # Switch to Opus 5 (1M) — fast mode is supported, toggle must reappear.
-    select_model_by_name(chat_panel, _OPUS_5_1M_MODEL_NAME)
-    expect(chat_panel.get_fast_mode_toggle()).to_be_visible()
-
-    # Switch to Opus 5 (200K) — fast mode is supported, toggle must stay visible.
+    # Switch to Opus 5 — fast mode is supported, toggle must reappear.
     select_model_by_name(chat_panel, _OPUS_5_MODEL_NAME)
     expect(chat_panel.get_fast_mode_toggle()).to_be_visible()
 
@@ -160,7 +141,7 @@ def test_fast_mode_draft_survives_model_switch(sculptor_instance_: SculptorInsta
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # Switch to Opus 5.5 and verify the toggle is present but inactive.
-    select_model_by_name(chat_panel, _OPUS_55_1M_MODEL_NAME)
+    select_model_by_name(chat_panel, _OPUS_55_MODEL_NAME)
     toggle = chat_panel.get_fast_mode_toggle()
     expect(toggle).to_be_visible()
     expect(toggle).to_have_attribute("data-active", "false")
@@ -174,7 +155,7 @@ def test_fast_mode_draft_survives_model_switch(sculptor_instance_: SculptorInsta
     expect(chat_panel.get_fast_mode_toggle()).not_to_be_visible()
 
     # Switch back to Opus 5.5 — the draft should be preserved: toggle is active.
-    select_model_by_name(chat_panel, _OPUS_55_1M_MODEL_NAME)
+    select_model_by_name(chat_panel, _OPUS_55_MODEL_NAME)
     expect(chat_panel.get_fast_mode_toggle()).to_have_attribute("data-active", "true")
 
 

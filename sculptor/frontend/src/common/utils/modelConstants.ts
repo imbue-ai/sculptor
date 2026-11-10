@@ -16,19 +16,21 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   // Retired rolling "latest" aliases — kept for load-compat and internal callers,
   // not shown in the picker. Labeled honestly so a lingering selection doesn't
   // masquerade as a pinned version.
-  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (latest, 1M)", long: "Claude Opus (latest, 1M)" },
+  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
   [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
-  [LlmModel.CLAUDE_4_SONNET]: { short: "Sonnet (latest, 1M)", long: "Claude Sonnet (latest, 1M)" },
+  [LlmModel.CLAUDE_4_SONNET]: { short: "Sonnet (latest)", long: "Claude Sonnet (latest)" },
   [LlmModel.CLAUDE_4_SONNET_200K]: { short: "Sonnet (latest)", long: "Claude Sonnet (latest)" },
   [LlmModel.CLAUDE_4_HAIKU]: { short: "Haiku (latest)", long: "Claude Haiku (latest)" },
-  // Pinned Opus generations.
-  [LlmModel.CLAUDE_5_5_OPUS]: { short: "Opus 5.5 (1M)", long: "Claude 5.5 Opus (1M)" },
+  // Pinned Opus generations. Opus 4.7 and later run a native 1M window whatever the
+  // id says, so each `_200K` member shares its sibling's label; only Opus 4.6 has a
+  // real 1M/200K split.
+  [LlmModel.CLAUDE_5_5_OPUS]: { short: "Opus 5.5", long: "Claude 5.5 Opus" },
   [LlmModel.CLAUDE_5_5_OPUS_200K]: { short: "Opus 5.5", long: "Claude 5.5 Opus" },
-  [LlmModel.CLAUDE_5_OPUS]: { short: "Opus 5 (1M)", long: "Claude 5 Opus (1M)" },
+  [LlmModel.CLAUDE_5_OPUS]: { short: "Opus 5", long: "Claude 5 Opus" },
   [LlmModel.CLAUDE_5_OPUS_200K]: { short: "Opus 5", long: "Claude 5 Opus" },
-  [LlmModel.CLAUDE_4_8_OPUS]: { short: "Opus 4.8 (1M)", long: "Claude 4.8 Opus (1M)" },
+  [LlmModel.CLAUDE_4_8_OPUS]: { short: "Opus 4.8", long: "Claude 4.8 Opus" },
   [LlmModel.CLAUDE_4_8_OPUS_200K]: { short: "Opus 4.8", long: "Claude 4.8 Opus" },
-  [LlmModel.CLAUDE_4_7_OPUS]: { short: "Opus 4.7 (1M)", long: "Claude 4.7 Opus (1M)" },
+  [LlmModel.CLAUDE_4_7_OPUS]: { short: "Opus 4.7", long: "Claude 4.7 Opus" },
   [LlmModel.CLAUDE_4_7_OPUS_200K]: { short: "Opus 4.7", long: "Claude 4.7 Opus" },
   [LlmModel.CLAUDE_4_6_OPUS]: { short: "Opus 4.6 (1M)", long: "Claude 4.6 Opus (1M)" },
   [LlmModel.CLAUDE_4_6_OPUS_200K]: { short: "Opus 4.6", long: "Claude 4.6 Opus" },
@@ -60,11 +62,8 @@ export const DEFAULT_LLM_MODEL: LlmModel = LlmModel.CLAUDE_5_5_OPUS;
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_FABLE_5_2,
   LlmModel.CLAUDE_FABLE_5_1,
-  LlmModel.CLAUDE_5_5_OPUS_200K,
   LlmModel.CLAUDE_5_5_OPUS,
-  LlmModel.CLAUDE_5_OPUS_200K,
   LlmModel.CLAUDE_5_OPUS,
-  LlmModel.CLAUDE_4_8_OPUS_200K,
   LlmModel.CLAUDE_4_8_OPUS,
   LlmModel.CLAUDE_5_5_SONNET,
   LlmModel.CLAUDE_5_5_HAIKU,

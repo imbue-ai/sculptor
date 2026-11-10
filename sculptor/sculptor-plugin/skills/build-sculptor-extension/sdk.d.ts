@@ -479,7 +479,8 @@ declare const LlmModel: {
  * 1. Add explicit members here named after the real model, and map each to its
  * exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).
  * A model whose bare id runs at 200K gets a 1M/200K pair (``[1m]`` + bare id);
- * one whose bare id already runs at 1M gets a single member.
+ * one whose bare id already runs at 1M gets a single member. Opus 4.7 and later,
+ * Sonnet 5 and later, Haiku 5.5 and every Fable run 1M on the bare id.
  * 2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),
  * insert at the correct spot in ``PRODUCTION_MODELS`` — that list is grouped by
  * family, so a new Opus heads the Opus block rather than the whole list — and

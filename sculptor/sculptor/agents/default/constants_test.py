@@ -30,8 +30,8 @@ def test_clone_mode_prompt_mentions_sculpt_workspace_show_and_repo_path() -> Non
 def test_opus_5_5_maps_to_its_pinned_model_ids() -> None:
     """The Opus 5.5 members map to the `--model` ids the Claude CLI accepts.
 
-    The bracketed `[1m]` suffix is what selects the 1M-context window; the bare id
-    is the 200K variant.
+    Both ids run Opus 5.5's native 1M window; the persisted members keep launching
+    the exact ids they always have.
     """
     assert MODEL_SHORTNAME_MAP[LLMModel.CLAUDE_5_5_OPUS] == "claude-opus-5-5[1m]"
     assert MODEL_SHORTNAME_MAP[LLMModel.CLAUDE_5_5_OPUS_200K] == "claude-opus-5-5"
