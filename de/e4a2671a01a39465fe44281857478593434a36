@@ -43,7 +43,7 @@
     },
     "config_path": "offload-electron.toml",
     "offload_version": "0.10.0",
-    "built_at": "2026-11-10T21:59:56Z"
+    "built_at": "2026-11-10T22:08:45Z"
   },
   "recipe:0cb89c92e62de680": {
     "image_id": "im-EPLcD1Qb367u1aNsuaGIjh",
