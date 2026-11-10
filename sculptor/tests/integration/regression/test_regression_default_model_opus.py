@@ -17,9 +17,8 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 # The chat-panel model selector renders the model's short name (see frontend
-# modelConstants.ts); the "(1M)" suffix distinguishes the 1M-context variant from
-# the 200K one, which carries the bare generation name.
-OPUS_MODEL_NAME = "Opus 5.5 (1M)"
+# modelConstants.ts).
+OPUS_MODEL_NAME = "Opus 5.5"
 
 
 @user_story("to have a new workspace default to Opus when I haven't picked a model")

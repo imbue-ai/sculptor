@@ -13,6 +13,7 @@ from httpx import ConnectError
 from httpx import Response
 from sculpt.auth import DEFAULT_CLAUDE_MODEL
 from sculpt.auth import MODEL_MAPPING
+from sculpt.auth import PINNED_MODEL_IDS
 from sculpt.commands.agent import _resolve_send_model
 from sculpt.main import app
 from sculpt.ws_client import AgentNotFoundError
@@ -1771,7 +1772,7 @@ class TestAgentSendModelDefault:
 
         assert result.exit_code == 0, result.output + (result.stderr or "")
         body = json.loads(route.calls.last.request.content)
-        assert body["model"] == LLMModel.CLAUDE_4_OPUS_200K.value
+        assert body["model"] == MODEL_MAPPING["opus"].value
 
     @respx.mock
     def test_send_null_current_model_falls_back_to_the_pinned_default(self, runner: CliRunner) -> None:
@@ -1804,6 +1805,34 @@ class TestAgentSendModelDefault:
 
     def test_resolve_send_model_explicit_wins_over_current(self) -> None:
         assert _resolve_send_model("haiku", "CLAUDE-4-SONNET", False) == MODEL_MAPPING["haiku"]
+
+    @pytest.mark.parametrize("shortcut", list(MODEL_MAPPING))
+    def test_resolve_send_model_family_shortcut_names_a_rolling_member(self, shortcut: str) -> None:
+        model = _resolve_send_model(shortcut, None, False)
+        assert model not in PINNED_MODEL_IDS.values()
+        assert not model.value.endswith("-200K")
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("claude-opus-5-5", LLMModel.CLAUDE_5_5_OPUS),
+            ("claude-opus-5-5[1m]", LLMModel.CLAUDE_5_5_OPUS),
+            ("Claude-Fable-5-2", LLMModel.CLAUDE_FABLE_5_2),
+            ("claude-sonnet-5-5", LLMModel.CLAUDE_5_5_SONNET),
+            ("claude-haiku-5-5", LLMModel.CLAUDE_5_5_HAIKU),
+        ],
+    )
+    def test_resolve_send_model_accepts_a_pinned_model_id(self, name: str, expected: LLMModel) -> None:
+        assert _resolve_send_model(name, None, False) == expected
+
+    def test_no_model_name_resolves_to_a_200k_variant(self) -> None:
+        reachable = [*MODEL_MAPPING.values(), *PINNED_MODEL_IDS.values()]
+        assert [model for model in reachable if model.value.endswith("-200K")] == []
+
+    def test_resolve_send_model_rejects_an_unknown_name(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with pytest.raises(typer.Exit):
+            _resolve_send_model("claude-opus-9", None, False)
+        assert "claude-opus-5-5" in capsys.readouterr().err
 
     def test_resolve_send_model_no_flag_no_current_uses_the_pinned_default(self) -> None:
         assert _resolve_send_model(None, None, False) == DEFAULT_CLAUDE_MODEL

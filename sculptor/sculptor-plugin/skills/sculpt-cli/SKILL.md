@@ -66,8 +66,11 @@ ask a question (WAITING). For polling instead, call the single-shot
 
 `agent send` **keeps the agent's current model** unless you pass `--model` —
 passing it switches the agent's model persistently for subsequent turns.
-`run` / `agent create` default to opus; pick `--model haiku`/`sonnet` for
-cheap disposable agents.
+`--model haiku`, `sonnet`, `opus`, or `fable` runs the newest model of that
+family, as the Claude CLI resolves it (`sonnet[1m]` and `opus[1m]` are accepted
+synonyms). A model id such as `claude-opus-5-5` or `claude-fable-5-2` runs that
+exact version. `run` / `agent create` default to the current pinned Opus; pick
+`--model haiku`/`sonnet` for cheap disposable agents.
 
 ## Agents waiting on a question
 

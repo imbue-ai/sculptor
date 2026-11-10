@@ -15,49 +15,62 @@ class LLMModel(StrEnum):
     """Built-in (Claude-harness) model identities.
 
     Append-only: every value is persisted (chat messages carry ``model_name``,
-    workspaces carry ``default_model``), so a value may be RETIRED from the picker
-    but never renamed or deleted — old rows must always deserialize. The
-    user-facing catalog is curated separately (frontend ``PRODUCTION_MODELS`` +
-    ``web/derived.py``), not by this enum's membership. Each member's name matches
-    the real model; ``MODEL_SHORTNAME_MAP`` maps it to the exact ``--model`` id.
+    workspaces carry ``default_model``), so a value may be RETIRED but never renamed
+    or deleted — old rows must always deserialize. ``MODEL_SHORTNAME_MAP``
+    (agents/default/constants.py) maps each member to the exact ``--model`` id it runs.
 
-    Per-release runbook (surface the newest generation, drop the oldest):
-      1. Add explicit members here named after the real model, and map each to its
-         exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).
-         A model whose bare id runs at 200K gets a 1M/200K pair (``[1m]`` + bare id);
-         one whose bare id already runs at 1M gets a single member.
-      2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),
-         insert at the correct spot in ``PRODUCTION_MODELS`` — that list is grouped by
-         family, so a new Opus heads the Opus block rather than the whole list — and
-         add to ``derived.py``'s streaming list.
-      3. For a new Opus, point the product default at the new member: ``userConfig.ts``
-         ``defaultModelAtom``, ``web/derived.py``'s fallback, and ``sculpt``'s
-         ``DEFAULT_CLAUDE_MODEL``.
-      4. Drop the oldest generation from the picker (remove it from ``PRODUCTION_MODELS``
-         only — its enum value, label, capabilities and streaming all stay, so a stored
-         selection still renders, keeps its toggles and streams).
-      5. Regenerate the API types + extension SDK + frozen schema, and bump the
-         managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.
-         Check what that build's own ``opus``, ``sonnet`` and ``haiku`` aliases resolve
-         to: the rolling members below follow them, so the bump moves them. Regenerate
-         last: this docstring is copied verbatim into both the SDK declarations and
-         the frozen schema, so editing it after generating leaves them stale.
+    Every family (Fable, Opus, Sonnet, Haiku) has the same three kinds of member:
+      - latest: a rolling member that runs the Claude CLI's own family alias, so it
+        follows whatever the CLI treats as newest. ``sculpt``'s family shortcuts
+        (``--model opus``) name it.
+      - current: the newest pinned generation. The product default
+        (``DEFAULT_LLM_MODEL``, ``sculpt``'s ``DEFAULT_CLAUDE_MODEL``) and ``BTW_MODEL``
+        name current members.
+      - previous: the pinned generation before it. Haiku has none for now: the Haiku
+        before 5.5 is 4.5, which has a 200K window and no effort support, so Haiku 5.5
+        becomes the first previous Haiku once a newer Haiku ships.
+    The picker (frontend ``PRODUCTION_MODELS``) offers these for each family, in that
+    order; older pinned generations stay defined but leave the picker.
+
+    One member per model: current models run a native 1M context window, so no model
+    gets a 1M/200K pair. The ``_200K`` members stay defined for old rows, but new
+    records never use one (``model_for_new_record``).
+
+    Per-release runbook (a new generation in one family):
+      1. Add a member named after the real model, and map it to its exact ``--model`` id.
+      2. Label + capability-gate it (``modelConstants.ts``, ``modelCapabilities.ts``, and
+         ``FAST_MODE_MODELS`` in constants.py) and add it to ``derived.py``'s streaming list.
+      3. Put it right after its family's latest entry in ``PRODUCTION_MODELS`` and drop
+         that family's old previous generation — from the picker only; its enum value, label,
+         capabilities and streaming all stay, so a stored selection still works.
+      4. Repoint the pinned pointers the family holds: for Opus, ``DEFAULT_LLM_MODEL``
+         (constants.py and ``modelConstants.ts``) and ``sculpt``'s ``DEFAULT_CLAUDE_MODEL``;
+         for Haiku, ``BTW_MODEL``. Tests fail until each names its family's newest pinned
+         member. The rolling members and ``sculpt``'s shortcuts need no change, and
+         ``sculpt`` derives the new model id from the member's name.
+      5. Bump the managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the
+         id, and check what its family aliases now resolve to: the rolling members follow
+         them, so their capabilities are a claim about whichever model each resolves to.
       6. Update what names models from outside this file. Integration and frontend
          tests select models by display name, and not only the ones about models —
          grep the tests for the retired entry's long name (``"Claude <gen> <family>"``)
-         rather than working from a list, since a test that merely needs *a* real
-         model also names one. Then the model claims in ``docs/specs``.
+         rather than working from a list. Then the model claims in ``docs/specs`` and
+         ``docs/help``.
+      7. Regenerate the API types + extension SDK + frozen schema last: this docstring
+         is copied verbatim into both the SDK declarations and the frozen schema, so
+         editing it after generating leaves them stale.
     """
 
-    # Rolling "latest Opus" alias (shortnames `opus[1m]` / `opus`). Retired from the
-    # GUI picker in favor of the explicit per-generation members below, but kept
-    # defined: old persisted rows still deserialize, and `sculpt --model opus`
-    # resolves through it to whatever the managed CLI treats as the newest Opus.
-    # Bumping CLAUDE_VERSION_RANGE can therefore land these members on a new
-    # generation with nothing in this repo changing.
+    # Rolling "latest Opus" alias (shortnames `opus[1m]` / `opus`). The picker's
+    # "Opus (latest)" entry and `sculpt --model opus` both run whatever the managed CLI
+    # treats as the newest Opus, so bumping CLAUDE_VERSION_RANGE can land these members
+    # on a new generation with nothing in this repo changing.
     CLAUDE_4_OPUS = "CLAUDE-4-OPUS"
     CLAUDE_4_OPUS_200K = "CLAUDE-4-OPUS-200K"
-    # Pinned Opus generations (explicit `--model` ids), newest first.
+    # Pinned Opus generations (explicit `--model` ids), newest first. Opus 4.7 and later
+    # run a native 1M window that the `[1m]` suffix leaves unchanged, so each `_200K`
+    # member from 4.7 on launches the same window as its sibling and stays defined only
+    # so persisted rows still deserialize; the picker offers one entry per generation.
     CLAUDE_5_5_OPUS = "CLAUDE-5-5-OPUS"
     CLAUDE_5_5_OPUS_200K = "CLAUDE-5-5-OPUS-200K"
     CLAUDE_5_OPUS = "CLAUDE-5-OPUS"
@@ -69,20 +82,35 @@ class LLMModel(StrEnum):
     CLAUDE_4_6_OPUS = "CLAUDE-4-6-OPUS"
     CLAUDE_4_6_OPUS_200K = "CLAUDE-4-6-OPUS-200K"
     # Rolling "latest Sonnet" / "latest Haiku" aliases (shortnames `sonnet[1m]` /
-    # `sonnet` / `haiku`). Like the rolling Opus alias, they are retired from the GUI
-    # picker but kept defined, and a managed CLI bump can move them to a new generation.
+    # `sonnet` / `haiku`). Like the rolling Opus alias, the picker offers them, and a
+    # managed CLI bump can move them to a new generation.
     CLAUDE_4_SONNET = "CLAUDE-4-SONNET"
     CLAUDE_4_SONNET_200K = "CLAUDE-4-SONNET-200K"
     CLAUDE_4_HAIKU = "CLAUDE-4-HAIKU"
-    # Pinned Sonnet and Haiku generations. Their 1M context is native, so each is a
-    # single entry with no 1M/200K split.
+    # Rolling "latest Fable" alias (`--model fable`), the Fable counterpart of the rolling
+    # members above.
+    CLAUDE_FABLE_LATEST = "CLAUDE-FABLE-LATEST"
+    # Pinned Sonnet and Haiku generations, newest first, one member each.
     CLAUDE_5_5_SONNET = "CLAUDE-5-5-SONNET"
+    CLAUDE_5_SONNET = "CLAUDE-5-SONNET"
     CLAUDE_5_5_HAIKU = "CLAUDE-5-5-HAIKU"
     # Fable (frontier line; single-context entries, no 1M/200K split).
     CLAUDE_FABLE_5 = "CLAUDE-FABLE-5"
     CLAUDE_FABLE_5_1 = "CLAUDE-FABLE-5-1"
+    CLAUDE_FABLE_5_2 = "CLAUDE-FABLE-5-2"
     FAKE_CLAUDE = "FAKE_CLAUDE"
     FAKE_CLAUDE_2 = "FAKE_CLAUDE_2"
+
+
+def model_for_new_record(model: LLMModel) -> LLMModel:
+    """The member a newly created record stores for `model`.
+
+    The `_200K` members stay defined so persisted rows still deserialize, but nothing
+    new is created with one: a 200K selection arriving from a stale client, a saved
+    setting or an older agent is stored as its 1M sibling, the same value without the
+    `-200K` suffix.
+    """
+    return LLMModel(model.value.removesuffix("-200K"))
 
 
 class EffortLevel(StrEnum):

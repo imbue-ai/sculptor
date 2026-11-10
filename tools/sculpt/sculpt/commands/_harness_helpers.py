@@ -12,7 +12,8 @@ from collections.abc import Sequence
 import httpx
 
 from sculpt.auth import DEFAULT_CLAUDE_MODEL
-from sculpt.auth import MODEL_MAPPING
+from sculpt.auth import invalid_model_message
+from sculpt.auth import resolve_claude_model
 from sculpt.client import Client
 from sculpt.client.api.default import get_pi_models
 from sculpt.client.api.default import list_terminal_agent_registrations
@@ -64,9 +65,9 @@ def resolve_harness_selection(harness: str | None, client: Client, json_output: 
 
 # Shared --model help so `agent create` and `run` describe the same contract.
 MODEL_HELP = (
-    "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable;"
-    + " defaults to the current pinned Opus). With --harness pi, a model from"
-    + " pi's own catalog:"
+    "The model to use: haiku, sonnet, opus, or fable for the newest model of that"
+    + " family, or a model id such as claude-opus-5-5 for one version (defaults to"
+    + " the current pinned Opus). With --harness pi, a model from pi's own catalog:"
     + " model_id, display name, or provider/model_id (default: pi's own"
     + " default model)."
 )
@@ -138,14 +139,13 @@ def resolve_prompt_models(
 
     Returns ``(claude_model, pi_backend_model)`` — exactly one is set: a pi
     harness takes a backend model from pi's own catalog, anything else a
-    Claude model from MODEL_MAPPING.
+    Claude model named by a family shortcut or a pinned model id.
     """
     if selection is not None and selection.agent_type == AgentTypeName.PI:
         return None, _resolve_pi_backend_model(client, json_output, model)
     if model is None:
         return DEFAULT_CLAUDE_MODEL, None
-    model_lower = model.lower()
-    if model_lower not in MODEL_MAPPING:
-        valid = ", ".join(MODEL_MAPPING.keys())
-        cli_error(f"Invalid model '{model}'. Valid options: {valid}", json_output=json_output)
-    return MODEL_MAPPING[model_lower], None
+    claude_model = resolve_claude_model(model)
+    if claude_model is None:
+        cli_error(invalid_model_message(model), json_output=json_output)
+    return claude_model, None

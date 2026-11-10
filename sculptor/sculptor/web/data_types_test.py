@@ -3,6 +3,7 @@
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.state.messages import LLMModel
 from sculptor.web.data_types import CreateWorkspaceRequestV2
+from sculptor.web.data_types import SendMessageRequest
 from sculptor.web.data_types import StartTaskRequest
 
 
@@ -20,3 +21,9 @@ def test_start_task_request_defaults_agent_type_to_none() -> None:
     # (defaulting to Claude); it is no longer hardcoded to Claude on the model.
     request = StartTaskRequest(prompt="hello", model=LLMModel.CLAUDE_4_SONNET)
     assert request.agent_type is None
+
+
+def test_a_request_naming_a_200k_variant_creates_records_with_its_1m_sibling() -> None:
+    # A stale client (local storage, a saved setting) can still send a retired 200K value.
+    assert SendMessageRequest(message="hi", model=LLMModel.CLAUDE_5_OPUS_200K).model == LLMModel.CLAUDE_5_OPUS
+    assert StartTaskRequest(prompt="hi", model=LLMModel.CLAUDE_4_OPUS_200K).model == LLMModel.CLAUDE_4_OPUS

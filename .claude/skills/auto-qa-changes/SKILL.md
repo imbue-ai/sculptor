@@ -576,7 +576,7 @@ The "Create new workspace" form is showing. I can see:
 - Prompt input area (placeholder: "Enter a prompt (optional)...")
 - Repo selector showing "manual_test_repo"
 - Branch selector showing "testing"
-- Model dropdown showing "Opus"
+- Model dropdown showing "Opus 5.5"
 - Blue submit arrow button at bottom right
 
 Form layout looks correct. All controls are visible and properly spaced.

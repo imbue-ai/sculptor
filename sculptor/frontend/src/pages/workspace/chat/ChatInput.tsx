@@ -19,6 +19,7 @@ import {
   DEFAULT_LLM_MODEL,
   getModelShortName,
   hasNoUsableModel,
+  modelForNewRecord,
   PRODUCTION_MODELS,
 } from "~/common/utils/modelConstants.ts";
 import { optional } from "~/common/utils/optional.ts";
@@ -194,7 +195,7 @@ export const ChatInput = ({
   const userConfig = useAtomValue(userConfigAtom);
   const [storedModel, setStoredModel] = useAtom(modelAtomFamily(agentId ?? ""));
   const setLastUsedModel = useSetAtom(lastUsedModelAtom);
-  const localModel = storedModel ?? (agentModel as LlmModel) ?? DEFAULT_LLM_MODEL;
+  const localModel = modelForNewRecord(storedModel ?? (agentModel as LlmModel) ?? DEFAULT_LLM_MODEL);
   // The mobile settings menu renders the model picker itself (desktop delegates
   // to ModelSelector), so it needs the same catalog handling: the fetched pi
   // list when the harness sources backend models, the built-in Claude list
@@ -224,7 +225,8 @@ export const ChatInput = ({
   // model as the user's most recently used. The MRU value is what new
   // workspaces default to when the "Default model" setting is "Most Recently
   // Used"; without recording it here the MRU default would never reflect the
-  // model the user is actually using and would fall back to Fable (SCU-1457).
+  // model the user is actually using and would fall back to DEFAULT_LLM_MODEL
+  // (SCU-1457).
   const handleModelChange = useCallback(
     (value: LlmModel) => {
       setStoredModel(value);

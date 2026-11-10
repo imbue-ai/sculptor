@@ -11,9 +11,10 @@ import typer
 import websockets.exceptions
 
 from sculpt.auth import DEFAULT_CLAUDE_MODEL
-from sculpt.auth import MODEL_MAPPING
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
+from sculpt.auth import invalid_model_message
+from sculpt.auth import resolve_claude_model
 from sculpt.client import Client
 from sculpt.client.api.default import create_workspace_agent
 from sculpt.client.api.default import delete_workspace_agent
@@ -584,8 +585,9 @@ def send(
         "--model",
         "-m",
         help=(
-            "The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)."
-            + " Defaults to the agent's current model."
+            "The model to use: haiku, sonnet, opus, or fable for the newest model of that"
+            + " family, or a model id such as claude-opus-5-5 for one version. Defaults to"
+            + " the agent's current model."
         ),
     ),
     file: list[str] | None = typer.Option(None, "--file", help="Files to include (repeatable)"),
@@ -652,11 +654,10 @@ def _resolve_send_model(model_option: str | None, current_model: str | None, jso
     server ignores it for them.
     """
     if model_option is not None:
-        model_lower = model_option.lower()
-        if model_lower not in MODEL_MAPPING:
-            valid = ", ".join(MODEL_MAPPING.keys())
-            cli_error(f"Invalid model '{model_option}'. Valid options: {valid}", json_output=json_output)
-        return MODEL_MAPPING[model_lower]
+        claude_model = resolve_claude_model(model_option)
+        if claude_model is None:
+            cli_error(invalid_model_message(model_option), json_output=json_output)
+        return claude_model
     if current_model:
         try:
             return LLMModel(current_model)

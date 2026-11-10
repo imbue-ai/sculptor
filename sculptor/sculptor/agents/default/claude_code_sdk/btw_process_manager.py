@@ -18,6 +18,7 @@ from typing import Literal
 from loguru import logger
 
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
+from sculptor.agents.default.constants import BTW_MODEL
 from sculptor.agents.default.constants import MODEL_SHORTNAME_MAP
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.database.models import TaskID
@@ -25,7 +26,6 @@ from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.interfaces.agents.errors import ClaudeBinaryNotFoundError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import WorkspaceID
-from sculptor.state.messages import LLMModel
 from sculptor.web.data_types import BtwUpdate
 
 BtwState = Literal["running", "done", "error", "aborted"]
@@ -67,7 +67,7 @@ def get_btw_claude_command(
         executable = f"{shlex.quote(sys.executable)} {shlex.quote(str(script_path))}"
     else:
         executable = f"env IS_SANDBOX=1 {shlex.quote(claude_binary_path)}"
-    model_shortname = MODEL_SHORTNAME_MAP[LLMModel.CLAUDE_4_HAIKU]
+    model_shortname = MODEL_SHORTNAME_MAP[BTW_MODEL]
     flags = [
         f"exec {executable}",
         f"--resume {shlex.quote(main_session_id)}",

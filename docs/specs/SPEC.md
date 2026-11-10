@@ -343,7 +343,7 @@ span several lines while still sending as one message.
 The input toolbar shapes how the agent handles your next message. A **model** picker chooses which
 model answers — present only for agents whose harness supports model selection (a Claude or Pi chat
 agent), and shown disabled with the current model for those that don't; the list it offers comes from
-the agent's own harness, so a **Claude** agent picks from the Claude models while a **Pi** agent
+the agent's own harness, so a **Claude** agent picks from the Claude models (for each of Fable, Opus, Sonnet, and Haiku: a "latest" entry that follows the Claude CLI's newest model of that family, then the current and previous generation, though Haiku has no previous generation listed yet) while a **Pi** agent
 surfaces Pi's live catalog grouped by provider — a single provider lists its models flat, while two or
 more providers cascade into a per-provider submenu, and a Pi agent with no authenticated providers
 shows the model picker **disabled** ("No models available") in place of the list — reached whenever
@@ -351,8 +351,8 @@ no provider is authenticated, including when a model had previously been selecte
 choice is dropped rather than shown; the action to fix it lives on the Send button (above). Changing a Pi agent's model takes
 effect in-session (a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
 selector budgets how much thinking it spends per step (Low, Medium, High, Extra High, Max — Extra High
-by default); a **fast mode** toggle trades some depth for quicker output on the models that support it
-(the pinned Opus generations) and is disabled for the rest; and **plan mode** makes the agent
+by default); a **fast mode** toggle trades a higher per-token price for quicker output on the models that support it
+(Opus 5.5, Opus 5, and Fable 5.2) and is disabled for the rest; and **plan mode** makes the agent
 investigate and propose a plan for your approval before it changes anything. The **+** button opens a
 menu for adding context — point the agent at specific **files and folders**, attach **images** (you
 can also drag-and-drop or paste them), or start a **skill** (→ §7.8 Skills); with the **Entity
@@ -828,7 +828,7 @@ The CLI is organized into a handful of command groups, each mapping to a domain 
 |---|---|
 | `sculpt repo` | List and show the **Projects (Repos)** Sculptor knows about — their paths and whether they're accessible. |
 | `sculpt workspace` | Create, list, show, rename, and delete **Workspaces**. Pick the isolation **strategy** (`--strategy`: `worktree`, `clone`, `in-place`); choose the source branch (`--branch`), a name for the workspace's new branch (`--branch-name`), its target (`--target-branch`), and a description (`--name`) at create time; `list` can span all repos (`--all`) or one (`--repo`), and `delete` takes `--yes`/`-y` to skip the prompt. |
-| `sculpt agent` | Manage **Agents** in a workspace: `create` one (with an opening `--prompt`, a `--model`, a `--name`, and a `--harness`), list (filter by status, scope with `--all` / `--repo` / `--workspace`), show, `send` a message (with `--model` and repeatable `--file` attachments), check `status`, read `messages` (`--limit`/`--tail`), `interrupt` a running one, rename, and delete. `send`, `status`, and `messages` all accept `--follow` to stream live. Choose the **model** (`haiku`, `sonnet`, `opus`, `fable`, plus the `sonnet[1m]` / `opus[1m]` 1M-context variants) and the **harness** (`--harness`: `Claude`, `Pi`, `Terminal`, or a registered terminal agent by display name; omitting it uses your most-recently-used type — the same default the GUI's **+** button applies, and an explicit choice updates that MRU). |
+| `sculpt agent` | Manage **Agents** in a workspace: `create` one (with an opening `--prompt`, a `--model`, a `--name`, and a `--harness`), list (filter by status, scope with `--all` / `--repo` / `--workspace`), show, `send` a message (with `--model` and repeatable `--file` attachments), check `status`, read `messages` (`--limit`/`--tail`), `interrupt` a running one, rename, and delete. `send`, `status`, and `messages` all accept `--follow` to stream live. Choose the **model** (`haiku`, `sonnet`, `opus`, `fable` for the newest model of that family, as the Claude CLI resolves it; `sonnet[1m]` / `opus[1m]` are accepted synonyms; or a model id such as `claude-opus-5-5` for one version; with no `--model`, `create` uses the current pinned Opus) and the **harness** (`--harness`: `Claude`, `Pi`, `Terminal`, or a registered terminal agent by display name; omitting it uses your most-recently-used type — the same default the GUI's **+** button applies, and an explicit choice updates that MRU). |
 | `sculpt run` | One-shot convenience: from a single prompt, create a workspace **and** an agent in one step, optionally `--follow` its output live. Accepts the same workspace-creation flags as `sculpt workspace create` (`--strategy`, `--branch`, `--target-branch`, …) plus `--model`, `--file`, and `--harness`. Because `run` always sends a prompt, a terminal/registered harness is rejected here (use `sculpt agent create` for those). |
 | `sculpt signal` | Run from **inside an agent's environment** to report state back to Sculptor — `busy`, `idle`, `waiting`, `files-changed` (refreshes the diff), or `session-id <id>` (which takes the session identifier as an argument). Lets terminal-based agents light up the same status indicators the GUI shows. |
 | `sculpt ui` | Let an agent **drive the app's UI** for the user: `open-file` (open a file or diff tab, with `--mode auto`/`diff`/`file`) and `webview-navigate` / `webview-refresh` (point or reload the in-app Browser panel, e.g. at a generated HTML report). |
@@ -1083,7 +1083,7 @@ used throughout:
 
 - **Target branch** — the branch a workspace's changes and pull request are measured against.
 - **Plan mode** — an agent investigates and proposes a plan for your approval before changing files.
-- **Fast mode** — trades some response depth for quicker output.
+- **Fast mode** — runs the same model faster at a higher per-token price, on the models that support it.
 - **Effort** — how much thinking an agent spends per step (Low … Max).
 - **Peek** — the hover popover previewing another workspace's agents, branch, and status.
 - **CI babysitter** — an opt-in helper that watches a pull request's CI and asks an agent to fix

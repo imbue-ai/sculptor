@@ -13,30 +13,34 @@ export const hasNoUsableModel = (
 ): boolean => sourcesBackendModels && Array.isArray(backendModels) && backendModels.length === 0;
 
 const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
-  // Retired rolling "latest" aliases — kept for load-compat and internal callers,
-  // not shown in the picker. Labeled honestly so a lingering selection doesn't
-  // masquerade as a pinned version.
-  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (latest, 1M)", long: "Claude Opus (latest, 1M)" },
+  // Rolling "latest" members: they run the Claude CLI's own family aliases, so the
+  // label can't name a version.
+  [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
   [LlmModel.CLAUDE_4_OPUS_200K]: { short: "Opus (latest)", long: "Claude Opus (latest)" },
-  [LlmModel.CLAUDE_4_SONNET]: { short: "Sonnet (latest, 1M)", long: "Claude Sonnet (latest, 1M)" },
+  [LlmModel.CLAUDE_4_SONNET]: { short: "Sonnet (latest)", long: "Claude Sonnet (latest)" },
   [LlmModel.CLAUDE_4_SONNET_200K]: { short: "Sonnet (latest)", long: "Claude Sonnet (latest)" },
   [LlmModel.CLAUDE_4_HAIKU]: { short: "Haiku (latest)", long: "Claude Haiku (latest)" },
-  // Pinned Opus generations.
-  [LlmModel.CLAUDE_5_5_OPUS]: { short: "Opus 5.5 (1M)", long: "Claude 5.5 Opus (1M)" },
+  [LlmModel.CLAUDE_FABLE_LATEST]: { short: "Fable (latest)", long: "Fable (latest)" },
+  // Pinned Opus generations. Opus 4.7 and later run a native 1M window whatever the
+  // id says, so each `_200K` member shares its sibling's label; only Opus 4.6 has a
+  // real 1M/200K split.
+  [LlmModel.CLAUDE_5_5_OPUS]: { short: "Opus 5.5", long: "Claude 5.5 Opus" },
   [LlmModel.CLAUDE_5_5_OPUS_200K]: { short: "Opus 5.5", long: "Claude 5.5 Opus" },
-  [LlmModel.CLAUDE_5_OPUS]: { short: "Opus 5 (1M)", long: "Claude 5 Opus (1M)" },
+  [LlmModel.CLAUDE_5_OPUS]: { short: "Opus 5", long: "Claude 5 Opus" },
   [LlmModel.CLAUDE_5_OPUS_200K]: { short: "Opus 5", long: "Claude 5 Opus" },
-  [LlmModel.CLAUDE_4_8_OPUS]: { short: "Opus 4.8 (1M)", long: "Claude 4.8 Opus (1M)" },
+  [LlmModel.CLAUDE_4_8_OPUS]: { short: "Opus 4.8", long: "Claude 4.8 Opus" },
   [LlmModel.CLAUDE_4_8_OPUS_200K]: { short: "Opus 4.8", long: "Claude 4.8 Opus" },
-  [LlmModel.CLAUDE_4_7_OPUS]: { short: "Opus 4.7 (1M)", long: "Claude 4.7 Opus (1M)" },
+  [LlmModel.CLAUDE_4_7_OPUS]: { short: "Opus 4.7", long: "Claude 4.7 Opus" },
   [LlmModel.CLAUDE_4_7_OPUS_200K]: { short: "Opus 4.7", long: "Claude 4.7 Opus" },
   [LlmModel.CLAUDE_4_6_OPUS]: { short: "Opus 4.6 (1M)", long: "Claude 4.6 Opus (1M)" },
   [LlmModel.CLAUDE_4_6_OPUS_200K]: { short: "Opus 4.6", long: "Claude 4.6 Opus" },
   // Pinned Sonnet and Haiku generations.
   [LlmModel.CLAUDE_5_5_SONNET]: { short: "Sonnet 5.5", long: "Claude 5.5 Sonnet" },
+  [LlmModel.CLAUDE_5_SONNET]: { short: "Sonnet 5", long: "Claude 5 Sonnet" },
   [LlmModel.CLAUDE_5_5_HAIKU]: { short: "Haiku 5.5", long: "Claude 5.5 Haiku" },
   [LlmModel.CLAUDE_FABLE_5]: { short: "Fable 5", long: "Fable 5" },
   [LlmModel.CLAUDE_FABLE_5_1]: { short: "Fable 5.1", long: "Fable 5.1" },
+  [LlmModel.CLAUDE_FABLE_5_2]: { short: "Fable 5.2", long: "Fable 5.2" },
   [LlmModel.FAKE_CLAUDE]: { short: "Fake Claude", long: "Fake Claude" },
   [LlmModel.FAKE_CLAUDE_2]: { short: "Fake Claude 2", long: "Fake Claude 2" },
 } as const;
@@ -55,17 +59,28 @@ export const getModelLongName = (model: LlmModel): string => modelNames[model]?.
  */
 export const DEFAULT_LLM_MODEL: LlmModel = LlmModel.CLAUDE_5_5_OPUS;
 
-// Models offered in production model pickers (desktop selector + mobile `+` menu).
+/**
+ * The model a new selection uses for `model`. The 200K members stay defined so stored
+ * selections still load, but nothing new is created with one: a 200K value from local
+ * storage, a saved setting or an older agent becomes its 1M sibling, the same value
+ * without the `-200K` suffix. The backend applies the same rule to every request.
+ */
+export const modelForNewRecord = (model: LlmModel): LlmModel => model.replace(/-200K$/, "") as LlmModel;
+
+// Models offered in production model pickers (desktop selector + mobile `+` menu):
+// each family's rolling latest entry, then its current and previous pinned generation.
+// Haiku has no previous entry yet (see `LLMModel`).
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
+  LlmModel.CLAUDE_FABLE_LATEST,
+  LlmModel.CLAUDE_FABLE_5_2,
   LlmModel.CLAUDE_FABLE_5_1,
-  LlmModel.CLAUDE_FABLE_5,
-  LlmModel.CLAUDE_5_5_OPUS_200K,
+  LlmModel.CLAUDE_4_OPUS,
   LlmModel.CLAUDE_5_5_OPUS,
-  LlmModel.CLAUDE_5_OPUS_200K,
   LlmModel.CLAUDE_5_OPUS,
-  LlmModel.CLAUDE_4_8_OPUS_200K,
-  LlmModel.CLAUDE_4_8_OPUS,
+  LlmModel.CLAUDE_4_SONNET,
   LlmModel.CLAUDE_5_5_SONNET,
+  LlmModel.CLAUDE_5_SONNET,
+  LlmModel.CLAUDE_4_HAIKU,
   LlmModel.CLAUDE_5_5_HAIKU,
 ];
 

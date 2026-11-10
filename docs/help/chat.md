@@ -11,9 +11,14 @@ progress appear in the panel above.
 ## Model picker
 
 The model picker sits in the chat input toolbar, to the left of the send button.
-Click it to switch the model for the current agent session. The change takes
+For Claude agents it lists each model family (Fable, Opus, Sonnet, and Haiku) as
+a "latest" entry, then the current and previous generation; Haiku has no previous
+entry yet. A "latest" entry runs the newest model your Claude CLI knows, so it
+moves to each new model as it ships; a numbered entry stays on that version.
+Click the picker to switch the model for the current agent session. The change takes
 effect on the next message you send. You can set the default model for new
-agents under **Settings > Claude**.
+agents under **Settings > Claude**; until you do, new agents use the model you
+picked most recently, or Opus 5.5 if you haven't picked one yet.
 
 ![Model picker](images/model_picker.png)
 
@@ -66,9 +71,11 @@ approval before making any changes. Useful for larger tasks where you want to
 review the approach first. Toggle off to return to the default "act first"
 behavior.
 
-**Fast mode** (lightning-bolt icon) — Toggle on for faster output. Trades some
-depth for speed; useful for quick iteration. You can set the default for new
-agents under **Settings > Claude**.
+**Fast mode** (lightning-bolt icon) — Toggle on for faster output from the same
+model, at a higher per-token price; useful for quick iteration. It appears only
+for models that support it: Opus 5.5, Opus 5, and Fable 5.2. On Claude
+subscription plans, fast mode draws on usage credits even when your plan has
+usage left. You can set the default for new agents under **Settings > Claude**.
 
 **Effort level** (brain icon with a fill bar) — Click to pick how much thinking
 the agent budgets for each step: **Low**, **Medium**, **High**, **Extra High**

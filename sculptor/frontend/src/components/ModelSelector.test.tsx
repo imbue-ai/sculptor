@@ -45,7 +45,7 @@ describe("ModelSelectOptions", () => {
   const renderOptions = (models?: ReadonlyArray<ModelOption>, optionTestId?: string): RenderResult =>
     render(
       withStore(
-        <Select.Root open value={models ? models[0].modelId : LlmModel.CLAUDE_FABLE_5}>
+        <Select.Root open value={models ? models[0].modelId : LlmModel.CLAUDE_FABLE_5_2}>
           <Select.Trigger />
           <Select.Content>
             <ModelSelectOptions models={models} optionTestId={optionTestId} />

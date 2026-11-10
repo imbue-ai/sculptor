@@ -15,6 +15,7 @@ from loguru import logger
 from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
+from sculptor.agents.default.constants import FAST_MODE_MODELS
 from sculptor.config.user_config import NightMode
 from sculptor.config.user_config import is_night_mode_active
 from sculptor.foundation.async_monkey_patches import log_exception
@@ -45,18 +46,21 @@ from sculptor.state.claude_state import TextDeltaEvent
 from sculptor.state.claude_state import ToolBlockStartEvent
 from sculptor.state.claude_state import ToolInputDeltaEvent
 from sculptor.state.claude_state import parse_claude_code_json_lines_simple
+from sculptor.state.messages import LLMModel
 
 
-def resolve_fast_mode(is_fast_mode_requested: bool, night_mode: NightMode, now: datetime) -> bool:
+def resolve_fast_mode(
+    is_fast_mode_requested: bool, model_name: LLMModel | None, night_mode: NightMode, now: datetime
+) -> bool:
     """Return the fast-mode setting a turn actually launches with.
 
-    Night mode is resolved here, at launch, rather than where the user picks fast
-    mode: a turn can sit queued for hours, be started by the CI babysitter, or be
-    resumed after a restart, and none of those paths re-read the sender's choice.
-    Resolving without writing back also means the stored preference returns on its
-    own once night mode lapses.
+    Night mode and the model's fast-mode support are resolved here, at launch,
+    rather than where the user picks fast mode: a turn can sit queued for hours, be
+    started by the CI babysitter, or be resumed after a restart, and none of those
+    paths re-check the sender's choice. Resolving without writing back also means
+    the stored preference returns on its own once night mode lapses.
     """
-    return is_fast_mode_requested and not is_night_mode_active(night_mode, now)
+    return is_fast_mode_requested and model_name in FAST_MODE_MODELS and not is_night_mode_active(night_mode, now)
 
 
 def get_claude_command(

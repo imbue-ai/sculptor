@@ -13,6 +13,8 @@ from sculptor.agents.default.claude_code_sdk.btw_process_manager import BtwProce
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import get_btw_claude_command
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
+from sculptor.agents.default.constants import BTW_MODEL
+from sculptor.agents.default.constants import MODEL_SHORTNAME_MAP
 from sculptor.interfaces.agents.errors import ClaudeBinaryNotFoundError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import TaskID
@@ -94,7 +96,7 @@ def test_get_btw_claude_command_flags() -> None:
     assert "--fork-session" in tokens
     assert "--no-session-persistence" in tokens
     assert tokens[tokens.index("-p") + 1] == "why did you pick sqlite?"
-    assert tokens[tokens.index("--model") + 1] == "haiku"
+    assert tokens[tokens.index("--model") + 1] == MODEL_SHORTNAME_MAP[BTW_MODEL]
     assert tokens[tokens.index("--tools") + 1] == ""
     assert "--strict-mcp-config" in tokens
     assert "--disable-slash-commands" in tokens

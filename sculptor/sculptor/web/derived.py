@@ -15,6 +15,7 @@ from pydantic import Tag
 from pydantic import ValidationError
 from pydantic import computed_field
 
+from sculptor.agents.default.constants import DEFAULT_LLM_MODEL
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
@@ -418,12 +419,12 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             if isinstance(message, ChatInputUserMessage) and message.model_name is not None:
                 return message.model_name
         # Fall back to the model selected at agent creation time, then to the
-        # product default: the newest pinned 1M-context Opus. Fable stays available
-        # in the switcher but is not the default.
+        # product default. Fable stays available in the switcher but is not the
+        # default.
         input_data = self.task.input_data
         if isinstance(input_data, AgentTaskInputsV2) and input_data.default_model is not None:
             return input_data.default_model
-        return LLMModel.CLAUDE_5_5_OPUS
+        return DEFAULT_LLM_MODEL
 
     @computed_field
     @property
@@ -494,9 +495,12 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             LLMModel.CLAUDE_4_6_OPUS_200K,
             LLMModel.CLAUDE_4_HAIKU,
             LLMModel.CLAUDE_5_5_SONNET,
+            LLMModel.CLAUDE_5_SONNET,
             LLMModel.CLAUDE_5_5_HAIKU,
             LLMModel.CLAUDE_FABLE_5,
             LLMModel.CLAUDE_FABLE_5_1,
+            LLMModel.CLAUDE_FABLE_5_2,
+            LLMModel.CLAUDE_FABLE_LATEST,
             LLMModel.FAKE_CLAUDE,
             LLMModel.FAKE_CLAUDE_2,
         )

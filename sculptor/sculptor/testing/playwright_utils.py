@@ -819,7 +819,7 @@ def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes
 
 
 def send_message_via_api(
-    page: Page, *, message: str, files: Sequence[str], model: LLMModel = LLMModel.CLAUDE_4_OPUS_200K
+    page: Page, *, message: str, files: Sequence[str], model: LLMModel = LLMModel.CLAUDE_4_OPUS
 ) -> None:
     """Send a chat message (with attached upload ids) to the active agent via the API.
 

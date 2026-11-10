@@ -2,6 +2,7 @@
 
 import pytest
 
+from sculptor.agents.default.constants import DEFAULT_LLM_MODEL
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -40,8 +41,8 @@ def _make_view_without_a_selected_model(default_model: LLMModel | None = None) -
     return view
 
 
-def test_unselected_model_falls_back_to_the_pinned_1m_opus() -> None:
-    assert _make_view_without_a_selected_model().model == LLMModel.CLAUDE_5_5_OPUS
+def test_unselected_model_falls_back_to_the_product_default() -> None:
+    assert _make_view_without_a_selected_model().model == DEFAULT_LLM_MODEL
 
 
 def test_the_default_model_supports_smooth_streaming() -> None:

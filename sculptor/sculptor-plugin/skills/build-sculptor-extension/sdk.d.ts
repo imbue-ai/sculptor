@@ -455,10 +455,13 @@ declare const LlmModel: {
 	readonly CLAUDE_4_SONNET: "CLAUDE-4-SONNET";
 	readonly CLAUDE_4_SONNET_200K: "CLAUDE-4-SONNET-200K";
 	readonly CLAUDE_4_HAIKU: "CLAUDE-4-HAIKU";
+	readonly CLAUDE_FABLE_LATEST: "CLAUDE-FABLE-LATEST";
 	readonly CLAUDE_5_5_SONNET: "CLAUDE-5-5-SONNET";
+	readonly CLAUDE_5_SONNET: "CLAUDE-5-SONNET";
 	readonly CLAUDE_5_5_HAIKU: "CLAUDE-5-5-HAIKU";
 	readonly CLAUDE_FABLE_5: "CLAUDE-FABLE-5";
 	readonly CLAUDE_FABLE_5_1: "CLAUDE-FABLE-5-1";
+	readonly CLAUDE_FABLE_5_2: "CLAUDE-FABLE-5-2";
 	readonly FAKE_CLAUDE: "FAKE_CLAUDE";
 	readonly FAKE_CLAUDE_2: "FAKE_CLAUDE_2";
 };
@@ -468,38 +471,50 @@ declare const LlmModel: {
  * Built-in (Claude-harness) model identities.
  *
  * Append-only: every value is persisted (chat messages carry ``model_name``,
- * workspaces carry ``default_model``), so a value may be RETIRED from the picker
- * but never renamed or deleted — old rows must always deserialize. The
- * user-facing catalog is curated separately (frontend ``PRODUCTION_MODELS`` +
- * ``web/derived.py``), not by this enum's membership. Each member's name matches
- * the real model; ``MODEL_SHORTNAME_MAP`` maps it to the exact ``--model`` id.
+ * workspaces carry ``default_model``), so a value may be RETIRED but never renamed
+ * or deleted — old rows must always deserialize. ``MODEL_SHORTNAME_MAP``
+ * (agents/default/constants.py) maps each member to the exact ``--model`` id it runs.
  *
- * Per-release runbook (surface the newest generation, drop the oldest):
- * 1. Add explicit members here named after the real model, and map each to its
- * exact ``--model`` id in ``MODEL_SHORTNAME_MAP`` (agents/default/constants.py).
- * A model whose bare id runs at 200K gets a 1M/200K pair (``[1m]`` + bare id);
- * one whose bare id already runs at 1M gets a single member.
- * 2. Label + capability-gate them (``modelConstants.ts``, ``modelCapabilities.ts``),
- * insert at the correct spot in ``PRODUCTION_MODELS`` — that list is grouped by
- * family, so a new Opus heads the Opus block rather than the whole list — and
- * add to ``derived.py``'s streaming list.
- * 3. For a new Opus, point the product default at the new member: ``userConfig.ts``
- * ``defaultModelAtom``, ``web/derived.py``'s fallback, and ``sculpt``'s
- * ``DEFAULT_CLAUDE_MODEL``.
- * 4. Drop the oldest generation from the picker (remove it from ``PRODUCTION_MODELS``
- * only — its enum value, label, capabilities and streaming all stay, so a stored
- * selection still renders, keeps its toggles and streams).
- * 5. Regenerate the API types + extension SDK + frozen schema, and bump the
- * managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the id.
- * Check what that build's own ``opus``, ``sonnet`` and ``haiku`` aliases resolve
- * to: the rolling members below follow them, so the bump moves them. Regenerate
- * last: this docstring is copied verbatim into both the SDK declarations and
- * the frozen schema, so editing it after generating leaves them stale.
+ * Every family (Fable, Opus, Sonnet, Haiku) has the same three kinds of member:
+ * - latest: a rolling member that runs the Claude CLI's own family alias, so it
+ * follows whatever the CLI treats as newest. ``sculpt``'s family shortcuts
+ * (``--model opus``) name it.
+ * - current: the newest pinned generation. The product default
+ * (``DEFAULT_LLM_MODEL``, ``sculpt``'s ``DEFAULT_CLAUDE_MODEL``) and ``BTW_MODEL``
+ * name current members.
+ * - previous: the pinned generation before it. Haiku has none for now: the Haiku
+ * before 5.5 is 4.5, which has a 200K window and no effort support, so Haiku 5.5
+ * becomes the first previous Haiku once a newer Haiku ships.
+ * The picker (frontend ``PRODUCTION_MODELS``) offers these for each family, in that
+ * order; older pinned generations stay defined but leave the picker.
+ *
+ * One member per model: current models run a native 1M context window, so no model
+ * gets a 1M/200K pair. The ``_200K`` members stay defined for old rows, but new
+ * records never use one (``model_for_new_record``).
+ *
+ * Per-release runbook (a new generation in one family):
+ * 1. Add a member named after the real model, and map it to its exact ``--model`` id.
+ * 2. Label + capability-gate it (``modelConstants.ts``, ``modelCapabilities.ts``, and
+ * ``FAST_MODE_MODELS`` in constants.py) and add it to ``derived.py``'s streaming list.
+ * 3. Put it right after its family's latest entry in ``PRODUCTION_MODELS`` and drop
+ * that family's old previous generation — from the picker only; its enum value, label,
+ * capabilities and streaming all stay, so a stored selection still works.
+ * 4. Repoint the pinned pointers the family holds: for Opus, ``DEFAULT_LLM_MODEL``
+ * (constants.py and ``modelConstants.ts``) and ``sculpt``'s ``DEFAULT_CLAUDE_MODEL``;
+ * for Haiku, ``BTW_MODEL``. Tests fail until each names its family's newest pinned
+ * member. The rolling members and ``sculpt``'s shortcuts need no change, and
+ * ``sculpt`` derives the new model id from the member's name.
+ * 5. Bump the managed Claude CLI (``CLAUDE_VERSION_RANGE``) to a build that knows the
+ * id, and check what its family aliases now resolve to: the rolling members follow
+ * them, so their capabilities are a claim about whichever model each resolves to.
  * 6. Update what names models from outside this file. Integration and frontend
  * tests select models by display name, and not only the ones about models —
  * grep the tests for the retired entry's long name (``"Claude <gen> <family>"``)
- * rather than working from a list, since a test that merely needs *a* real
- * model also names one. Then the model claims in ``docs/specs``.
+ * rather than working from a list. Then the model claims in ``docs/specs`` and
+ * ``docs/help``.
+ * 7. Regenerate the API types + extension SDK + frozen schema last: this docstring
+ * is copied verbatim into both the SDK declarations and the frozen schema, so
+ * editing it after generating leaves them stale.
  */
 export type LlmModel = typeof LlmModel[keyof typeof LlmModel];
 declare const ModelCatalogState: {

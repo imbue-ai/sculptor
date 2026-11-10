@@ -126,6 +126,7 @@ class ClaudeProcessManager:
         self._setup_state_provider = setup_state_provider
         self._project_naming_pattern = project_naming_pattern
         self._harness: ClaudeCodeHarness = harness
+        self._model_name: LLMModel | None = None
         self._fast_mode: bool = False
         self._effort: str | None = "xhigh"
         self._handle_user_message_callback = handle_user_message_callback
@@ -209,7 +210,7 @@ class ClaudeProcessManager:
 
         Model-less turns (UserQuestionAnswerMessage, answer-continuation
         resumes) continue the conversation with the in-memory launch settings
-        — the command shape (real vs fake CLI), fast mode, and effort — which a
+        — the command shape (real vs fake CLI), model, fast mode, and effort — which a
         manager constructed after a backend restart would otherwise reset to
         defaults. The runner calls this with the last processed chat turn's
         settings so such turns relaunch the CLI the same way the conversation
@@ -218,6 +219,7 @@ class ClaudeProcessManager:
         if model_name is None:
             return
         self._is_fake_claude = model_name in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2)
+        self._model_name = model_name
         self._fast_mode = fast_mode
         self._effort = effort
 
@@ -693,6 +695,7 @@ class ClaudeProcessManager:
                 and message.model_name is not None
             ):
                 self._is_fake_claude = message.model_name in (LLMModel.FAKE_CLAUDE, LLMModel.FAKE_CLAUDE_2)
+                self._model_name = message.model_name
                 self._fast_mode = message.fast_mode
                 self._effort = message.effort
             maybe_model = (
@@ -702,7 +705,7 @@ class ClaudeProcessManager:
             )
             plugin_dirs = get_plugin_dirs()
             is_fast_mode_enabled = resolve_fast_mode(
-                self._fast_mode, get_user_config_instance().night_mode, datetime.now(timezone.utc)
+                self._fast_mode, self._model_name, get_user_config_instance().night_mode, datetime.now(timezone.utc)
             )
             claude_command = get_claude_command(
                 system_prompt=combined_system_prompt,
