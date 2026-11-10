@@ -81,6 +81,7 @@ class LLMModel(StrEnum):
     # Fable (frontier line; single-context entries, no 1M/200K split).
     CLAUDE_FABLE_5 = "CLAUDE-FABLE-5"
     CLAUDE_FABLE_5_1 = "CLAUDE-FABLE-5-1"
+    CLAUDE_FABLE_5_2 = "CLAUDE-FABLE-5-2"
     FAKE_CLAUDE = "FAKE_CLAUDE"
     FAKE_CLAUDE_2 = "FAKE_CLAUDE_2"
 

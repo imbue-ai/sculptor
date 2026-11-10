@@ -459,6 +459,7 @@ declare const LlmModel: {
 	readonly CLAUDE_5_5_HAIKU: "CLAUDE-5-5-HAIKU";
 	readonly CLAUDE_FABLE_5: "CLAUDE-FABLE-5";
 	readonly CLAUDE_FABLE_5_1: "CLAUDE-FABLE-5-1";
+	readonly CLAUDE_FABLE_5_2: "CLAUDE-FABLE-5-2";
 	readonly FAKE_CLAUDE: "FAKE_CLAUDE";
 	readonly FAKE_CLAUDE_2: "FAKE_CLAUDE_2";
 };

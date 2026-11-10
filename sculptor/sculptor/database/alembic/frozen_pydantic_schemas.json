@@ -592,6 +592,7 @@
               "CLAUDE-5-5-HAIKU",
               "CLAUDE-FABLE-5",
               "CLAUDE-FABLE-5-1",
+              "CLAUDE-FABLE-5-2",
               "FAKE_CLAUDE",
               "FAKE_CLAUDE_2"
             ],
@@ -2040,6 +2041,7 @@
               "CLAUDE-5-5-HAIKU",
               "CLAUDE-FABLE-5",
               "CLAUDE-FABLE-5-1",
+              "CLAUDE-FABLE-5-2",
               "FAKE_CLAUDE",
               "FAKE_CLAUDE_2"
             ],
@@ -3014,6 +3016,7 @@
               "CLAUDE-5-5-HAIKU",
               "CLAUDE-FABLE-5",
               "CLAUDE-FABLE-5-1",
+              "CLAUDE-FABLE-5-2",
               "FAKE_CLAUDE",
               "FAKE_CLAUDE_2"
             ],

@@ -87,6 +87,10 @@ const MODEL_CAPABILITIES: Partial<Record<LlmModel, ModelCapabilities>> = {
     supportsFileAttachments: true,
     supportsFastMode: false,
   },
+  [LlmModel.CLAUDE_FABLE_5_2]: {
+    supportsFileAttachments: true,
+    supportsFastMode: false,
+  },
   // Test-only models. FAKE_CLAUDE supports fast mode so fast-mode tests using
   // the default test model work out of the box. FAKE_CLAUDE_2 does NOT support
   // fast mode so cross-model contamination tests can send on a fake, non-fast

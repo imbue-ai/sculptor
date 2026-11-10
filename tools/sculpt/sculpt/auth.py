@@ -36,7 +36,7 @@ MODEL_MAPPING: dict[str, LLMModel] = {
     "sonnet[1m]": LLMModel.CLAUDE_4_SONNET,
     "opus": LLMModel.CLAUDE_4_OPUS_200K,
     "opus[1m]": LLMModel.CLAUDE_4_OPUS,
-    "fable": LLMModel.CLAUDE_FABLE_5,
+    "fable": LLMModel.CLAUDE_FABLE_5_2,
 }
 
 # What an unspecified --model resolves to, kept out of MODEL_MAPPING on purpose. The

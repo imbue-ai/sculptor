@@ -37,6 +37,7 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   [LlmModel.CLAUDE_5_5_HAIKU]: { short: "Haiku 5.5", long: "Claude 5.5 Haiku" },
   [LlmModel.CLAUDE_FABLE_5]: { short: "Fable 5", long: "Fable 5" },
   [LlmModel.CLAUDE_FABLE_5_1]: { short: "Fable 5.1", long: "Fable 5.1" },
+  [LlmModel.CLAUDE_FABLE_5_2]: { short: "Fable 5.2", long: "Fable 5.2" },
   [LlmModel.FAKE_CLAUDE]: { short: "Fake Claude", long: "Fake Claude" },
   [LlmModel.FAKE_CLAUDE_2]: { short: "Fake Claude 2", long: "Fake Claude 2" },
 } as const;
@@ -57,8 +58,8 @@ export const DEFAULT_LLM_MODEL: LlmModel = LlmModel.CLAUDE_5_5_OPUS;
 
 // Models offered in production model pickers (desktop selector + mobile `+` menu).
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
+  LlmModel.CLAUDE_FABLE_5_2,
   LlmModel.CLAUDE_FABLE_5_1,
-  LlmModel.CLAUDE_FABLE_5,
   LlmModel.CLAUDE_5_5_OPUS_200K,
   LlmModel.CLAUDE_5_5_OPUS,
   LlmModel.CLAUDE_5_OPUS_200K,
