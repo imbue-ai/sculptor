@@ -4,6 +4,7 @@ from pathlib import Path
 from sculptor.config.user_config import DependencyPaths
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
@@ -62,6 +63,33 @@ def test_changed_file_paths_after_rebaselining_on_uncommitted_changes(
     (git_repo / "second.txt").write_text("second\n")
 
     assert tracker.get_changed_file_paths() == ["second.txt"]
+
+
+def test_changed_file_paths_include_a_lone_unstaged_edit_to_a_tracked_file(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+    tracker = make_turn_diff_tracker(environment)
+
+    (git_repo / "file.txt").write_text("edited\n")
+
+    assert tracker.get_changed_file_paths() == ["file.txt"]
+
+
+def test_tool_diff_after_rebaselining_on_an_unstaged_edit_is_measured_from_that_baseline(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+    tracker = make_turn_diff_tracker(environment)
+    (git_repo / "file.txt").write_text("uncommitted\n")
+    tracker.rebaseline()
+    (git_repo / "file.txt").write_text("edited\n")
+
+    diff = tracker.compute_diff_for_tool(AgentToolName.EDIT, {"file_path": str(git_repo / "file.txt")})
+
+    assert diff is not None
+    assert "-uncommitted" in diff
+    assert "+edited" in diff
 
 
 def test_to_repo_relative_path_strips_the_checkout_root_and_keeps_outside_paths(

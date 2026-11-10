@@ -460,7 +460,8 @@ def _remove_temp_objects_dir(environment: AgentExecutionEnvironment, objects_dir
 
 def _has_untracked_or_unstaged_changes(git: GitCli, checkout: Path) -> bool:
     result = git.run_git(["status", "--porcelain"], checkout, is_read_only=True, timeout=None)
-    for line in result.stdout.strip().split("\n"):
+    # Not stripped: the leading space of " M path" is what marks the change as unstaged.
+    for line in result.stdout.split("\n"):
         if not line:
             continue
         # Check for unstaged (2nd char not space) or untracked (??)
