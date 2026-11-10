@@ -90,11 +90,12 @@ def setup_instance(port):
     api(port, "POST", "/config/complete")
     projects = api(port, "GET", "/projects")
     project_id = projects[0]["objectId"]
+    workspace = api(port, "POST", "/workspaces", {"projectId": project_id, "initializationStrategy": "IN_PLACE"})
     task = api(port, "POST", f"/projects/{project_id}/tasks", {
         "prompt": "Say hello",
         "interface": "API",
         "model": "CLAUDE-4-SONNET",
-        "mode": "IN_PLACE",
+        "workspaceId": workspace["objectId"],
     })
     return task["workspaceId"], task["id"]
 
