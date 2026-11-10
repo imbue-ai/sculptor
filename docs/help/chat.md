@@ -13,7 +13,8 @@ progress appear in the panel above.
 The model picker sits in the chat input toolbar, to the left of the send button.
 Click it to switch the model for the current agent session. The change takes
 effect on the next message you send. You can set the default model for new
-agents under **Settings > Claude**.
+agents under **Settings > Claude**; until you do, new agents use the model you
+picked most recently, or Opus 5.5 if you haven't picked one yet.
 
 ![Model picker](images/model_picker.png)
 

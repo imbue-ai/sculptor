@@ -224,7 +224,8 @@ export const ChatInput = ({
   // model as the user's most recently used. The MRU value is what new
   // workspaces default to when the "Default model" setting is "Most Recently
   // Used"; without recording it here the MRU default would never reflect the
-  // model the user is actually using and would fall back to Fable (SCU-1457).
+  // model the user is actually using and would fall back to DEFAULT_LLM_MODEL
+  // (SCU-1457).
   const handleModelChange = useCallback(
     (value: LlmModel) => {
       setStoredModel(value);
