@@ -17,6 +17,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.utils import get_playwright_modifier_key
+from sculptor.testing.utils import wait_for_keyboard_drag_listeners
 
 _ARROW_BY_DIRECTION: dict[str, str] = {
     "left": "ArrowLeft",
@@ -57,9 +58,10 @@ def drag_panel_to_section(
     the helper presses it until the target section reports ``data-drop-active`` (the
     isDropTargetAtom slice), then drops. Verifies the panel tab lands in the target.
 
-    The KeyboardSensor picks up on Space but attaches its arrow/end keydown listener on
-    a deferred tick AND marks the source section as the initial drop target, so the
-    helper waits for that source highlight before pressing arrows — otherwise the first
+    The KeyboardSensor picks up on Space and marks the source section as the initial drop
+    target at once, but attaches its arrow/end keydown listener on a deferred tick, so the
+    helper waits for that source highlight and then for the tick
+    (``wait_for_keyboard_drag_listeners``) before pressing arrows — otherwise the first
     arrow is dispatched before the listener is live and is silently dropped. Pickup
     itself is retried per ``_PICKUP_ATTEMPTS``: a stolen-focus Space may have gone to
     (and opened) another control, so each retry dismisses whatever it opened with
@@ -73,6 +75,7 @@ def drag_panel_to_section(
         page.keyboard.press("Space")  # pick up
         try:
             expect(source).to_have_attribute("data-drop-active", "true", timeout=5_000)
+            wait_for_keyboard_drag_listeners(page)
             break
         except AssertionError:
             if attempt == _PICKUP_ATTEMPTS - 1:
