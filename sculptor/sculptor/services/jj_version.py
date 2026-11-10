@@ -8,11 +8,11 @@ are recorded here, keyed by the Rust target triple in the release asset names. K
 module import-free.
 """
 
-JJ_PINNED_VERSION = "0.46.0"
+JJ_PINNED_VERSION = "0.47.1"
 
 JJ_PINNED_SHA256_BY_TARGET_TRIPLE = {
-    "aarch64-apple-darwin": "43daa37ce0f9716cdf6fb65a29cbcae74a3160aef048cf3cb3d166d41cb4ab58",
-    "x86_64-apple-darwin": "10d941de276c7c5074ef5d395312813b4575f4ce92cb9c0b05738efb90bd3b60",
-    "aarch64-unknown-linux-musl": "80e28f7501c11e50e0ca06cd6a1fa1d982cff9cc59bfe4411a9d36aa501d867e",
-    "x86_64-unknown-linux-musl": "fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08",
+    "aarch64-apple-darwin": "50129b527f7cd6aef82aebd4bb2b670bb56766adc509ef3279c4327aa3592255",
+    "x86_64-apple-darwin": "ce7ac70c3b7cf90f2273b4fa62d24576727c5fd55c60dc3820221c05320c7589",
+    "aarch64-unknown-linux-musl": "0f300e1576de8dabe0a9dedf0b87ae44f8accea5cf54d9a342a51061c1fb1bcd",
+    "x86_64-unknown-linux-musl": "d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7",
 }

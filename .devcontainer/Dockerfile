@@ -30,9 +30,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash 
 
 # Install jj (Jujutsu) from its static musl release build. These ARGs mirror
 # sculptor/sculptor/services/jj_version.py; jj_version_test.py keeps them equal.
-ARG JJ_VERSION=0.46.0
-ARG JJ_SHA256_X86_64=fce0271158e665ceb82dc66c5eb95b1728649094e9133074f3b5baece345fc08
-ARG JJ_SHA256_AARCH64=80e28f7501c11e50e0ca06cd6a1fa1d982cff9cc59bfe4411a9d36aa501d867e
+ARG JJ_VERSION=0.47.1
+ARG JJ_SHA256_X86_64=d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7
+ARG JJ_SHA256_AARCH64=0f300e1576de8dabe0a9dedf0b87ae44f8accea5cf54d9a342a51061c1fb1bcd
 RUN case "$(uname -m)" in \
         x86_64) triple=x86_64-unknown-linux-musl; sha256="$JJ_SHA256_X86_64" ;; \
         aarch64) triple=aarch64-unknown-linux-musl; sha256="$JJ_SHA256_AARCH64" ;; \
