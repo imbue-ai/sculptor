@@ -53,8 +53,14 @@ from sculptor.tasks.handlers.run_terminal_agent.v1 import run_terminal_agent_tas
 
 
 @pytest.fixture
-def project() -> Project:
-    return Project(object_id=ProjectID(), name="Test Project", organization_reference=OrganizationReference("org_123"))
+def project(initial_commit_repo: tuple[Path, str]) -> Project:
+    code_dir, _ = initial_commit_repo
+    return Project(
+        object_id=ProjectID(),
+        name="Test Project",
+        organization_reference=OrganizationReference("org_123"),
+        user_git_repo_url=f"file://{code_dir}",
+    )
 
 
 @pytest.fixture
