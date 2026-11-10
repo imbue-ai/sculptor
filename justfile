@@ -1195,6 +1195,22 @@ compute-pi-pin version:
 bump-pi version:
     uv run python "{{justfile_directory()}}/scripts/bump_pin.py" pi "{{version}}"
 
+# Recompute jj's per-platform sha256 pin: download each supported-platform tarball,
+# hash it, and print the JJ_PINNED_SHA256_BY_TARGET_TRIPLE block to paste into
+# sculptor/sculptor/services/jj_version.py. Print-only; `just bump-jj` applies a bump.
+[group("install")]
+compute-jj-pin version:
+    uv run python "{{justfile_directory()}}/scripts/compute_pin.py" jj "{{version}}"
+
+# Apply a jj version bump end-to-end: recompute the per-platform sha256 pins
+# (cross-checked against the digests GitHub records per release asset, since jj
+# publishes no SHA256SUMS) and rewrite JJ_PINNED_VERSION plus every hardcoded
+# copy. Bumps are manual: the pin is also the oldest jj Sculptor accepts, so each
+# bump raises the floor for anyone using their own jj.
+[group("install")]
+bump-jj version:
+    uv run python "{{justfile_directory()}}/scripts/bump_pin.py" jj "{{version}}"
+
 # Installs additional dependencies for testing
 [group("install")]
 install-test:

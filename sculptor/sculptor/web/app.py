@@ -125,6 +125,7 @@ from sculptor.service_collections.service_collection import CompleteServiceColle
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.data_model_service.data_types import TaskAndDataModelTransaction
 from sculptor.services.dependency_management_service import InstallResult
+from sculptor.services.dependency_management_service import JjIdentityError
 from sculptor.services.git_repo_service.default_implementation import LocalReadOnlyGitRepo
 from sculptor.services.git_repo_service.default_implementation import LocalWritableGitRepo
 from sculptor.services.git_repo_service.error_types import GitRepoError
@@ -236,6 +237,7 @@ from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
 from sculptor.web.data_types import InstallExtensionRequest
 from sculptor.web.data_types import InstallExtensionResponse
+from sculptor.web.data_types import JjIdentity
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingConventionFile
@@ -264,6 +266,7 @@ from sculptor.web.data_types import RecentWorkspaceResponse
 from sculptor.web.data_types import RenameAgentRequest
 from sculptor.web.data_types import RepoInfo
 from sculptor.web.data_types import SendMessageRequest
+from sculptor.web.data_types import SetJjIdentityRequest
 from sculptor.web.data_types import SetModelRequest
 from sculptor.web.data_types import SetTelemetryRequest
 from sculptor.web.data_types import SignalEventRequest
@@ -3274,6 +3277,20 @@ def install_dependency(
         raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}") from e
 
     return services.dependency_management_service.install_managed(dependency)
+
+
+@router.post("/api/v1/dependencies/jj/identity")
+def set_jj_identity(
+    body: SetJjIdentityRequest,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> DependenciesStatus:
+    """Write jj's author identity into the user's jj config and return the refreshed status."""
+    services = get_services_from_request_or_websocket(request)
+    try:
+        return services.dependency_management_service.set_jj_identity(JjIdentity(name=body.name, email=body.email))
+    except JjIdentityError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.post("/api/v1/dependencies/auth")

@@ -6,7 +6,7 @@ import { getDependenciesStatus, installDependency, UserConfigField } from "~/api
 import { usePollingInterval } from "~/common/hooks/usePollingInterval";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
 
-type ManagedDependencyTool = "CLAUDE" | "PI";
+type ManagedDependencyTool = "CLAUDE" | "PI" | "JJ";
 
 // Clear an optimistic pending mode after this long so the settling spinner cannot
 // get stuck if the WebSocket update that would confirm the new mode never arrives.
@@ -18,17 +18,21 @@ const MODE_SETTLE_TIMEOUT_MS = 10_000;
 const DEPENDENCY_CONFIG_KEY = {
   CLAUDE: "claude",
   PI: "pi",
-} as const satisfies Record<ManagedDependencyTool, "claude" | "pi">;
+  JJ: "jj",
+} as const satisfies Record<ManagedDependencyTool, "claude" | "pi" | "jj">;
 
 // DependenciesStatus has a string index signature (unknown | DependencyInfo), so
 // indexing by a dynamic key loses the type. Selecting the named field keeps it.
+const DEPENDENCY_INFO_SELECTOR = {
+  CLAUDE: (status) => status.claude,
+  PI: (status) => status.pi,
+  JJ: (status) => status.jj,
+} as const satisfies Record<ManagedDependencyTool, (status: DependenciesStatus) => DependencyInfo>;
+
 const selectInfo = (
   status: DependenciesStatus | null | undefined,
   tool: ManagedDependencyTool,
-): DependencyInfo | null => {
-  if (!status) return null;
-  return tool === "CLAUDE" ? status.claude : status.pi;
-};
+): DependencyInfo | null => (status ? DEPENDENCY_INFO_SELECTOR[tool](status) : null);
 
 type UseManagedDependencyParams = {
   tool: ManagedDependencyTool;
@@ -53,12 +57,10 @@ type UseManagedDependencyResult = {
 };
 
 /**
- * Shared install/mode/status lifecycle for a managed dependency (Claude or pi) as
- * surfaced in its Settings section: the optimistic MANAGED/CUSTOM mode switch, the
- * background managed install (with status polling as a WebSocket fallback), the
- * custom-path entry, and the derived install progress/error state. The Claude and pi
- * settings sections are identical apart from which tool they manage, so they share
- * this hook rather than each keeping a copy of the logic.
+ * Shared install/mode/status lifecycle for a managed dependency as surfaced in its
+ * Settings section: the optimistic MANAGED/CUSTOM mode switch, the background managed
+ * install (with status polling as a WebSocket fallback), the custom-path entry, and
+ * the derived install progress/error state.
  */
 export const useManagedDependency = ({
   tool,
@@ -170,8 +172,8 @@ export const useManagedDependency = ({
   // Clear stale error/installing state once the atom confirms the binary is healthy
   // (e.g. the backend finished after the frontend timed out or errored). Adjusting
   // during render avoids the extra render cycle an effect would introduce.
-  // "Healthy" means the binary the configured mode intends: pi's MANAGED mode
-  // resolves a system-PATH fallback while no managed copy is downloaded, and that
+  // "Healthy" means the binary the configured mode intends: an optional tool's MANAGED
+  // mode resolves a system-PATH fallback while no managed copy is downloaded, and that
   // fallback being fine must not clear the state of an in-flight managed install.
   const isIntendedBinaryActive = mode !== "MANAGED" || info?.source === "MANAGED";
   const isBinaryHealthy = Boolean(info?.installed && info?.isVersionInRange && isIntendedBinaryActive);
@@ -187,7 +189,7 @@ export const useManagedDependency = ({
       : null;
 
   // The managed install is only up to date when the *managed* copy is the active
-  // binary — an in-range PATH-fallback pi doesn't count.
+  // binary — an in-range PATH fallback doesn't count.
   const isManagedUpToDate = Boolean(mode === "MANAGED" && info?.source === "MANAGED" && info?.isVersionInRange);
 
   // Fold the backend status's install error in with the local one, but ignore it once

@@ -58,14 +58,16 @@ def _make_user_config(
     env_var_override_enabled: bool = False,
 ) -> UserConfig:
     # Build unified dependency_paths.claude from mode + optional custom path.
-    # pi is pinned to the bare "pi" (CUSTOM/PATH) so these Claude-focused tests are
-    # unaffected by pi's MANAGED default — exactly the pre-flip behaviour, where the
-    # default was also "pi". pi-specific tests use _make_user_config_with_pi instead.
+    # pi and jj are pinned to their bare names (CUSTOM/PATH) so these Claude-focused
+    # tests never read a real managed-copy directory through the optional tools'
+    # MANAGED defaults. pi-specific tests use _make_user_config_with_pi instead.
     if dependency_paths is None:
-        dep_paths = DependencyPaths(claude=claude_binary_mode, pi="pi")
+        dep_paths = DependencyPaths(claude=claude_binary_mode, pi="pi", jj="jj")
     else:
         claude_value = dependency_paths.claude if dependency_paths.claude else claude_binary_mode
-        dep_paths = DependencyPaths(git=dependency_paths.git, gh=dependency_paths.gh, claude=claude_value, pi="pi")
+        dep_paths = DependencyPaths(
+            git=dependency_paths.git, gh=dependency_paths.gh, claude=claude_value, pi="pi", jj="jj"
+        )
     return UserConfig(
         user_email=user_email,
         user_id=user_id,
@@ -337,27 +339,27 @@ class TestVersionRange:
     def test_in_range(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            assert service.is_version_in_range(_RECOMMENDED) is True
+            assert service.is_version_in_range(_RECOMMENDED, Dependency.CLAUDE) is True
 
     def test_below_min(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            assert service.is_version_in_range("2.0.0") is False
+            assert service.is_version_in_range("2.0.0", Dependency.CLAUDE) is False
 
     def test_above_max(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            assert service.is_version_in_range("3.0.0") is False
+            assert service.is_version_in_range("3.0.0", Dependency.CLAUDE) is False
 
     def test_recommended_is_in_range(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            assert service.is_version_in_range(CLAUDE_VERSION_RANGE.recommended_version) is True
+            assert service.is_version_in_range(CLAUDE_VERSION_RANGE.recommended_version, Dependency.CLAUDE) is True
 
     def test_invalid_version(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            assert service.is_version_in_range("not-a-version") is False
+            assert service.is_version_in_range("not-a-version", Dependency.CLAUDE) is False
 
     @patch.object(
         ClaudeManagedTool,
@@ -372,9 +374,9 @@ class TestVersionRange:
     def test_single_blocked_version(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            assert service.is_version_in_range("2.1.101") is False
-            assert service.is_version_in_range("2.1.100") is True
-            assert service.is_version_in_range("2.1.102") is True
+            assert service.is_version_in_range("2.1.101", Dependency.CLAUDE) is False
+            assert service.is_version_in_range("2.1.100", Dependency.CLAUDE) is True
+            assert service.is_version_in_range("2.1.102", Dependency.CLAUDE) is True
 
     @patch.object(
         ClaudeManagedTool,
@@ -389,11 +391,11 @@ class TestVersionRange:
     def test_blocked_version_range(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            assert service.is_version_in_range("2.1.99") is True
-            assert service.is_version_in_range("2.1.100") is False
-            assert service.is_version_in_range("2.1.103") is False
-            assert service.is_version_in_range("2.1.105") is False
-            assert service.is_version_in_range("2.1.106") is True
+            assert service.is_version_in_range("2.1.99", Dependency.CLAUDE) is True
+            assert service.is_version_in_range("2.1.100", Dependency.CLAUDE) is False
+            assert service.is_version_in_range("2.1.103", Dependency.CLAUDE) is False
+            assert service.is_version_in_range("2.1.105", Dependency.CLAUDE) is False
+            assert service.is_version_in_range("2.1.106", Dependency.CLAUDE) is True
 
     @patch.object(
         ClaudeManagedTool,
@@ -411,10 +413,10 @@ class TestVersionRange:
     def test_multiple_blocked_ranges(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            assert service.is_version_in_range("2.1.50") is False
-            assert service.is_version_in_range("2.1.51") is True
-            assert service.is_version_in_range("2.1.103") is False
-            assert service.is_version_in_range("2.1.89") is True
+            assert service.is_version_in_range("2.1.50", Dependency.CLAUDE) is False
+            assert service.is_version_in_range("2.1.51", Dependency.CLAUDE) is True
+            assert service.is_version_in_range("2.1.103", Dependency.CLAUDE) is False
+            assert service.is_version_in_range("2.1.89", Dependency.CLAUDE) is True
 
 
 class TestInstallManaged:
@@ -1234,8 +1236,10 @@ class TestCheckAuthenticated:
 
         mock_cg = MagicMock()
         # Order of calls in _get_status: git --version, claude --version, pi --version,
-        # claude auth status, gh --version, gh auth status.
+        # jj --version, claude auth status, gh --version, gh auth status. jj's readiness
+        # stops at the unparseable version, so it runs nothing more.
         mock_cg.run_process_to_completion.side_effect = [
+            version_result,
             version_result,
             version_result,
             version_result,
@@ -1768,7 +1772,7 @@ def _make_user_config_with_pi(pi_path: str = "pi") -> UserConfig:
         user_id="user-1",
         organization_id="org-1",
         instance_id="inst-1",
-        dependency_paths=DependencyPaths(claude="MANAGED", pi=pi_path),
+        dependency_paths=DependencyPaths(claude="MANAGED", pi=pi_path, jj="jj"),
     )
 
 
@@ -1779,7 +1783,7 @@ def _make_managed_config(claude: str, pi: str) -> UserConfig:
         user_id="user-1",
         organization_id="org-1",
         instance_id="inst-1",
-        dependency_paths=DependencyPaths(claude=claude, pi=pi),
+        dependency_paths=DependencyPaths(claude=claude, pi=pi, jj="jj"),
     )
 
 
@@ -2521,7 +2525,6 @@ class TestGetManagedVersion:
             (claude_dir / f"version-{v}").mkdir(parents=True)
 
         service = DependencyManagementService.model_construct(concurrency_group=MagicMock())
-        assert service._get_managed_version() == "2.1.200"
         assert service._get_managed_version(Dependency.CLAUDE) == "2.1.200"
 
     @patch("sculptor.services.dependency_management_service.get_internal_folder")

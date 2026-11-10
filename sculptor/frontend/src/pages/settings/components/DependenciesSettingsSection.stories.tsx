@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { createStore, Provider as JotaiProvider } from "jotai";
 import type { ReactElement } from "react";
 
-import type { DependenciesStatus, DependencyInfo } from "~/api";
+import type { DependenciesStatus, DependencyInfo, JjReadiness } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
 
 import { DependenciesSettingsSection } from "./DependenciesSettingsSection";
@@ -26,6 +26,8 @@ const optionalCliNotInstalled: DependencyInfo = {
   versionRange: null,
   isVersionInRange: null,
 };
+
+const jjNotInstalled: JjReadiness = { blocker: "NOT_INSTALLED" };
 
 const ghInstalled: DependencyInfo = {
   installed: true,
@@ -71,6 +73,8 @@ const managedUpToDate: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  jj: optionalCliNotInstalled,
+  jjReadiness: jjNotInstalled,
   voiceModels: optionalCliNotInstalled,
 };
 
@@ -96,6 +100,8 @@ const managedOutOfRange: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  jj: optionalCliNotInstalled,
+  jjReadiness: jjNotInstalled,
   voiceModels: optionalCliNotInstalled,
 };
 
@@ -120,6 +126,8 @@ const pathMode: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  jj: optionalCliNotInstalled,
+  jjReadiness: jjNotInstalled,
   voiceModels: optionalCliNotInstalled,
 };
 
@@ -144,6 +152,8 @@ const customMode: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  jj: optionalCliNotInstalled,
+  jjReadiness: jjNotInstalled,
   voiceModels: optionalCliNotInstalled,
 };
 
@@ -168,6 +178,8 @@ const notInstalled: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  jj: optionalCliNotInstalled,
+  jjReadiness: jjNotInstalled,
   voiceModels: optionalCliNotInstalled,
 };
 
@@ -210,6 +222,8 @@ const managedUpgradeFailed: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
+  jj: optionalCliNotInstalled,
+  jjReadiness: jjNotInstalled,
   voiceModels: optionalCliNotInstalled,
 };
 

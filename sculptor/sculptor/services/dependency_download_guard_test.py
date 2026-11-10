@@ -21,7 +21,7 @@ def test_managed_install_raises_instead_of_downloading(
     service = DependencyManagementService(
         concurrency_group=test_root_concurrency_group.make_concurrency_group("dependency_management_service")
     )
-    for tool in (Dependency.PI, Dependency.CLAUDE):
+    for tool in (Dependency.PI, Dependency.CLAUDE, Dependency.JJ):
         with pytest.raises(AssertionError, match="allow_dependency_downloads"):
             service.install_managed(tool)
 

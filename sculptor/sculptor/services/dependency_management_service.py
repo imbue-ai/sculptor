@@ -1,14 +1,17 @@
 import functools
 import hashlib
+import json
 import os
 import re
 import shutil
 import signal
+import tempfile
 import threading
 import time
 import uuid
 import webbrowser
 from collections.abc import Callable
+from collections.abc import Mapping
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -23,6 +26,7 @@ from packaging.version import InvalidVersion
 from packaging.version import Version
 from pydantic import PrivateAttr
 
+from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import InvalidConcurrencyGroupStateError
 from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.processes.local_process import run_background
@@ -33,6 +37,7 @@ from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
+from sculptor.services.managed_tools import JJ_VERSION_RANGE
 from sculptor.services.managed_tools import ManagedTool
 from sculptor.services.managed_tools import PI_VERSION_RANGE
 from sculptor.services.managed_tools import ResolvedDistribution
@@ -53,6 +58,14 @@ from sculptor.web.data_types import BinarySource
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import DependencyInfo
 from sculptor.web.data_types import InstallProgress
+from sculptor.web.data_types import JjAvailable
+from sculptor.web.data_types import JjBlocker
+from sculptor.web.data_types import JjIdentity
+from sculptor.web.data_types import JjNoIdentity
+from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.data_types import JjNotRunnable
+from sculptor.web.data_types import JjReadiness
+from sculptor.web.data_types import JjUnsupportedVersion
 from sculptor.web.data_types import VersionRangeInfo
 
 
@@ -68,6 +81,12 @@ class DependencyCheckResult(FrozenModel):
     installed: bool
     path: str | None = None
     version: str | None = None
+    # How a resolved binary's ``--version`` failed, in one line.
+    probe_error: str | None = None
+
+
+class JjIdentityError(Exception):
+    """jj's author identity could not be written to the user's jj config."""
 
 
 DEPENDENCIES_DIR_NAME = "dependencies"
@@ -86,6 +105,27 @@ def _is_valid_custom_binary(value: str) -> bool:
         return True
     # Bare command name: single word, no slashes or spaces
     return " " not in value and "/" not in value
+
+
+def _configured_binary_value(config: UserConfig, tool: Dependency) -> str:
+    """The ``dependency_paths`` mode-and-path value of a tool that has a binary mode."""
+    match tool:
+        case Dependency.CLAUDE:
+            return config.dependency_paths.claude
+        case Dependency.PI:
+            return config.dependency_paths.pi
+        case Dependency.JJ:
+            return config.dependency_paths.jj
+        case Dependency.GIT | Dependency.GH:
+            raise ValueError(f"{tool} has no managed binary mode")
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _describe_process_error(error: ProcessError) -> str | None:
+    """Summarize a failed command in one line: its first line of stderr, else how it failed."""
+    first_stderr_line = next((line.strip() for line in error.stderr.splitlines() if line.strip()), None)
+    return first_stderr_line or error.message
 
 
 def _parse_dependency_config(value: str) -> tuple[BinaryMode, str | None]:
@@ -629,16 +669,9 @@ class DependencyManagementService(Service):
             logger.opt(exception=True).warning("Auto-install check failed")
             return
 
-        # Mode lives in a per-tool config field, so reading it is the one place
-        # auto-install still dispatches on the tool (not on the install path).
         managed_mode_tools: list[Dependency] = []
         for tool in get_managed_tools():
-            if tool == Dependency.CLAUDE:
-                mode, _ = _parse_dependency_config(config.dependency_paths.claude)
-            elif tool == Dependency.PI:
-                mode, _ = _parse_dependency_config(config.dependency_paths.pi)
-            else:
-                continue
+            mode, _ = _parse_dependency_config(_configured_binary_value(config, tool))
             if mode == BinaryMode.MANAGED:
                 managed_mode_tools.append(tool)
 
@@ -724,8 +757,8 @@ class DependencyManagementService(Service):
                 return self._resolve_claude_path()
             case Dependency.GIT:
                 return self._resolve_git_path()
-            case Dependency.PI:
-                return self._resolve_pi_path()
+            case Dependency.PI | Dependency.JJ:
+                return self._resolve_optional_tool_path(tool)
             case Dependency.GH:
                 return self._resolve_gh_path()
             case _ as unreachable:
@@ -743,18 +776,20 @@ class DependencyManagementService(Service):
             return config.dependency_paths.gh
         return shutil.which("gh")
 
-    def _resolve_pi_path(self) -> str | None:
+    def _resolve_optional_tool_path(self, tool: Dependency) -> str | None:
+        """Resolve an optional managed tool, whose MANAGED mode can fall back to PATH."""
         config = get_user_config_instance()
-        mode, custom_path = _parse_dependency_config(config.dependency_paths.pi)
+        mode, custom_path = _parse_dependency_config(_configured_binary_value(config, tool))
+        command_name = tool.value.lower()
 
         if mode == BinaryMode.MANAGED:
-            managed_binary = self._find_managed_binary(Dependency.PI)
+            managed_binary = self._find_managed_binary(tool)
             if managed_binary is not None:
                 return managed_binary
-            # pi is optional and its managed copy is only downloaded on explicit
-            # user action, so MANAGED with no downloaded copy falls back to a pi
+            # An optional tool's managed copy is only downloaded on explicit user
+            # action, so MANAGED with no downloaded copy falls back to the tool
             # already on the system PATH rather than reporting nothing.
-            return shutil.which("pi")
+            return shutil.which(command_name)
 
         # CUSTOM: an absolute path or bare command name, resolved via PATH —
         # unchanged from the pre-managed behaviour (a "CUSTOM" keyword or empty
@@ -763,7 +798,7 @@ class DependencyManagementService(Service):
         if not value:
             return None
         if not _is_valid_custom_binary(value):
-            logger.info("Invalid custom pi binary path: {!r}, ignoring", value)
+            logger.info("Invalid custom {} binary path: {!r}, ignoring", command_name, value)
             return None
         return shutil.which(value)
 
@@ -825,12 +860,11 @@ class DependencyManagementService(Service):
                 [binary, "--version"],
                 timeout=5.0,
             )
-            # WHY: real pi emits --version to stderr, not stdout; feed both channels.
-            version_text = f"{result.stdout}\n{result.stderr}" if tool == Dependency.PI else result.stdout
-            version = _parse_version_for_tool(tool, version_text)
-            return DependencyCheckResult(installed=True, path=binary, version=version)
-        except ProcessError:
-            return DependencyCheckResult(installed=False, path=binary)
+        except ProcessError as e:
+            return DependencyCheckResult(installed=False, path=binary, probe_error=_describe_process_error(e))
+        # Tools differ in which channel carries --version (pi uses stderr), so read both.
+        version = _parse_version_for_tool(tool, f"{result.stdout}\n{result.stderr}")
+        return DependencyCheckResult(installed=True, path=binary, version=version)
 
     def _check_installed_concurrently(self, tools: Sequence[Dependency]) -> dict[Dependency, DependencyCheckResult]:
         """Probe several tools' installed version concurrently, returning the result per tool.
@@ -852,15 +886,15 @@ class DependencyManagementService(Service):
                 logger.opt(exception=True).warning("Failed to check installed version of {}", tool.value)
         return results
 
-    def _build_auth_probe_env(self) -> dict[str, str] | None:
-        """Environment for the ``auth status`` probe, overlaying ``~/.sculptor/.env``.
+    def _build_agent_probe_env(self) -> dict[str, str] | None:
+        """Environment for probes that must see what agents see, overlaying ``~/.sculptor/.env``.
 
         Agents get the user's ``.env`` values merged into their environment (see
         ``LocalEnvironment._run_process_in_background``), but the backend's own ``os.environ``
-        never does, so a credential configured only there — a token, or a
-        ``CLAUDE_CONFIG_DIR`` pointing at the store holding one — would leave
-        Sculptor reporting the tool unauthenticated while the agent it launches
-        is authenticated.
+        never does, so a setting configured only there — a token, a
+        ``CLAUDE_CONFIG_DIR`` pointing at the store holding one, or a ``JJ_USER`` — would
+        leave Sculptor reporting the tool unauthenticated or unidentified while the agent
+        it launches is fine.
 
         Only the global file applies: the probe is project-agnostic, so there is
         no per-project ``.sculptor/.env`` to resolve. Precedence mirrors
@@ -898,7 +932,7 @@ class DependencyManagementService(Service):
             self.concurrency_group.run_process_to_completion(
                 [binary, "auth", "status"],
                 timeout=3.0,
-                env=self._build_auth_probe_env(),
+                env=self._build_agent_probe_env(),
             )
             return True
         except ProcessTimeoutError:
@@ -1086,6 +1120,7 @@ class DependencyManagementService(Service):
         git_check = self.check_installed(Dependency.GIT)
         claude_check = self.check_installed(Dependency.CLAUDE)
         pi_check = self.check_installed(Dependency.PI)
+        jj_check = self.check_installed(Dependency.JJ)
 
         config = get_user_config_instance()
         effective_mode, _ = _parse_dependency_config(config.dependency_paths.claude)
@@ -1098,9 +1133,9 @@ class DependencyManagementService(Service):
 
         claude_in_range = None
         if claude_check.version:
-            claude_in_range = self.is_version_in_range(claude_check.version)
+            claude_in_range = self.is_version_in_range(claude_check.version, Dependency.CLAUDE)
 
-        claude_managed_version = self._get_managed_version()
+        claude_managed_version = self._get_managed_version(Dependency.CLAUDE)
         # Claude has no PATH fallback, so its source follows the configured mode.
         claude_source = None
         if claude_check.installed:
@@ -1134,44 +1169,140 @@ class DependencyManagementService(Service):
             install_error=error_by_tool.get(Dependency.CLAUDE),
         )
 
-        pi_version_range = VersionRangeInfo(
-            min_version=PI_VERSION_RANGE.min_version,
-            max_version=PI_VERSION_RANGE.max_version,
-            recommended_version=PI_VERSION_RANGE.recommended_version,
-        )
-        pi_mode, _ = _parse_dependency_config(config.dependency_paths.pi)
-        pi_in_range = None
-        if pi_check.version:
-            pi_in_range = self.is_version_in_range(pi_check.version, Dependency.PI)
-        # pi's MANAGED mode falls back to a PATH binary, so its source is decided by
-        # which binary actually resolved rather than by the configured mode.
-        pi_source = None
-        if pi_check.installed:
-            pi_managed_binary = self._find_managed_binary(Dependency.PI)
-            is_managed_binary_active = pi_managed_binary is not None and pi_check.path == pi_managed_binary
-            pi_source = BinarySource.MANAGED if is_managed_binary_active else BinarySource.EXTERNAL
-        pi_info = DependencyInfo(
-            installed=pi_check.installed,
-            path=pi_check.path,
-            version=pi_check.version,
-            mode=pi_mode,
-            source=pi_source,
-            version_range=pi_version_range,
-            is_version_in_range=pi_in_range,
-            managed_version=self._get_managed_version(Dependency.PI),
-            install_progress=progress_by_tool.get(Dependency.PI),
-            install_error=error_by_tool.get(Dependency.PI),
-        )
-
         gh_info = self._get_remote_cli_info(Dependency.GH)
 
         return DependenciesStatus(
             git=git_info,
             claude=claude_info,
-            pi=pi_info,
+            pi=self._build_optional_tool_info(
+                Dependency.PI, PI_VERSION_RANGE, pi_check, config, progress_by_tool, error_by_tool
+            ),
             gh=gh_info,
+            jj=self._build_optional_tool_info(
+                Dependency.JJ, JJ_VERSION_RANGE, jj_check, config, progress_by_tool, error_by_tool
+            ),
+            jj_readiness=self._jj_readiness_from_check(jj_check),
             voice_models=self._get_voice_models_installer().build_info(),
         )
+
+    def _build_optional_tool_info(
+        self,
+        tool: Dependency,
+        version_range: VersionRange,
+        check: DependencyCheckResult,
+        config: UserConfig,
+        progress_by_tool: Mapping[Dependency, InstallProgress],
+        error_by_tool: Mapping[Dependency, str],
+    ) -> DependencyInfo:
+        """Status of an optional managed tool."""
+        mode, _ = _parse_dependency_config(_configured_binary_value(config, tool))
+        # MANAGED mode falls back to a PATH binary, so the source is decided by which
+        # binary actually resolved rather than by the configured mode.
+        source = None
+        if check.installed:
+            managed_binary = self._find_managed_binary(tool)
+            is_managed_binary_active = managed_binary is not None and check.path == managed_binary
+            source = BinarySource.MANAGED if is_managed_binary_active else BinarySource.EXTERNAL
+        return DependencyInfo(
+            installed=check.installed,
+            path=check.path,
+            version=check.version,
+            mode=mode,
+            source=source,
+            version_range=VersionRangeInfo(
+                min_version=version_range.min_version,
+                max_version=version_range.max_version,
+                recommended_version=version_range.recommended_version,
+            ),
+            is_version_in_range=self.is_version_in_range(check.version, tool) if check.version else None,
+            managed_version=self._get_managed_version(tool),
+            install_progress=progress_by_tool.get(tool),
+            install_error=error_by_tool.get(tool),
+        )
+
+    def get_jj_readiness(self) -> JjReadiness:
+        """JJ_AVAILABLE: whether Sculptor can use the resolved jj, or the first check that fails."""
+        return self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
+
+    def _jj_readiness_from_check(self, check: DependencyCheckResult) -> JjReadiness:
+        if check.path is None:
+            return JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
+        if not check.installed:
+            return JjNotRunnable(blocker=JjBlocker.NOT_RUNNABLE, error=check.probe_error)
+        if check.version is None or not self.is_version_in_range(check.version, Dependency.JJ):
+            return JjUnsupportedVersion(blocker=JjBlocker.UNSUPPORTED_VERSION, path=check.path, version=check.version)
+        try:
+            identity = self._read_jj_identity(check.path)
+        except ProcessError as e:
+            return JjNotRunnable(blocker=JjBlocker.NOT_RUNNABLE, error=_describe_process_error(e))
+        if identity.name and identity.email:
+            return JjAvailable(blocker=None, identity=identity)
+        git_identity = self._read_git_global_identity()
+        return JjNoIdentity(
+            blocker=JjBlocker.NO_IDENTITY,
+            suggested_identity=JjIdentity(
+                name=identity.name or git_identity.name, email=identity.email or git_identity.email
+            ),
+        )
+
+    def _run_jj_outside_any_repo(self, binary: str, arguments: Sequence[str]) -> str:
+        """Run jj where only user-level config applies, with the environment agents get."""
+        result = self.concurrency_group.run_process_to_completion(
+            [binary, *arguments],
+            timeout=5.0,
+            cwd=Path(tempfile.gettempdir()),
+            env=self._build_agent_probe_env(),
+        )
+        return result.stdout
+
+    def _read_jj_identity(self, binary: str) -> JjIdentity:
+        """jj's ``user.name`` and ``user.email``, either empty when unset."""
+        output = self._run_jj_outside_any_repo(
+            binary,
+            ["--ignore-working-copy", "config", "list", "user", "--template", 'name ++ "\\t" ++ json(value) ++ "\\n"'],
+        )
+        values: dict[str, str] = {}
+        for line in output.splitlines():
+            name, _, value = line.partition("\t")
+            try:
+                parsed_value = json.loads(value)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed_value, str):
+                values[name] = parsed_value.strip()
+        return JjIdentity(name=values.get("user.name", ""), email=values.get("user.email", ""))
+
+    def _read_git_global_identity(self) -> JjIdentity:
+        """git's global ``user.name`` and ``user.email``, either empty when unset."""
+        git_binary = self.resolve_binary_path(Dependency.GIT)
+        if git_binary is None:
+            return JjIdentity(name="", email="")
+        return JjIdentity(
+            name=self._read_git_global_value(git_binary, "user.name"),
+            email=self._read_git_global_value(git_binary, "user.email"),
+        )
+
+    def _read_git_global_value(self, git_binary: str, key: str) -> str:
+        result = self.concurrency_group.run_process_to_completion(
+            [git_binary, "config", "--global", key],
+            timeout=5.0,
+            is_checked_after=False,
+            env=self._build_agent_probe_env(),
+        )
+        # `git config` exits 1 when the key is unset.
+        return result.stdout.strip() if result.returncode == 0 else ""
+
+    def set_jj_identity(self, identity: JjIdentity) -> DependenciesStatus:
+        """Write the author identity into the user's jj config, then push fresh status."""
+        binary = self.resolve_binary_path(Dependency.JJ)
+        if binary is None:
+            raise JjIdentityError("jj is not installed")
+        for key, value in (("user.name", identity.name), ("user.email", identity.email)):
+            try:
+                self._run_jj_outside_any_repo(binary, ["config", "set", "--user", key, value])
+            except ProcessError as e:
+                raise JjIdentityError(_describe_process_error(e)) from e
+        return self.get_status()
 
     def _get_remote_cli_info(self, tool: Dependency) -> DependencyInfo:
         """Build a DependencyInfo for the gh remote-host CLI.
@@ -1234,8 +1365,8 @@ class DependencyManagementService(Service):
         self._notify_observers(status)
         return status
 
-    def _get_managed_version(self, tool: Dependency = Dependency.CLAUDE) -> str | None:
-        """Get the highest installed managed version for a tool (defaults to Claude)."""
+    def _get_managed_version(self, tool: Dependency) -> str | None:
+        """Get the highest installed managed version for a tool."""
         tool_dir = _get_tool_dir(tool)
         if not tool_dir.is_dir():
             return None
@@ -1251,7 +1382,7 @@ class DependencyManagementService(Service):
         versions.sort(reverse=True)
         return str(versions[0])
 
-    def is_version_in_range(self, version: str, tool: Dependency = Dependency.CLAUDE) -> bool:
+    def is_version_in_range(self, version: str, tool: Dependency) -> bool:
         """Check whether a version string falls within the supported range and is not blocked."""
         version_range = _version_range_for_tool(tool)
         if version_range is None:

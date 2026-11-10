@@ -761,7 +761,9 @@ def _make_test_user_config(claude_path: str = "claude") -> UserConfig:
         is_privacy_policy_consented=True,
         is_telemetry_level_set=True,
         # Pin pi to CUSTOM (bare "pi") so it resolves the FakePi stub on PATH without touching the managed-copy directory.
-        dependency_paths=DependencyPaths(claude=claude_path, pi="pi"),
+        # Pin jj to CUSTOM with no path so it resolves to nothing: JJ_AVAILABLE stays off, whatever jj the machine
+        # has, unless a test configures one.
+        dependency_paths=DependencyPaths(claude=claude_path, pi="pi", jj="CUSTOM"),
     )
 
 

@@ -1,9 +1,11 @@
 import io
+import subprocess
 import tarfile
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -11,9 +13,14 @@ from packaging.version import Version
 from pydantic import ValidationError
 
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.services.jj_version import JJ_PINNED_SHA256_BY_TARGET_TRIPLE
+from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
 from sculptor.services.managed_tools import ClaudeManagedTool
 from sculptor.services.managed_tools import GCP_BUCKET_BASE_URL
+from sculptor.services.managed_tools import JJ_PIN
+from sculptor.services.managed_tools import JJ_VERSION_RANGE
+from sculptor.services.managed_tools import JjManagedTool
 from sculptor.services.managed_tools import ManagedDistributionError
 from sculptor.services.managed_tools import ManagedTool
 from sculptor.services.managed_tools import PI_PIN
@@ -22,9 +29,11 @@ from sculptor.services.managed_tools import PiPin
 from sculptor.services.managed_tools import ResolvedDistribution
 from sculptor.services.managed_tools import UnsupportedManagedPlatformError
 from sculptor.services.managed_tools import _CLAUDE_PLATFORM_MAP
+from sculptor.services.managed_tools import _JJ_PLATFORM_MAP
 from sculptor.services.managed_tools import _PI_PLATFORM_MAP
 from sculptor.services.managed_tools import get_managed_tool
 from sculptor.services.managed_tools import get_managed_tools
+from sculptor.testing.jj_repos import JjBinary
 
 # Verified darwin-arm64 sha256 for pi 1.3.0; ``just bump-pi <version>`` refreshes it.
 _PI_DARWIN_ARM64_SHA256_1_3_0 = "1f9ae61cdeae04dd68caf1a1e8ab8ec9b292062f6ccb3252e0a9cbe93b5b16f1"
@@ -365,5 +374,109 @@ def test_claude_platform_map_values_match_the_advertised_platform_keys() -> None
     assert set(_CLAUDE_PLATFORM_MAP.values()) == ClaudeManagedTool().platform_keys
 
 
-def test_get_managed_tools_lists_exactly_claude_and_pi() -> None:
-    assert set(get_managed_tools()) == {Dependency.CLAUDE, Dependency.PI}
+def test_get_managed_tools_lists_exactly_claude_pi_and_jj() -> None:
+    assert set(get_managed_tools()) == {Dependency.CLAUDE, Dependency.PI, Dependency.JJ}
+
+
+_JJ_TARGET_TRIPLES = {
+    "darwin-arm64": "aarch64-apple-darwin",
+    "darwin-x64": "x86_64-apple-darwin",
+    "linux-x64": "x86_64-unknown-linux-musl",
+    "linux-arm64": "aarch64-unknown-linux-musl",
+}
+
+
+def test_jj_pin_names_each_platform_asset_after_its_upstream_target_triple() -> None:
+    assert JJ_PIN.version == JJ_PINNED_VERSION
+    assert {key: pin.asset for key, pin in JJ_PIN.platforms.items()} == {
+        key: f"jj-v{JJ_PINNED_VERSION}-{triple}.tar.gz" for key, triple in _JJ_TARGET_TRIPLES.items()
+    }
+
+
+def test_jj_pin_digests_are_the_ones_install_jj_verifies() -> None:
+    assert {key: pin.sha256 for key, pin in JJ_PIN.platforms.items()} == {
+        key: JJ_PINNED_SHA256_BY_TARGET_TRIPLE[triple] for key, triple in _JJ_TARGET_TRIPLES.items()
+    }
+
+
+def test_jj_version_range_floor_is_the_pin_and_any_later_zero_x_is_accepted() -> None:
+    assert JJ_VERSION_RANGE.min_version == JJ_PINNED_VERSION
+    assert JJ_VERSION_RANGE.recommended_version == JJ_PINNED_VERSION
+    assert JJ_VERSION_RANGE.max_version == "0.999.999"
+
+
+def test_jj_parse_version_strips_the_commit_hash_suffix() -> None:
+    output = "jj 0.46.0-7d382314f9420b4b8d932245b49c99492c812b9f\n"
+    assert JjManagedTool().parse_version(output) == "0.46.0"
+
+
+def test_jj_parse_version_reads_an_older_release() -> None:
+    assert JjManagedTool().parse_version("jj 0.45.2-0123456789abcdef0123456789abcdef01234567") == "0.45.2"
+
+
+def test_jj_parse_version_accepts_a_build_without_a_hash() -> None:
+    assert JjManagedTool().parse_version("jj 0.47.0") == "0.47.0"
+
+
+def test_jj_parse_version_rejects_output_that_is_not_a_jj_version_line() -> None:
+    assert JjManagedTool().parse_version("Config error: Configuration cannot be parsed") is None
+
+
+def test_jj_parse_version_reads_the_real_binary_output(jj_binary: JjBinary) -> None:
+    output = subprocess.run([str(jj_binary.path), "--version"], capture_output=True, text=True, check=True).stdout
+    assert JjManagedTool().parse_version(output) == jj_binary.version
+
+
+def _make_jj_tarball(version: str) -> bytes:
+    """A jj release tarball's layout: ``./jj``, ``./LICENSE`` and ``./README.md`` at the root."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        for name, content, mode in (
+            ("./jj", f"#!/bin/sh\necho jj {version}-{uuid4().hex}\n".encode(), 0o644),
+            ("./LICENSE", b"license", 0o644),
+            ("./README.md", b"readme", 0o644),
+        ):
+            info = tarfile.TarInfo(name=name)
+            info.size = len(content)
+            info.mode = mode
+            tar.addfile(info, io.BytesIO(content))
+    return buffer.getvalue()
+
+
+def test_jj_stage_extracts_the_binary_and_makes_it_executable(tmp_path: Path) -> None:
+    downloaded = tmp_path / "jj.tar.gz"
+    downloaded.write_bytes(_make_jj_tarball(JJ_PINNED_VERSION))
+    version_dir = tmp_path / f"version-{JJ_PINNED_VERSION}"
+
+    binary = JjManagedTool().stage(downloaded, version_dir)
+
+    assert binary == version_dir / JjManagedTool.binary_subpath
+    assert binary.stat().st_mode & 0o111
+    output = subprocess.run([str(binary), "--version"], capture_output=True, text=True, check=True).stdout
+    assert JjManagedTool().parse_version(output) == JJ_PINNED_VERSION
+
+
+def test_jj_resolves_the_running_platform_from_the_pin() -> None:
+    distribution = JjManagedTool().resolve_distribution()
+    platform_key = next(key for key, pin in JJ_PIN.platforms.items() if pin.sha256 == distribution.checksum_sha256)
+
+    assert distribution.version == JJ_PINNED_VERSION
+    assert distribution.url == (
+        f"https://github.com/jj-vcs/jj/releases/download/v{JJ_PINNED_VERSION}/{JJ_PIN.platforms[platform_key].asset}"
+    )
+    assert distribution.archive == "tarball"
+    assert distribution.binary_subpath == JjManagedTool.binary_subpath
+
+
+def test_jj_registry_entry_is_optional_and_keeps_one_version() -> None:
+    tool = get_managed_tool(Dependency.JJ)
+    assert isinstance(tool, JjManagedTool)
+    assert tool.tool == Dependency.JJ
+    assert tool.version_range == JJ_VERSION_RANGE
+    assert tool.installs_on_startup_when_missing is False
+    assert tool.retention_keep == 1
+    assert tool.platform_keys == frozenset(_JJ_TARGET_TRIPLES)
+
+
+def test_jj_platform_map_values_match_the_advertised_platform_keys() -> None:
+    assert set(_JJ_PLATFORM_MAP.values()) == JjManagedTool().platform_keys == frozenset(JJ_PIN.platforms)

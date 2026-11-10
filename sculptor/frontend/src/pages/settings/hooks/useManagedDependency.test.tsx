@@ -38,6 +38,8 @@ const makeStatus = (overrides: Partial<DependenciesStatus>): DependenciesStatus 
   claude: makeInfo({}),
   pi: makeInfo({}),
   gh: makeInfo({}),
+  jj: makeInfo({}),
+  jjReadiness: { blocker: "NOT_INSTALLED" },
   voiceModels: makeInfo({}),
   ...overrides,
 });
@@ -154,6 +156,40 @@ describe("useManagedDependency", () => {
     expect(result.current.displayMode).toBe("CUSTOM");
     expect(result.current.isModeSettling).toBe(true);
     expect(onSettingChange).toHaveBeenCalledWith(UserConfigField.DEPENDENCY_PATHS, { pi: "CUSTOM" });
+  });
+
+  it("reads jj's own status rather than another tool's", () => {
+    store.set(
+      dependenciesStatusAtom,
+      makeStatus({
+        pi: makeInfo({ installed: true, mode: "CUSTOM", path: "/usr/bin/pi" }),
+        jj: makeInfo({
+          installed: true,
+          mode: "MANAGED",
+          path: "/managed/jj",
+          source: "MANAGED",
+          isVersionInRange: true,
+        }),
+      }),
+    );
+
+    const { result } = renderHook(() => useManagedDependency({ tool: "JJ", onSettingChange }), { wrapper });
+
+    expect(result.current.info?.path).toBe("/managed/jj");
+    expect(result.current.mode).toBe("MANAGED");
+    expect(result.current.isManagedUpToDate).toBe(true);
+  });
+
+  it("persists jj's mode under its own dependency_paths field", () => {
+    store.set(dependenciesStatusAtom, makeStatus({ jj: makeInfo({ installed: false, mode: "MANAGED" }) }));
+
+    const { result } = renderHook(() => useManagedDependency({ tool: "JJ", onSettingChange }), { wrapper });
+
+    act(() => {
+      result.current.handleModeChange("CUSTOM");
+    });
+
+    expect(onSettingChange).toHaveBeenCalledWith(UserConfigField.DEPENDENCY_PATHS, { jj: "CUSTOM" });
   });
 
   it("handleInstall requests the install for the given tool and reports an immediate failure", async () => {

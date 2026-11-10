@@ -16,3 +16,14 @@ export const isPiAvailableAtom = atom<boolean>((get) => {
   if (status === null) return true;
   return Boolean(status.pi.installed && status.pi.isVersionInRange);
 });
+
+/** JJ_AVAILABLE: whether Sculptor can use jj, as derived by the backend's readiness
+ * check (`jjReadiness`).
+ *
+ * Fails closed while the status is still unknown: what it gates writes to the
+ * user's repository, so it must never assume jj works. */
+export const isJjAvailableAtom = atom<boolean>((get) => {
+  const status = get(dependenciesStatusAtom);
+  if (status === null) return false;
+  return status.jjReadiness.blocker === null;
+});

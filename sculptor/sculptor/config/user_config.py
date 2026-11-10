@@ -67,12 +67,17 @@ class DependencyPaths(SerializableModel):
     ``"pi"`` (the old default) is preserved and resolves via PATH (i.e. treated
     as CUSTOM), so existing setups keep working after the default flips to
     ``"MANAGED"``.
+
+    The ``jj`` field uses the same grammar and the same MANAGED fallback as ``pi``:
+    jj is optional, and a ``jj`` already on the system PATH serves until the user
+    downloads the managed copy.
     """
 
     git: str | None = None
     gh: str | None = None
     claude: str = Field(default_factory=lambda: os.environ.get("SCULPTOR_CLAUDE_BINARY_DEFAULT_OVERRIDE", "MANAGED"))
     pi: str = "MANAGED"
+    jj: str = "MANAGED"
 
 
 class PiConfig(SerializableModel):
@@ -264,6 +269,11 @@ class UserConfig(SerializableModel):
     pi: PiConfig = Field(
         default_factory=PiConfig,
         description="Configuration for the pi agent harness",
+    )
+    jj_snapshot_max_new_file_size_mib: int = Field(
+        default=10,
+        ge=1,
+        description="Largest new file, in MiB, that jj snapshots into a jj workspace. jj leaves bigger new files untracked; its own 1 MiB default would leave updated lockfiles out.",
     )
     env_var_override_enabled: bool = Field(
         default=False,

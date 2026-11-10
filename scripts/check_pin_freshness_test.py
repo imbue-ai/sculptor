@@ -19,6 +19,16 @@ def test_latest_release_api_url_uses_the_tool_repo() -> None:
     assert url == "https://api.github.com/repos/earendil-works/pi/releases/latest"
 
 
+def test_latest_release_api_url_for_jj_uses_the_jj_repo() -> None:
+    url = check_pin_freshness.latest_release_api_url(managed_pin.JJ_PIN_SPEC)
+    assert url == "https://api.github.com/repos/jj-vcs/jj/releases/latest"
+
+
+def test_jj_staleness_advice_names_the_bump_target() -> None:
+    advice = managed_pin.JJ_PIN_SPEC.stale_pin_advice_template.format(latest="0.47.0")
+    assert "just bump-jj 0.47.0" in advice
+
+
 def test_format_github_output_renders_one_key_per_line() -> None:
     rendered = check_pin_freshness.format_github_output("0.80.2", "0.80.10", True)
     assert rendered == "pinned=0.80.2\nlatest=0.80.10\nstale=true\n"
