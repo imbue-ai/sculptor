@@ -1,15 +1,14 @@
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 from loguru import logger
 
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.cli_status_utils import CliStatusError
+from sculptor.web.cli_status_utils import GhRunner
 from sculptor.web.cli_status_utils import classify_cli_error
-from sculptor.web.cli_status_utils import run_cli_with_retry
 from sculptor.web.cli_status_utils import strip_remote_prefix
 from sculptor.web.derived import PrApproval
 from sculptor.web.derived import PrComment
@@ -17,12 +16,12 @@ from sculptor.web.derived import PrStatusInfo
 
 
 def fetch_pr_status(
+    run_gh: GhRunner,
     workspace_id: WorkspaceID,
-    working_dir: Path,
-    current_branch: str,
+    head_ref_name: str,
     target_branch: str,
 ) -> PrStatusInfo:
-    """Fetch PR status from GitHub for a workspace's current and target branch.
+    """Fetch PR status from GitHub for a workspace's PR head and target branch.
 
     Calls the gh CLI to find an open or merged PR matching the branches,
     and if found, surfaces check status, reviews, and unresolved comments.
@@ -36,7 +35,7 @@ def fetch_pr_status(
     verifying the origin is GitHub before calling this function.
     """
     try:
-        return _fetch_pr_status_inner(workspace_id, working_dir, current_branch, target_branch)
+        return _fetch_pr_status_inner(run_gh, workspace_id, head_ref_name, target_branch)
     except CliStatusError as e:
         logger.debug("PR status check failed ({}): {}", e.category, e)
         return PrStatusInfo(
@@ -48,9 +47,9 @@ def fetch_pr_status(
 
 
 def _fetch_pr_status_inner(
+    run_gh: GhRunner,
     workspace_id: WorkspaceID,
-    working_dir: Path,
-    current_branch: str,
+    head_ref_name: str,
     target_branch: str,
 ) -> PrStatusInfo:
     """Inner implementation that raises CliStatusError on CLI failures."""
@@ -59,7 +58,7 @@ def _fetch_pr_status_inner(
     # One `gh api graphql` call returns every PR on this source branch (across
     # all states) *with* its check/review/comment detail, so we group by each
     # PR's ``state`` and dispatch locally rather than issuing a second query.
-    all_prs = _fetch_prs_with_details(working_dir, current_branch)
+    all_prs = _fetch_prs_with_details(run_gh, head_ref_name)
     open_prs = [pr for pr in all_prs if pr.get("state") == "OPEN"]
     merged_prs = [pr for pr in all_prs if pr.get("state") == "MERGED"]
     closed_prs = [pr for pr in all_prs if pr.get("state") == "CLOSED"]
@@ -187,7 +186,7 @@ query($owner: String!, $name: String!, $branch: String!, $limit: Int!) {
 """
 
 
-def _fetch_prs_with_details(working_dir: Path, source_branch: str) -> list[dict]:
+def _fetch_prs_with_details(run_gh: GhRunner, source_branch: str) -> list[dict]:
     """Fetch all PRs (open/merged/closed) for a source branch, with detail.
 
     Issues a single ``gh api graphql`` request. Each returned node carries its
@@ -201,8 +200,7 @@ def _fetch_prs_with_details(working_dir: Path, source_branch: str) -> list[dict]
     Raises CliStatusError on any CLI failure (including rate limits, classified
     via ``classify_cli_error``) so the poller can surface it and back off.
     """
-    cmd = [
-        "gh",
+    arguments = [
         "api",
         "graphql",
         "-f",
@@ -216,7 +214,7 @@ def _fetch_prs_with_details(working_dir: Path, source_branch: str) -> list[dict]
         "-F",
         f"limit={_PR_QUERY_LIMIT}",
     ]
-    result = run_cli_with_retry(cmd, working_dir)
+    result = run_gh(arguments)
     if result.returncode != 0:
         raise CliStatusError(classify_cli_error(result.stderr), result.stderr)
     try:
@@ -307,7 +305,7 @@ class OpenPrSearchResult:
     rate_limit: GithubRateLimit | None
 
 
-def fetch_open_prs_for_token(working_dir: Path) -> OpenPrSearchResult:
+def fetch_open_prs_for_token(run_gh: GhRunner) -> OpenPrSearchResult:
     """Fetch every open PR authored by the token owner in one search query.
 
     Issues a single ``gh api graphql`` ``search`` request (``author:@me``,
@@ -328,7 +326,7 @@ def fetch_open_prs_for_token(working_dir: Path) -> OpenPrSearchResult:
     after: str | None = None
     page = 1
     while True:
-        payload = _run_search_query(working_dir, after)
+        payload = _run_search_query(run_gh, after)
         search = (payload.get("data") or {}).get("search") or {}
         nodes.extend(search.get("nodes") or [])
         rate_limit = _parse_rate_limit(payload)
@@ -345,16 +343,15 @@ def fetch_open_prs_for_token(working_dir: Path) -> OpenPrSearchResult:
     return OpenPrSearchResult(nodes=nodes, rate_limit=rate_limit)
 
 
-def _run_search_query(working_dir: Path, after: str | None) -> dict:
+def _run_search_query(run_gh: GhRunner, after: str | None) -> dict:
     """Run one page of the token-wide search query and return its parsed payload.
 
     Unlike ``_fetch_prs_with_details`` there is no ``owner``/``name`` arg —
-    search is token-global, not repo-scoped — but ``gh`` still needs a directory
-    to resolve the token/host. Raises CliStatusError on CLI failure or invalid
-    JSON, mirroring ``_fetch_prs_with_details``.
+    search is token-global, not repo-scoped — but ``gh`` still resolves the
+    token/host from the directory ``run_gh`` runs it in. Raises CliStatusError on
+    CLI failure or invalid JSON, mirroring ``_fetch_prs_with_details``.
     """
-    cmd = [
-        "gh",
+    arguments = [
         "api",
         "graphql",
         "-f",
@@ -365,8 +362,8 @@ def _run_search_query(working_dir: Path, after: str | None) -> dict:
         f"prCount={_SEARCH_PAGE_SIZE}",
     ]
     if after is not None:
-        cmd += ["-f", f"after={after}"]
-    result = run_cli_with_retry(cmd, working_dir)
+        arguments += ["-f", f"after={after}"]
+    result = run_gh(arguments)
     if result.returncode != 0:
         raise CliStatusError(classify_cli_error(result.stderr), result.stderr)
     try:

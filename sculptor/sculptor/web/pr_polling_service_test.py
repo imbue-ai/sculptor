@@ -1,5 +1,8 @@
 import datetime
+import json
+import os
 import queue
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -10,7 +13,14 @@ from unittest.mock import patch
 import pytest
 
 from sculptor.config.user_config import UserConfig
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
@@ -22,17 +32,15 @@ from sculptor.web.pr_polling_service import _GLOBAL_MIN_POLL_SPACING_SECONDS
 from sculptor.web.pr_polling_service import _HostThrottle
 from sculptor.web.pr_polling_service import _MIN_POLL_INTERVAL_SECONDS
 from sculptor.web.pr_polling_service import _PollJob
+from sculptor.web.pr_polling_service import _PullRequestLookup
 from sculptor.web.pr_polling_service import _RATE_LIMIT_COOLDOWN_SECONDS
 from sculptor.web.pr_polling_service import _RATE_LIMIT_WINDOW_SECONDS
-from sculptor.web.pr_polling_service import _RoundCandidate
 from sculptor.web.pr_polling_service import _TERMINAL_STATE_MULTIPLIER
 from sculptor.web.pr_polling_service import _WorkspacePollState
 from sculptor.web.pr_polling_service import _build_pr_index
 from sculptor.web.pr_polling_service import _compute_governed_interval
 from sculptor.web.pr_polling_service import _compute_poll_delay
 from sculptor.web.pr_polling_service import _compute_round_interval
-from sculptor.web.pr_polling_service import _parse_origin
-from sculptor.web.pr_polling_service import _parse_origin_owner_repo
 from sculptor.web.pr_polling_service import _seconds_until_reset
 from sculptor.web.pr_status import GithubRateLimit
 from sculptor.web.pr_status import OpenPrSearchResult
@@ -63,15 +71,16 @@ def _make_service() -> PrPollingService:
     svc._worker_events = [threading.Event() for _ in range(4)]
     svc._worker_sleep_until = {}
     svc._worker_sleep_lock = threading.Lock()
-    svc._gh_available = None
     svc._throttle = _HostThrottle(_GLOBAL_MIN_POLL_SPACING_SECONDS)
     svc._matched_workspaces = set()
     svc._rate_limit_by_host = {}
     svc._round_failed_hosts = set()
     svc._cold_start_logged_hosts = set()
     svc._governed_interval = None
+    workspace_service = MagicMock()
+    workspace_service.get_workspace_working_directory.return_value = None
     object.__setattr__(svc, "_data_model_service", MagicMock())
-    object.__setattr__(svc, "_workspace_service", MagicMock())
+    object.__setattr__(svc, "_workspace_service", workspace_service)
     return svc
 
 
@@ -86,53 +95,170 @@ def _add_workspace_poll_state(svc: PrPollingService, workspace_id: WorkspaceID) 
     """Add metadata for a workspace without calling on_workspace_created (avoids mock typing)."""
     svc._workspace_poll_state[workspace_id] = _WorkspacePollState(
         workspace_id=workspace_id,
-        working_dir=None,
+        initialization_strategy=WorkspaceInitializationStrategy.CLONE,
+        checkout_location=None,
         target_branch="main",
         is_open=True,
     )
 
 
 # ---------------------------------------------------------------------------
-# CLI availability caching
+# Real-git checkouts and a configured gh
 # ---------------------------------------------------------------------------
 
 
-def test_gh_available_cached_when_found() -> None:
+_GITHUB_ORIGIN = "https://github.com/org/repo.git"
+
+
+@pytest.fixture
+def hermetic_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the developer's git config (identity, URL rewrites) out of tests that run git."""
+    global_config = tmp_path / "gitconfig"
+    global_config.write_text("[user]\n\tname = Test\n\temail = test@example.com\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+
+@pytest.fixture
+def decoy_gh_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A gh on PATH that fails, so a test passes only when the poller runs the configured gh."""
+    decoy_directory = tmp_path / "decoy-bin"
+    decoy_directory.mkdir()
+    _write_script(decoy_directory / "gh", 'echo "the gh on PATH ran" >&2\nexit 1')
+    monkeypatch.setenv("PATH", f"{decoy_directory}{os.pathsep}{os.environ['PATH']}")
+
+
+def _write_script(path: Path, body: str) -> Path:
+    path.write_text(f"#!/bin/bash\n{body}\n")
+    path.chmod(0o755)
+    return path
+
+
+def _make_repo(path: Path, branch: str, origin_url: str | None) -> Path:
+    """A repository on `branch` with one empty commit and, optionally, an `origin` remote."""
+    path.mkdir(parents=True)
+    run_blocking(["git", "init", "-q", "-b", branch], cwd=path)
+    run_blocking(["git", "commit", "-q", "--allow-empty", "-m", "init"], cwd=path)
+    if origin_url is not None:
+        run_blocking(["git", "remote", "add", "origin", origin_url], cwd=path)
+    return path
+
+
+def _make_fake_gh(directory: Path, nodes: list[dict]) -> Path:
+    """A gh that answers the per-workspace query with `nodes` and records the directory it ran in."""
+    payload = directory / "gh-payload.json"
+    payload.write_text(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
+    return _write_script(directory / "gh", f'pwd -P > "{directory / "gh-cwd"}"\ncat "{payload}"')
+
+
+def _make_git_cli(concurrency_group: ConcurrencyGroup, gh: Path | None) -> GitCli:
+    binaries = {Dependency.GIT: shutil.which("git"), Dependency.GH: None if gh is None else str(gh)}
+    return GitCli(concurrency_group, binaries.get)
+
+
+def _make_service_with_git(concurrency_group: ConcurrencyGroup, git_cli: GitCli) -> PrPollingService:
     svc = _make_service()
-    with patch("shutil.which", return_value="/usr/bin/gh"):
-        assert svc._is_gh_available() is True
-    # Second call should use cached value — shutil.which not called
-    with patch("shutil.which", side_effect=AssertionError("should not be called")):
-        assert svc._is_gh_available() is True
+    svc._git = git_cli
+    object.__setattr__(svc, "concurrency_group", concurrency_group)
+    return svc
 
 
-def test_gh_not_cached_when_missing() -> None:
-    svc = _make_service()
-    call_count = 0
+def _register_checkout(
+    svc: PrPollingService, repo: Path, checkout: Path, target_branch: str = "origin/main"
+) -> tuple[WorkspaceID, _WorkspacePollState]:
+    """Track a clone-mode workspace whose checkout is already known, so polling never reads the DB."""
+    workspace_id = WorkspaceID()
+    state = _WorkspacePollState(
+        workspace_id=workspace_id,
+        initialization_strategy=WorkspaceInitializationStrategy.CLONE,
+        checkout_location=CheckoutLocation(repo_path=repo, checkout_path=checkout),
+        target_branch=target_branch,
+        is_open=True,
+    )
+    svc._workspace_poll_state[workspace_id] = state
+    return workspace_id, state
 
-    def counting_which(name: str) -> None:
-        nonlocal call_count
-        call_count += 1
-        return None
 
-    with patch("shutil.which", side_effect=counting_which):
-        assert svc._is_gh_available() is False
-        assert svc._is_gh_available() is False
-    assert call_count == 2, "shutil.which should be called each time when gh is not found"
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_fallback_runs_the_configured_gh_in_the_checkout(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", _GITHUB_ORIGIN)
+    gh = _make_fake_gh(tmp_path, [_open_search_node(7, base="main")])
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh))
+    workspace_id, state = _register_checkout(svc, repo, checkout)
+
+    status = svc._fetch_status(workspace_id, state)
+
+    assert isinstance(status, PrStatusInfo)
+    assert status.pr_state == "open"
+    assert status.pr_iid == 7
+    assert (tmp_path / "gh-cwd").read_text().strip() == str(checkout.resolve())
 
 
-def test_gh_becomes_available_after_install() -> None:
-    svc = _make_service()
-    with patch("shutil.which", return_value=None):
-        assert svc._is_gh_available() is False
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_fallback_reports_cli_missing_when_gh_cannot_be_resolved(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", _GITHUB_ORIGIN)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    workspace_id, state = _register_checkout(svc, repo, checkout)
 
-    # Simulate installing gh
-    with patch("shutil.which", return_value="/usr/bin/gh"):
-        assert svc._is_gh_available() is True
+    status = svc._fetch_status(workspace_id, state)
 
-    # Now should be cached
-    with patch("shutil.which", side_effect=AssertionError("should not be called")):
-        assert svc._is_gh_available() is True
+    assert isinstance(status, PrStatusInfo)
+    assert status.pr_state == "none"
+    assert status.error_category == "cli_missing"
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_detached_head_reports_no_pr_without_running_gh(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", _GITHUB_ORIGIN)
+    run_blocking(["git", "checkout", "-q", "--detach"], cwd=checkout)
+    # gh cannot be resolved, so running it would surface as `cli_missing`.
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    workspace_id, state = _register_checkout(svc, repo, checkout)
+
+    status = svc._fetch_status(workspace_id, state)
+
+    assert status == PrStatusInfo(workspace_id=workspace_id, pr_state="none")
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_round_reads_the_origin_from_the_main_repo_not_the_checkout(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", "git@github.example.com:org/repo.git")
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", None)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    workspace_id, state = _register_checkout(svc, repo, checkout)
+
+    lookup = svc._resolve_round_candidate(workspace_id, state)
+
+    assert lookup is not None
+    assert lookup.host == "github.example.com"
+    assert lookup.name_with_owner == "org/repo"
+    assert lookup.head_ref_name == "feat-1"
+    assert lookup.working_dir == checkout
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_fallback_raises_for_a_jj_checkout_instead_of_reporting_no_pr(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    checkout = tmp_path / "jj-checkout"
+    (checkout / ".jj").mkdir(parents=True)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    workspace_id, state = _register_checkout(svc, repo, checkout)
+
+    with pytest.raises(GitCommandInJjWorkspaceError):
+        svc._fetch_status(workspace_id, state)
 
 
 # ---------------------------------------------------------------------------
@@ -689,52 +815,6 @@ def test_rate_limited_result_re_enqueues_after_cooldown() -> None:
 
 
 # ---------------------------------------------------------------------------
-# origin URL -> (host, owner, name) parsing (Change-1 fan-out, Risk-5 GHE hosts).
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "url, host, owner, name",
-    [
-        ("https://github.com/imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
-        ("git@github.com:imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
-        ("ssh://git@github.com/imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
-        ("https://github.com/imbue-ai/sculptor", "github.com", "imbue-ai", "sculptor"),
-        ("https://github.example.com/org/repo.git", "github.example.com", "org", "repo"),
-    ],
-)
-def test_parse_origin_valid_forms(url: str, host: str, owner: str, name: str) -> None:
-    info = _parse_origin(url)
-    assert info is not None
-    assert info.host == host
-    assert info.owner == owner
-    assert info.name == name
-    # name_with_owner is what the poller compares against repository.nameWithOwner.
-    assert info.name_with_owner == f"{owner}/{name}"
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://github.com/onlyowner",
-        "git@github.com:onlyowner.git",
-        "https://github.com/",
-        "https://github.com/a/b/c",
-        "not a url",
-        "",
-    ],
-)
-def test_parse_origin_malformed_returns_none(url: str) -> None:
-    assert _parse_origin(url) is None
-
-
-def test_parse_origin_owner_repo_strips_dot_git() -> None:
-    # nameWithOwner from GitHub's API never carries .git; origin URLs usually do.
-    assert _parse_origin_owner_repo("https://github.com/imbue-ai/sculptor.git") == ("imbue-ai", "sculptor")
-    assert _parse_origin_owner_repo("git@github.com:imbue-ai/sculptor.git") == ("imbue-ai", "sculptor")
-
-
-# ---------------------------------------------------------------------------
 # Transient per-round (repo, branch) -> nodes index (Change-1 fan-out).
 # ---------------------------------------------------------------------------
 
@@ -825,24 +905,24 @@ def _candidate(
     svc: PrPollingService,
     workspace_id: WorkspaceID,
     target_branch: str,
-    current_branch: str = "feat-1",
+    head_ref_name: str = "feat-1",
     repo: str = "org/repo",
     host: str = "github.com",
     is_open: bool = True,
-) -> _RoundCandidate:
+) -> _PullRequestLookup:
     """Register a poll state and build a matching round candidate (no git I/O)."""
-    state = _WorkspacePollState(
+    svc._workspace_poll_state[workspace_id] = _WorkspacePollState(
         workspace_id=workspace_id,
-        working_dir=_WORKING_DIR,
+        initialization_strategy=WorkspaceInitializationStrategy.CLONE,
+        checkout_location=CheckoutLocation(repo_path=_WORKING_DIR, checkout_path=_WORKING_DIR),
         target_branch=target_branch,
         is_open=is_open,
     )
-    svc._workspace_poll_state[workspace_id] = state
-    return _RoundCandidate(
+    return _PullRequestLookup(
         workspace_id=workspace_id,
-        state=state,
         working_dir=_WORKING_DIR,
-        current_branch=current_branch,
+        gh_env={},
+        head_ref_name=head_ref_name,
         target_branch=target_branch,
         host=host,
         name_with_owner=repo,
@@ -903,7 +983,7 @@ def test_round_unmatched_branch_enqueues_fallback_and_does_not_emit() -> None:
     # the round emits nothing for it and enqueues a per-workspace fallback.
     svc = _make_service()
     ws = WorkspaceID()
-    cand = _candidate(svc, ws, target_branch="main", current_branch="feat-no-pr")
+    cand = _candidate(svc, ws, target_branch="main", head_ref_name="feat-no-pr")
 
     with patch.object(PrPollingService, "_respect_throttle", return_value=None):
         with patch(
@@ -935,7 +1015,7 @@ def test_round_stashes_rate_limit_for_governor() -> None:
 
 def test_round_logs_cold_start_unmatched_count_once() -> None:
     svc = _make_service()
-    cand = _candidate(svc, WorkspaceID(), target_branch="main", current_branch="feat-no-pr")
+    cand = _candidate(svc, WorkspaceID(), target_branch="main", head_ref_name="feat-no-pr")
 
     with patch.object(PrPollingService, "_respect_throttle", return_value=None):
         with patch(
@@ -981,41 +1061,50 @@ def test_round_skips_search_when_in_cooldown() -> None:
             svc._run_host_round("github.com", [cand])
 
 
-def test_round_short_circuit_on_target_issues_no_search() -> None:
+def test_round_reports_cli_missing_to_every_candidate_when_gh_cannot_be_resolved(
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    ws_a = WorkspaceID()
+    ws_b = WorkspaceID()
+    candidates = [_candidate(svc, ws_a, target_branch="main"), _candidate(svc, ws_b, target_branch="main")]
+
+    svc._run_host_round("github.com", candidates)
+
+    assert svc._cache[ws_a].error_category == "cli_missing"
+    assert svc._cache[ws_b].error_category == "cli_missing"
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_round_short_circuit_on_target_issues_no_search(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
     # A workspace on its target branch resolves to `none` with zero gh calls —
-    # it never becomes a round candidate, so no search query runs.
-    svc = _make_service()
-    ws = WorkspaceID()
-    _add_workspace_poll_state(svc, ws)
-    svc._workspace_poll_state[ws].working_dir = _WORKING_DIR
-    svc._workspace_poll_state[ws].target_branch = "origin/main"
-    config = _make_user_config()
+    # it never becomes a round candidate, so no search query runs (gh cannot be
+    # resolved, so a search would surface as `cli_missing`).
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    checkout = _make_repo(tmp_path / "checkout", "main", _GITHUB_ORIGIN)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    ws, _ = _register_checkout(svc, repo, checkout, target_branch="origin/main")
 
-    with patch("sculptor.web.pr_polling_service._get_workspace_current_branch", return_value="main"):
-        with patch(
-            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
-            side_effect=AssertionError("no search for an on-target workspace"),
-        ):
-            svc._run_round(config)
+    svc._run_round(_make_user_config())
 
-    assert svc._cache[ws].pr_state == "none"
+    assert svc._cache[ws] == PrStatusInfo(workspace_id=ws, pr_state="none")
 
 
-def test_round_short_circuit_no_branch_issues_no_search() -> None:
-    svc = _make_service()
-    ws = WorkspaceID()
-    _add_workspace_poll_state(svc, ws)
-    svc._workspace_poll_state[ws].working_dir = _WORKING_DIR
-    config = _make_user_config()
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_round_short_circuit_detached_head_issues_no_search(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", _GITHUB_ORIGIN)
+    run_blocking(["git", "checkout", "-q", "--detach"], cwd=checkout)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    ws, _ = _register_checkout(svc, repo, checkout)
 
-    with patch("sculptor.web.pr_polling_service._get_workspace_current_branch", return_value=None):
-        with patch(
-            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
-            side_effect=AssertionError("no search for a branchless workspace"),
-        ):
-            svc._run_round(config)
+    svc._run_round(_make_user_config())
 
-    assert svc._cache[ws].pr_state == "none"
+    assert svc._cache[ws] == PrStatusInfo(workspace_id=ws, pr_state="none")
 
 
 def test_fallback_index_blip_open_to_none_is_noop() -> None:

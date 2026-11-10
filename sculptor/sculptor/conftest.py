@@ -26,6 +26,7 @@ from sculptor.services.user_config.user_config import get_default_user_config_in
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.web.pr_polling_service import PrPollingService
 
 
@@ -129,10 +130,12 @@ def test_service_collection(
     _test_project_service: ProjectService,
     _test_workspace_service: WorkspaceService,
 ) -> Generator[CompleteServiceCollection, None, None]:
+    pr_polling_concurrency_group = test_root_concurrency_group.make_concurrency_group("pr_polling")
     pr_polling_service = PrPollingService(
-        concurrency_group=test_root_concurrency_group.make_concurrency_group("pr_polling"),
+        concurrency_group=pr_polling_concurrency_group,
         data_model_service=_test_data_model_service,
         workspace_service=_test_workspace_service,
+        git_cli=GitCli(pr_polling_concurrency_group, _test_dependency_management_service.resolve_binary_path),
     )
     ci_babysitter_service = CIBabysitterCoordinator(
         concurrency_group=test_root_concurrency_group.make_concurrency_group("ci_babysitter"),

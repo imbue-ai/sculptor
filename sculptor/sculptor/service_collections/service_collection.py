@@ -8,6 +8,7 @@ from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoor
 from sculptor.services.pi_login_service import PiLoginService
 from sculptor.services.task_service.data_types import TaskServiceCollection
 from sculptor.services.task_service.service_collection import get_task_service_collection
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.web.pr_polling_service import PrPollingService
 
 
@@ -41,10 +42,12 @@ def get_services(
     settings: SculptorSettings,
 ) -> CompleteServiceCollection:
     services = get_task_service_collection(concurrency_group, settings)
+    pr_polling_concurrency_group = concurrency_group.make_concurrency_group("pr_polling")
     pr_polling_service = PrPollingService(
-        concurrency_group=concurrency_group.make_concurrency_group("pr_polling"),
+        concurrency_group=pr_polling_concurrency_group,
         data_model_service=services.data_model_service,
         workspace_service=services.workspace_service,
+        git_cli=GitCli(pr_polling_concurrency_group, services.dependency_management_service.resolve_binary_path),
     )
     btw_service = BtwService(concurrency_group=concurrency_group.make_concurrency_group("btw_service"))
     pi_login_service = PiLoginService(

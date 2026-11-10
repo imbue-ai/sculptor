@@ -2,15 +2,17 @@ import json
 import os
 import re
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from sculptor.foundation.processes.local_process import run_blocking
-from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
 from sculptor.web.cli_status_utils import CliStatusError
+from sculptor.web.cli_status_utils import GhRunner
 from sculptor.web.pr_status import _GRAPHQL_PR_QUERY
 from sculptor.web.pr_status import _PR_QUERY_LIMIT
 from sculptor.web.pr_status import _SEARCH_PAGE_SIZE
@@ -21,14 +23,11 @@ from sculptor.web.pr_status import fetch_open_prs_for_token
 from sculptor.web.pr_status import fetch_pr_status
 
 
-def _make_finished(stdout: str, returncode: int = 0, stderr: str = "") -> FinishedProcess:
-    return FinishedProcess(
-        stdout=stdout, stderr=stderr, returncode=returncode, command=("gh",), is_output_already_logged=False
-    )
+def _make_finished(stdout: str, returncode: int = 0, stderr: str = "") -> VcsCommandResult:
+    return VcsCommandResult(command=("gh",), returncode=returncode, stdout=stdout, stderr=stderr)
 
 
 WORKSPACE_ID = WorkspaceID()
-WORKING_DIR = Path("/tmp/repo")
 
 
 def _pr_node(
@@ -85,37 +84,34 @@ def _graphql_stdout(nodes: list[dict]) -> str:
     return json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}})
 
 
-def _patch_cli(side_effect):  # noqa: ANN001
-    return patch("sculptor.web.pr_status.run_cli_with_retry", side_effect=side_effect)
-
-
-def _graphql_handler(nodes: list[dict]):  # noqa: ANN001
-    """Build a cli_handler for the single `gh api graphql` call.
+def _graphql_handler(nodes: list[dict]) -> GhRunner:
+    """Build a gh runner for the single `gh api graphql` call.
 
     The backend issues exactly one graphql request that returns every PR on the
     source branch (across all states) with its check/review/comment detail
     bundled in. This handler returns ``nodes`` wrapped in the graphql envelope.
     """
 
-    def handler(cmd, _working_dir):  # noqa: ANN001
-        if "graphql" in cmd:
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
+        if "graphql" in arguments:
             return _make_finished(_graphql_stdout(nodes))
         return _make_finished("[]")
 
     return handler
 
 
-def _captured_query(cmd: list[str]) -> str:
-    """Return the GraphQL query string passed as `-f query=...` in a gh command."""
-    for arg in cmd:
+def _captured_query(arguments: Sequence[str]) -> str:
+    """Return the GraphQL query string passed as `-f query=...` in gh's arguments."""
+    for arg in arguments:
         if arg.startswith("query="):
             return arg[len("query=") :]
-    raise AssertionError(f"no query= argument found in command: {cmd}")
+    raise AssertionError(f"no query= argument found in arguments: {arguments}")
 
 
 def test_open_pr_matching_target() -> None:
-    with _patch_cli(_graphql_handler([_open_node(100, base_ref="main")])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(
+        _graphql_handler([_open_node(100, base_ref="main")]), WORKSPACE_ID, "feat-1", "origin/main"
+    )
 
     assert result.pr_state == "open"
     assert result.pr_iid == 100
@@ -123,8 +119,9 @@ def test_open_pr_matching_target() -> None:
 
 
 def test_open_pr_mismatched_target() -> None:
-    with _patch_cli(_graphql_handler([_open_node(200, base_ref="develop")])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(
+        _graphql_handler([_open_node(200, base_ref="develop")]), WORKSPACE_ID, "feat-1", "origin/main"
+    )
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid == 200
@@ -133,16 +130,16 @@ def test_open_pr_mismatched_target() -> None:
 
 
 def test_no_prs_at_all() -> None:
-    with _patch_cli(_graphql_handler([])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler([]), WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid is None
 
 
 def test_merged_pr_matching_target() -> None:
-    with _patch_cli(_graphql_handler([_merged_node(300, base_ref="main")])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(
+        _graphql_handler([_merged_node(300, base_ref="main")]), WORKSPACE_ID, "feat-1", "origin/main"
+    )
 
     assert result.pr_state == "merged"
     assert result.pr_iid == 300
@@ -155,8 +152,7 @@ def test_multiple_open_prs_one_matches() -> None:
         _open_node(401, base_ref="main"),
     ]
 
-    with _patch_cli(_graphql_handler(nodes)):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 401
@@ -169,8 +165,7 @@ def test_multiple_open_prs_none_match() -> None:
         _open_node(501, base_ref="staging"),
     ]
 
-    with _patch_cli(_graphql_handler(nodes)):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid == 500
@@ -178,8 +173,9 @@ def test_multiple_open_prs_none_match() -> None:
 
 
 def test_closed_pr_matching_target() -> None:
-    with _patch_cli(_graphql_handler([_closed_node(800, base_ref="main")])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(
+        _graphql_handler([_closed_node(800, base_ref="main")]), WORKSPACE_ID, "feat-1", "origin/main"
+    )
 
     assert result.pr_state == "closed"
     assert result.pr_iid == 800
@@ -195,8 +191,7 @@ def test_merged_takes_precedence_over_closed() -> None:
         _closed_node(810, base_ref="main"),
     ]
 
-    with _patch_cli(_graphql_handler(nodes)):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler(nodes), WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "merged"
     assert result.pr_iid == 820
@@ -217,12 +212,11 @@ def test_open_pr_details_fetched_in_single_graphql_call() -> None:
         ],
     )
 
-    def handler(cmd, _working_dir):  # noqa: ANN001
-        calls.append(cmd)
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
+        calls.append(list(arguments))
         return _make_finished(_graphql_stdout([node]))
 
-    with _patch_cli(handler):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "open"
     assert result.pipeline_status == "passed"
@@ -233,7 +227,7 @@ def test_open_pr_details_fetched_in_single_graphql_call() -> None:
     # Exactly one CLI call, and it is a `gh api graphql` request (not the old
     # `gh pr list` + `gh pr view` pair).
     assert len(calls) == 1
-    assert calls[0][:3] == ["gh", "api", "graphql"]
+    assert calls[0][:2] == ["api", "graphql"]
 
 
 # ---------------------------------------------------------------------------
@@ -242,8 +236,9 @@ def test_open_pr_details_fetched_in_single_graphql_call() -> None:
 
 
 def test_open_pr_in_merge_queue() -> None:
-    with _patch_cli(_graphql_handler([_open_node(55, is_in_merge_queue=True)])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(
+        _graphql_handler([_open_node(55, is_in_merge_queue=True)]), WORKSPACE_ID, "feat-1", "origin/main"
+    )
 
     assert result.pr_state == "open"
     assert result.pr_iid == 55
@@ -259,8 +254,7 @@ def test_open_pr_in_merge_queue() -> None:
 
 def test_failed_check_rollup_surfaces_as_failed_pipeline() -> None:
     node = _open_node(59, check_state="FAILURE")
-    with _patch_cli(_graphql_handler([node])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 59
@@ -281,8 +275,7 @@ def test_failed_check_rollup_surfaces_as_failed_pipeline() -> None:
 )
 def test_status_check_rollup_state_maps_to_pipeline_status(rollup_state: str | None, expected: str | None) -> None:
     node = _open_node(10, check_state=rollup_state)
-    with _patch_cli(_graphql_handler([node])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pipeline_status == expected
 
@@ -296,8 +289,9 @@ def test_status_check_rollup_state_maps_to_pipeline_status(rollup_state: str | N
 
 
 def test_open_pr_has_conflicts_flag_flows_through() -> None:
-    with _patch_cli(_graphql_handler([_open_node(700, mergeable="CONFLICTING")])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(
+        _graphql_handler([_open_node(700, mergeable="CONFLICTING")]), WORKSPACE_ID, "feat-1", "origin/main"
+    )
 
     assert result.pr_state == "open"
     assert result.has_conflicts is True
@@ -317,8 +311,9 @@ def test_open_pr_has_conflicts_flag_flows_through() -> None:
     ],
 )
 def test_mergeable_state_maps_to_has_conflicts(mergeable: str | None, expected: bool | None) -> None:
-    with _patch_cli(_graphql_handler([_open_node(10, mergeable=mergeable)])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(
+        _graphql_handler([_open_node(10, mergeable=mergeable)]), WORKSPACE_ID, "feat-1", "origin/main"
+    )
 
     assert result.has_conflicts is expected
 
@@ -333,17 +328,16 @@ def test_mergeable_state_maps_to_has_conflicts(mergeable: str | None, expected: 
 def test_graphql_query_requests_the_fields_the_parser_reads() -> None:
     captured: list[list] = []
 
-    def handler(cmd, _working_dir):  # noqa: ANN001
-        captured.append(cmd)
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
+        captured.append(list(arguments))
         return _make_finished(_graphql_stdout([]))
 
-    with _patch_cli(handler):
-        fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
 
     assert len(captured) == 1
-    cmd = captured[0]
-    assert cmd[:3] == ["gh", "api", "graphql"]
-    query = _captured_query(cmd)
+    arguments = captured[0]
+    assert arguments[:2] == ["api", "graphql"]
+    query = _captured_query(arguments)
     # Every field the parser navigates must be present in the query.
     for field in (
         "statusCheckRollup",
@@ -370,11 +364,10 @@ def test_graphql_query_requests_the_fields_the_parser_reads() -> None:
 
 
 def test_transient_cli_failure_surfaces_error() -> None:
-    def handler(cmd, _working_dir):  # noqa: ANN001
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr="HTTP 500 Internal Server Error")
 
-    with _patch_cli(handler):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
     assert result.error_category == "transient"
@@ -396,8 +389,7 @@ def test_open_pr_with_missing_detail_degrades_gracefully() -> None:
         "state": "OPEN",
         "baseRefName": "main",
     }
-    with _patch_cli(_graphql_handler([node])):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(_graphql_handler([node]), WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "open"
     assert result.pr_iid == 65
@@ -415,33 +407,30 @@ def test_open_pr_with_missing_detail_degrades_gracefully() -> None:
 def test_unknown_field_usage_error_not_classified_as_not_authenticated() -> None:
     stderr = 'Unknown JSON field: "reviewThreads"\nAvailable fields:\n  author\n  authorAssociation\n  state\n'
 
-    def handler(cmd, _working_dir):  # noqa: ANN001
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr=stderr)
 
-    with _patch_cli(handler):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.error_category != "not_authenticated"
     assert result.error_category == "transient"
 
 
 def test_rate_limit_surfaces_error() -> None:
-    def handler(cmd, _working_dir):  # noqa: ANN001
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr="HTTP 403: API rate limit exceeded for user")
 
-    with _patch_cli(handler):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
     assert result.error_category == "rate_limited"
 
 
 def test_secondary_rate_limit_surfaces_error() -> None:
-    def handler(cmd, _working_dir):  # noqa: ANN001
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr="You have exceeded a secondary rate limit.")
 
-    with _patch_cli(handler):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.error_category == "rate_limited"
 
@@ -452,11 +441,10 @@ def test_secondary_rate_limit_surfaces_error() -> None:
 
 
 def test_null_repository_in_payload_returns_none() -> None:
-    def handler(cmd, _working_dir):  # noqa: ANN001
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished(json.dumps({"data": {"repository": None}}))
 
-    with _patch_cli(handler):
-        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+    result = fetch_pr_status(handler, WORKSPACE_ID, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
     assert result.error_category is None
@@ -552,23 +540,22 @@ def _search_stdout(
     )
 
 
-def _captured_search_string(cmd: list[str]) -> str:
-    """Return the `-f q=...` search filter passed in a gh command (not `query=`)."""
-    for arg in cmd:
+def _captured_search_string(arguments: Sequence[str]) -> str:
+    """Return the `-f q=...` search filter passed in gh's arguments (not `query=`)."""
+    for arg in arguments:
         if arg.startswith("q="):
             return arg[len("q=") :]
-    raise AssertionError(f"no q= argument found in command: {cmd}")
+    raise AssertionError(f"no q= argument found in arguments: {arguments}")
 
 
 def test_fetch_open_prs_for_token_single_page() -> None:
     captured: list[list] = []
 
-    def handler(cmd, _working_dir):  # noqa: ANN001
-        captured.append(cmd)
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
+        captured.append(list(arguments))
         return _make_finished(_search_stdout([_search_node(100), _search_node(101)]))
 
-    with _patch_cli(handler):
-        result = fetch_open_prs_for_token(WORKING_DIR)
+    result = fetch_open_prs_for_token(handler)
 
     assert [n["number"] for n in result.nodes] == [100, 101]
     assert result.rate_limit is not None
@@ -578,15 +565,15 @@ def test_fetch_open_prs_for_token_single_page() -> None:
     assert result.rate_limit.reset_at == "2026-01-01T00:00:00Z"
 
     assert len(captured) == 1
-    cmd = captured[0]
-    assert cmd[:3] == ["gh", "api", "graphql"]
+    arguments = captured[0]
+    assert arguments[:2] == ["api", "graphql"]
     # The search is token-global, not repo-scoped — no owner/name args.
-    assert not any(arg.startswith("owner=") or arg.startswith("name=") for arg in cmd)
-    search_string = _captured_search_string(cmd)
+    assert not any(arg.startswith("owner=") or arg.startswith("name=") for arg in arguments)
+    search_string = _captured_search_string(arguments)
     assert "author:@me" in search_string
     assert "state:open" in search_string
     assert "sort:updated" in search_string
-    query = _captured_query(cmd)
+    query = _captured_query(arguments)
     for field in (
         "mergeable",
         "isInMergeQueue",
@@ -601,15 +588,14 @@ def test_fetch_open_prs_for_token_single_page() -> None:
 def test_fetch_open_prs_for_token_paginates() -> None:
     captured: list[list] = []
 
-    def handler(cmd, _working_dir):  # noqa: ANN001
-        captured.append(cmd)
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
+        captured.append(list(arguments))
         if len(captured) == 1:
             return _make_finished(_search_stdout([_search_node(1)], has_next=True, end_cursor="CURSOR_1"))
         return _make_finished(_search_stdout([_search_node(2)], has_next=False))
 
     with patch("sculptor.web.pr_status.logger") as mock_logger:
-        with _patch_cli(handler):
-            result = fetch_open_prs_for_token(WORKING_DIR)
+        result = fetch_open_prs_for_token(handler)
 
     assert [n["number"] for n in result.nodes] == [1, 2]
     assert len(captured) == 2
@@ -620,23 +606,21 @@ def test_fetch_open_prs_for_token_paginates() -> None:
 
 
 def test_fetch_open_prs_for_token_missing_rate_limit_is_tolerated() -> None:
-    def handler(cmd, _working_dir):  # noqa: ANN001
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished(_search_stdout([_search_node(1)], rate_limit=None))
 
-    with _patch_cli(handler):
-        result = fetch_open_prs_for_token(WORKING_DIR)
+    result = fetch_open_prs_for_token(handler)
 
     assert [n["number"] for n in result.nodes] == [1]
     assert result.rate_limit is None
 
 
 def test_fetch_open_prs_for_token_cli_failure_raises_classified() -> None:
-    def handler(cmd, _working_dir):  # noqa: ANN001
+    def handler(arguments: Sequence[str]) -> VcsCommandResult:
         return _make_finished("", returncode=1, stderr="HTTP 403: API rate limit exceeded for user")
 
-    with _patch_cli(handler):
-        with pytest.raises(CliStatusError) as exc_info:
-            fetch_open_prs_for_token(WORKING_DIR)
+    with pytest.raises(CliStatusError) as exc_info:
+        fetch_open_prs_for_token(handler)
 
     assert exc_info.value.category == "rate_limited"
 

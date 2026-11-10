@@ -1,28 +1,35 @@
 """Shared helpers for CLI-based PR status checks.
 
-Provides an error class, error classifier, and retry runner used by
-pr_status.py (gh).
+Provides an error class, error classifier, and the retrying gh runner used by
+pr_status.py.
 """
 
 import re
+from collections.abc import Callable
+from collections.abc import Mapping
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
 from loguru import logger
 
-from sculptor.foundation.processes.local_process import run_blocking
-from sculptor.foundation.subprocess_utils import FinishedProcess
-from sculptor.foundation.subprocess_utils import ProcessSetupError
+from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
+from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundError
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 
-CliErrorCategory = Literal["not_authenticated", "no_access", "network_error", "rate_limited", "transient"]
+CliErrorCategory = Literal[
+    "cli_missing", "not_authenticated", "no_access", "network_error", "rate_limited", "transient"
+]
+
+# Runs `gh <arguments>` for one workspace; pr_status.py builds the arguments.
+GhRunner = Callable[[Sequence[str]], VcsCommandResult]
 
 # Errors we never retry immediately. The first three are permanent (a retry
 # would fail the same way); ``rate_limited`` is temporary but a retry would
 # only deepen the throttling, so the poller backs off via a host-level
 # cooldown instead (see PrPollingService).
 NON_RETRYABLE_CLI_ERRORS = frozenset({"not_authenticated", "no_access", "network_error", "rate_limited"})
-
-_CLI_COMMAND_TIMEOUT = 30.0
 
 
 class CliStatusError(Exception):
@@ -84,24 +91,31 @@ def strip_remote_prefix(branch: str) -> str:
     return branch.split("/", 1)[-1] if "/" in branch else branch
 
 
-def run_cli_with_retry(cmd: list[str], working_dir: Path) -> FinishedProcess:
-    """Run a CLI command with a single retry on transient failures only.
+def run_gh_with_retry(
+    git_cli: GitCli, arguments: Sequence[str], cwd: Path, extra_env: Mapping[str, str]
+) -> VcsCommandResult:
+    """Run the configured gh in `cwd`, retrying once on a transient failure.
 
-    Raises CliStatusError("transient", ...) if the working directory no longer
-    exists (e.g. workspace was deleted while a poll was in-flight).
+    `extra_env` is laid over the process environment. Raises
+    CliStatusError("cli_missing", ...) when gh cannot be found, and
+    CliStatusError("transient", ...) when it cannot start or times out (e.g. the
+    workspace was deleted while a poll was in flight).
     """
+    result = _run_gh(git_cli, arguments, cwd, extra_env)
+    if result.returncode == 0:
+        return result
+    category = classify_cli_error(result.stderr)
+    if category in NON_RETRYABLE_CLI_ERRORS:
+        logger.debug("gh command failed ({}), not retrying: {}", category, result.stderr.strip())
+        return result
+    logger.debug("gh command failed ({}), retrying: {}", category, result.stderr.strip())
+    return _run_gh(git_cli, arguments, cwd, extra_env)
+
+
+def _run_gh(git_cli: GitCli, arguments: Sequence[str], cwd: Path, extra_env: Mapping[str, str]) -> VcsCommandResult:
     try:
-        result = run_blocking(cmd, timeout=_CLI_COMMAND_TIMEOUT, is_checked=False, cwd=working_dir)
-    except ProcessSetupError as e:
-        raise CliStatusError("transient", f"CLI process failed to start: {e}") from e
-    if result.returncode != 0:
-        category = classify_cli_error(result.stderr)
-        if category in NON_RETRYABLE_CLI_ERRORS:
-            logger.debug("{} command failed ({}), not retrying: {}", cmd[0], category, result.stderr.strip())
-            return result
-        logger.debug("{} command failed ({}), retrying: {}", cmd[0], category, result.stderr.strip())
-        try:
-            result = run_blocking(cmd, timeout=_CLI_COMMAND_TIMEOUT, is_checked=False, cwd=working_dir)
-        except ProcessSetupError as e:
-            raise CliStatusError("transient", f"CLI process failed to start: {e}") from e
-    return result
+        return git_cli.run_gh(arguments, cwd, is_read_only=True, is_checked=False, extra_env=extra_env)
+    except VcsBinaryNotFoundError as e:
+        raise CliStatusError("cli_missing", str(e)) from e
+    except VcsCommandError as e:
+        raise CliStatusError("transient", str(e)) from e
