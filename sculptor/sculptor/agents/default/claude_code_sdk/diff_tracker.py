@@ -1,4 +1,5 @@
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -13,29 +14,30 @@ from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
+from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
 from sculptor.state.chat_state import ToolInput
-from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
 from sculptor.utils.timeout import log_runtime_decorator
 
 
-def _run_git_command_in_environment_and_handle_errors(
-    environment: AgentExecutionEnvironment,
-    command: list[str],
+def _run_read_only_git_and_log_failure(
+    git: GitCli,
+    checkout: Path,
+    options: Sequence[str],
+    operands: Sequence[str],
     error_message: str,
     extra: dict[str, Any] | None = None,
+    paths: Sequence[str] = (),
     timeout: float = 5.0,
     env: dict[str, str] | None = None,
-) -> tuple[int, str, str] | None:
+) -> VcsCommandResult | None:
     try:
-        return run_git_command_in_environment(
-            environment=environment,
-            command=command,
-            secrets=env,
-            check_output=True,
-            timeout=timeout,
+        return git.run_git(
+            options, checkout, is_read_only=True, operands=operands, paths=paths, timeout=timeout, extra_env=env
         )
-    except Exception as e:
+    except VcsCommandError as e:
         log_exception(
             exc=e,
             message=error_message,
@@ -46,14 +48,18 @@ def _run_git_command_in_environment_and_handle_errors(
 
 
 def _is_file_present_at_commit_hash(
-    environment: AgentExecutionEnvironment,
+    git: GitCli,
+    checkout: Path,
     commit_hash: str,
     relative_file_path: Path,
     env: dict[str, str] | None = None,
 ) -> bool:
-    result = _run_git_command_in_environment_and_handle_errors(
-        environment=environment,
-        command=["git", "ls-tree", commit_hash, "--", str(relative_file_path)],
+    result = _run_read_only_git_and_log_failure(
+        git,
+        checkout,
+        ["ls-tree"],
+        operands=[commit_hash],
+        paths=[str(relative_file_path)],
         error_message=f"Failed to check if {relative_file_path} was present at commit hash {commit_hash}",
         extra=dict(filepath=relative_file_path, initial_tree_sha=commit_hash),
         env=env,
@@ -62,19 +68,21 @@ def _is_file_present_at_commit_hash(
     if not result:
         return False
 
-    returncode, stdout, _ = result
-    return returncode == 0 and stdout.strip() != ""
+    return result.returncode == 0 and result.stdout.strip() != ""
 
 
 def _get_file_contents_at_commit_hash(
-    environment: AgentExecutionEnvironment,
+    git: GitCli,
+    checkout: Path,
     commit_hash: str,
     relative_file_path: Path,
     env: dict[str, str] | None = None,
 ) -> str | None:
-    result = _run_git_command_in_environment_and_handle_errors(
-        environment=environment,
-        command=["git", "show", f"{commit_hash}:{relative_file_path}"],
+    result = _run_read_only_git_and_log_failure(
+        git,
+        checkout,
+        ["show"],
+        operands=[f"{commit_hash}:{relative_file_path}"],
         error_message=f"Failed to get file {relative_file_path} from git tree {commit_hash}",
         extra=dict(filepath=relative_file_path, initial_tree_sha=commit_hash),
         env=env,
@@ -83,8 +91,7 @@ def _get_file_contents_at_commit_hash(
     if not result:
         return None
 
-    _, stdout, _ = result
-    return stdout
+    return result.stdout
 
 
 class DiffTracker(TurnDiffTracker):
@@ -93,6 +100,7 @@ class DiffTracker(TurnDiffTracker):
     def __init__(self, environment: AgentExecutionEnvironment) -> None:
         self.environment = environment
         self.code_directory = environment.get_working_directory()
+        self._git = GitCli(environment.concurrency_group, environment.get_tool_binary_path)
         self.file_snapshot_by_path: dict[str, str | bytes | None] = {}
         # Stable temp directory for git objects written by _get_tree_hash.
         # Kept alive so tree SHAs remain resolvable for get_changed_file_paths()
@@ -130,12 +138,17 @@ class DiffTracker(TurnDiffTracker):
         env = self._get_alternate_objects_env()
 
         if not _is_file_present_at_commit_hash(
-            environment=self.environment, commit_hash=self.initial_tree_sha, relative_file_path=relative_path, env=env
+            git=self._git,
+            checkout=self.code_directory,
+            commit_hash=self.initial_tree_sha,
+            relative_file_path=relative_path,
+            env=env,
         ):
             return None
 
         return _get_file_contents_at_commit_hash(
-            environment=self.environment,
+            git=self._git,
+            checkout=self.code_directory,
             commit_hash=self.initial_tree_sha,
             relative_file_path=relative_path,
             env=env,
@@ -247,17 +260,11 @@ class DiffTracker(TurnDiffTracker):
             # so we need GIT_ALTERNATE_OBJECT_DIRECTORIES for git diff-tree.
             env = self._get_alternate_objects_env()
 
-            result = _run_git_command_in_environment_and_handle_errors(
-                environment=self.environment,
-                command=[
-                    "git",
-                    "diff-tree",
-                    "-r",
-                    "--name-only",
-                    "--no-commit-id",
-                    self.initial_tree_sha,
-                    current_tree_sha,
-                ],
+            result = _run_read_only_git_and_log_failure(
+                self._git,
+                self.code_directory,
+                ["diff-tree", "-r", "--name-only", "--no-commit-id"],
+                operands=[self.initial_tree_sha, current_tree_sha],
                 error_message="Failed to diff trees for changed file paths",
                 extra=dict(initial_tree_sha=self.initial_tree_sha, current_tree_sha=current_tree_sha),
                 timeout=10.0,
@@ -266,8 +273,7 @@ class DiffTracker(TurnDiffTracker):
             if not result:
                 return []
 
-            _, stdout, _ = result
-            return [line for line in stdout.strip().split("\n") if line]
+            return [line for line in result.stdout.strip().split("\n") if line]
         except Exception as e:
             log_exception(
                 e,
@@ -391,7 +397,7 @@ def create_unified_diff(
             return None
 
 
-def _resolve_git_path(environment: AgentExecutionEnvironment, rev_parse_flag: str) -> str:
+def _resolve_git_path(git: GitCli, checkout: Path, rev_parse_flag: str) -> str:
     """Resolve a git path like ``--git-dir`` or ``--git-common-dir`` in the agent's working dir.
 
     Returned as an absolute path so it stays valid regardless of subprocess cwd.
@@ -399,16 +405,10 @@ def _resolve_git_path(environment: AgentExecutionEnvironment, rev_parse_flag: st
     dir holds the shared `objects/` store. Hardcoding `.git/...` only works in
     non-worktree repos.
     """
-    _, stdout, _ = run_git_command_in_environment(
-        environment,
-        ["git", "rev-parse", rev_parse_flag],
-        {},
-        check_output=True,
-        timeout=DEFAULT_WAIT_TIMEOUT,
-    )
-    path = Path(stdout.strip())
+    result = git.run_git(["rev-parse", rev_parse_flag], checkout, is_read_only=True, timeout=DEFAULT_WAIT_TIMEOUT)
+    path = Path(result.stdout.strip())
     if not path.is_absolute():
-        path = environment.get_working_directory() / path
+        path = checkout / path
     return str(path)
 
 
@@ -419,10 +419,10 @@ def _get_tree_hash(diff_tracker: DiffTracker) -> str | None:
     so tree SHAs remain resolvable for later git diff-tree calls.
     """
     try:
-        if _has_untracked_or_unstaged_changes(diff_tracker.environment):
+        if _has_untracked_or_unstaged_changes(diff_tracker._git, diff_tracker.code_directory):
             return _get_tree_hash_with_untracked_and_unstaged_changes(diff_tracker)
         else:
-            return _get_tree_hash_from_staged_changes(diff_tracker.environment)
+            return _get_tree_hash_from_staged_changes(diff_tracker._git, diff_tracker.code_directory)
     except Exception as e:
         log_exception(
             e,
@@ -432,9 +432,9 @@ def _get_tree_hash(diff_tracker: DiffTracker) -> str | None:
         return None
 
 
-def _has_untracked_or_unstaged_changes(environment: AgentExecutionEnvironment) -> bool:
-    _, stdout, _ = run_git_command_in_environment(environment, ["git", "status", "--porcelain"], {}, check_output=True)
-    for line in stdout.strip().split("\n"):
+def _has_untracked_or_unstaged_changes(git: GitCli, checkout: Path) -> bool:
+    result = git.run_git(["status", "--porcelain"], checkout, is_read_only=True, timeout=None)
+    for line in result.stdout.strip().split("\n"):
         if not line:
             continue
         # Check for unstaged (2nd char not space) or untracked (??)
@@ -443,17 +443,10 @@ def _has_untracked_or_unstaged_changes(environment: AgentExecutionEnvironment) -
     return False
 
 
-def _get_tree_hash_from_staged_changes(environment: AgentExecutionEnvironment) -> str | None:
+def _get_tree_hash_from_staged_changes(git: GitCli, checkout: Path) -> str | None:
     # Fast path: just use current index (staged changes only)
-    _, stdout, _ = run_git_command_in_environment(
-        environment,
-        ["git", "write-tree"],
-        {},
-        check_output=True,
-        timeout=DEFAULT_WAIT_TIMEOUT,
-        is_retry_safe=False,
-    )
-    tree_sha = stdout.strip()
+    result = git.run_git(["write-tree"], checkout, is_read_only=False, timeout=DEFAULT_WAIT_TIMEOUT)
+    tree_sha = result.stdout.strip()
     logger.debug("Created tree SHA from current index (staged changes only): {}", tree_sha)
     return tree_sha
 
@@ -482,8 +475,10 @@ def _get_tree_hash_with_untracked_and_unstaged_changes(diff_tracker: DiffTracker
     # pointer (regular file), so those literal paths do not exist:
     #   - --git-dir points to the per-worktree git directory, which owns `index`
     #   - --git-common-dir points to the shared git directory, which owns `objects`
-    git_dir = _resolve_git_path(environment, "--git-dir")
-    git_common_dir = _resolve_git_path(environment, "--git-common-dir")
+    git = diff_tracker._git
+    checkout = diff_tracker.code_directory
+    git_dir = _resolve_git_path(git, checkout, "--git-dir")
+    git_common_dir = _resolve_git_path(git, checkout, "--git-common-dir")
 
     temp_git_dir = environment.get_root_path() / f".git_{generate_id()}"
     temp_index = temp_git_dir / "index"
@@ -503,20 +498,14 @@ def _get_tree_hash_with_untracked_and_unstaged_changes(diff_tracker: DiffTracker
         # Using cp -p preserves the modification time cross-platform (Linux and macOS).
         environment.run_process_to_completion(["cp", "-p", str(Path(git_dir) / "index"), str(temp_index)], {})
 
-        # Add all files (including untracked) to the temp index
-        run_git_command_in_environment(environment, ["git", "add", "-A"], env, check_output=True)
+        # Add all files (including untracked) to the temp index. It writes only
+        # the temp index and objects, never the repository, so it is safe to retry.
+        git.run_git(["add", "-A"], checkout, is_read_only=True, timeout=None, extra_env=env)
 
         # Write tree from temp index
-        _, stdout, _ = run_git_command_in_environment(
-            environment,
-            ["git", "write-tree"],
-            env,
-            check_output=True,
-            timeout=DEFAULT_WAIT_TIMEOUT,
-            is_retry_safe=False,
-        )
+        result = git.run_git(["write-tree"], checkout, is_read_only=False, timeout=DEFAULT_WAIT_TIMEOUT, extra_env=env)
 
-        tree_sha = stdout.strip()
+        tree_sha = result.stdout.strip()
         logger.debug("Created tree SHA including all changes: {}", tree_sha)
 
         # Keep the temp objects dir alive so the tree SHA remains resolvable.

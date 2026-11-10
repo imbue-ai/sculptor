@@ -1,11 +1,15 @@
+import shutil
 from pathlib import Path
 
+from sculptor.config.user_config import DependencyPaths
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
@@ -53,3 +57,21 @@ def test_to_repo_relative_path_strips_the_checkout_root_and_keeps_outside_paths(
 
     assert tracker.to_repo_relative_path(str(git_repo / "src" / "module.py")) == "src/module.py"
     assert tracker.to_repo_relative_path("/elsewhere/notes.md") == "/elsewhere/notes.md"
+
+
+def test_tracker_runs_git_with_the_binary_the_environment_resolves(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    invocation_log = tmp_path / "git_invocations.log"
+    logging_git = tmp_path / "logging_git"
+    logging_git.write_text(f'#!/bin/bash\necho "$@" >> {invocation_log}\nexec {shutil.which("git")} "$@"\n')
+    logging_git.chmod(0o755)
+    config = get_default_user_config_instance().model_copy(
+        update={"dependency_paths": DependencyPaths(git=str(logging_git))}
+    )
+    set_user_config_instance(config)
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+
+    make_turn_diff_tracker(environment)
+
+    assert "status --porcelain" in invocation_log.read_text()

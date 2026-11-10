@@ -20,6 +20,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
 
 _FILE_CONTENTS: Final[str] = """def foo() -> None:
@@ -67,6 +68,10 @@ def _create_clone_mode_agent_execution_environment(
     return LocalAgentExecutionEnvironment(local_env, TaskID(), dep_service)
 
 
+def _git_cli(environment: AgentExecutionEnvironment) -> GitCli:
+    return GitCli(environment.concurrency_group, environment.get_tool_binary_path)
+
+
 def _setup_repo_in_environment_with_initial_files_commit(environment: AgentExecutionEnvironment) -> str:
     working_dir = environment.get_working_directory()
     environment.write_file(str(working_dir / _FILE_PATH), _FILE_CONTENTS)
@@ -100,11 +105,17 @@ def test_is_file_present_at_commit_hash(
 ) -> None:
     environment, initial_repo_commit_hash = environment_and_initial_repo_commit_hash
     assert _is_file_present_at_commit_hash(
-        environment=environment, commit_hash=initial_repo_commit_hash, relative_file_path=Path(_FILE_PATH)
+        git=_git_cli(environment),
+        checkout=environment.get_working_directory(),
+        commit_hash=initial_repo_commit_hash,
+        relative_file_path=Path(_FILE_PATH),
     )
 
     assert not _is_file_present_at_commit_hash(
-        environment=environment, commit_hash=initial_repo_commit_hash, relative_file_path=Path("does_not_exist.py")
+        git=_git_cli(environment),
+        checkout=environment.get_working_directory(),
+        commit_hash=initial_repo_commit_hash,
+        relative_file_path=Path("does_not_exist.py"),
     )
 
 
@@ -113,7 +124,10 @@ def test_get_file_contents_at_commit_hash(
 ) -> None:
     environment, initial_repo_commit_hash = environment_and_initial_repo_commit_hash
     file_contents = _get_file_contents_at_commit_hash(
-        environment=environment, commit_hash=initial_repo_commit_hash, relative_file_path=Path(_FILE_PATH)
+        git=_git_cli(environment),
+        checkout=environment.get_working_directory(),
+        commit_hash=initial_repo_commit_hash,
+        relative_file_path=Path(_FILE_PATH),
     )
     assert file_contents == _FILE_CONTENTS
 
@@ -203,7 +217,10 @@ def test_get_file_contents_preserves_trailing_newline(
     _, commit_hash, _ = run_git_command_in_environment(environment=environment, command=["git", "rev-parse", "HEAD"])
 
     file_contents = _get_file_contents_at_commit_hash(
-        environment=environment, commit_hash=commit_hash.strip(), relative_file_path=Path("with_newline.py")
+        git=_git_cli(environment),
+        checkout=working_dir,
+        commit_hash=commit_hash.strip(),
+        relative_file_path=Path("with_newline.py"),
     )
     assert file_contents == original_contents
 
