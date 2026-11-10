@@ -1143,6 +1143,23 @@ def test_round_short_circuit_on_target_issues_no_search(
 
 
 @pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_round_skips_a_workspace_git_cannot_read_and_resolves_the_others(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    on_target_checkout = _make_repo(tmp_path / "on-target", "main", _GITHUB_ORIGIN)
+    unreadable_checkout = _make_repo(tmp_path / "unreadable", "feat-1", _GITHUB_ORIGIN)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    on_target_ws, _ = _register_checkout(svc, repo, on_target_checkout)
+    unreadable_ws, _ = _register_checkout(svc, tmp_path / "deleted-repo", unreadable_checkout)
+
+    svc._run_round(_make_user_config())
+
+    assert unreadable_ws not in svc._cache
+    assert svc._cache[on_target_ws] == PrStatusInfo(workspace_id=on_target_ws, pr_state="none")
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
 def test_round_short_circuit_detached_head_issues_no_search(
     test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
 ) -> None:

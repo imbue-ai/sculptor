@@ -786,9 +786,8 @@ class PrPollingService(Service):
         """Resolve a workspace for the round, emitting its status when it short-circuits.
 
         Returns a candidate only for a GitHub workspace off its target branch (the
-        population the search can match). A workspace whose checkout git cannot
-        read this round is skipped rather than failing the round for every
-        other workspace.
+        population the search can match). A ``VcsCommandError`` while reading one
+        workspace skips that workspace for this round instead of failing the round.
         """
         try:
             lookup = self._resolve_pull_request_lookup(workspace_id, state)
