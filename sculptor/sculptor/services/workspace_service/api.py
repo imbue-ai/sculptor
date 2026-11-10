@@ -304,8 +304,9 @@ class WorkspaceService(Service, ABC):
         for each status transition (GENERATING -> READY) so the frontend sees each
         state change immediately.
 
-        The diff is computed from workspace.source_git_hash to current state and
-        stored in the workspace artifacts directory.
+        The uncommitted diff runs from HEAD to the working tree; the target branch
+        diff runs from the merge base with workspace.target_branch to the working
+        tree. Both are stored in the workspace artifacts directory.
 
         Args:
             workspace_id: The workspace to refresh diff for.
@@ -397,11 +398,12 @@ class WorkspaceService(Service, ABC):
         transaction: DataModelTransaction | None = None,
     ) -> Path | None:
         """
-        Get the git working directory for a workspace.
+        Get the checkout directory for a workspace.
 
         For IN_PLACE workspaces, returns the project's local path.
-        For CLONE workspaces, returns the cloned repository path inside the environment.
+        Otherwise, returns the checkout inside the workspace's environment.
         Returns None if the workspace's environment hasn't been initialized yet.
+        Never resumes the environment, so it is cheap enough to call on every poll.
 
         Args:
             workspace: The workspace to get the working directory for.
@@ -468,10 +470,11 @@ class WorkspaceService(Service, ABC):
             transaction: Database transaction for atomicity.
 
         Returns:
-            Tuple of (diff_text, commit_hash, parent_hash).
+            Tuple of (diff_text, full commit_hash, parent_hash); parent_hash is None for a root commit.
 
         Raises:
             WorkspaceNotFoundError: If the workspace does not exist.
+            ValueError: If commit_hash is malformed or names no commit.
         """
 
     @abstractmethod
@@ -482,16 +485,15 @@ class WorkspaceService(Service, ABC):
     ) -> tuple[list[CommitRecord], str | None]:
         """Get the commit history for the workspace branch.
 
-        Returns commits from HEAD back to the fork point (source_git_hash) where
-        the workspace was created.
+        Returns commits from HEAD back to the fork point: the merge base with the
+        workspace's target branch, or source_git_hash when there is none.
 
         Args:
             workspace_id: The workspace to get commit history for.
             transaction: Database transaction for atomicity.
 
         Returns:
-            Tuple of (commits, fork_point_hash) where commits is a list of dicts
-            with commit metadata and file changes.
+            Tuple of (commits, fork_point_hash), newest commit first.
 
         Raises:
             WorkspaceNotFoundError: If the workspace does not exist.

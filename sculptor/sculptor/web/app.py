@@ -1246,7 +1246,8 @@ def get_workspace_diff(
 ) -> WorkspaceDiffResponse:
     """Get the latest diff for a workspace.
 
-    The diff shows changes from workspace.source_git_hash to current state.
+    The uncommitted diff runs from HEAD to the working tree; the target branch
+    diff runs from the merge base with workspace.target_branch to the working tree.
     Use force_refresh=true to regenerate the diff before returning.
     Use scope=vs-target-branch to include the target branch diff.
     """

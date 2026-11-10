@@ -20,11 +20,16 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.git import get_repo_base_path
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.interfaces.environments.base import Environment
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.workspace_service.api import FileAtRefResult
+from sculptor.services.workspace_service.api import FileNotFoundAtRefError
+from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.environment_manager import (
@@ -44,6 +49,9 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.testing.git_snapshot import FullLocalGitRepo
 from sculptor.testing.git_snapshot import GitCommitSnapshot
 from sculptor.testing.git_snapshot import create_repo_from_snapshot
@@ -719,6 +727,127 @@ def test_delete_workspace_offloads_environment_teardown_off_request_thread(
     )
 
 
+def test_delete_worktree_workspace_removes_the_worktree_and_its_merged_branch(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    workspace_service = test_service_collection.workspace_service
+    assert isinstance(workspace_service, DefaultWorkspaceService)
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    branch_name = f"worktree-{uuid4().hex[:8]}"
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        initialized_project = test_service_collection.project_service.initialize_project(
+            project_path=repo_path,
+            organization_reference=ANONYMOUS_ORGANIZATION_REFERENCE,
+            transaction=transaction,
+        )
+        test_service_collection.project_service.activate_project(initialized_project)
+        # No setup command, so no background setup process outlives the test.
+        project = transaction.update_project_fields(initialized_project.object_id, workspace_setup_command="")
+        assert project is not None
+        workspace = workspace_service.create_workspace(
+            project=project,
+            initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+            source_branch="main",
+            requested_branch_name=branch_name,
+            description="Worktree deletion",
+            transaction=transaction,
+        )
+    with test_root_concurrency_group.make_concurrency_group("env_test") as concurrency_group:
+        with workspace_service.agent_environment_context(
+            project=project,
+            workspace_id=workspace.object_id,
+            task_id=TaskID(),
+            concurrency_group=concurrency_group,
+            root_progress_handle=RootProgressHandle(),
+            shutdown_event=GLOBAL_SHUTDOWN_EVENT,
+        ):
+            pass
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace_with_environment = transaction.get_workspace(workspace.object_id)
+    assert workspace_with_environment is not None and workspace_with_environment.environment_id is not None
+    checkout_path = Path(workspace_with_environment.environment_id) / "code"
+    assert (checkout_path / ".git").is_file()
+
+    existing_manager = workspace_service.environment_manager
+    assert isinstance(existing_manager, DefaultEnvironmentManager)
+    recording_manager = _ThreadRecordingEnvironmentManager(data_model_service=existing_manager.data_model_service)
+    workspace_service.environment_manager = recording_manager
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace_service.delete_workspace(workspace.object_id, transaction)
+    assert recording_manager._teardown_done.wait(timeout=10.0), "environment teardown never ran"
+
+    worktree_list = subprocess.run(
+        ["git", "-C", str(repo_path), "worktree", "list", "--porcelain"], check=True, capture_output=True, text=True
+    ).stdout
+    branch_list = subprocess.run(
+        ["git", "-C", str(repo_path), "branch", "--list", branch_name], check=True, capture_output=True, text=True
+    ).stdout
+    assert str(checkout_path) not in worktree_list
+    assert branch_list == ""
+
+
+class _ResumeCountingEnvironmentManager(DefaultEnvironmentManager):
+    _resume_count: int = PrivateAttr(default=0)
+
+    def resume_environment(
+        self,
+        environment_id: str,
+        project_path: Path,
+        project_id: ProjectID,
+        concurrency_group: ConcurrencyGroup,
+        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
+        env_var_override: bool = False,
+        sculptor_folder: Path | None = None,
+    ) -> Environment:
+        self._resume_count += 1
+        return super().resume_environment(
+            environment_id,
+            project_path,
+            project_id,
+            concurrency_group,
+            initialization_strategy,
+            env_var_override,
+            sculptor_folder,
+        )
+
+
+@pytest.mark.parametrize(
+    "initialization_strategy", [WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE]
+)
+def test_get_workspace_working_directory_finds_the_checkout_without_resuming_the_environment(
+    test_service_collection: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+    initialization_strategy: WorkspaceInitializationStrategy,
+) -> None:
+    workspace_service = test_service_collection.workspace_service
+    assert isinstance(workspace_service, DefaultWorkspaceService)
+    existing_manager = workspace_service.environment_manager
+    assert isinstance(existing_manager, DefaultEnvironmentManager)
+    counting_manager = _ResumeCountingEnvironmentManager(data_model_service=existing_manager.data_model_service)
+    workspace_service.environment_manager = counting_manager
+
+    environment_dir = tmp_path / f"environment-{uuid4().hex}"
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = workspace_service.create_workspace(
+            project=test_project,
+            initialization_strategy=initialization_strategy,
+            source_branch="main",
+            requested_branch_name=f"working-dir-{uuid4().hex[:8]}",
+            description="Working directory lookup",
+            transaction=transaction,
+        )
+        workspace = transaction.update_workspace_fields(workspace.object_id, environment_id=str(environment_dir))
+    assert workspace is not None
+
+    working_directory = workspace_service.get_workspace_working_directory(workspace)
+
+    assert working_directory == environment_dir / "code"
+    assert counting_manager._resume_count == 0
+
+
 def _wait_for_dead(pid: int, timeout: float = 1.0) -> bool:
     """Return True once ``os.kill(pid, 0)`` raises ProcessLookupError within ``timeout``."""
     deadline = time.monotonic() + timeout
@@ -741,8 +870,8 @@ def test_delete_worktree_workspace_stops_terminals_before_removing_worktree(
 ) -> None:
     """A workspace terminal's child process must be killed before its worktree is removed.
 
-    Regression test for SCU-1424: deleting a WORKTREE workspace ran
-    ``remove_worktree`` (which deletes the ``<environment_id>/code`` checkout a
+    Regression test for SCU-1424: deleting a WORKTREE workspace removed the
+    worktree (which deletes the ``<environment_id>/code`` checkout a
     running terminal uses as its working directory) *before*
     ``stop_terminals_for_environment``.  A process running in the terminal then
     had its working directory yanked out from under it, producing the messy
@@ -757,7 +886,7 @@ def test_delete_worktree_workspace_stops_terminals_before_removing_worktree(
     real pty and assert the terminal child is already dead at the moment the
     worktree-removal step runs.
     """
-    # Create a WORKTREE workspace so the remove_worktree branch of the deletion
+    # Create a WORKTREE workspace so the worktree-removal step of the deletion
     # callback runs.
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         workspace = test_service_collection.workspace_service.create_workspace(
@@ -803,21 +932,16 @@ def test_delete_worktree_workspace_stops_terminals_before_removing_worktree(
             # Spy on the worktree-removal step to record whether the terminal's
             # child process is already gone when it runs.  We deliberately skip
             # the real git worktree removal — its git behaviour is irrelevant to
-            # the ordering under test.  The signature mirrors remove_worktree so
-            # the keyword call site still binds.
+            # the ordering under test.
             def _record_terminal_liveness(
-                user_repo_path: Path,
-                destination: Path,
-                branch_name: str,
-                deletion_policy: str,
-                concurrency_group: ConcurrencyGroup,
+                self: GitWorkspaceVcs,
+                location: CheckoutLocation,
+                created_ref_name: str | None,
+                deletion_policy: BranchDeletionPolicy,
             ) -> None:
                 shell_dead_when_worktree_removed.append(_wait_for_dead(shell_pid))
 
-            monkeypatch.setattr(
-                "sculptor.services.workspace_service.default_implementation.remove_worktree",
-                _record_terminal_liveness,
-            )
+            monkeypatch.setattr(GitWorkspaceVcs, "remove_checkout", _record_terminal_liveness)
 
             # Delete the workspace.  The post-commit callback fires when the
             # transaction commits on block exit, but it offloads the actual
@@ -978,6 +1102,24 @@ def test_create_workspace_auto_resolves_target_branch_with_origin(
         )
 
     assert workspace.target_branch == "origin/main"
+
+
+def test_create_workspace_resolves_target_branch_to_what_origin_head_points_at(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_repo_with_origin_and_feature_branch(tmp_path, test_root_concurrency_group)
+    subprocess.run(["git", "-C", str(repo_path), "push", "origin", "feature"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_path), "remote", "set-head", "origin", "feature"], check=True)
+
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = transaction.get_workspace(workspace_id)
+    assert workspace is not None
+    assert workspace.target_branch == "origin/feature"
+    assert workspace.source_git_hash == _read_head_commit(repo_path)
 
 
 def test_create_workspace_uses_explicit_target_branch_over_auto_resolution(
@@ -1170,26 +1312,182 @@ def test_diff_skipped_when_no_target_branch(
     assert diff.target_branch_diff == ""
 
 
-class TestExpandNumstatRenamePath:
-    """Tests for _expand_numstat_rename_path which resolves git's compact rename notation."""
+def _create_in_place_workspace(test_service_collection: CompleteServiceCollection, repo_path: Path) -> WorkspaceID:
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        project = test_service_collection.project_service.initialize_project(
+            project_path=repo_path,
+            organization_reference=ANONYMOUS_ORGANIZATION_REFERENCE,
+            transaction=transaction,
+        )
+        test_service_collection.project_service.activate_project(project)
+        workspace = test_service_collection.workspace_service.create_workspace(
+            project=project,
+            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="Isolated repo workspace",
+            transaction=transaction,
+        )
+    return workspace.object_id
 
-    def test_folder_rename_brace_notation(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("{src => lib}/a.py") == "lib/a.py"
 
-    def test_folder_rename_with_prefix(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("pkg/{old => new}/file.py") == "pkg/new/file.py"
+def test_workspace_diff_includes_untracked_files_whose_names_start_with_a_dash(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    (repo_path / "-dash.txt").write_text("dash content\n")
 
-    def test_move_from_root_to_folder(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("{ => lib}/file.py") == "lib/file.py"
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        diff = test_service_collection.workspace_service.get_workspace_diff(
+            workspace_id, transaction, force_refresh=True, include_target_branch_diff=True
+        )
 
-    def test_move_from_folder_to_root(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("{src => }/file.py") == "file.py"
+    assert diff is not None
+    assert "+++ b/-dash.txt" in diff.uncommitted_diff
+    assert "+++ b/-dash.txt" in diff.target_branch_diff
 
-    def test_simple_file_rename(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("old.py => new.py") == "new.py"
 
-    def test_no_rename(self) -> None:
-        assert DefaultWorkspaceService._expand_numstat_rename_path("src/file.py") == "src/file.py"
+def _read_head_commit(repo_path: Path) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo_path), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _commit_all(repo_path: Path, message: str) -> str:
+    subprocess.run(["git", "-C", str(repo_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", message], check=True, capture_output=True)
+    return _read_head_commit(repo_path)
+
+
+def test_commit_history_reports_a_file_type_change_as_modified(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    subprocess.run(["git", "-C", str(repo_path), "checkout", "-b", "feature"], check=True, capture_output=True)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    (repo_path / "README.md").unlink()
+    (repo_path / "README.md").symlink_to("elsewhere.md")
+    commit_hash = _commit_all(repo_path, "Turn the readme into a symlink")
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        commits, fork_point = test_service_collection.workspace_service.get_commit_history(workspace_id, transaction)
+
+    assert [commit.hash for commit in commits] == [commit_hash]
+    assert [(change.path, change.status) for change in commits[0].files] == [("README.md", "M")]
+    assert fork_point is not None
+
+
+def test_get_commit_diff_resolves_an_abbreviated_hash_and_its_parent(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    parent_hash = _read_head_commit(repo_path)
+    (repo_path / "added.txt").write_text("added\n")
+    commit_hash = _commit_all(repo_path, "Add a file")
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        diff_text, resolved_hash, resolved_parent = test_service_collection.workspace_service.get_commit_diff(
+            workspace_id, commit_hash[:10], transaction
+        )
+        with pytest.raises(ValueError):
+            test_service_collection.workspace_service.get_commit_diff(workspace_id, "not-a-hash", transaction)
+
+    assert "+++ b/added.txt" in diff_text
+    assert resolved_hash == commit_hash
+    assert resolved_parent == parent_hash
+
+
+def test_read_file_at_ref_reads_a_ref_starting_with_a_dash_as_a_revision_not_an_option(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        content_at_head = test_service_collection.workspace_service.read_file_at_ref(
+            workspace_id, "README.md", "HEAD", transaction
+        )
+        with pytest.raises(FileNotFoundAtRefError):
+            test_service_collection.workspace_service.read_file_at_ref(
+                workspace_id, "README.md", "--format=format:injected", transaction
+            )
+
+    assert content_at_head == FileAtRefResult(content="test", encoding="utf-8")
+
+
+def test_discard_file_restores_tracked_files_deletes_untracked_ones_and_rejects_paths_outside_the_checkout(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    (repo_path / "README.md").write_text("edited")
+    (repo_path / "untracked.txt").write_text("untracked")
+    workspace_service = test_service_collection.workspace_service
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        tracked_result = workspace_service.discard_file(workspace_id, "README.md", transaction)
+        untracked_result = workspace_service.discard_file(workspace_id, "untracked.txt", transaction)
+        traversal_result = workspace_service.discard_file(workspace_id, "../outside.txt", transaction)
+
+    assert tracked_result.success
+    assert (repo_path / "README.md").read_text() == "test"
+    assert untracked_result.success
+    assert not (repo_path / "untracked.txt").exists()
+    assert not traversal_result.success
+    assert traversal_result.error_message == "Path traversal is not allowed"
+
+
+def test_get_workspace_files_lists_tracked_and_untracked_files_but_not_ignored_ones(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    workspace_id = _create_in_place_workspace(test_service_collection, repo_path)
+    (repo_path / ".gitignore").write_text("ignored.txt\n")
+    (repo_path / "ignored.txt").write_text("ignored")
+    (repo_path / "nested").mkdir()
+    (repo_path / "nested" / "untracked.txt").write_text("untracked")
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        file_paths = test_service_collection.workspace_service.get_workspace_files(workspace_id, transaction)
+
+    assert file_paths == [".gitignore", "README.md", "nested/untracked.txt"]
+
+
+def test_get_workspace_files_raises_files_unavailable_when_the_checkout_is_not_a_repository(
+    test_service_collection: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+) -> None:
+    environment_dir = tmp_path / f"environment-{uuid4().hex}"
+    (environment_dir / "code").mkdir(parents=True)
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = test_service_collection.workspace_service.create_workspace(
+            project=test_project,
+            initialization_strategy=WorkspaceInitializationStrategy.CLONE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="Checkout without a repository",
+            transaction=transaction,
+        )
+        transaction.update_workspace_fields(workspace.object_id, environment_id=str(environment_dir))
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        with pytest.raises(WorkspaceFilesUnavailableError):
+            test_service_collection.workspace_service.get_workspace_files(workspace.object_id, transaction)
 
 
 def test_get_cached_current_branch_does_not_create_the_branch_poller(
