@@ -485,9 +485,10 @@ declare const LlmModel: {
  * insert at the correct spot in ``PRODUCTION_MODELS`` — that list is grouped by
  * family, so a new Opus heads the Opus block rather than the whole list — and
  * add to ``derived.py``'s streaming list.
- * 3. For a new Opus, point the product default at the new member: ``userConfig.ts``
- * ``defaultModelAtom``, ``web/derived.py``'s fallback, and ``sculpt``'s
- * ``DEFAULT_CLAUDE_MODEL``.
+ * 3. Repoint the pinned pointers the family holds: for Opus, the product default
+ * (``DEFAULT_LLM_MODEL`` in constants.py and ``modelConstants.ts``, and ``sculpt``'s
+ * ``DEFAULT_CLAUDE_MODEL``); for Haiku, ``BTW_MODEL`` (constants.py). Tests fail
+ * until each names its family's newest pinned member.
  * 4. Drop the oldest generation from the picker (remove it from ``PRODUCTION_MODELS``
  * only — its enum value, label, capabilities and streaming all stay, so a stored
  * selection still renders, keeps its toggles and streams).

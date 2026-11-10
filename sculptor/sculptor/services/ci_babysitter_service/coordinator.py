@@ -20,6 +20,7 @@ from queue import Queue
 from loguru import logger
 from pydantic import PrivateAttr
 
+from sculptor.agents.default.constants import DEFAULT_LLM_MODEL
 from sculptor.config.user_config import BabysitterAgentClaude
 from sculptor.config.user_config import BabysitterAgentPi
 from sculptor.config.user_config import BabysitterAgentRegistered
@@ -144,7 +145,7 @@ def _model_from_config_or_fallback(config: UserConfig) -> LLMModel:
             return LLMModel(config.default_llm)
         except ValueError:
             logger.debug("Invalid default_llm {!r} in user config; using fallback", config.default_llm)
-    return LLMModel.CLAUDE_4_OPUS_200K
+    return DEFAULT_LLM_MODEL
 
 
 class CIBabysitterWorkspaceStateView(SerializableModel):

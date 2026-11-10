@@ -21,6 +21,7 @@ from typing import cast
 import pytest
 from pydantic import PrivateAttr
 
+from sculptor.agents.default.constants import DEFAULT_LLM_MODEL
 from sculptor.config.user_config import BabysitterAgentClaude
 from sculptor.config.user_config import BabysitterAgentMRU
 from sculptor.config.user_config import BabysitterAgentPi
@@ -57,6 +58,7 @@ from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoor
 from sculptor.services.ci_babysitter_service.coordinator import ChatAgent
 from sculptor.services.ci_babysitter_service.coordinator import Disabled
 from sculptor.services.ci_babysitter_service.coordinator import DriveableTerminal
+from sculptor.services.ci_babysitter_service.coordinator import _model_from_config_or_fallback
 from sculptor.services.ci_babysitter_service.transitions import Transition
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
@@ -1511,6 +1513,10 @@ def test_transient_reason_clears_on_pipeline_passed(
 
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="passed", pipeline_id=1))
     assert state.transient_disabled_reason is None
+
+
+def test_model_fallback_is_the_product_default_when_settings_name_no_model() -> None:
+    assert _model_from_config_or_fallback(_make_user_config()) == DEFAULT_LLM_MODEL
 
 
 def test_select_model_for_workspace_skips_terminal_agents(

@@ -53,6 +53,13 @@ FAST_MODE_MODELS: Final[frozenset[LLMModel]] = frozenset(
     }
 )
 
+# The product default for a Claude agent when nothing else names a model. The
+# frontend's DEFAULT_LLM_MODEL (modelConstants.ts) must name the same member.
+DEFAULT_LLM_MODEL: Final[LLMModel] = LLMModel.CLAUDE_5_5_OPUS
+
+# The model `/btw` side-chat turns run on.
+BTW_MODEL: Final[LLMModel] = LLMModel.CLAUDE_5_5_HAIKU
+
 
 ENTITY_MENTIONS_SYSTEM_PROMPT: Final[str] = """
 <Entity mentions>

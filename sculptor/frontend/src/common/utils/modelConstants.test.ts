@@ -78,7 +78,37 @@ describe("retired models", () => {
   });
 });
 
+// The rolling "latest Opus" alias launches whatever the Claude CLI treats as newest,
+// so it never counts as a pinned generation.
+const ROLLING_OPUS_ALIASES: ReadonlyArray<string> = ["CLAUDE_4_OPUS"];
+
+const compareVersions = (a: ReadonlyArray<number>, b: ReadonlyArray<number>): number => {
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return 0;
+};
+
+const newestPinnedOpus = (): LlmModel => {
+  const pinned = Object.entries(LlmModel).flatMap(([name, model]) => {
+    const match = /^CLAUDE_(\d+(?:_\d+)*)_OPUS$/.exec(name);
+    if (match === null || ROLLING_OPUS_ALIASES.includes(name)) {
+      return [];
+    }
+    return [{ model, version: match[1].split("_").map(Number) }];
+  });
+  const [newest] = pinned.sort((a, b) => compareVersions(b.version, a.version));
+  return newest.model;
+};
+
 describe("DEFAULT_LLM_MODEL", () => {
+  it("names the newest pinned Opus, so an Opus release that forgets to repoint it fails here", () => {
+    expect(DEFAULT_LLM_MODEL).toBe(newestPinnedOpus());
+  });
+
   it("is a model the picker offers", () => {
     // A default the picker does not list is a selection the user cannot get back to
     // after switching away from it.
