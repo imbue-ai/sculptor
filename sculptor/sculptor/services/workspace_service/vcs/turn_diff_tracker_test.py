@@ -1,0 +1,55 @@
+from pathlib import Path
+
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
+from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
+    LocalAgentExecutionEnvironment,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.turn_diff_tracker import make_turn_diff_tracker
+
+
+def _in_place_environment(
+    repo: Path, workspace: Path, concurrency_group: ConcurrencyGroup
+) -> LocalAgentExecutionEnvironment:
+    """An agent environment working in `repo` that keeps its own files in `workspace`, outside the checkout."""
+    local_environment = LocalEnvironment.create(
+        environment_id=LocalEnvironmentID(str(workspace)),
+        project_id=ProjectID(),
+        concurrency_group=concurrency_group,
+        repo_host_path=repo,
+    )
+    dependency_management_service = DependencyManagementService(
+        concurrency_group=concurrency_group.make_concurrency_group("dependency_management_service"),
+    )
+    return LocalAgentExecutionEnvironment(local_environment, TaskID(), dependency_management_service)
+
+
+def test_changed_file_paths_are_measured_from_the_last_rebaseline(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+    tracker = make_turn_diff_tracker(environment)
+    (git_repo / "first.txt").write_text("first\n")
+    assert tracker.get_changed_file_paths() == ["first.txt"]
+    run_blocking(["git", "add", "first.txt"], cwd=git_repo)
+    run_blocking(["git", "commit", "-q", "-m", "first"], cwd=git_repo)
+
+    tracker.rebaseline()
+    (git_repo / "second.txt").write_text("second\n")
+
+    assert tracker.get_changed_file_paths() == ["second.txt"]
+
+
+def test_to_repo_relative_path_strips_the_checkout_root_and_keeps_outside_paths(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+    tracker = make_turn_diff_tracker(environment)
+
+    assert tracker.to_repo_relative_path(str(git_repo / "src" / "module.py")) == "src/module.py"
+    assert tracker.to_repo_relative_path("/elsewhere/notes.md") == "/elsewhere/notes.md"

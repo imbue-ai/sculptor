@@ -13,6 +13,7 @@ from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
+from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
 from sculptor.state.chat_state import ToolInput
 from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
 from sculptor.utils.timeout import log_runtime_decorator
@@ -86,8 +87,8 @@ def _get_file_contents_at_commit_hash(
     return stdout
 
 
-class DiffTracker:
-    """Tracks file changes and computes diffs using in-memory snapshots."""
+class DiffTracker(TurnDiffTracker):
+    """Tracks file changes in a git checkout and computes diffs using in-memory snapshots."""
 
     def __init__(self, environment: AgentExecutionEnvironment) -> None:
         self.environment = environment
@@ -99,7 +100,7 @@ class DiffTracker:
         self._temp_objects_dir: Path | None = None
         self.initial_tree_sha = _get_tree_hash(self)
 
-    def update_initial_tree_sha(self) -> None:
+    def rebaseline(self) -> None:
         """Update the initial git tree SHA and clear snapshots."""
         logger.info("Reinitializing diff tracker, getting new tree hash")
         initial_tree_sha = _get_tree_hash(self)
@@ -180,7 +181,7 @@ class DiffTracker:
             )
             return None
 
-    def to_git_relative_path(self, file_path: str) -> str:
+    def to_repo_relative_path(self, file_path: str) -> str:
         """Convert an absolute file path to a git-relative path.
 
         Strips the code_directory prefix so paths match what ``git diff`` produces.

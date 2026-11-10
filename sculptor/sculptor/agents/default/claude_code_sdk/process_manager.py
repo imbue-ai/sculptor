@@ -17,7 +17,6 @@ from loguru import logger
 
 from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.claude_code_sdk.branch_rename_hint import resolve_branch_rename_hint
-from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
 from sculptor.agents.default.claude_code_sdk.naming_conventions import resolve_naming_conventions
@@ -68,6 +67,8 @@ from sculptor.services.workspace_service.branch_naming import resolve_naming_pat
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
+from sculptor.services.workspace_service.vcs.turn_diff_tracker import make_turn_diff_tracker
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
@@ -119,7 +120,7 @@ class ClaudeProcessManager:
         self._secrets = secrets
         self._output_messages = output_message_queue
         # there are no untracked changes at this point, so we can use the fast path
-        self._diff_tracker: DiffTracker = DiffTracker(self.environment)
+        self._diff_tracker: TurnDiffTracker = make_turn_diff_tracker(self.environment)
         self._system_prompt: str = system_prompt
         self._on_diff_needed = on_diff_needed
         self._workspace_id = workspace_id
@@ -774,7 +775,7 @@ class ClaudeProcessManager:
                     )
 
             # reinitialize the diff tracker with the new tree hash - this will clear the in-memory snapshots but that is okay because we have the new tree hash
-            self._diff_tracker.update_initial_tree_sha()
+            self._diff_tracker.rebaseline()
 
     def _process_clear_context_message(self, message: UserMessageUnion) -> None:
         with self._handle_user_message_callback(message):

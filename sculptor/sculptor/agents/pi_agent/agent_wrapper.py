@@ -61,7 +61,6 @@ from pydantic import ValidationError
 
 from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
-from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
@@ -171,6 +170,8 @@ from sculptor.primitives.ids import ToolUseID
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.dependency_management_service import parse_pi_version
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
+from sculptor.services.workspace_service.vcs.turn_diff_tracker import make_turn_diff_tracker
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ContentBlockTypes
 from sculptor.state.chat_state import TextBlock
@@ -578,7 +579,7 @@ class PiAgent(DefaultAgentWrapper):
     # turn boundary against the tree at this turn's agent_end. Created lazily on
     # the first turn (keeps `start()` git-free) and re-baselined per turn. Used
     # only on the message-processing thread.
-    _diff_tracker: DiffTracker | None = PrivateAttr(default=None)
+    _diff_tracker: TurnDiffTracker | None = PrivateAttr(default=None)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -2535,7 +2536,7 @@ class PiAgent(DefaultAgentWrapper):
         captures the tree SHA and never raises (it logs and degrades internally).
         """
         if self._diff_tracker is None:
-            self._diff_tracker = DiffTracker(self.environment)
+            self._diff_tracker = make_turn_diff_tracker(self.environment)
 
     def _collect_changed_files_and_rebaseline(self) -> list[str]:
         """Return this turn's changed files (git-relative), then re-baseline the tree.
@@ -2550,7 +2551,7 @@ class PiAgent(DefaultAgentWrapper):
         if tracker is None:
             return []
         changed_files = tracker.get_changed_file_paths()
-        tracker.update_initial_tree_sha()
+        tracker.rebaseline()
         return changed_files
 
     def _handle_auto_retry_end(self, parsed: ParsedAutoRetryEnd, state: _TurnState) -> None:

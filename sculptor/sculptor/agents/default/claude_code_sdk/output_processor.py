@@ -15,7 +15,6 @@ from sculptor.agents.default.artifact_creation import get_file_artifact_messages
 from sculptor.agents.default.artifact_creation import should_refresh_task_list
 from sculptor.agents.default.artifact_creation import should_send_diff_and_branch_name_artifacts
 from sculptor.agents.default.claude_code_sdk.constants import TRANSIENT_ERROR_CODES
-from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.errors import ClaudeAPIError
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
@@ -46,6 +45,7 @@ from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import AgentTransientError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ContentBlockTypes
 from sculptor.state.chat_state import FileBlock
@@ -270,7 +270,7 @@ class ClaudeOutputProcessor:
         source_command: str,
         output_message_queue: Queue[Message],
         environment: AgentExecutionEnvironment,
-        diff_tracker: DiffTracker | None,
+        diff_tracker: TurnDiffTracker | None,
         task_id: TaskID,
         session_id_written_event: Event,
         harness: ClaudeCodeHarness,
@@ -521,7 +521,7 @@ class ClaudeOutputProcessor:
         source_command: str,
         output_message_queue: Queue[Message],
         environment: AgentExecutionEnvironment,
-        diff_tracker: DiffTracker | None,
+        diff_tracker: TurnDiffTracker | None,
         task_id: TaskID,
         session_id_written_event: Event,
         harness: ClaudeCodeHarness,

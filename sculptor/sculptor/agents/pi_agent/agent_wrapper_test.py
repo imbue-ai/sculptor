@@ -51,6 +51,7 @@ from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.subagent import SUBAGENT_NOTIFY_MARKER
 from sculptor.agents.pi_agent.subagent import parse_subagent_completion
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
@@ -100,7 +101,11 @@ def _make_agent(
     on_diff_needed: Callable[[], None] | None = None,
     preselected_model: ModelOption | None = None,
 ) -> PiAgent:
-    env = environment if environment is not None else MagicMock(spec=AgentExecutionEnvironment)
+    if environment is None:
+        env = MagicMock(spec=AgentExecutionEnvironment)
+        env.get_initialization_strategy.return_value = WorkspaceInitializationStrategy.IN_PLACE
+    else:
+        env = environment
     return PiAgent(
         harness=PI_HARNESS,
         environment=env,
@@ -3665,7 +3670,7 @@ class TestTurnFooterMetrics:
         # Whatever the tree-diff reports (git-relative, tool-agnostic), verbatim.
         assert metrics[0].turn_metrics.changed_files == ["src/a.py", "scripts/gen.sh"]
         # The baseline is advanced so the next turn diffs from this turn's end.
-        tracker.update_initial_tree_sha.assert_called_once()
+        tracker.rebaseline.assert_called_once()
 
     def test_turn_metrics_changed_files_empty_when_no_diff_tracker(self) -> None:
         """With no DiffTracker (e.g. before start()), changed_files degrades to empty
@@ -3689,13 +3694,13 @@ class TestTurnFooterMetrics:
     def test_ensure_diff_baseline_creates_tracker_once(self) -> None:
         """The diff baseline is captured lazily on the first turn and reused after."""
         agent = _make_agent()
-        with patch("sculptor.agents.pi_agent.agent_wrapper.DiffTracker") as tracker_cls:
+        with patch("sculptor.agents.pi_agent.agent_wrapper.make_turn_diff_tracker") as make_tracker:
             agent._ensure_diff_baseline()
             first = agent._diff_tracker
             agent._ensure_diff_baseline()
         assert first is not None
         assert agent._diff_tracker is first
-        tracker_cls.assert_called_once_with(agent.environment)
+        make_tracker.assert_called_once_with(agent.environment)
 
 
 class TestSculptorInitiatedWake:
