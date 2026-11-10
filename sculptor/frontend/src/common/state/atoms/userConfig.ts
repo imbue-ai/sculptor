@@ -54,12 +54,19 @@ export const isAlwaysInterruptAndSendAtom = atom<boolean>(
 
 export const lastUsedModelAtom = atomWithStorage<string | null>("sculptor-last-used-model", null);
 
-export const configuredDefaultModelAtom = atom<string | null>((get) => get(userConfigAtom)?.defaultLlm ?? null);
+// The "Default model" setting as new agents apply it, or null for "Most Recently
+// Used". Settings shows this value, so it always names the model new agents get.
+export const configuredDefaultModelAtom = atom<LlmModel | null>((get) => {
+  const configuredDefaultModel = get(userConfigAtom)?.defaultLlm;
+  return configuredDefaultModel && isLlmModel(configuredDefaultModel)
+    ? modelForNewRecord(configuredDefaultModel)
+    : null;
+});
 
 export const defaultModelAtom = atom<string>((get) => {
   const configuredDefaultModel = get(configuredDefaultModelAtom);
-  if (configuredDefaultModel && isLlmModel(configuredDefaultModel)) {
-    return modelForNewRecord(configuredDefaultModel);
+  if (configuredDefaultModel) {
+    return configuredDefaultModel;
   }
   const lastUsedModel = get(lastUsedModelAtom);
   if (lastUsedModel && isLlmModel(lastUsedModel)) {

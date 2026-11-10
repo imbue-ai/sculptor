@@ -13,7 +13,6 @@ import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import type { UpdateChannel } from "~/common/types/backend.ts";
 import { getUpdateStatusText } from "~/common/utils/autoUpdate.ts";
-import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
 
 import { ElementIds, UserConfigField } from "../../api";
 import {
@@ -39,6 +38,7 @@ import { AccountFieldRow } from "./components/AccountFieldRow.tsx";
 import { ActionsSettingsSection } from "./components/ActionsSettingsSection.tsx";
 import { CustomBackendSection } from "./components/AdvancedSection.tsx";
 import { CIBabysitterSettingsSection } from "./components/CIBabysitterSettingsSection.tsx";
+import { DefaultModelSettingRow } from "./components/DefaultModelSettingRow.tsx";
 import { DependenciesSettingsSection } from "./components/DependenciesSettingsSection.tsx";
 import { EnvironmentVariablesSection } from "./components/EnvironmentVariablesSection.tsx";
 import { ExtensionsSettingsSection } from "./components/ExtensionsSettingsSection.tsx";
@@ -347,30 +347,11 @@ export const SettingsPage = (): ReactElement => {
               )}
               {activeSection === SettingsSection.AGENT && (
                 <SettingsSectionLayout description="Configure default agent behavior and model preferences.">
-                  <SettingRow title="Default Model" description="Select the default model for new agents.">
-                    <Select.Root
-                      value={configuredDefaultModel ?? "None"}
-                      onValueChange={(value) => {
-                        if (value === "None") {
-                          handleSettingChange(UserConfigField.DEFAULT_LLM, null);
-                        } else {
-                          handleSettingChange(UserConfigField.DEFAULT_LLM, value);
-                        }
-                      }}
-                    >
-                      <Select.Trigger
-                        variant="soft"
-                        className={styles.settingControl}
-                        data-testid={ElementIds.SETTINGS_DEFAULT_MODEL_SELECT}
-                      />
-                      <Select.Content>
-                        <Select.Item key="None" value="None">
-                          Most Recently Used
-                        </Select.Item>
-                        <ModelSelectOptions optionTestId={ElementIds.SETTINGS_DEFAULT_MODEL_OPTION} />
-                      </Select.Content>
-                    </Select.Root>
-                  </SettingRow>
+                  <DefaultModelSettingRow
+                    model={configuredDefaultModel}
+                    onChange={(model) => handleSettingChange(UserConfigField.DEFAULT_LLM, model)}
+                    controlClassName={styles.settingControl}
+                  />
 
                   <SettingRow
                     title="Fast Mode"
