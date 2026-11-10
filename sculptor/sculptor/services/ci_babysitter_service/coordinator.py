@@ -56,6 +56,7 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import EffortLevel
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+from sculptor.state.messages import model_for_new_record
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.derived import is_agent_busy_or_waiting
@@ -594,7 +595,7 @@ class CIBabysitterCoordinator(Service):
             # readiness wait confirms the program is at its prompt.
             return deliver_prompt_to_terminal_agent(task, prompt_text, submit=True, task_service=self._task_service)
         with self._data_model_service.open_transaction(RequestID()) as transaction:
-            model = self._select_model_for_task(task.object_id, config, transaction)
+            model = model_for_new_record(self._select_model_for_task(task.object_id, config, transaction))
             message = ChatInputUserMessage(
                 text=prompt_text,
                 message_id=AgentMessageID(),
@@ -676,7 +677,9 @@ class CIBabysitterCoordinator(Service):
             # babysitter matches the user's last-chosen model (and uses FakeClaude in
             # tests where the parent agent does). Falls back to default_llm only when
             # the workspace has no prior agent.
-            model = self._select_model_for_workspace(state.workspace_id, workspace.project_id, config, transaction)
+            model = model_for_new_record(
+                self._select_model_for_workspace(state.workspace_id, workspace.project_id, config, transaction)
+            )
             with self._git_repo_service.open_local_user_git_repo_for_read(project) as repo:
                 initial_commit_hash = repo.get_current_commit_hash()
             task = Task(

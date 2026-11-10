@@ -3,7 +3,7 @@ import { atomWithStorage } from "jotai/utils";
 
 import { NIGHT_MODE_OFF } from "~/common/nightMode.ts";
 import { getTelemetryEnabled } from "~/common/telemetry/telemetry.ts";
-import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
+import { DEFAULT_LLM_MODEL, modelForNewRecord } from "~/common/utils/modelConstants.ts";
 
 import type { CiBabysitterConfig, CustomActionsConfig, UserConfig } from "../../../api";
 import { LlmModel } from "../../../api";
@@ -59,11 +59,11 @@ export const configuredDefaultModelAtom = atom<string | null>((get) => get(userC
 export const defaultModelAtom = atom<string>((get) => {
   const configuredDefaultModel = get(configuredDefaultModelAtom);
   if (configuredDefaultModel && isLlmModel(configuredDefaultModel)) {
-    return configuredDefaultModel;
+    return modelForNewRecord(configuredDefaultModel);
   }
   const lastUsedModel = get(lastUsedModelAtom);
   if (lastUsedModel && isLlmModel(lastUsedModel)) {
-    return lastUsedModel;
+    return modelForNewRecord(lastUsedModel);
   }
   return DEFAULT_LLM_MODEL;
 });

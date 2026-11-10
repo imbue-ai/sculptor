@@ -1,3 +1,4 @@
+import pytest
 from syrupy import SnapshotAssertion
 
 from sculptor.database.models import AgentTaskStateV2
@@ -10,6 +11,7 @@ from sculptor.state.messages import ModelCatalogState
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import NOT_FETCHED_YET
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.state.messages import model_for_new_record
 
 
 def test_create_messages(snapshot: SnapshotAssertion) -> None:
@@ -62,3 +64,13 @@ def test_legacy_empty_catalog_deserializes_as_fetched_empty() -> None:
         AgentTaskStateV2(workspace_id=WorkspaceID(), available_models=[opus]).model_dump_json()
     )
     assert fetched.available_models == [opus]
+
+
+@pytest.mark.parametrize("model", [model for model in LLMModel if model.value.endswith("-200K")])
+def test_a_200k_variant_is_stored_as_its_1m_sibling_in_new_records(model: LLMModel) -> None:
+    assert model_for_new_record(model).value == model.value.removesuffix("-200K")
+
+
+@pytest.mark.parametrize("model", [model for model in LLMModel if not model.value.endswith("-200K")])
+def test_every_other_model_is_stored_unchanged_in_new_records(model: LLMModel) -> None:
+    assert model_for_new_record(model) is model

@@ -7,6 +7,7 @@ from typing import Annotated
 from typing import Any
 from typing import Literal
 
+from pydantic import AfterValidator
 from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
@@ -33,6 +34,7 @@ from sculptor.state.messages import EffortLevel
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.state.messages import ModelOption
+from sculptor.state.messages import model_for_new_record
 
 
 class TaskInterface(StrEnum):
@@ -130,13 +132,18 @@ class RequestModel(SerializableModel):
     pass
 
 
+# The model a request creates records with. A retired 200K variant from a stale client
+# is stored as its 1M sibling (see `model_for_new_record`).
+NewRecordLLMModel = Annotated[LLMModel, AfterValidator(model_for_new_record)]
+
+
 class StartTaskRequest(RequestModel):
     prompt: str
     interface: str = TaskInterface.TERMINAL.value
     # Mutually exclusive, one per harness's terms — the same pair as
     # CreateAgentRequest, validated per resolved harness
     # (`_validate_prompt_model_selection`).
-    model: LLMModel | None = None
+    model: NewRecordLLMModel | None = None
     backend_model: ModelOption | None = None
     files: list[str] = Field(default_factory=list)
     # Strategy for the workspace this task creates; IN_PLACE when omitted.
@@ -198,7 +205,7 @@ class CreateAgentRequest(RequestModel):
     # `backend_model` (the chosen `ModelOption`) for a backend-sourced catalog
     # (pi). A pi prompt requires `backend_model`; a promptless create must not
     # carry one (post-start selection owns that case).
-    model: LLMModel | None = None
+    model: NewRecordLLMModel | None = None
     backend_model: ModelOption | None = None
     interface: str = TaskInterface.TERMINAL.value
     files: list[str] = Field(default_factory=list)
@@ -445,7 +452,7 @@ class ListWorkspacesResponse(SerializableModel):
 
 class SendMessageRequest(RequestModel):
     message: str
-    model: LLMModel
+    model: NewRecordLLMModel
     files: list[str] = Field(default_factory=list)
     enter_plan_mode: bool = False
     exit_plan_mode: bool = False
@@ -459,7 +466,7 @@ class AnswerQuestionRequest(RequestModel):
     notes: dict[str, str] = Field(default_factory=dict)
     question_data: AskUserQuestionData
     tool_use_id: str
-    model: LLMModel
+    model: NewRecordLLMModel
 
 
 class BtwRequest(RequestModel):

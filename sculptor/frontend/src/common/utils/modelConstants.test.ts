@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import { LlmModel } from "~/api";
 
 import { getModelCapabilities } from "./modelCapabilities";
-import { DEFAULT_LLM_MODEL, getModelLongName, getModelShortName, PRODUCTION_MODELS } from "./modelConstants";
+import {
+  DEFAULT_LLM_MODEL,
+  getModelLongName,
+  getModelShortName,
+  modelForNewRecord,
+  PRODUCTION_MODELS,
+} from "./modelConstants";
 
 describe("Opus 5.5", () => {
   it("is labelled by its pinned generation, with no context suffix on either member", () => {
@@ -120,5 +126,19 @@ describe("DEFAULT_LLM_MODEL", () => {
       supportsFastMode: true,
       supportsFileAttachments: true,
     });
+  });
+});
+
+describe("modelForNewRecord", () => {
+  const all = Object.values(LlmModel);
+
+  it.each(all.filter((model) => model.endsWith("-200K")))("stores %s as its 1M sibling", (model) => {
+    const sibling = modelForNewRecord(model);
+    expect(sibling).toBe(model.replace(/-200K$/, ""));
+    expect(all).toContain(sibling);
+  });
+
+  it.each(all.filter((model) => !model.endsWith("-200K")))("leaves %s unchanged", (model) => {
+    expect(modelForNewRecord(model)).toBe(model);
   });
 });

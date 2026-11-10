@@ -29,4 +29,10 @@ describe("defaultModelAtom", () => {
     store.set(userConfigAtom, { defaultLlm: LlmModel.CLAUDE_4_HAIKU } as never);
     expect(store.get(defaultModelAtom)).toBe(LlmModel.CLAUDE_4_HAIKU);
   });
+
+  it("turns a configured 200K variant into its 1M sibling for new agents", () => {
+    const store = createStore();
+    store.set(userConfigAtom, { defaultLlm: LlmModel.CLAUDE_5_OPUS_200K } as never);
+    expect(store.get(defaultModelAtom)).toBe(LlmModel.CLAUDE_5_OPUS);
+  });
 });

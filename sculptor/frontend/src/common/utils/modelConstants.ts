@@ -59,6 +59,14 @@ export const getModelLongName = (model: LlmModel): string => modelNames[model]?.
  */
 export const DEFAULT_LLM_MODEL: LlmModel = LlmModel.CLAUDE_5_5_OPUS;
 
+/**
+ * The model a new selection uses for `model`. The 200K members stay defined so stored
+ * selections still load, but nothing new is created with one: a 200K value from local
+ * storage, a saved setting or an older agent becomes its 1M sibling, the same value
+ * without the `-200K` suffix. The backend applies the same rule to every request.
+ */
+export const modelForNewRecord = (model: LlmModel): LlmModel => model.replace(/-200K$/, "") as LlmModel;
+
 // Models offered in production model pickers (desktop selector + mobile `+` menu).
 export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
   LlmModel.CLAUDE_FABLE_5_2,

@@ -94,6 +94,17 @@ class LLMModel(StrEnum):
     FAKE_CLAUDE_2 = "FAKE_CLAUDE_2"
 
 
+def model_for_new_record(model: LLMModel) -> LLMModel:
+    """The member a newly created record stores for `model`.
+
+    The `_200K` members stay defined so persisted rows still deserialize, but nothing
+    new is created with one: a 200K selection arriving from a stale client, a saved
+    setting or an older agent is stored as its 1M sibling, the same value without the
+    `-200K` suffix.
+    """
+    return LLMModel(model.value.removesuffix("-200K"))
+
+
 class EffortLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
