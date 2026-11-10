@@ -1,13 +1,8 @@
 """Low-level, domain-agnostic primitives for cheaply detecting git ref changes.
 
-These are the stat fast path behind ``WorkspaceService``'s branch poller, which
-watches two facts per live workspace: its current branch (its ``HEAD``) and its
-repo's target candidates (keyed by common git dir, so each repo is scanned once).
-
 Everything here reads the filesystem and returns plain values (paths and
-change-signatures); it never forks ``git``. The poller reads the facts themselves
-through the VCS seam, and only when a signature moved. An idle scan touches the
-filesystem but forks nothing.
+change-signatures); it never forks ``git``. A polling loop can stat these every
+cycle and fork git only when a signature moves.
 """
 
 import os

@@ -10,9 +10,8 @@ subscriber queues:
   offers), projected from the repo's target candidates minus the workspace's own
   branch.
 
-Both are read through the VCS seam (``services/workspace_service/vcs``). A
-checkout that is not a git checkout (no ``.git``, e.g. a vanished directory or a
-jj workspace) is flagged in its published ``WorkspaceBranchInfo`` and logged once.
+Both are read through the VCS seam. A checkout with no ``.git`` cannot be read,
+so its ``WorkspaceBranchInfo`` carries a ``checkout_problem`` instead of a branch.
 
 Target candidates are a property of the *repo*, not the workspace, so they are
 read once per **common git dir**, in that repo's main checkout, and reused across
@@ -29,9 +28,9 @@ when a signature actually moved, so an idle cycle forks nothing. A
 periodic forced recompute covers ref-mutation shapes that leave the signature
 unchanged (e.g. a loose ref being packed).
 
-Results are fanned out as ``WorkspaceBranchInfo`` / ``WorkspaceTargetBranchesInfo``,
-which the stream conversion and PR polling consume. A single loop serves the whole
-process; websocket connections subscribe rather than each starting their own pollers.
+Results are fanned out as ``WorkspaceBranchInfo`` / ``WorkspaceTargetBranchesInfo``.
+A single loop serves the whole process; websocket connections subscribe rather
+than each starting their own pollers.
 """
 
 import threading

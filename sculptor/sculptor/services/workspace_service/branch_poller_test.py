@@ -2,15 +2,7 @@
 
 The poller is a background loop with no UI trigger, so per the repo's test
 strategy its mechanics are exercised here rather than via Playwright. Tests drive
-a single ``_scan_once()`` and assert on what is fanned out to observer queues:
-
-- current branch is detected (and the diff refreshed only on a transition),
-- target branches are projected from the repo's own remote-tracking refs (keyed
-  by common git dir) — including the no-remote fallback that excludes the
-  workspace's own branch,
-- a checkout with no ``.git`` is flagged in the published state and logged, and
-- an idle re-scan of an unchanged repo forks no git (``HEAD`` and remote-ref stat
-  signatures unchanged).
+a single ``_scan_once()`` and assert on what is fanned out to observer queues.
 """
 
 import shlex
@@ -276,18 +268,14 @@ def test_idle_rescan_forks_no_git(
     git_cli: GitCli,
     git_invocation_log: Path,
 ) -> None:
-    """A second scan of an unchanged repo forks git zero times.
-
-    The ``HEAD`` and remote-ref stat signatures are unchanged since the first
-    scan, so neither the branch nor the target-candidate read runs on an idle cycle.
-    """
+    """A second scan of an unchanged repo forks git zero times."""
     _add_remote_ref(base_repo, "origin/main")
     worktree = tmp_path / "ws"
     _add_worktree(base_repo, worktree, "wsbranch")
     workspace = _FakeWorkspace(WorkspaceID(), ProjectID())
     poller = _build_poller([workspace], {workspace.object_id: worktree}, test_root_concurrency_group, git_cli)
 
-    # The first scan forks git to read the branch and list the target candidates.
+    # The first scan must fork git, or the empty log after the second would prove nothing.
     poller._scan_once()
     assert _read_git_invocations(git_invocation_log) != []
     git_invocation_log.write_text("")
