@@ -401,7 +401,7 @@ class WorkspaceService(Service, ABC):
         Get the checkout directory for a workspace.
 
         For IN_PLACE workspaces, returns the project's local path.
-        For CLONE and WORKTREE workspaces, returns the checkout inside the environment.
+        Otherwise, returns the checkout inside the workspace's environment.
         Returns None if the workspace's environment hasn't been initialized yet.
         Never resumes the environment, so it is cheap enough to call on every poll.
 

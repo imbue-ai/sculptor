@@ -789,8 +789,6 @@ def test_delete_worktree_workspace_removes_the_worktree_and_its_merged_branch(
 
 
 class _ResumeCountingEnvironmentManager(DefaultEnvironmentManager):
-    """Environment manager that counts `resume_environment` calls."""
-
     _resume_count: int = PrivateAttr(default=0)
 
     def resume_environment(
@@ -824,7 +822,6 @@ def test_get_workspace_working_directory_finds_the_checkout_without_resuming_the
     tmp_path: Path,
     initialization_strategy: WorkspaceInitializationStrategy,
 ) -> None:
-    """The branch poller calls this for every workspace on every cycle, so it must not resume environments."""
     workspace_service = test_service_collection.workspace_service
     assert isinstance(workspace_service, DefaultWorkspaceService)
     existing_manager = workspace_service.environment_manager

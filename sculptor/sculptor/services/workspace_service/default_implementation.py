@@ -302,9 +302,7 @@ class DefaultWorkspaceService(WorkspaceService):
         if description is None:
             description = uuid.uuid4().hex[:8]
 
-        # Record HEAD as the workspace's starting point: commit history measures
-        # from it when the target branch has no merge base. None if git is not
-        # available or HEAD doesn't exist.
+        # Record the user's HEAD as the workspace's starting point.
         project_path = project.get_local_user_path()
         vcs = self._get_workspace_vcs(initialization_strategy)
         source_git_hash = vcs.resolve_base_commit_id(project_path, "HEAD")
@@ -712,10 +710,7 @@ class DefaultWorkspaceService(WorkspaceService):
         workspace: Workspace,
         transaction: DataModelTransaction | None = None,
     ) -> Path | None:
-        """Get the checkout directory for a workspace without resuming its environment.
-
-        Returns None if a clone or worktree workspace has no environment yet.
-        """
+        """Get the checkout directory for a workspace without resuming its environment."""
         if transaction is not None:
             project = transaction.get_project(workspace.project_id)
         else:
@@ -726,7 +721,10 @@ class DefaultWorkspaceService(WorkspaceService):
         return workspace_checkout_path(workspace, project.get_local_user_path())
 
     def _get_checkout_location(self, workspace: Workspace, transaction: DataModelTransaction) -> CheckoutLocation:
-        """Where the workspace's checkout lives; raises WorkspaceNotFoundError until it has one."""
+        """Where the workspace's checkout lives.
+
+        Raises WorkspaceNotFoundError if its project is gone or it has no checkout yet.
+        """
         project = transaction.get_project(workspace.project_id)
         if project is None:
             raise WorkspaceNotFoundError(workspace.object_id)
