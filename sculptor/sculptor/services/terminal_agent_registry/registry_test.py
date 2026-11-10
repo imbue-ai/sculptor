@@ -10,8 +10,11 @@ import pytest
 
 from sculptor.services.terminal_agent_registry import registry as registry_module
 from sculptor.services.terminal_agent_registry.bundled import get_bundled_claude_code_dir
+from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegistration
 from sculptor.services.terminal_agent_registry.registry import get_registration
 from sculptor.services.terminal_agent_registry.registry import load_registrations
+
+_SH_SCRIPT_PREFIX = "sh -c '"
 
 
 @pytest.fixture
@@ -20,6 +23,19 @@ def registrations_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     directory = tmp_path / "terminal_agents"
     directory.mkdir()
     return directory
+
+
+def _load_bundled_claude_code(registrations_dir: Path) -> TerminalAgentRegistration:
+    sample_dir = get_bundled_claude_code_dir()
+    assert sample_dir is not None, "bundled claude-code sample not found"
+    (registrations_dir / "claude-code.toml").write_text((sample_dir / "claude-code.toml").read_text())
+    return load_registrations()[0]
+
+
+def _sh_script(command: str) -> str:
+    """The script a bundled command hands to sh, asserting the command is exactly `sh -c '<script>'`."""
+    assert command.startswith(_SH_SCRIPT_PREFIX) and command.endswith("'") and command.count("'") == 2, command
+    return command[len(_SH_SCRIPT_PREFIX) : -1]
 
 
 def test_minimal_registration_loads_with_defaults(registrations_dir: Path) -> None:
@@ -125,7 +141,8 @@ def test_bundled_claude_code_sample_round_trips_through_loader(registrations_dir
     assert registration.resume_command_template is not None
     assert "{session_id}" in registration.resume_command_template
     # A resumed session must come back with exactly the launch flags.
-    assert registration.resume_command_template == f"{registration.launch_command} --resume {{session_id}}"
+    launch_script = _sh_script(registration.launch_command)
+    assert _sh_script(registration.resume_command_template) == f"{launch_script} --resume {{session_id}}"
     assert registration.accepts_automated_prompts is True
 
 
@@ -160,17 +177,27 @@ def test_shell_parameter_expansions_are_not_placeholders() -> None:
     assert registration.launch_command == 'c ${EXTRA_DIR:+--dir="$EXTRA_DIR"}'
 
 
+def test_bundled_commands_hand_one_posix_script_to_sh(registrations_dir: Path) -> None:
+    # The commands are typed into the user's login shell, which may be fish or
+    # tcsh, so each is exactly `sh -c '<script>'` and sh alone parses the
+    # script. Inside single quotes fish still reads `\` and csh still expands
+    # `!`, so the script uses neither. See "Commands typed into the user's
+    # shell" in docs/development/style/backend.md.
+    registration = _load_bundled_claude_code(registrations_dir)
+    assert registration.resume_command_template is not None
+
+    for command in (registration.launch_command, registration.resume_command_template):
+        script = _sh_script(command)
+        assert "\\" not in script and "!" not in script, script
+
+
 @pytest.mark.parametrize("shell", ["sh", "bash"])
 def test_bundled_launch_command_passes_the_jj_plugin_dir_only_when_it_is_exported(
     registrations_dir: Path, tmp_path: Path, shell: str
 ) -> None:
-    # The command is typed into the user's shell. The jj flag must reach the
-    # program as one argument (zsh never splits the expansion into two) and
-    # vanish when SCULPT_JJ_PLUGIN_DIR is unset.
-    sample_dir = get_bundled_claude_code_dir()
-    assert sample_dir is not None
-    (registrations_dir / "claude-code.toml").write_text((sample_dir / "claude-code.toml").read_text())
-    registration = load_registrations()[0]
+    # The jj flag must reach the program as one argument, and vanish when
+    # SCULPT_JJ_PLUGIN_DIR is unset.
+    registration = _load_bundled_claude_code(registrations_dir)
     print_arguments = tmp_path / "print-arguments"
     print_arguments.write_text('#!/bin/sh\nfor argument in "$@"; do echo "$argument"; done\n')
     print_arguments.chmod(0o755)

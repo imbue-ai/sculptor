@@ -43,7 +43,7 @@ _KNOWN_MANAGED_FILE_SHA256: dict[str, frozenset[str]] = {
         {
             "f04ba8bc5b7a0730420f05aab2e7bee45d187429322d970c38cd4b4fa4e8dcc3",
             "3d4e954592cda50c70b4e7882b09957b6f7bfb4f541754427cff50bc48a55d86",
-            "f5af6ab36e1a4c317a05b20d4a897a21b089264a952ea4733fd2e1f6c685a22e",
+            "8e9b873cf218e816a22d4b58fe3252d3485f54c6f7e94b2bf50d622581ae5b25",
         }
     ),
     "claude-code-hooks.json": frozenset(
