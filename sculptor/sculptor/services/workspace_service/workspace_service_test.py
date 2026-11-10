@@ -1235,6 +1235,50 @@ def test_diff_skipped_when_no_target_branch(
     assert diff.target_branch_diff == ""
 
 
+def _create_in_place_workspace_on_isolated_repo(
+    test_service_collection: CompleteServiceCollection,
+    concurrency_group: ConcurrencyGroup,
+    repo_path: Path,
+) -> tuple[Path, WorkspaceID]:
+    repo_path = _create_isolated_git_repo(repo_path, concurrency_group)
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        project = test_service_collection.project_service.initialize_project(
+            project_path=repo_path,
+            organization_reference=ANONYMOUS_ORGANIZATION_REFERENCE,
+            transaction=transaction,
+        )
+        test_service_collection.project_service.activate_project(project)
+        workspace = test_service_collection.workspace_service.create_workspace(
+            project=project,
+            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="Isolated repo workspace",
+            transaction=transaction,
+        )
+    return repo_path, workspace.object_id
+
+
+def test_workspace_diff_includes_untracked_files_whose_names_start_with_a_dash(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path, workspace_id = _create_in_place_workspace_on_isolated_repo(
+        test_service_collection, test_root_concurrency_group, tmp_path / "repo"
+    )
+    (repo_path / "-dash.txt").write_text("dash content\n")
+
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        diff = test_service_collection.workspace_service.get_workspace_diff(
+            workspace_id, transaction, force_refresh=True, include_target_branch_diff=True
+        )
+
+    assert diff is not None
+    assert "+++ b/-dash.txt" in diff.uncommitted_diff
+    assert "+++ b/-dash.txt" in diff.target_branch_diff
+
+
 class TestExpandNumstatRenamePath:
     """Tests for _expand_numstat_rename_path which resolves git's compact rename notation."""
 

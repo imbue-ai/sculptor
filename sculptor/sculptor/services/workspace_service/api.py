@@ -304,8 +304,9 @@ class WorkspaceService(Service, ABC):
         for each status transition (GENERATING -> READY) so the frontend sees each
         state change immediately.
 
-        The diff is computed from workspace.source_git_hash to current state and
-        stored in the workspace artifacts directory.
+        The uncommitted diff runs from HEAD to the working tree; the target branch
+        diff runs from the merge base with workspace.target_branch to the working
+        tree. Both are stored in the workspace artifacts directory.
 
         Args:
             workspace_id: The workspace to refresh diff for.

@@ -9,6 +9,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Generator
 from typing import Self
+from typing import assert_never
 from typing import cast
 
 from loguru import logger
@@ -76,7 +77,10 @@ from sculptor.services.workspace_service.setup_command_runner import SetupComman
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.services.workspace_service.vcs.checkout_paths import workspace_checkout_path
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.timeout import timeout_monitor
@@ -91,15 +95,6 @@ _GIT_COMMAND_TIMEOUT = 30.0
 # the maximum a caller is allowed to request.
 _DEFAULT_DIFF_CONTEXT_LINES = 3
 _MAX_DIFF_CONTEXT_LINES = 50
-
-# Shell snippet that produces a unified diff for every untracked file.
-# Used by both the uncommitted diff and the target-branch diff so that new
-# (un-added) files appear in both views.
-_UNTRACKED_FILES_DIFF_CMD = (
-    "git ls-files --others --exclude-standard -z"
-    + " | xargs -0 -I {} find {} -maxdepth 0 -type f -print0"
-    + " | xargs -0 -I {} git --no-pager diff --no-index /dev/null {}"
-)
 
 
 class DefaultWorkspaceService(WorkspaceService):
@@ -116,6 +111,7 @@ class DefaultWorkspaceService(WorkspaceService):
     project_service: ProjectService
     workspace_sync_dir: Path
     backend_port: int
+    git_cli: GitCli
 
     _diff_lock_by_workspace: dict[WorkspaceID, threading.Lock] = PrivateAttr(default_factory=dict)
     _diff_lock_map_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
@@ -147,7 +143,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 self._branch_poller_instance = WorkspaceBranchPoller(
                     concurrency_group=self.concurrency_group,
                     data_model_service=self.data_model_service,
-                    git_cli=GitCli(self.concurrency_group, self.dependency_management_service.resolve_binary_path),
+                    git_cli=self.git_cli,
                     resolve_working_dir=self.get_workspace_working_directory,
                     refresh_diff_on_branch_change=self.maybe_refresh_workspace_diff,
                 )
@@ -249,15 +245,28 @@ class DefaultWorkspaceService(WorkspaceService):
         environment_manager = DefaultEnvironmentManager(
             data_model_service=cast(TaskDataModelService, data_model_service),
         )
+        workspace_concurrency_group = concurrency_group.make_concurrency_group("workspace_service")
         return cls(
-            concurrency_group=concurrency_group.make_concurrency_group("workspace_service"),
+            concurrency_group=workspace_concurrency_group,
             data_model_service=data_model_service,
             dependency_management_service=dependency_management_service,
             environment_manager=environment_manager,
             project_service=project_service,
             workspace_sync_dir=settings.workspace_sync_path,
             backend_port=settings.BACKEND_PORT,
+            git_cli=GitCli(workspace_concurrency_group, dependency_management_service.resolve_binary_path),
         )
+
+    def _get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
+        match initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                return GitWorkspaceVcs(initialization_strategy, self.git_cli, self.concurrency_group)
+            case _ as unreachable:
+                assert_never(unreachable)
 
     def _get_diff_lock(self, workspace_id: WorkspaceID) -> threading.Lock:
         """Get a per-workspace lock for diff generation, creating one lazily if needed."""
@@ -429,9 +438,9 @@ class DefaultWorkspaceService(WorkspaceService):
         if description is None:
             description = uuid.uuid4().hex[:8]
 
-        # Capture the current git hash as the starting point for diffs.
-        # source_git_hash can be None if git is not available or HEAD doesn't exist.
-        # Diff-generation methods handle None explicitly (see _get_diff_base_ref).
+        # Record HEAD as the workspace's starting point: commit history measures
+        # from it when the target branch has no merge base. None if git is not
+        # available or HEAD doesn't exist.
         project_path = project.get_local_user_path()
         source_git_hash = self._get_current_git_hash(project_path)
 
@@ -879,96 +888,16 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace.object_id)
         return working_dir
 
-    def _run_diff_command(
-        self,
-        command: list[str],
-        cwd: Path,
-        diff_kind: str,
-    ) -> str:
-        """Run a git diff command and return its output.
-
-        Args:
-            command: The git command to run.
-            cwd: Working directory for the command.
-            diff_kind: Human-readable label for the diff type (e.g. "committed", "uncommitted").
-
-        Returns:
-            The diff output, or empty string on failure.
-        """
-        try:
-            returncode, stdout, stderr = run_git_command_local(
-                self.concurrency_group,
-                command,
-                cwd=cwd,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            # returncode 0 = empty diff, 1 = non-empty diff, >1 = error
-            # 123 = xargs found items (which is fine for our use case)
-            if returncode > 1 and returncode != 123:
-                logger.warning(
-                    "Unexpected returncode for {} diff: returncode={}, stderr={}",
-                    diff_kind,
-                    returncode,
-                    stderr[:500],
-                )
-            return stdout.strip()
-        except GitCommandFailure as e:
-            logger.warning("Failed to generate {} diff: {}", diff_kind, e)
-            return ""
-
-    def _create_diff_artifact_local(
-        self,
-        base_ref: str,
-        working_dir: Path,
-        context_lines: int = _DEFAULT_DIFF_CONTEXT_LINES,
-        target_branch: str | None = None,
-    ) -> DiffArtifact:
-        """Create a diff artifact using local git commands.
-
-        Args:
-            base_ref: Git ref to diff against (branch name, commit hash, or "HEAD~0").
-            working_dir: Working directory for git commands.
-            context_lines: Number of unchanged context lines around each diff hunk.
-            target_branch: If set, compute target-branch diff using merge-base.
-        """
-        if not isinstance(context_lines, int) or context_lines < 0:
-            raise ValueError(f"context_lines must be a non-negative integer, got {context_lines!r}")
-        context_flag = f"-U{context_lines}"
-
-        # Commands to generate each diff type.
-        # -M enables rename detection so renames show as a single entry instead of delete+add.
-        untracked = _UNTRACKED_FILES_DIFF_CMD
-        uncommitted_diff_command = [
-            "bash",
-            "-c",
-            f"git --no-pager diff -M {context_flag} HEAD; {untracked}",
-        ]
-        uncommitted_diff = self._run_diff_command(uncommitted_diff_command, working_dir, "uncommitted")
-
-        # Compute target-branch diff if requested.  Resolve the merge-base once
-        # and reuse it both to compute the diff and to expose it on the artifact,
-        # so the frontend can fetch old-side file content at the exact ref the
-        # diff's old-side line numbers reference (rather than the target-branch
-        # tip, which may have diverged since the merge-base).
-        target_branch_diff = ""
-        target_branch_merge_base = ""
-        if target_branch is not None:
-            merge_base = self._get_merge_base(working_dir, target_branch)
-            if merge_base is not None:
-                target_branch_merge_base = merge_base
-                target_branch_diff = self._compute_target_branch_diff(working_dir, merge_base, context_flag)
-
-        # Detect per-file errors (e.g., files inside nested git repositories)
-        file_errors = self._detect_file_errors(working_dir)
-
-        return DiffArtifact(
-            uncommitted_diff=uncommitted_diff,
-            target_branch_diff=target_branch_diff,
-            target_branch_merge_base=target_branch_merge_base,
-            file_errors=file_errors,
-        )
+    def _get_checkout_location(self, workspace: Workspace, transaction: DataModelTransaction) -> CheckoutLocation:
+        """Where the workspace's checkout lives; raises WorkspaceNotFoundError until it has one."""
+        project = transaction.get_project(workspace.project_id)
+        if project is None:
+            raise WorkspaceNotFoundError(workspace.object_id)
+        repo_path = project.get_local_user_path()
+        checkout_path = workspace_checkout_path(workspace, repo_path)
+        if checkout_path is None:
+            raise WorkspaceNotFoundError(workspace.object_id)
+        return CheckoutLocation(repo_path=repo_path, checkout_path=checkout_path)
 
     def _get_merge_base(self, working_dir: Path, target_branch: str) -> str | None:
         """Return the merge-base of HEAD and *target_branch*, or ``None`` on failure."""
@@ -986,68 +915,6 @@ class DefaultWorkspaceService(WorkspaceService):
             return stdout.strip()
         except GitCommandFailure:
             return None
-
-    def _compute_target_branch_diff(
-        self,
-        working_dir: Path,
-        merge_base: str,
-        context_flag: str,
-    ) -> str:
-        """Compute the diff from the given merge-base commit to the working tree.
-
-        This includes both committed and uncommitted changes so the "All changes"
-        view reflects the full delta against the target branch. The caller
-        resolves the merge-base (so the exact same commit can be exposed on the
-        artifact for the frontend's old-side content fetch).
-        """
-        # Diff merge-base against the working tree (not HEAD) so uncommitted
-        # changes are included.  Also append untracked files, matching the
-        # approach used for the uncommitted diff.
-        untracked = _UNTRACKED_FILES_DIFF_CMD
-        diff_command = [
-            "bash",
-            "-c",
-            f"git --no-pager diff -M {context_flag} {merge_base}; {untracked}",
-        ]
-        return self._run_diff_command(diff_command, working_dir, "target-branch")
-
-    def _detect_file_errors(self, working_dir: Path) -> dict[str, str]:
-        """Detect files that cannot be diffed (e.g., inside nested git repos)."""
-        try:
-            returncode, stdout, _stderr = run_git_command_local(
-                self.concurrency_group,
-                ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-                cwd=working_dir,
-                check_output=False,
-                timeout=_GIT_COMMAND_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode != 0:
-                return {}
-        except GitCommandFailure:
-            return {}
-
-        file_paths = [f for f in stdout.split("\0") if f.strip()]
-        errors: dict[str, str] = {}
-        for file_path in file_paths:
-            if "/.git/" in f"/{file_path}/" and not file_path.startswith(".git/"):
-                errors[file_path] = "Could not generate diff: file is inside a nested git repository"
-
-        return errors
-
-    @staticmethod
-    def _get_diff_base_ref(workspace: Workspace) -> str:
-        """Get the git ref to use as the diff baseline for a workspace.
-
-        If source_branch is set, diff against that branch (e.g., "main").
-        Otherwise, diff from the captured source_git_hash.
-        Falls back to HEAD~0 (empty diff) if neither is available.
-        """
-        if workspace.source_branch is not None:
-            return workspace.source_branch
-        if workspace.source_git_hash is not None:
-            return workspace.source_git_hash
-        return "HEAD~0"
 
     def refresh_workspace_diff(
         self,
@@ -1082,14 +949,12 @@ class DefaultWorkspaceService(WorkspaceService):
                 if workspace is None:
                     raise WorkspaceNotFoundError(workspace_id)
 
-                base_ref = self._get_diff_base_ref(workspace)
-                working_dir = self._get_workspace_working_dir(workspace, transaction)
+                location = self._get_checkout_location(workspace, transaction)
                 target_branch = workspace.target_branch if include_target_branch_diff else None
 
             # Generate the diff artifact (outside transaction — may be slow)
-            diff_artifact = self._create_diff_artifact_local(
-                base_ref, working_dir, effective_context_lines, target_branch=target_branch
-            )
+            vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+            diff_artifact = vcs.compute_diff_artifact(location, target_branch, effective_context_lines)
 
             # Store the artifact to disk
             artifact_dir = self._get_workspace_artifact_dir(workspace_id)
