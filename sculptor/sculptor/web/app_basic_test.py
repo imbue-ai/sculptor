@@ -7,7 +7,6 @@ NOTE: Endpoints are not currently tested for cross-user authorization (preventin
 """
 
 from pathlib import Path
-from typing import Callable
 from typing import Generator
 from unittest.mock import patch
 
@@ -39,6 +38,7 @@ from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import ToolUseID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.terminal_agent_registry import registry as registry_module
@@ -207,13 +207,17 @@ def create_claude_task(
 def test_create_task_creates_task(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
-    _user_session = authenticate_anonymous(test_services, RequestID())
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
     response = client.post(
         f"/api/v1/projects/{test_project.object_id}/tasks",
         json=model_dump(
             StartTaskRequest(
                 prompt="foo",
                 model=LLMModel.CLAUDE_4_SONNET,
+                workspace_id=workspace.object_id,
             ),
             is_camel_case=True,
         ),
@@ -221,8 +225,7 @@ def test_create_task_creates_task(
     if response.status_code == 422:
         raise AssertionError(f"Validation failed: {response.json()}. ")
     assert response.status_code == 200
-    workspace_id = response.json()["workspaceId"]
-    response = client.get(f"/api/v1/workspaces/{workspace_id}/agents")
+    response = client.get(f"/api/v1/workspaces/{workspace.object_id}/agents")
     assert response.status_code == 200
     assert len(response.json()) == 1
 
@@ -248,26 +251,6 @@ def _post_create_workspace(
     )
 
 
-def _post_start_task(
-    client: TestClient,
-    project: Project,
-    initialization_strategy: WorkspaceInitializationStrategy,
-    source_branch: str | None,
-) -> httpx.Response:
-    return client.post(
-        f"/api/v1/projects/{project.object_id}/tasks",
-        json=model_dump(
-            StartTaskRequest(
-                prompt="hello",
-                model=LLMModel.CLAUDE_4_SONNET,
-                initialization_strategy=initialization_strategy,
-                source_branch=source_branch,
-            ),
-            is_camel_case=True,
-        ),
-    )
-
-
 @pytest.mark.parametrize(
     ("initialization_strategy", "source_branch", "expected_status", "expected_detail"),
     [
@@ -283,17 +266,15 @@ def _post_start_task(
         ),
     ],
 )
-@pytest.mark.parametrize("post_create", [_post_create_workspace, _post_start_task], ids=["workspaces", "tasks"])
-def test_every_workspace_creation_endpoint_applies_the_per_mode_rules(
+def test_create_workspace_applies_the_per_mode_rules(
     client: TestClient,
     test_project: Project,
-    post_create: Callable[[TestClient, Project, WorkspaceInitializationStrategy, str | None], httpx.Response],
     initialization_strategy: WorkspaceInitializationStrategy,
     source_branch: str | None,
     expected_status: int,
     expected_detail: str | None,
 ) -> None:
-    response = post_create(client, test_project, initialization_strategy, source_branch)
+    response = _post_create_workspace(client, test_project, initialization_strategy, source_branch)
     assert response.status_code == expected_status, response.text
     if expected_detail is not None:
         assert expected_detail in response.json()["detail"]
@@ -381,40 +362,19 @@ def test_create_workspace_applies_the_branch_name_rules(
 
 def test_start_task_returns_404_for_a_missing_project(client: TestClient) -> None:
     response = client.post(
-        f"/api/v1/projects/{ProjectID()}/tasks", json={"prompt": "hello", "model": LLMModel.CLAUDE_4_SONNET.value}
+        f"/api/v1/projects/{ProjectID()}/tasks",
+        json={"prompt": "hello", "model": LLMModel.CLAUDE_4_SONNET.value, "workspaceId": str(WorkspaceID())},
     )
     assert response.status_code == 404, response.text
 
 
-@pytest.mark.parametrize(
-    ("workspace_creation_fields", "expected_status"),
-    [
-        pytest.param({}, 200, id="existing-workspace-only"),
-        pytest.param({"initializationStrategy": WorkspaceInitializationStrategy.IN_PLACE.value}, 422, id="strategy"),
-        pytest.param({"sourceBranch": "main"}, 422, id="source-branch"),
-    ],
-)
-def test_start_task_rejects_workspace_creation_fields_alongside_an_existing_workspace(
-    client: TestClient,
-    test_services: CompleteServiceCollection,
-    test_project: Project,
-    workspace_creation_fields: dict[str, str],
-    expected_status: int,
-) -> None:
-    user_session = authenticate_anonymous(test_services, RequestID())
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-
+def test_start_task_without_a_workspace_returns_422(client: TestClient, test_project: Project) -> None:
     response = client.post(
         f"/api/v1/projects/{test_project.object_id}/tasks",
-        json={
-            "prompt": "hello",
-            "model": LLMModel.CLAUDE_4_SONNET.value,
-            "workspaceId": str(workspace.object_id),
-            **workspace_creation_fields,
-        },
+        json={"prompt": "hello", "model": LLMModel.CLAUDE_4_SONNET.value},
     )
-    assert response.status_code == expected_status, response.text
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"][0]["loc"] == ["body", "workspace_id"]
 
 
 def test_workspace_working_directory_resolves_per_strategy() -> None:
@@ -1356,6 +1316,10 @@ def test_start_task_resolves_agent_type(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
     """Prompt-ful creation honors a chat agent_type and rejects terminal types."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
     with patch("sculptor.web.app.compute_authenticated_provider_ids", return_value={"anthropic"}):
         response = client.post(
             f"/api/v1/projects/{test_project.object_id}/tasks",
@@ -1365,6 +1329,7 @@ def test_start_task_resolves_agent_type(
                     backend_model=ModelOption(
                         provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"
                     ),
+                    workspace_id=workspace.object_id,
                     agent_type=AgentTypeName.PI,
                 ),
                 is_camel_case=True,
@@ -1372,7 +1337,6 @@ def test_start_task_resolves_agent_type(
         )
     assert response.status_code == 200, response.text
     task_id = TaskID(response.json()["id"])
-    user_session = authenticate_anonymous(test_services, RequestID())
     with user_session.open_transaction(test_services) as transaction:
         task = test_services.task_service.get_task(task_id, transaction)
     assert task is not None
@@ -1385,6 +1349,7 @@ def test_start_task_resolves_agent_type(
             StartTaskRequest(
                 prompt="hello terminal",
                 model=LLMModel.CLAUDE_4_SONNET,
+                workspace_id=workspace.object_id,
                 agent_type=AgentTypeName.TERMINAL,
             ),
             is_camel_case=True,
@@ -1534,10 +1499,14 @@ def test_start_task_terminal_mru_falls_back_to_claude_for_prompt(
 ) -> None:
     """A prompt-ful create with a terminal MRU uses Claude rather than being rejected."""
     _set_user_config_with(last_used_agent_type="terminal")
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
     response = client.post(
         f"/api/v1/projects/{test_project.object_id}/tasks",
         json=model_dump(
-            StartTaskRequest(prompt="hello", model=LLMModel.CLAUDE_4_SONNET),
+            StartTaskRequest(prompt="hello", model=LLMModel.CLAUDE_4_SONNET, workspace_id=workspace.object_id),
             is_camel_case=True,
         ),
     )

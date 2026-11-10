@@ -32,14 +32,20 @@ TARGET_COMPONENTS = [
 ]
 
 
-def _create_second_task(page, base_url):
-    """Create a second task via the UI or API and return its task_id."""
+def _create_second_workspace(page, base_url):
+    """Create a second workspace with a task and return their ids."""
     # Use fetch() inside the page to call the API directly
     result = page.evaluate("""async () => {
         const projectsRes = await fetch('/api/v1/projects');
         const projects = await projectsRes.json();
         const projectId = projects[0]?.objectId;
         if (!projectId) return null;
+        const workspaceRes = await fetch('/api/v1/workspaces', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ projectId, initializationStrategy: 'IN_PLACE' })
+        });
+        const workspace = await workspaceRes.json();
         const taskRes = await fetch(`/api/v1/projects/${projectId}/tasks`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -47,7 +53,7 @@ def _create_second_task(page, base_url):
                 prompt: 'Say goodbye briefly',
                 interface: 'API',
                 model: 'CLAUDE-4-SONNET',
-                mode: 'IN_PLACE'
+                workspaceId: workspace.objectId
             })
         });
         const task = await taskRes.json();
@@ -61,8 +67,8 @@ def setup(page, base_url, workspace_id, task_id):
     page.wait_for_load_state("networkidle")
     time.sleep(5)
 
-    # Create a second task so we have two tabs to switch between
-    second = _create_second_task(page, base_url)
+    # Create a second workspace so the sidebar has two rows to switch between
+    second = _create_second_workspace(page, base_url)
     if second:
         page.goto(f"{base_url}/#/ws/{second['workspaceId']}/agent/{second['taskId']}")
         page.wait_for_load_state("networkidle")
