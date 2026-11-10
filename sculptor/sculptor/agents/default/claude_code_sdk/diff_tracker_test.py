@@ -11,6 +11,7 @@ from sculptor.agents.default.claude_code_sdk.diff_tracker import _is_file_presen
 from sculptor.agents.default.claude_code_sdk.diff_tracker import create_unified_diff
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
@@ -21,7 +22,6 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
-from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
 
 _FILE_CONTENTS: Final[str] = """def foo() -> None:
     pass"""
@@ -72,14 +72,18 @@ def _git_cli(environment: AgentExecutionEnvironment) -> GitCli:
     return GitCli(environment.concurrency_group, environment.get_tool_binary_path)
 
 
+def _commit_everything_in_a_new_repo(working_dir: Path) -> str:
+    """Make `working_dir` a repository whose one commit holds all its files; returns `git rev-parse HEAD` output."""
+    run_blocking(["git", "init"], cwd=working_dir)
+    run_blocking(["git", "add", "."], cwd=working_dir)
+    run_blocking(["git", "commit", "-am", "initial commit"], cwd=working_dir)
+    return run_blocking(["git", "rev-parse", "HEAD"], cwd=working_dir).stdout
+
+
 def _setup_repo_in_environment_with_initial_files_commit(environment: AgentExecutionEnvironment) -> str:
     working_dir = environment.get_working_directory()
     environment.write_file(str(working_dir / _FILE_PATH), _FILE_CONTENTS)
-    run_git_command_in_environment(environment=environment, command=["git", "init"])
-    run_git_command_in_environment(environment=environment, command=["git", "add", "."])
-    run_git_command_in_environment(environment=environment, command=["git", "commit", "-am", "initial commit"])
-    _, commit_hash, _ = run_git_command_in_environment(environment=environment, command=["git", "rev-parse", "HEAD"])
-    return commit_hash
+    return _commit_everything_in_a_new_repo(working_dir)
 
 
 @pytest.fixture
@@ -211,10 +215,7 @@ def test_get_file_contents_preserves_trailing_newline(
     file_path = str(working_dir / "with_newline.py")
     original_contents = "print('hello')\n"
     environment.write_file(file_path, original_contents)
-    run_git_command_in_environment(environment=environment, command=["git", "init"])
-    run_git_command_in_environment(environment=environment, command=["git", "add", "."])
-    run_git_command_in_environment(environment=environment, command=["git", "commit", "-am", "initial commit"])
-    _, commit_hash, _ = run_git_command_in_environment(environment=environment, command=["git", "rev-parse", "HEAD"])
+    commit_hash = _commit_everything_in_a_new_repo(working_dir)
 
     file_contents = _get_file_contents_at_commit_hash(
         git=_git_cli(environment),
@@ -238,9 +239,7 @@ def test_compute_diff_for_unchanged_file_with_trailing_newline(
     working_dir = environment.get_working_directory()
     file_path = str(working_dir / "with_newline.py")
     environment.write_file(file_path, "print('hello')\n")
-    run_git_command_in_environment(environment=environment, command=["git", "init"])
-    run_git_command_in_environment(environment=environment, command=["git", "add", "."])
-    run_git_command_in_environment(environment=environment, command=["git", "commit", "-am", "initial commit"])
+    _commit_everything_in_a_new_repo(working_dir)
 
     diff_tracker = DiffTracker(environment=environment)
     diff = diff_tracker._compute_diff_for_file_path(file_path=file_path)

@@ -24,6 +24,7 @@ from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
 from sculptor.config.user_config import NIGHT_MODE_OFF
 from sculptor.config.user_config import NIGHT_MODE_ON
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.tool_names import AgentToolName
@@ -49,7 +50,6 @@ from sculptor.state.claude_state import ParsedAssistantResponse
 from sculptor.state.claude_state import ParsedToolResultResponse
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
-from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
 
 
 def test_get_user_instructions_enter_plan_mode_true() -> None:
@@ -618,9 +618,9 @@ def _make_repo_with_file_ending_in_newline(
 
     file_path = str(tmp_path / "repo.py")
     environment.write_file(file_path, "print('hello')\n")
-    run_git_command_in_environment(environment=environment, command=["git", "init"])
-    run_git_command_in_environment(environment=environment, command=["git", "add", "."])
-    run_git_command_in_environment(environment=environment, command=["git", "commit", "-am", "initial"])
+    run_blocking(["git", "init"], cwd=tmp_path)
+    run_blocking(["git", "add", "."], cwd=tmp_path)
+    run_blocking(["git", "commit", "-am", "initial"], cwd=tmp_path)
     return environment, file_path
 
 
