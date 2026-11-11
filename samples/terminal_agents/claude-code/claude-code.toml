@@ -6,13 +6,23 @@
 
 display_name = "Claude"
 
-# The launch command runs in the agent's login shell. Two kinds of variables
-# are substituted in launch_command / resume_command_template:
+# Sculptor types each command into the agent's login shell, which may be
+# bash, zsh, fish, tcsh or anything else. So each command is one POSIX script
+# handed to `sh -c '…'`: every common shell passes single-quoted text through
+# untouched, and sh alone parses the script. Keep the script free of `'` (it
+# ends the quoting), `\` (fish reads it inside single quotes) and `!` (csh
+# expands it inside single quotes). `exec` replaces sh with the program. The
+# TOML values use '''…''' because the commands contain single quotes.
+# Two kinds of variables are substituted in launch_command /
+# resume_command_template:
 #   $SCULPT_* — shell env vars Sculptor injects into every terminal-agent
-#     shell, expanded by the shell at launch:
+#     shell, expanded by sh at launch:
 #       SCULPT_CLAUDE_BIN  — Sculptor's managed Claude binary (falls back to
 #                            `claude` from PATH when unmanaged)
 #       SCULPT_PLUGINS_DIR — the directory holding the bundled Sculptor plugins
+#       SCULPT_JJ_PLUGIN_DIR — the bundled jujutsu plugin; set only in jj
+#                            workspaces, so `${SCULPT_JJ_PLUGIN_DIR:+…}` adds
+#                            it only there.
 #   {…} placeholders — substituted by Sculptor when it renders the command:
 #       {sculptor_directory}          — the Sculptor folder
 #       {terminal_agents_directory}   — where registrations + their companion
@@ -31,12 +41,12 @@ display_name = "Claude"
 # CLAUDE_CODE_NO_FLICKER=1 forces the TUI's fullscreen alt-screen renderer
 # (flicker-free, virtualized scrollback) instead of the classic main-screen
 # renderer.
-launch_command = 'env CLAUDE_CODE_NO_FLICKER=1 "$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings "{terminal_agents_directory}/claude-code-hooks.json" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental"'
+launch_command = '''sh -c 'exec env CLAUDE_CODE_NO_FLICKER=1 "$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings "{terminal_agents_directory}/claude-code-hooks.json" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental" ${SCULPT_JJ_PLUGIN_DIR:+--plugin-dir="$SCULPT_JJ_PLUGIN_DIR"}''''
 
 # Same env and flags as launch_command (a resumed session must come back
 # with the same renderer, hooks, and plugins), plus --resume: {session_id}
 # is replaced with the session id the hooks reported on the first prompt,
 # so a Sculptor restart resumes the same conversation.
-resume_command_template = 'env CLAUDE_CODE_NO_FLICKER=1 "$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings "{terminal_agents_directory}/claude-code-hooks.json" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental" --resume {session_id}'
+resume_command_template = '''sh -c 'exec env CLAUDE_CODE_NO_FLICKER=1 "$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings "{terminal_agents_directory}/claude-code-hooks.json" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental" ${SCULPT_JJ_PLUGIN_DIR:+--plugin-dir="$SCULPT_JJ_PLUGIN_DIR"} --resume {session_id}''''
 
 accepts_automated_prompts = true

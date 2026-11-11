@@ -2043,7 +2043,7 @@ def get_skills(
         raise HTTPException(status_code=400, detail="Either project_id or workspace_id is required")
 
     services = get_services_from_request_or_websocket(request)
-    plugin_dirs = get_plugin_dirs()
+    plugin_dirs = get_plugin_dirs("git")
 
     if workspace_id is not None:
         validated_workspace_id = validate_workspace_id(workspace_id)

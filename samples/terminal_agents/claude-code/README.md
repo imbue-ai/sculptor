@@ -25,8 +25,8 @@ The installed copy is **yours**:
   without a restart.
 
 (Manual install, e.g. after deleting it: copy both files into
-`<sculptor folder>/terminal_agents/` and point the two `--settings` paths in
-the TOML at the copied hooks file.)
+`<sculptor folder>/terminal_agents/`. The TOML finds the hooks file through
+the `{terminal_agents_directory}` placeholder, so no paths need editing.)
 
 ## How it works
 
@@ -34,14 +34,23 @@ the TOML at the copied hooks file.)
   registration id** (`claude-code`); renaming the file changes the id (agents
   you already created keep working — their launch settings were stamped at
   creation).
-- The launch command runs in the agent's login shell and uses env vars
-  Sculptor injects into every terminal-agent shell, so no machine-specific
-  paths are baked into the file:
+- Sculptor types the launch command into the agent's login shell, which may
+  be bash, zsh, fish, tcsh or anything else. So the command is one POSIX
+  script handed to `sh -c '…'`: every common shell passes single-quoted text
+  through untouched, and `sh` alone parses the script. The script must not
+  contain `'`, `\` or `!` (the TOML's comment says why). Use the same form in
+  your own registrations if they may run under someone else's shell.
+- The script uses env vars Sculptor injects into every terminal-agent shell,
+  so no machine-specific paths are baked into the file:
   - `$SCULPT_CLAUDE_BIN` — Sculptor's managed Claude binary (falls back to
     `claude` from PATH);
   - `$SCULPT_PLUGINS_DIR` — the bundled Sculptor plugin directories, loaded
     via `--plugin-dir` (same plugins chat agents get: `sculptor-plugin`,
-    `sculptor-workflow`, `sculptor-experimental`).
+    `sculptor-workflow`, `sculptor-experimental`);
+  - `$SCULPT_JJ_PLUGIN_DIR` — the bundled `sculptor-jj` plugin (the jujutsu
+    skill), set only in workspaces that use jj.
+    `${SCULPT_JJ_PLUGIN_DIR:+--plugin-dir="$SCULPT_JJ_PLUGIN_DIR"}` adds the
+    flag only when the variable is set.
 - It launches with `--dangerously-skip-permissions` (matching how Sculptor
   runs Claude for chat agents); the settings file skips the one-time
   bypass-permissions disclaimer so the TUI lands directly at its prompt. This

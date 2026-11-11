@@ -22,7 +22,7 @@ from typing import cast
 
 from loguru import logger
 
-from sculptor.common.plugin import get_plugins_base_dir
+from sculptor.common.plugin import get_terminal_agent_plugin_env
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -201,7 +201,7 @@ def _run_terminal_agent_in_environment(
     # scrubs inherited SCULPT_*/SCULPTOR_* vars and re-applies extra_env (PATH
     # is prepended), so everything must go through extra_env.
     #
-    # SCULPT_PLUGINS_DIR and SCULPT_CLAUDE_BIN exist for registration launch
+    # The plugin dirs and SCULPT_CLAUDE_BIN exist for registration launch
     # commands (shell-expanded at launch): install-relative paths move on app
     # updates — and on every AppImage launch — so a registration file cannot
     # bake them in.
@@ -212,7 +212,7 @@ def _run_terminal_agent_in_environment(
             project_id=project.object_id,
             agent_id=task.object_id,
         ),
-        "SCULPT_PLUGINS_DIR": str(get_plugins_base_dir()),
+        **get_terminal_agent_plugin_env("git"),
         # Managed binary when resolvable; bare `claude` (PATH) as fallback so
         # the command still works for users who manage their own install.
         "SCULPT_CLAUDE_BIN": claude_binary_path or "claude",

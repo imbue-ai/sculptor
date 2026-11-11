@@ -822,7 +822,7 @@ class PiAgent(DefaultAgentWrapper):
         user can pick. The names may be plugin-namespaced (`<plugin>:<skill>`);
         `_rewrite_skill_invocation` reduces those to bare names for pi.
         """
-        skills = discover_skills(self.environment.get_working_directory(), get_plugin_dirs())
+        skills = discover_skills(self.environment.get_working_directory(), get_plugin_dirs("git"))
         return frozenset(skill.name for skill in skills)
 
     def _build_skill_launch_args(self) -> list[str]:
@@ -841,7 +841,7 @@ class PiAgent(DefaultAgentWrapper):
         """
         sources = get_skill_source_directories(
             self.environment.get_working_directory(),
-            plugin_dirs=get_plugin_dirs(),
+            plugin_dirs=get_plugin_dirs("git"),
             home_path=self.environment.get_user_home_directory(),
         )
         args: list[str] = []

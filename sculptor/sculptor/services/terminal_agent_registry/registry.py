@@ -30,14 +30,15 @@ _REGISTRATION_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
 # placeholders resolve to absolute paths and are valid in any command;
 # `{session_id}` is only meaningful in `resume_command_template` (there is no
 # session at first launch). The loader rejects any other `{…}` token so a typo
-# fails loudly here instead of surviving verbatim into the launched command.
+# fails loudly here instead of surviving verbatim into the launched command;
+# a `${…}` shell parameter expansion is left for the shell.
 SESSION_ID_PLACEHOLDER = "{session_id}"
 SCULPTOR_DIRECTORY_PLACEHOLDER = "{sculptor_directory}"
 TERMINAL_AGENTS_DIRECTORY_PLACEHOLDER = "{terminal_agents_directory}"
 _DIRECTORY_PLACEHOLDERS = frozenset({SCULPTOR_DIRECTORY_PLACEHOLDER, TERMINAL_AGENTS_DIRECTORY_PLACEHOLDER})
 _LAUNCH_COMMAND_PLACEHOLDERS = _DIRECTORY_PLACEHOLDERS
 _RESUME_COMMAND_PLACEHOLDERS = _DIRECTORY_PLACEHOLDERS | {SESSION_ID_PLACEHOLDER}
-_PLACEHOLDER_PATTERN = re.compile(r"\{[^}]*\}")
+_PLACEHOLDER_PATTERN = re.compile(r"(?<!\$)\{[^}]*\}")
 
 
 def _reject_unknown_placeholders(command: str, allowed: frozenset[str], field_name: str) -> None:

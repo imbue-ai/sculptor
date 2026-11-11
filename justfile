@@ -1211,6 +1211,13 @@ compute-jj-pin version:
 bump-jj version:
     uv run python "{{justfile_directory()}}/scripts/bump_pin.py" jj "{{version}}"
 
+# Re-vendor the jujutsu agent skill (sculptor/sculptor-jj/) from upstream at `ref`
+# (a branch, tag or commit), rewrite its UPSTREAM.toml provenance, and print the
+# upstream compare URL. Commit the result; never edit the vendored files by hand.
+[group("install")]
+update-jj-skill ref="main":
+    uv run python "{{justfile_directory()}}/scripts/update_jj_skill.py" "{{ref}}"
+
 # Installs additional dependencies for testing
 [group("install")]
 install-test:

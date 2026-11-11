@@ -1,0 +1,10 @@
+# Provenance of the vendored jujutsu skill. Written by `just update-jj-skill`; do not edit.
+repository = "https://github.com/danverbraganza/jujutsu-skill"
+requested_ref = "main"
+commit = "85a8376a3a0d5cf16ecb9b0fb0f3f48a48ce62c2"
+fetched_on = 2026-11-10
+license = "MIT"
+
+[sha256]
+"skills/jujutsu/LICENSE" = "90ed807e7da009b1697ed8cdeed486a4266a8cfdc81f324fef0036603a4f4757"
+"skills/jujutsu/SKILL.md" = "22f51fb5e6f1f96b275e2350a5bb4e4e956e9534ff9f1f96ab6a59836d19a14e"
