@@ -95,6 +95,20 @@ class LocalEnvironment(Environment):
     def get_project_env_var_names(self) -> list[str]:
         return list(self._project_env_vars.keys())
 
+    def get_project_env_overrides(self) -> dict[str, Secret]:
+        """The project's `.env` variables a process started here gets on top of `os.environ`.
+
+        Re-read from `~/.sculptor/.env` and `.sculptor/.env` on every call, so
+        processes started later pick up the user's edits. Unless env-var
+        override is on, a variable already set in `os.environ` keeps its value.
+        """
+        project_env_vars = load_project_env_vars(self.get_working_directory(), sculptor_folder=self._sculptor_folder)
+        return {
+            name: Secret(value)
+            for name, value in project_env_vars.items()
+            if self._env_var_override or name not in os.environ
+        }
+
     def set_sculpt_terminal_env_vars(self, env_vars: dict[str, str]) -> None:
         """Set SCULPT_* env vars that should be available in terminal sessions.
 
@@ -339,16 +353,9 @@ class LocalEnvironment(Environment):
         if run_with_sudo_privileges or run_as_root:
             raise NotImplementedError()
 
-        secrets_dict = {k: v.unwrap() if isinstance(v, Secret) else v for k, v in secrets.items()}
-        # Re-read .env files on every launch so existing agents pick up changes
-        # the user makes to ~/.sculptor/.env or .sculptor/.env after the workspace
-        # was created.
-        project_env_vars = load_project_env_vars(self.get_working_directory(), sculptor_folder=self._sculptor_folder)
-        if self._env_var_override:
-            merged = {**os.environ, **project_env_vars}
-        else:
-            merged = {**project_env_vars, **os.environ}
-        env = {**merged, **secrets_dict}
+        process_secrets = {**self.get_project_env_overrides(), **secrets}
+        secrets_dict = {k: v.unwrap() if isinstance(v, Secret) else v for k, v in process_secrets.items()}
+        env = {**os.environ, **secrets_dict}
         # Remove CLAUDECODE so spawned Claude Code processes don't refuse to start
         # thinking they're nested inside another Claude Code session.
         env.pop("CLAUDECODE", None)

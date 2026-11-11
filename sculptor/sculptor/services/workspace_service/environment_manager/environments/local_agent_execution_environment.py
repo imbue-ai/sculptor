@@ -241,6 +241,10 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
         """Get the names of project-configured environment variables."""
         return self._environment.get_project_env_var_names()
 
+    def get_project_env_overrides(self) -> dict[str, Secret]:
+        """The project's `.env` variables a process started here gets on top of `os.environ`."""
+        return self._environment.get_project_env_overrides()
+
     def start_terminal_manager(
         self,
         concurrency_group: ConcurrencyGroup,
