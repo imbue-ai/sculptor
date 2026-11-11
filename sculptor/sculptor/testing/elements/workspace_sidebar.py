@@ -6,6 +6,7 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 from sculptor.testing.elements.layouts import PlaywrightLayoutsSwitcherElement
+from sculptor.testing.utils import wait_for_keyboard_drag_listeners
 
 # Keyboard pickup (focus → Space) is retried: an async focus restore from a menu
 # that just closed can steal the Space press, so it lands on the menu trigger
@@ -117,15 +118,16 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         restore from a menu that just closed can steal the Space press, so each
         retry dismisses whatever it opened with Escape and re-focuses the item.
         The sensor marks the activator with ``data-sidebar-dragging`` on drag
-        start, which doubles as the "keydown listeners are live" signal — the
-        KeyboardSensor attaches them on a deferred tick, so an arrow pressed
-        before the flag appears would be silently dropped.
+        start but attaches its keydown listeners a tick later, so after the flag
+        appears the helper also waits for that tick: a key pressed before it is
+        silently dropped (``wait_for_keyboard_drag_listeners``).
         """
         for attempt in range(_REORDER_PICKUP_ATTEMPTS):
             item.focus()
             self._page.keyboard.press("Space")  # pick up
             try:
                 expect(item).to_have_attribute("data-sidebar-dragging", "true", timeout=5_000)
+                wait_for_keyboard_drag_listeners(self._page)
                 return
             except AssertionError:
                 if attempt == _REORDER_PICKUP_ATTEMPTS - 1:
