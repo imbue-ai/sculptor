@@ -12,33 +12,45 @@ Replaces the previous thread-per-workspace PrStatusPollingManager.
 
 import datetime
 import queue
-import shutil
 import threading
 import time
-import urllib.parse
+from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 from queue import Queue
 from typing import Literal
+from typing import assert_never
 
 from loguru import logger
 from pydantic import PrivateAttr
 
 from sculptor.config.user_config import UserConfig
 from sculptor.database.models import Workspace
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.constants import ExceptionPriority
-from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
 from sculptor.services.data_model_service.api import DataModelService
+from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
+from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
+from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
+from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
 from sculptor.web.cli_status_utils import CliStatusError
+from sculptor.web.cli_status_utils import GhRunner
+from sculptor.web.cli_status_utils import run_gh_with_retry
 from sculptor.web.cli_status_utils import strip_remote_prefix
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
@@ -51,7 +63,7 @@ from sculptor.web.pr_status import fetch_pr_status
 _PrState = Literal["none", "open", "merged", "closed"]
 
 # Re-enqueue delay when a poll returns None — either the workspace is still
-# initializing (no working_dir yet) or _execute_poll caught an exception.
+# initializing (no checkout yet) or _execute_poll caught an exception.
 # 3s used to be fine for the "not ready" case but it doubles as a tight
 # retry loop on exceptions (including rate-limit responses, since this
 # branch has no host-level cooldown). 30s is long enough to not hammer a
@@ -272,24 +284,31 @@ class _PollJob:
 
 
 @dataclass(frozen=True)
-class _RoundCandidate:
-    """A workspace eligible to be matched against a batched search round.
+class _PullRequestLookup:
+    """What one poll looks a workspace's pull request up by.
 
-    Carries everything the fan-out needs without re-reading git: the workspace's
-    repo identity (``name_with_owner``, ``None`` if the origin couldn't be parsed
-    into owner/repo — such a workspace is always unmatched and falls back) and
-    its ``current_branch`` (the index key), plus its ``target_branch`` for the
-    per-workspace derivation. Short-circuited workspaces (no branch / on target /
-    non-GitHub) never become candidates.
+    Carries everything the batched round and the per-workspace fallback need
+    without re-reading git: the workspace's repo identity (``name_with_owner``,
+    ``None`` if the origin couldn't be parsed into owner/repo — such a workspace
+    is always unmatched and falls back) and its ``head_ref_name`` (the index
+    key), the PR base its target names (``base_ref_name``) for the per-workspace
+    derivation, and the checkout and environment gh runs with. Short-circuited
+    workspaces (no PR head / on target / non-GitHub) never get one.
     """
 
     workspace_id: WorkspaceID
-    state: "_WorkspacePollState"
     working_dir: Path
-    current_branch: str
-    target_branch: str
+    gh_env: Mapping[str, str]
+    head_ref_name: str
+    base_ref_name: str
     host: str
     name_with_owner: str | None
+
+
+def _read_remote_names(git: GitCli, repo_path: Path) -> frozenset[str]:
+    """The names of the repository's remotes, such as ``origin``."""
+    output = git.run_git(["remote"], repo_path, is_read_only=True).stdout
+    return frozenset(line.strip() for line in output.splitlines() if line.strip())
 
 
 def _build_pr_index(nodes: Sequence[dict]) -> dict[tuple[str, str], list[dict]]:
@@ -311,115 +330,6 @@ def _build_pr_index(nodes: Sequence[dict]) -> dict[tuple[str, str], list[dict]]:
 
 
 # ---------------------------------------------------------------------------
-# Git helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_workspace_current_branch(working_dir: Path) -> str | None:
-    try:
-        result = run_blocking(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            timeout=10,
-            is_checked=False,
-            cwd=working_dir,
-        )
-        if result.returncode != 0:
-            return None
-        return result.stdout.strip()
-    except Exception:
-        return None
-
-
-def _get_origin_url(repo_path: Path) -> str | None:
-    try:
-        result = run_blocking(
-            ["git", "remote", "get-url", "origin"],
-            timeout=10,
-            is_checked=False,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-        return None
-    except Exception:
-        return None
-
-
-def _extract_hostname(url: str) -> str:
-    if ":" in url and not url.startswith(("https://", "http://", "ssh://")):
-        return url.split("@", 1)[-1].split(":")[0]
-    parsed = urllib.parse.urlparse(url)
-    return parsed.hostname or ""
-
-
-def _is_github_url(url: str) -> bool:
-    return "github" in _extract_hostname(url).lower()
-
-
-@dataclass(frozen=True)
-class _OriginInfo:
-    """Parsed identity of a workspace's ``origin`` remote.
-
-    ``host`` keys the per-(host, token) poll round, so a ``github.com`` workspace
-    and a GitHub Enterprise workspace get separate rounds.
-    ``name_with_owner`` (``owner/name``, ``.git`` stripped) is compared *exactly*
-    against a search node's ``repository.nameWithOwner`` to map the node back to
-    this workspace. GitHub returns canonical casing there, so a casing mismatch
-    would simply drop the workspace to the per-workspace fallback (acceptable
-    degradation).
-    """
-
-    host: str
-    owner: str
-    name: str
-
-    @property
-    def name_with_owner(self) -> str:
-        return f"{self.owner}/{self.name}"
-
-
-def _parse_origin_owner_repo(url: str) -> tuple[str, str] | None:
-    """Parse ``(owner, name)`` from a git ``origin`` URL, ``.git`` stripped.
-
-    Handles the scp-like (``git@host:owner/repo.git``), ``ssh://``, and http(s)
-    forms. Pure string parsing — no git call. Returns ``None`` for any URL that
-    does not yield exactly an owner and a repo, so a malformed remote degrades
-    (the workspace falls to the fallback) instead of crashing the round.
-    """
-    if ":" in url and not url.startswith(("https://", "http://", "ssh://")):
-        # scp-like ``git@host:owner/repo.git`` — the path follows the first ':'.
-        path = url.split(":", 1)[1]
-    else:
-        path = urllib.parse.urlparse(url).path
-    parts = path.strip("/").split("/")
-    if len(parts) != 2:
-        return None
-    owner, repo = parts
-    if repo.endswith(".git"):
-        repo = repo[: -len(".git")]
-    if not owner or not repo:
-        return None
-    return owner, repo
-
-
-def _parse_origin(url: str) -> _OriginInfo | None:
-    """Parse a git ``origin`` URL into its ``(host, owner, name)`` identity.
-
-    Reuses ``_extract_hostname`` (consistent with ``_is_github_url``) for the
-    host and ``_parse_origin_owner_repo`` for the path. Returns ``None`` if
-    either the host or the ``owner/repo`` can't be parsed.
-    """
-    host = _extract_hostname(url)
-    if not host:
-        return None
-    owner_repo = _parse_origin_owner_repo(url)
-    if owner_repo is None:
-        return None
-    owner, name = owner_repo
-    return _OriginInfo(host=host, owner=owner, name=name)
-
-
-# ---------------------------------------------------------------------------
 # Per-workspace poll state
 # ---------------------------------------------------------------------------
 
@@ -427,7 +337,8 @@ def _parse_origin(url: str) -> _OriginInfo | None:
 class _WorkspacePollState:
     __slots__ = (
         "workspace_id",
-        "working_dir",
+        "initialization_strategy",
+        "checkout_location",
         "target_branch",
         "is_open",
         "is_deleted",
@@ -438,12 +349,14 @@ class _WorkspacePollState:
     def __init__(
         self,
         workspace_id: WorkspaceID,
-        working_dir: Path | None,
+        initialization_strategy: WorkspaceInitializationStrategy,
+        checkout_location: CheckoutLocation | None,
         target_branch: str | None,
         is_open: bool,
     ) -> None:
         self.workspace_id = workspace_id
-        self.working_dir = working_dir
+        self.initialization_strategy = initialization_strategy
+        self.checkout_location = checkout_location
         self.target_branch = target_branch
         self.is_open = is_open
         self.is_deleted = False
@@ -461,6 +374,7 @@ class PrPollingService(Service):
 
     _data_model_service: DataModelService = PrivateAttr()
     _workspace_service: WorkspaceService = PrivateAttr()
+    _git: GitCli = PrivateAttr()
     _job_queue: queue.PriorityQueue = PrivateAttr(default_factory=queue.PriorityQueue)
     _pending: set[WorkspaceID] = PrivateAttr(default_factory=set)
     _pending_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
@@ -478,7 +392,6 @@ class PrPollingService(Service):
     _worker_events: list[threading.Event] = PrivateAttr(default_factory=list)
     _worker_sleep_until: dict[int, float] = PrivateAttr(default_factory=dict)
     _worker_sleep_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
-    _gh_available: bool | None = PrivateAttr(default=None)
     # Process-global throttle/cooldown shared by every worker. The gh
     # commands are GraphQL-backed and the rate limit is per-user, so spacing
     # and cooldown must be coordinated across the whole pool, not per workspace.
@@ -507,10 +420,12 @@ class PrPollingService(Service):
         concurrency_group: ConcurrencyGroup,
         data_model_service: DataModelService,
         workspace_service: WorkspaceService,
+        git_cli: GitCli,
     ) -> None:
         super().__init__(concurrency_group=concurrency_group)
         self._data_model_service = data_model_service
         self._workspace_service = workspace_service
+        self._git = git_cli
 
     # -- Observer registry (multi-observer fan-out) -----------------------
 
@@ -532,16 +447,6 @@ class PrPollingService(Service):
         """Unregister; safe to call if not registered."""
         with self._observer_lock:
             self._observers = [q for q in self._observers if q is not queue]
-
-    # -- CLI availability (cached per service lifetime) --------------------
-
-    def _is_gh_available(self) -> bool:
-        if self._gh_available is True:
-            return True
-        available = shutil.which("gh") is not None
-        if available:
-            self._gh_available = True
-        return available
 
     # -- Lifecycle ---------------------------------------------------------
 
@@ -673,13 +578,27 @@ class PrPollingService(Service):
     # -- Internal ----------------------------------------------------------
 
     def _add_workspace_poll_state(self, workspace: Workspace) -> None:
-        working_dir = self._workspace_service.get_workspace_working_directory(workspace)
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            checkout_location = self._read_checkout_location(workspace, transaction)
         self._workspace_poll_state[workspace.object_id] = _WorkspacePollState(
             workspace_id=workspace.object_id,
-            working_dir=working_dir,
+            initialization_strategy=workspace.initialization_strategy,
+            checkout_location=checkout_location,
             target_branch=workspace.target_branch,
             is_open=workspace.is_open,
         )
+
+    def _read_checkout_location(
+        self, workspace: Workspace, transaction: DataModelTransaction
+    ) -> CheckoutLocation | None:
+        """Where the workspace's checkout lives, or None until its environment has one."""
+        project = transaction.get_project(workspace.project_id)
+        if project is None:
+            return None
+        checkout_path = self._workspace_service.get_workspace_working_directory(workspace, transaction)
+        if checkout_path is None:
+            return None
+        return CheckoutLocation(repo_path=project.get_local_user_path(), checkout_path=checkout_path)
 
     def _enqueue(self, workspace_id: WorkspaceID, delay: float) -> None:
         with self._pending_lock:
@@ -766,7 +685,7 @@ class PrPollingService(Service):
 
     def _run_round(self, config: UserConfig) -> None:
         """Run one batched search round per distinct host across tracked workspaces."""
-        candidates_by_host: dict[str, list[_RoundCandidate]] = {}
+        candidates_by_host: dict[str, list[_PullRequestLookup]] = {}
         for workspace_id, state in list(self._workspace_poll_state.items()):
             if state.is_deleted:
                 continue
@@ -777,18 +696,17 @@ class PrPollingService(Service):
         for host, candidates in candidates_by_host.items():
             self._run_host_round(host, candidates)
 
-    def _run_host_round(self, host: str, candidates: list[_RoundCandidate]) -> None:
+    def _run_host_round(self, host: str, candidates: list[_PullRequestLookup]) -> None:
         """Issue one ``search`` query for ``host`` and fan its results out."""
         deferred = self._respect_throttle()
         if deferred is not None:
             # In rate-limit cooldown — skip the batched round; the next round
             # (or the fallback, once the cooldown expires) re-resolves.
             return
-        working_dir = candidates[0].working_dir
         try:
-            search_result = fetch_open_prs_for_token(working_dir)
+            search_result = fetch_open_prs_for_token(self._gh_runner(candidates[0]))
         except CliStatusError as e:
-            self._handle_round_failure(host, e)
+            self._handle_round_failure(host, candidates, e)
             return
 
         self._round_failed_hosts.discard(host)
@@ -807,7 +725,7 @@ class PrPollingService(Service):
         unmatched_count = 0
         for candidate in candidates:
             nodes = (
-                index.get((candidate.name_with_owner, candidate.current_branch)) if candidate.name_with_owner else None
+                index.get((candidate.name_with_owner, candidate.head_ref_name)) if candidate.name_with_owner else None
             )
             if nodes:
                 # The branch carries at least one of the user's open PRs — derive
@@ -816,7 +734,7 @@ class PrPollingService(Service):
                 # resolves it for free; mark it so its per-workspace fallback
                 # stops rescheduling.
                 self._matched_workspaces.add(candidate.workspace_id)
-                status = build_status_from_open_nodes(candidate.workspace_id, nodes, candidate.target_branch)
+                status = build_status_from_open_nodes(candidate.workspace_id, nodes, candidate.base_ref_name)
                 self._emit_status(candidate.workspace_id, status)
             else:
                 # No open authored PR on this branch — terminal (merged/closed),
@@ -836,8 +754,20 @@ class PrPollingService(Service):
                 len(candidates),
             )
 
-    def _handle_round_failure(self, host: str, error: CliStatusError) -> None:
-        """Route a failed search round: cool down on rate limits, log once on transient."""
+    def _handle_round_failure(self, host: str, candidates: list[_PullRequestLookup], error: CliStatusError) -> None:
+        """Route a failed search round: report a missing gh, cool down on rate limits, log once on transient."""
+        if error.category == "cli_missing":
+            for candidate in candidates:
+                self._emit_status(
+                    candidate.workspace_id,
+                    PrStatusInfo(
+                        workspace_id=candidate.workspace_id,
+                        pr_state="none",
+                        error_category="cli_missing",
+                        error_message=str(error),
+                    ),
+                )
+            return
         if error.category == "rate_limited":
             self._throttle.enter_cooldown(_RATE_LIMIT_COOLDOWN_SECONDS)
             logger.debug("PR search rate-limited on {}, cooling down {:.0f}s", host, _RATE_LIMIT_COOLDOWN_SECONDS)
@@ -852,55 +782,76 @@ class PrPollingService(Service):
 
     def _resolve_round_candidate(
         self, workspace_id: WorkspaceID, state: _WorkspacePollState
-    ) -> _RoundCandidate | None:
-        """Resolve a workspace for the round, or short-circuit it to ``none``.
+    ) -> _PullRequestLookup | None:
+        """Resolve a workspace for the round, emitting its status when it short-circuits.
 
-        Applies today's short-circuits *before* a workspace can enter a
-        round or fallback: not ready (no working_dir) → skip silently; no branch
-        info / on the target branch / non-GitHub origin → emit ``none`` with zero
-        gh calls. Returns a candidate only for a GitHub workspace off its target
-        branch (the population the search can match).
+        Returns a candidate only for a GitHub workspace off its target branch (the
+        population the search can match). A ``VcsCommandError`` while reading one
+        workspace skips that workspace for this round instead of failing the round.
         """
-        working_dir = self._resolve_working_dir(workspace_id, state)
-        if working_dir is None:
+        try:
+            lookup = self._resolve_pull_request_lookup(workspace_id, state)
+        except VcsCommandError as e:
+            logger.debug("PR search round: skipping workspace {}: {}", workspace_id, e)
             return None
+        if isinstance(lookup, PrStatusInfo):
+            self._emit_status(workspace_id, lookup)
+            return None
+        return lookup
 
-        current_branch = _get_workspace_current_branch(working_dir)
+    def _resolve_pull_request_lookup(
+        self, workspace_id: WorkspaceID, state: _WorkspacePollState
+    ) -> _PullRequestLookup | PrStatusInfo | None:
+        """Resolve what to look a workspace's PR up by, or the status that needs no lookup.
+
+        Applies the short-circuits *before* a workspace can enter a round or
+        fallback: not ready (no checkout) → ``None``; no PR head (e.g. a detached
+        HEAD) or no target / non-GitHub origin / on the target branch → ``none``
+        with zero gh calls. The origin and remote names are read from the main
+        repository, which exists even when a checkout has no ``.git`` of its own.
+        """
+        location = self._resolve_checkout_location(workspace_id, state)
+        if location is None:
+            return None
+        no_pr_status = PrStatusInfo(workspace_id=workspace_id, pr_state="none")
         target_branch = state.target_branch
-        if current_branch is None or target_branch is None:
-            self._emit_status(workspace_id, PrStatusInfo(workspace_id=workspace_id, pr_state="none"))
-            return None
-        if current_branch == strip_remote_prefix(target_branch):
-            self._emit_status(workspace_id, PrStatusInfo(workspace_id=workspace_id, pr_state="none"))
-            return None
-
-        origin_url = _get_origin_url(working_dir)
-        if origin_url is None or not _is_github_url(origin_url):
-            self._emit_status(workspace_id, PrStatusInfo(workspace_id=workspace_id, pr_state="none"))
-            return None
-        if not self._is_gh_available():
-            self._emit_status(
-                workspace_id,
-                PrStatusInfo(
-                    workspace_id=workspace_id,
-                    pr_state="none",
-                    error_category="cli_missing",
-                    error_message="gh CLI not found in PATH",
-                ),
-            )
-            return None
-
-        owner_repo = _parse_origin_owner_repo(origin_url)
-        name_with_owner = f"{owner_repo[0]}/{owner_repo[1]}" if owner_repo is not None else None
-        return _RoundCandidate(
+        if target_branch is None:
+            return no_pr_status
+        vcs = self._get_workspace_vcs(state.initialization_strategy)
+        head_ref_names = vcs.get_pull_request_refs(location).head_ref_names
+        if not head_ref_names:
+            return no_pr_status
+        origin_url = read_origin_url(self._git, location.repo_path)
+        if origin_url is None or not is_github_remote_url(origin_url):
+            return no_pr_status
+        base_ref_name = strip_remote_prefix(target_branch, _read_remote_names(self._git, location.repo_path))
+        if head_ref_names[0] == base_ref_name:
+            return no_pr_status
+        owner_and_name = parse_remote_owner_and_name(origin_url)
+        return _PullRequestLookup(
             workspace_id=workspace_id,
-            state=state,
-            working_dir=working_dir,
-            current_branch=current_branch,
-            target_branch=target_branch,
-            host=_extract_hostname(origin_url),
-            name_with_owner=name_with_owner,
+            working_dir=location.checkout_path,
+            gh_env=vcs.agent_environment(location).environment_variables,
+            head_ref_name=head_ref_names[0],
+            base_ref_name=base_ref_name,
+            host=extract_remote_hostname(origin_url),
+            name_with_owner=f"{owner_and_name[0]}/{owner_and_name[1]}" if owner_and_name is not None else None,
         )
+
+    def _get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
+        match initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                return GitWorkspaceVcs(initialization_strategy, self._git, self.concurrency_group)
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def _gh_runner(self, lookup: _PullRequestLookup) -> GhRunner:
+        """Run gh in the workspace's checkout, where gh expands ``{owner}``/``{repo}`` from its remotes."""
+        return lambda arguments: run_gh_with_retry(self._git, arguments, lookup.working_dir, lookup.gh_env)
 
     def _emit_status(self, workspace_id: WorkspaceID, status: PrStatusInfo) -> None:
         """Cache and fan out a status, but only if it changed.
@@ -1024,7 +975,7 @@ class PrPollingService(Service):
             self._enqueue(job.workspace_id, delay=max(result.retry_after, _MIN_POLL_INTERVAL_SECONDS))
             return
 
-        # None means workspace wasn't ready (no working_dir yet) — retry soon.
+        # None means workspace wasn't ready (no checkout yet) — retry soon.
         if result is None:
             self._enqueue(job.workspace_id, delay=_NOT_READY_RETRY_SECONDS)
             return
@@ -1134,76 +1085,41 @@ class PrPollingService(Service):
             self._throttle.enter_cooldown(_RATE_LIMIT_COOLDOWN_SECONDS)
             logger.debug("PR poll: rate-limited, cooling down {:.0f}s", _RATE_LIMIT_COOLDOWN_SECONDS)
 
-    def _resolve_working_dir(self, workspace_id: WorkspaceID, state: _WorkspacePollState) -> Path | None:
-        """Resolve a workspace's working directory, re-reading from the DB if needed.
+    def _resolve_checkout_location(
+        self, workspace_id: WorkspaceID, state: _WorkspacePollState
+    ) -> CheckoutLocation | None:
+        """Resolve a workspace's checkout, re-reading from the DB if needed.
 
         Returns ``None`` if the workspace is gone (marks it deleted) or its
-        environment hasn't initialized a working_dir yet. Shared by the batched
-        round and the per-workspace fallback fetch.
+        environment hasn't created a checkout yet. Shared by the batched round
+        and the per-workspace fallback fetch.
         """
-        working_dir = state.working_dir
-        if working_dir is not None:
-            return working_dir
+        if state.checkout_location is not None:
+            return state.checkout_location
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             workspace = transaction.get_workspace(workspace_id)
-        if workspace is None or workspace.is_deleted:
-            logger.trace("PR poll {}: workspace deleted or missing in DB", workspace_id)
-            state.is_deleted = True
+            if workspace is None or workspace.is_deleted:
+                logger.trace("PR poll {}: workspace deleted or missing in DB", workspace_id)
+                state.is_deleted = True
+                return None
+            checkout_location = self._read_checkout_location(workspace, transaction)
+        if checkout_location is None:
+            logger.trace("PR poll {}: no checkout yet", workspace_id)
             return None
-        working_dir = self._workspace_service.get_workspace_working_directory(workspace)
-        if working_dir is None:
-            logger.trace("PR poll {}: no working_dir yet", workspace_id)
-            return None
-        state.working_dir = working_dir
+        state.checkout_location = checkout_location
         state.target_branch = workspace.target_branch
-        return working_dir
+        return checkout_location
 
     def _fetch_status(
         self, workspace_id: WorkspaceID, state: _WorkspacePollState
     ) -> PrStatusInfo | _CooldownDeferred | None:
-        working_dir = self._resolve_working_dir(workspace_id, state)
-        if working_dir is None:
-            return None
-
-        current_branch = _get_workspace_current_branch(working_dir)
-        target_branch = state.target_branch
-        logger.trace(
-            "PR poll {}: working_dir={}, current_branch={}, target_branch={}",
-            workspace_id,
-            working_dir,
-            current_branch,
-            target_branch,
-        )
-        if current_branch is None or target_branch is None:
-            logger.trace("PR poll {}: no branch info → pr_state=none", workspace_id)
-            return PrStatusInfo(workspace_id=workspace_id, pr_state="none")
-
-        stripped_target = strip_remote_prefix(target_branch)
-        if current_branch == stripped_target:
-            logger.trace("PR poll {}: on target branch ({}) → pr_state=none", workspace_id, current_branch)
-            return PrStatusInfo(workspace_id=workspace_id, pr_state="none")
-
-        origin_url = _get_origin_url(working_dir)
-        logger.trace("PR poll {}: origin_url={}", workspace_id, origin_url)
-
-        if origin_url is not None and _is_github_url(origin_url):
-            if not self._is_gh_available():
-                return PrStatusInfo(
-                    workspace_id=workspace_id,
-                    pr_state="none",
-                    error_category="cli_missing",
-                    error_message="gh CLI not found in PATH",
-                )
-            deferred = self._respect_throttle()
-            if deferred is not None:
-                return deferred
-            status = fetch_pr_status(
-                workspace_id=workspace_id,
-                working_dir=working_dir,
-                current_branch=current_branch,
-                target_branch=target_branch,
-            )
-            self._note_rate_limit(status)
-            return status
-
-        return PrStatusInfo(workspace_id=workspace_id, pr_state="none")
+        lookup = self._resolve_pull_request_lookup(workspace_id, state)
+        logger.trace("PR poll {}: {}", workspace_id, lookup)
+        if lookup is None or isinstance(lookup, PrStatusInfo):
+            return lookup
+        deferred = self._respect_throttle()
+        if deferred is not None:
+            return deferred
+        status = fetch_pr_status(self._gh_runner(lookup), workspace_id, lookup.head_ref_name, lookup.base_ref_name)
+        self._note_rate_limit(status)
+        return status

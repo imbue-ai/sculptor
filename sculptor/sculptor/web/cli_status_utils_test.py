@@ -1,5 +1,29 @@
+from pathlib import Path
+
+import pytest
+
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.cli_status_utils import classify_cli_error
+from sculptor.web.cli_status_utils import run_gh_with_retry
+from sculptor.web.cli_status_utils import strip_remote_prefix
+
+
+def _write_script(path: Path, body: str) -> Path:
+    path.write_text(f"#!/bin/bash\n{body}\n")
+    path.chmod(0o755)
+    return path
+
+
+def _git_cli_with_gh(concurrency_group: ConcurrencyGroup, gh: Path | None) -> GitCli:
+    return GitCli(concurrency_group, lambda tool: str(gh) if tool is Dependency.GH and gh is not None else None)
+
+
+def _count_lines(path: Path) -> int:
+    return len(path.read_text().splitlines()) if path.exists() else 0
+
 
 # --- classify_cli_error: not_authenticated ---
 
@@ -173,3 +197,98 @@ def test_cli_status_error_stderr_is_message() -> None:
     """str(error) should return the stderr, so it can be passed as error_message."""
     error = CliStatusError("no_access", "HTTP 403 Forbidden")
     assert str(error) == "HTTP 403 Forbidden"
+
+
+# --- strip_remote_prefix ---
+
+
+def test_strip_remote_prefix_drops_the_remote_from_a_remote_tracking_target() -> None:
+    assert strip_remote_prefix("origin/main", frozenset({"origin"})) == "main"
+
+
+def test_strip_remote_prefix_keeps_the_rest_of_a_nested_remote_branch() -> None:
+    assert strip_remote_prefix("origin/feature/foo", frozenset({"origin"})) == "feature/foo"
+
+
+def test_strip_remote_prefix_drops_any_remote_of_the_repository() -> None:
+    assert strip_remote_prefix("upstream/main", frozenset({"origin", "upstream"})) == "main"
+
+
+def test_strip_remote_prefix_keeps_a_local_branch_whose_name_has_a_slash() -> None:
+    assert strip_remote_prefix("release/1.0", frozenset({"origin"})) == "release/1.0"
+
+
+def test_strip_remote_prefix_keeps_a_branch_without_a_slash() -> None:
+    assert strip_remote_prefix("main", frozenset({"origin"})) == "main"
+
+
+# --- run_gh_with_retry ---
+
+
+def test_run_gh_with_retry_runs_the_configured_gh_in_cwd_with_extra_env(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    gh = _write_script(tmp_path / "gh", 'echo "$(pwd -P)|$GH_REPO|$*"')
+    git_cli = _git_cli_with_gh(test_root_concurrency_group, gh)
+
+    result = run_gh_with_retry(git_cli, ["api", "graphql"], tmp_path, {"GH_REPO": "github.com/owner/name"})
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == f"{tmp_path.resolve()}|github.com/owner/name|api graphql"
+
+
+def test_run_gh_with_retry_reports_a_gh_that_cannot_be_resolved_as_cli_missing(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    git_cli = _git_cli_with_gh(test_root_concurrency_group, None)
+
+    with pytest.raises(CliStatusError) as exc_info:
+        run_gh_with_retry(git_cli, ["api", "graphql"], tmp_path, {})
+
+    assert exc_info.value.category == "cli_missing"
+
+
+def test_run_gh_with_retry_reports_a_deleted_working_directory_as_transient(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    gh = _write_script(tmp_path / "gh", "echo unreachable")
+    git_cli = _git_cli_with_gh(test_root_concurrency_group, gh)
+
+    with pytest.raises(CliStatusError) as exc_info:
+        run_gh_with_retry(git_cli, ["api", "graphql"], tmp_path / "deleted-workspace", {})
+
+    assert exc_info.value.category == "transient"
+
+
+def test_run_gh_with_retry_retries_a_transient_failure_once(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    calls = tmp_path / "calls"
+    gh = _write_script(
+        tmp_path / "gh",
+        f'echo call >> "{calls}"\n'
+        + f'if [ "$(wc -l < "{calls}")" -eq 1 ]; then echo "HTTP 502 Bad Gateway" >&2; exit 1; fi\n'
+        + "echo ok",
+    )
+    git_cli = _git_cli_with_gh(test_root_concurrency_group, gh)
+
+    result = run_gh_with_retry(git_cli, ["api", "graphql"], tmp_path, {})
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+    assert _count_lines(calls) == 2
+
+
+def test_run_gh_with_retry_does_not_retry_a_rate_limit(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    calls = tmp_path / "calls"
+    gh = _write_script(
+        tmp_path / "gh", f'echo call >> "{calls}"\necho "HTTP 403: API rate limit exceeded" >&2\nexit 1'
+    )
+    git_cli = _git_cli_with_gh(test_root_concurrency_group, gh)
+
+    result = run_gh_with_retry(git_cli, ["api", "graphql"], tmp_path, {})
+
+    assert result.returncode == 1
+    assert _count_lines(calls) == 1
