@@ -119,6 +119,23 @@ def test_detached_head_gets_no_hint(tmp_path: Path, test_root_concurrency_group:
     assert resolve_branch_rename_hint(environment, "<user>/<slug>") is None
 
 
+def test_hint_reads_the_git_user_through_the_project_env_variables(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    repo = tmp_path / "repo"
+    _make_repo(repo, "Dev Person")
+    environment = _worktree_environment(
+        tmp_path / "workspace", repo, test_root_concurrency_group, "agent/gorgeous-emu"
+    )
+    env_file = environment.get_working_directory() / ".sculptor" / ".env"
+    env_file.parent.mkdir(parents=True, exist_ok=True)
+    env_file.write_text("GIT_CONFIG_COUNT=1\nGIT_CONFIG_KEY_0=user.name\nGIT_CONFIG_VALUE_0=Agent\n")
+
+    hint = resolve_branch_rename_hint(environment, "<user>/<slug>")
+
+    assert hint == BranchRenameHint(current_branch="agent/gorgeous-emu", target_template="agent/<slug>")
+
+
 def test_jj_workspace_raises_the_tripwire_instead_of_giving_no_hint(
     tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:

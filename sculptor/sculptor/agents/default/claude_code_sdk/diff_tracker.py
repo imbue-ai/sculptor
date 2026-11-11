@@ -100,7 +100,9 @@ class DiffTracker(TurnDiffTracker):
     def __init__(self, environment: AgentExecutionEnvironment) -> None:
         self.environment = environment
         self.code_directory = environment.get_working_directory()
-        self._git = GitCli(environment.concurrency_group, environment.get_tool_binary_path)
+        self._git = GitCli(
+            environment.concurrency_group, environment.get_tool_binary_path, environment.get_project_env_overrides
+        )
         self.file_snapshot_by_path: dict[str, str | bytes | None] = {}
         # Stable temp directory for git objects written by _get_tree_hash.
         # Kept alive so tree SHAs remain resolvable for get_changed_file_paths()

@@ -26,6 +26,7 @@ def _in_place_environment(
         project_id=ProjectID(),
         concurrency_group=concurrency_group,
         repo_host_path=repo,
+        sculptor_folder=workspace / "sculptor_folder",
     )
     dependency_management_service = DependencyManagementService(
         concurrency_group=concurrency_group.make_concurrency_group("dependency_management_service"),
@@ -75,3 +76,23 @@ def test_tracker_runs_git_with_the_binary_the_environment_resolves(
     make_turn_diff_tracker(environment)
 
     assert "status --porcelain" in invocation_log.read_text()
+
+
+def test_tracker_sees_the_checkout_through_the_project_env_variables(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    (git_repo / ".git" / "info" / "exclude").write_text(".sculptor/\n")
+    excludes_file = tmp_path / "agent_excludes"
+    excludes_file.write_text("*.log\n")
+    env_file = git_repo / ".sculptor" / ".env"
+    env_file.parent.mkdir()
+    env_file.write_text(
+        f"GIT_CONFIG_COUNT=1\nGIT_CONFIG_KEY_0=core.excludesFile\nGIT_CONFIG_VALUE_0={excludes_file}\n"
+    )
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+    tracker = make_turn_diff_tracker(environment)
+
+    (git_repo / "debug.log").write_text("noise\n")
+    (git_repo / "notes.txt").write_text("kept\n")
+
+    assert tracker.get_changed_file_paths() == ["notes.txt"]

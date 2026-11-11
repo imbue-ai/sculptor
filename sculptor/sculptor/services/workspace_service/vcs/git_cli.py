@@ -3,10 +3,12 @@
 Binaries come from a resolver callable: Sculptor's own calls pass the
 dependency service's `resolve_binary_path`, so `dependency_paths.git` and
 `dependency_paths.gh` are honoured, and agent-side calls pass their execution
-environment's `get_tool_binary_path`. Every failure, including a timeout, is a
-`VcsCommandError`. Only read-only commands are retried. Operands (refs,
-revisions, destinations) go after `--end-of-options` and paths after `--`, so
-a value starting with `-` is never parsed as an option.
+environment's `get_tool_binary_path`. Agent-side calls also pass the
+environment's `get_project_env_overrides`, so git sees the project's `.env`
+variables as the agent's own processes do. Every failure, including a
+timeout, is a `VcsCommandError`. Only read-only commands are retried.
+Operands (refs, revisions, destinations) go after `--end-of-options` and paths
+after `--`, so a value starting with `-` is never parsed as an option.
 """
 
 import os

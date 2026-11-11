@@ -42,7 +42,9 @@ class BranchRenameHint(FrozenModel):
 def resolve_branch_rename_hint(environment: AgentExecutionEnvironment, naming_pattern: str) -> BranchRenameHint | None:
     if environment.get_initialization_strategy() == WorkspaceInitializationStrategy.IN_PLACE:
         return None
-    git = GitCli(environment.concurrency_group, environment.get_tool_binary_path)
+    git = GitCli(
+        environment.concurrency_group, environment.get_tool_binary_path, environment.get_project_env_overrides
+    )
     checkout = environment.get_working_directory()
     try:
         current_branch = read_head_identity(git, checkout).branch_name
