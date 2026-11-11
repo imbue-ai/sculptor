@@ -211,6 +211,7 @@ def test_fallback_reports_cli_missing_when_gh_cannot_be_resolved(
     assert isinstance(status, PrStatusInfo)
     assert status.pr_state == "none"
     assert status.error_category == "cli_missing"
+    assert status.error_message == "gh CLI not found in PATH"
 
 
 @pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
@@ -1122,6 +1123,7 @@ def test_round_reports_cli_missing_to_every_candidate_when_gh_cannot_be_resolved
     svc._run_host_round("github.com", candidates)
 
     assert svc._cache[ws_a].error_category == "cli_missing"
+    assert svc._cache[ws_a].error_message == "gh CLI not found in PATH"
     assert svc._cache[ws_b].error_category == "cli_missing"
 
 

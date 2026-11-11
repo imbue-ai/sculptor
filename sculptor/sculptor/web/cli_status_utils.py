@@ -118,6 +118,6 @@ def _run_gh(git_cli: GitCli, arguments: Sequence[str], cwd: Path, extra_env: Map
     try:
         return git_cli.run_gh(arguments, cwd, is_read_only=True, is_checked=False, extra_env=extra_env)
     except VcsBinaryNotFoundError as e:
-        raise CliStatusError("cli_missing", str(e)) from e
+        raise CliStatusError("cli_missing", "gh CLI not found in PATH") from e
     except VcsCommandError as e:
         raise CliStatusError("transient", str(e)) from e
