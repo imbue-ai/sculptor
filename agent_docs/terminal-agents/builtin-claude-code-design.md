@@ -45,7 +45,7 @@ launch command to parity with how Sculptor launches Claude in SDK mode.
    (`run_terminal_agent/v1.py` `extra_env`); add:
 
    - `SCULPT_PLUGINS_DIR` — the directory containing `sculptor-plugin`,
-     `sculptor-workflow`, `sculptor-experimental` (today:
+     `sculptor-workflow`, `sculptor-experimental`, `sculptor-jj` (today:
      `Path(sculptor.__file__).parent.parent`, same base `get_plugin_dirs()`
      uses).
    - `SCULPT_CLAUDE_BIN` — the managed Claude binary path
@@ -114,9 +114,9 @@ env IS_SANDBOX=1 <managed-binary> --dangerously-skip-permissions
 ### Carry over to the TUI registration
 
 - `--dangerously-skip-permissions`.
-- `--plugin-dir` for **all three** bundled plugins (`sculptor-plugin`,
-  `sculptor-workflow`, `sculptor-experimental`) — `get_plugin_dirs()` ships
-  all three, not just sculptor-workflow.
+- `--plugin-dir` for **all four** bundled plugins (`sculptor-plugin`,
+  `sculptor-workflow`, `sculptor-experimental`, `sculptor-jj`) —
+  `get_plugin_dirs()` ships all four, not just sculptor-workflow.
 - **The managed Claude binary** (via `SCULPT_CLAUDE_BIN`), not bare `claude`
   from PATH: a user who never installed Claude globally gets "command not
   found", and PATH claude can skew versions vs SDK agents. The managed
