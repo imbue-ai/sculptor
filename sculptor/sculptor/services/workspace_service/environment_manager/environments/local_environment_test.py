@@ -14,6 +14,7 @@ import pytest
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.secrets_utils import Secret
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
@@ -361,6 +362,68 @@ def test_env_var_override_true_overrides_existing(
 
     output = _collect_stdout(local_environment, ["printenv", "SCTEST_OVERRIDE"])
     assert "new_value" in output
+
+
+def _write_project_env_file(environment: LocalEnvironment, contents: str) -> None:
+    env_file = environment.get_working_directory() / ".sculptor" / ".env"
+    env_file.parent.mkdir(parents=True, exist_ok=True)
+    env_file.write_text(contents)
+
+
+def test_project_env_overrides_leave_variables_the_process_environment_already_sets(
+    local_environment: LocalEnvironment, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SCTEST_EXISTING", "original")
+    monkeypatch.delenv("SCTEST_PROJECT_ONLY", raising=False)
+    _write_project_env_file(local_environment, "SCTEST_EXISTING=should_not_win\nSCTEST_PROJECT_ONLY=from_project\n")
+    local_environment._sculptor_folder = tmp_path
+    local_environment._env_var_override = False
+
+    assert local_environment.get_project_env_overrides() == {"SCTEST_PROJECT_ONLY": Secret("from_project")}
+
+
+def test_project_env_overrides_include_every_variable_when_env_var_override_is_on(
+    local_environment: LocalEnvironment, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SCTEST_EXISTING", "original")
+    monkeypatch.delenv("SCTEST_PROJECT_ONLY", raising=False)
+    _write_project_env_file(local_environment, "SCTEST_EXISTING=should_win\nSCTEST_PROJECT_ONLY=from_project\n")
+    local_environment._sculptor_folder = tmp_path
+    local_environment._env_var_override = True
+
+    assert local_environment.get_project_env_overrides() == {
+        "SCTEST_EXISTING": Secret("should_win"),
+        "SCTEST_PROJECT_ONLY": Secret("from_project"),
+    }
+
+
+def test_project_env_overrides_reflect_edits_to_the_env_file(
+    local_environment: LocalEnvironment, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("SCTEST_EDITED", raising=False)
+    local_environment._sculptor_folder = tmp_path
+    _write_project_env_file(local_environment, "SCTEST_EDITED=before\n")
+    before = local_environment.get_project_env_overrides()
+
+    _write_project_env_file(local_environment, "SCTEST_EDITED=after\n")
+
+    assert (before, local_environment.get_project_env_overrides()) == (
+        {"SCTEST_EDITED": Secret("before")},
+        {"SCTEST_EDITED": Secret("after")},
+    )
+
+
+def test_project_env_overrides_hide_their_values_when_printed(
+    local_environment: LocalEnvironment, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("SCTEST_TOKEN", raising=False)
+    _write_project_env_file(local_environment, "SCTEST_TOKEN=very-secret-value\n")
+    local_environment._sculptor_folder = tmp_path
+
+    overrides = local_environment.get_project_env_overrides()
+
+    assert "SCTEST_TOKEN" in repr(overrides)
+    assert "very-secret-value" not in repr(overrides)
 
 
 def test_get_system_prompt_dispatches_on_initialization_strategy(local_environment: LocalEnvironment) -> None:

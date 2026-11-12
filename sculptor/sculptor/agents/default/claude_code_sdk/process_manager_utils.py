@@ -13,7 +13,6 @@ from typing import cast
 from loguru import logger
 
 from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
-from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.constants import FAST_MODE_MODELS
 from sculptor.config.user_config import NightMode
@@ -30,6 +29,7 @@ from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
+from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
 from sculptor.state.chat_state import DiffToolContent
 from sculptor.state.chat_state import GenericToolContent
 from sculptor.state.chat_state import SimpleToolContent
@@ -401,7 +401,7 @@ def _strip_and_unescape_html(text: str) -> str:
 def parse_claude_code_json_lines(
     line: str,
     tool_use_map: dict[str, tuple[str, ToolInput]] | None = None,
-    diff_tracker: DiffTracker | None = None,
+    diff_tracker: TurnDiffTracker | None = None,
 ) -> ParsedAgentResponseType | ParsedStreamEventTypes | None:
     """Parse a JSON line from Claude Code SDK.
 
@@ -558,7 +558,7 @@ def _create_tool_content(
     tool_name: str,
     tool_input: ToolInput,
     tool_content: Any,
-    diff_tracker: DiffTracker | None,
+    diff_tracker: TurnDiffTracker | None,
     is_error: bool = False,
 ) -> GenericToolContent | DiffToolContent:
     """Create appropriate tool content based on tool type."""
@@ -571,7 +571,7 @@ def _create_tool_content(
                 log_exception(e, "Failed to compute diff for tool, falling back to synthetic diff")
 
         file_path_str = tool_input.get("file_path", "")
-        file_path = diff_tracker.to_git_relative_path(file_path_str) if diff_tracker else file_path_str
+        file_path = diff_tracker.to_repo_relative_path(file_path_str) if diff_tracker else file_path_str
 
         if diff:
             return DiffToolContent(diff=diff, file_path=file_path)
@@ -689,7 +689,7 @@ def _create_synthetic_write_diff(file_path: str, content: str) -> str:
 
 def _load_content_for_tool_result_message_no_error_checking(
     simple_tool_result: ParsedToolResultResponseSimple | None,
-    diff_tracker: DiffTracker | None,
+    diff_tracker: TurnDiffTracker | None,
 ) -> ParsedToolResultResponse | None:
     """Handle user/tool result message type, including parsing tool content."""
 
@@ -726,7 +726,7 @@ def _load_content_for_tool_result_message_no_error_checking(
 
 def _load_content_for_tool_result_message(
     simple_tool_result: ParsedToolResultResponseSimple | None,
-    diff_tracker: DiffTracker | None,
+    diff_tracker: TurnDiffTracker | None,
 ) -> ParsedToolResultResponse | None:
     """Load content for tool result message, with error checking. If parsing fails, but the JSON is valid, we return None.
 

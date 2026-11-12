@@ -249,7 +249,17 @@ class AgentExecutionEnvironment(Protocol):
 
         Names come from `.env` files (`~/.sculptor/.env` and
         `<repo>/.sculptor/.env`) that the user explicitly configured for the
-        agent. Values are intentionally not exposed.
+        agent. Values are intentionally not exposed, so the list is safe to show
+        in prompts; processes get the values from `get_project_env_overrides`.
+        """
+        ...
+
+    def get_project_env_overrides(self) -> dict[str, Secret]:
+        """The project's `.env` variables a process started here gets on top of `os.environ`.
+
+        Re-read on every call, so later processes see the user's edits. Each
+        value is a `Secret`, which prints as `[redacted]`: unwrap it only where
+        a process starts, and never put it in a prompt.
         """
         ...
 

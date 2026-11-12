@@ -3,10 +3,12 @@
 Binaries come from a resolver callable: Sculptor's own calls pass the
 dependency service's `resolve_binary_path`, so `dependency_paths.git` and
 `dependency_paths.gh` are honoured, and agent-side calls pass their execution
-environment's `get_tool_binary_path`. Every failure, including a timeout, is a
-`VcsCommandError`. Only read-only commands are retried. Operands (refs,
-revisions, destinations) go after `--end-of-options` and paths after `--`, so
-a value starting with `-` is never parsed as an option.
+environment's `get_tool_binary_path`. Agent-side calls also pass the
+environment's `get_project_env_overrides`, so git sees the project's `.env`
+variables as the agent's own processes do. Every failure, including a
+timeout, is a `VcsCommandError`. Only read-only commands are retried.
+Operands (refs, revisions, destinations) go after `--end-of-options` and paths
+after `--`, so a value starting with `-` is never parsed as an option.
 """
 
 import os
@@ -22,6 +24,7 @@ from tenacity import wait_exponential
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.retry_utils import log_before_sleep
+from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
@@ -36,6 +39,15 @@ DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS = 30.0
 # Both `DependencyManagementService.resolve_binary_path` and
 # `AgentExecutionEnvironment.get_tool_binary_path` have this shape.
 BinaryResolver = Callable[[Dependency], str | None]
+
+# Variables laid over the process environment for every command, read again as
+# each command starts so that edits to their source reach later commands.
+# Values may stay wrapped in `Secret` until then.
+EnvOverridesReader = Callable[[], Mapping[str, str | Secret]]
+
+
+def _no_env_overrides() -> Mapping[str, str | Secret]:
+    return {}
 
 
 _retry_read_only_command = retry(
@@ -67,9 +79,15 @@ def find_jj_workspace_root(directory: Path) -> Path | None:
 class GitCli:
     """Runs git and gh with the user's configured binaries."""
 
-    def __init__(self, concurrency_group: ConcurrencyGroup, resolve_binary: BinaryResolver) -> None:
+    def __init__(
+        self,
+        concurrency_group: ConcurrencyGroup,
+        resolve_binary: BinaryResolver,
+        read_env_overrides: EnvOverridesReader = _no_env_overrides,
+    ) -> None:
         self._concurrency_group = concurrency_group
         self._resolve_binary_path = resolve_binary
+        self._read_env_overrides = read_env_overrides
 
     def run_git(
         self,
@@ -88,8 +106,8 @@ class GitCli:
         Raises `GitCommandInJjWorkspaceError` when `cwd` is inside a jj workspace.
         With `is_checked`, a non-zero exit raises `VcsCommandExitError`; without
         it, the result is returned whatever its exit code. `extra_env` is laid
-        over the process environment, for callers that steer git with variables
-        such as `GIT_INDEX_FILE`.
+        over the process environment and the env overrides, for callers that
+        steer git with variables such as `GIT_INDEX_FILE`.
         """
         jj_workspace_root = find_jj_workspace_root(cwd)
         if jj_workspace_root is not None:
@@ -139,10 +157,20 @@ class GitCli:
         timeout: float | None,
         extra_env: Mapping[str, str] | None,
     ) -> VcsCommandResult:
-        env = None if extra_env is None else {**os.environ, **extra_env}
+        env = self._build_env(extra_env)
         if is_read_only:
             return _retry_read_only_command(self._run_once)(command, cwd, is_checked, timeout, env)
         return self._run_once(command, cwd, is_checked, timeout, env)
+
+    def _build_env(self, extra_env: Mapping[str, str] | None) -> Mapping[str, str] | None:
+        """The env overrides, then `extra_env`, over the process environment; None when neither adds anything."""
+        overrides = {**self._read_env_overrides(), **(extra_env or {})}
+        if not overrides:
+            return None
+        unwrapped_overrides = {
+            name: value.unwrap() if isinstance(value, Secret) else value for name, value in overrides.items()
+        }
+        return {**os.environ, **unwrapped_overrides}
 
     def _run_once(
         self,

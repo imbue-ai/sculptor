@@ -11,6 +11,7 @@ from sculptor.agents.default.claude_code_sdk.diff_tracker import _is_file_presen
 from sculptor.agents.default.claude_code_sdk.diff_tracker import create_unified_diff
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
@@ -20,7 +21,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
-from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
 
 _FILE_CONTENTS: Final[str] = """def foo() -> None:
     pass"""
@@ -67,14 +68,22 @@ def _create_clone_mode_agent_execution_environment(
     return LocalAgentExecutionEnvironment(local_env, TaskID(), dep_service)
 
 
+def _git_cli(environment: AgentExecutionEnvironment) -> GitCli:
+    return GitCli(environment.concurrency_group, environment.get_tool_binary_path)
+
+
+def _commit_everything_in_a_new_repo(working_dir: Path) -> str:
+    """Make `working_dir` a repository whose one commit holds all its files; returns `git rev-parse HEAD` output."""
+    run_blocking(["git", "init"], cwd=working_dir)
+    run_blocking(["git", "add", "."], cwd=working_dir)
+    run_blocking(["git", "commit", "-am", "initial commit"], cwd=working_dir)
+    return run_blocking(["git", "rev-parse", "HEAD"], cwd=working_dir).stdout
+
+
 def _setup_repo_in_environment_with_initial_files_commit(environment: AgentExecutionEnvironment) -> str:
     working_dir = environment.get_working_directory()
     environment.write_file(str(working_dir / _FILE_PATH), _FILE_CONTENTS)
-    run_git_command_in_environment(environment=environment, command=["git", "init"])
-    run_git_command_in_environment(environment=environment, command=["git", "add", "."])
-    run_git_command_in_environment(environment=environment, command=["git", "commit", "-am", "initial commit"])
-    _, commit_hash, _ = run_git_command_in_environment(environment=environment, command=["git", "rev-parse", "HEAD"])
-    return commit_hash
+    return _commit_everything_in_a_new_repo(working_dir)
 
 
 @pytest.fixture
@@ -100,11 +109,17 @@ def test_is_file_present_at_commit_hash(
 ) -> None:
     environment, initial_repo_commit_hash = environment_and_initial_repo_commit_hash
     assert _is_file_present_at_commit_hash(
-        environment=environment, commit_hash=initial_repo_commit_hash, relative_file_path=Path(_FILE_PATH)
+        git=_git_cli(environment),
+        checkout=environment.get_working_directory(),
+        commit_hash=initial_repo_commit_hash,
+        relative_file_path=Path(_FILE_PATH),
     )
 
     assert not _is_file_present_at_commit_hash(
-        environment=environment, commit_hash=initial_repo_commit_hash, relative_file_path=Path("does_not_exist.py")
+        git=_git_cli(environment),
+        checkout=environment.get_working_directory(),
+        commit_hash=initial_repo_commit_hash,
+        relative_file_path=Path("does_not_exist.py"),
     )
 
 
@@ -113,7 +128,10 @@ def test_get_file_contents_at_commit_hash(
 ) -> None:
     environment, initial_repo_commit_hash = environment_and_initial_repo_commit_hash
     file_contents = _get_file_contents_at_commit_hash(
-        environment=environment, commit_hash=initial_repo_commit_hash, relative_file_path=Path(_FILE_PATH)
+        git=_git_cli(environment),
+        checkout=environment.get_working_directory(),
+        commit_hash=initial_repo_commit_hash,
+        relative_file_path=Path(_FILE_PATH),
     )
     assert file_contents == _FILE_CONTENTS
 
@@ -197,13 +215,13 @@ def test_get_file_contents_preserves_trailing_newline(
     file_path = str(working_dir / "with_newline.py")
     original_contents = "print('hello')\n"
     environment.write_file(file_path, original_contents)
-    run_git_command_in_environment(environment=environment, command=["git", "init"])
-    run_git_command_in_environment(environment=environment, command=["git", "add", "."])
-    run_git_command_in_environment(environment=environment, command=["git", "commit", "-am", "initial commit"])
-    _, commit_hash, _ = run_git_command_in_environment(environment=environment, command=["git", "rev-parse", "HEAD"])
+    commit_hash = _commit_everything_in_a_new_repo(working_dir)
 
     file_contents = _get_file_contents_at_commit_hash(
-        environment=environment, commit_hash=commit_hash.strip(), relative_file_path=Path("with_newline.py")
+        git=_git_cli(environment),
+        checkout=working_dir,
+        commit_hash=commit_hash.strip(),
+        relative_file_path=Path("with_newline.py"),
     )
     assert file_contents == original_contents
 
@@ -221,13 +239,26 @@ def test_compute_diff_for_unchanged_file_with_trailing_newline(
     working_dir = environment.get_working_directory()
     file_path = str(working_dir / "with_newline.py")
     environment.write_file(file_path, "print('hello')\n")
-    run_git_command_in_environment(environment=environment, command=["git", "init"])
-    run_git_command_in_environment(environment=environment, command=["git", "add", "."])
-    run_git_command_in_environment(environment=environment, command=["git", "commit", "-am", "initial commit"])
+    _commit_everything_in_a_new_repo(working_dir)
 
     diff_tracker = DiffTracker(environment=environment)
     diff = diff_tracker._compute_diff_for_file_path(file_path=file_path)
     assert diff is None or diff == "", f"Expected no diff for unchanged file, got:\n{diff}"
+
+
+def test_temp_git_directories_do_not_accumulate_across_turns(
+    clone_mode_environment_and_initial_repo_commit_hash: tuple[AgentExecutionEnvironment, str],
+) -> None:
+    environment, _ = clone_mode_environment_and_initial_repo_commit_hash
+    working_dir = environment.get_working_directory()
+    diff_tracker = DiffTracker(environment=environment)
+
+    for turn in range(3):
+        (working_dir / f"untracked_{turn}.txt").write_text("content\n")
+        assert diff_tracker.get_changed_file_paths() == [f"untracked_{turn}.txt"]
+        diff_tracker.rebaseline()
+
+    assert len(list(environment.get_root_path().glob(".git_*"))) == 1
 
 
 def test_attempt_to_compute_diff_for_non_existent_file(

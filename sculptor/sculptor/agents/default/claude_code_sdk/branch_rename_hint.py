@@ -14,18 +14,22 @@ typed a custom name or a clone sits on its source branch; nor when the pattern
 has no `<slug>` to replace.
 """
 
+from pathlib import Path
+
 from loguru import logger
 
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import FrozenModel
-from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.workspace_service.branch_naming import SLUG_PLACEHOLDER
 from sculptor.services.workspace_service.branch_naming import resolve_pattern
 from sculptor.services.workspace_service.branch_naming import user_slug_from_full_name
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
 
-# These run on the path that assembles the user's first message, so a stuck git
-# (index.lock contention, a hung credential helper) must not hold up the prompt.
+# The user-name query runs on the path that assembles the user's first message,
+# so a stuck git must not hold up the prompt.
 _GIT_QUERY_TIMEOUT_SECONDS = 5.0
 
 
@@ -38,10 +42,18 @@ class BranchRenameHint(FrozenModel):
 def resolve_branch_rename_hint(environment: AgentExecutionEnvironment, naming_pattern: str) -> BranchRenameHint | None:
     if environment.get_initialization_strategy() == WorkspaceInitializationStrategy.IN_PLACE:
         return None
-    current_branch = _git_stdout(environment, ["git", "symbolic-ref", "--short", "HEAD"])
+    git = GitCli(
+        environment.concurrency_group, environment.get_tool_binary_path, environment.get_project_env_overrides
+    )
+    checkout = environment.get_working_directory()
+    try:
+        current_branch = read_head_identity(git, checkout).branch_name
+    except VcsCommandError as e:
+        logger.debug("Cannot read the branch checked out in {}: {}", checkout, e)
+        return None
     if current_branch is None:
         return None
-    full_name = _git_stdout(environment, ["git", "config", "user.name"]) or ""
+    full_name = _read_git_user_name(git, checkout)
     template = resolve_pattern(
         naming_pattern, user_slug=user_slug_from_full_name(full_name), name_slug=SLUG_PLACEHOLDER
     )
@@ -58,23 +70,19 @@ def _fits_template(branch: str, template: str) -> bool:
     return branch.startswith(prefix) and branch.endswith(suffix) and len(branch) > len(prefix) + len(suffix)
 
 
-def _git_stdout(environment: AgentExecutionEnvironment, command: list[str]) -> str | None:
-    """Stripped stdout of a read-only git command run in the workspace checkout, or None if it failed.
-
-    A timeout raises `ProcessTimeoutError`, a `ProcessError`, so it lands in the same
-    "no hint" answer as any other failure.
-    """
+def _read_git_user_name(git: GitCli, checkout: Path) -> str:
+    """The `user.name` git uses in `checkout`, or empty when it is unset or cannot be read."""
     try:
-        result = environment.run_process_to_completion(
-            command,
-            secrets={},
-            cwd=str(environment.get_working_directory()),
+        result = git.run_git(
+            ["config", "user.name"],
+            checkout,
+            is_read_only=True,
+            is_checked=False,
             timeout=_GIT_QUERY_TIMEOUT_SECONDS,
-            is_checked_after=False,
         )
-    except ProcessError as e:
-        logger.debug("git query {} failed: {}", " ".join(command), e)
-        return None
+    except VcsCommandError as e:
+        logger.debug("Cannot read the git user name in {}: {}", checkout, e)
+        return ""
     if result.returncode != 0:
-        return None
+        return ""
     return result.stdout.strip()

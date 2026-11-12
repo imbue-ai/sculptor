@@ -5,6 +5,7 @@ import pytest
 from sculptor.config.user_config import DependencyPaths
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.foundation.secrets_utils import Secret
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
@@ -220,6 +221,35 @@ def test_run_git_passes_extra_env_to_git(git_cli: GitCli, tmp_path: Path) -> Non
     )
 
     assert result.stdout.strip() == str(tmp_path / "index")
+
+
+def test_env_overrides_reach_git_unwrapped_and_a_call_extra_env_wins_over_them(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    fake_git = _write_script(tmp_path / "fake-git", 'echo "$SCTEST_FROM_OVERRIDES $SCTEST_SHARED"')
+    git_cli = GitCli(
+        test_root_concurrency_group,
+        lambda tool: str(fake_git),
+        lambda: {"SCTEST_FROM_OVERRIDES": Secret("override"), "SCTEST_SHARED": "override"},
+    )
+
+    result = git_cli.run_git(["status"], tmp_path, is_read_only=True, extra_env={"SCTEST_SHARED": "call"})
+
+    assert result.stdout.strip() == "override call"
+
+
+def test_env_overrides_are_read_again_for_each_command(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    fake_git = _write_script(tmp_path / "fake-git", 'echo "$SCTEST_VALUE"')
+    env_overrides = {"SCTEST_VALUE": "first"}
+    git_cli = GitCli(test_root_concurrency_group, lambda tool: str(fake_git), lambda: env_overrides)
+    first = git_cli.run_git(["status"], tmp_path, is_read_only=True)
+
+    env_overrides["SCTEST_VALUE"] = "second"
+    second = git_cli.run_git(["status"], tmp_path, is_read_only=True)
+
+    assert (first.stdout.strip(), second.stdout.strip()) == ("first", "second")
 
 
 def test_a_git_cli_built_from_a_resolver_runs_the_resolved_binary(
