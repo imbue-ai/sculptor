@@ -125,7 +125,7 @@
     "yaml": "2.9.1"
   },
   "devDependencies": {
-    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/cli": "8.0.1",
     "@electron-forge/maker-dmg": "7.11.2",
     "@electron-forge/maker-squirrel": "7.11.2",
     "@electron-forge/maker-zip": "7.11.2",
