@@ -130,7 +130,10 @@ jobs:
           # needs. Move it deliberately.
           - { name: linux-x64,   runs-on: ubuntu-26.04,     os: linux,  arch: x64,   allow-failure: false }
           - { name: linux-arm64, runs-on: ubuntu-26.04-arm, os: linux,  arch: arm64, allow-failure: true }
-          - { name: macos-arm64, runs-on: macos-14,         os: darwin, arch: arm64, allow-failure: false }
+          # Pinned, not macos-latest (macOS 26): GitHub retired the macOS 14
+          # runners on 2026-11-02 (actions/runner-images#13518), and a job on a
+          # retired image is cancelled at scheduling. Move it deliberately.
+          - { name: macos-arm64, runs-on: macos-15,         os: darwin, arch: arm64, allow-failure: false }
     env:
       # Tag pushes mint the release role (env-claim-bound); everything else
       # uses the dev role.
@@ -203,7 +206,7 @@ jobs:
       - name: Install nvm (macOS)
         if: matrix.os == 'darwin'
         # The frontend recipes source $NVM_DIR/nvm.sh (justfile nvm_use); the
-        # macos-14 runner has no nvm. The recipe runs `nvm install 24.17.0`.
+        # hosted macOS runner image has no nvm. The recipe runs `nvm install 24.17.0`.
         run: |
           export NVM_DIR="$HOME/.nvm"
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
@@ -345,7 +348,8 @@ jobs:
           # arm64 runs ~2x slower than x64; give it a large budget. Its result
           # is non-blocking, so an over-budget run does not gate the workflow.
           - { name: linux-arm64, runs-on: ubuntu-26.04-arm, os: linux,  arch: arm64, allow-failure: true,  pytest-timeout: 3000, job-timeout: 75 }
-          - { name: macos-arm64, runs-on: macos-14,         os: darwin, arch: arm64, allow-failure: false, pytest-timeout: 1200, job-timeout: 45 }
+          # macos-15: the macOS 14 runners were retired (see the build matrix above).
+          - { name: macos-arm64, runs-on: macos-15,         os: darwin, arch: arm64, allow-failure: false, pytest-timeout: 1200, job-timeout: 45 }
     env:
       # The packaged backend uses get_filesystem_root(); override off /mnt/private.
       SCIENCE_FILESYSTEM_ROOT: /tmp/science
