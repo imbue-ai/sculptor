@@ -135,7 +135,7 @@
     "@electron/fuses": "1.8.0",
     "@eslint/js": "9.39.5",
     "@hey-api/openapi-ts": "0.99.0",
-    "@reforged/maker-appimage": "5.3.1",
+    "@reforged/maker-appimage": "6.0.0",
     "@storybook/react": "10.6.2",
     "@storybook/react-vite": "10.6.2",
     "@stylistic/eslint-plugin": "5.10.0",
