@@ -101,7 +101,7 @@ dev = [
     # inline-snapshot, pytest-asyncio and pytest-mock were absorbed from the former
     # imbue_core library (now sculptor.foundation) — its tests need them.
     "inline-snapshot",
-    "pillow>=11.0.0",
+    "pillow>=13.0.0",
     # playwright's bundled Chromium must match Electron's (1.53 <-> Electron 37,
     # 1.60 <-> Electron 42, 1.64 <-> Electron 45) for connect_over_cdp; bump
     # together with Electron. Keep the frontend package.json "playwright"
