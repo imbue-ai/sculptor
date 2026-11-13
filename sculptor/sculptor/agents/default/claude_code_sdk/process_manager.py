@@ -704,7 +704,7 @@ class ClaudeProcessManager:
                 if isinstance(message, (ChatInputUserMessage, ResumeAgentResponseRunnerMessage)) and message.model_name
                 else None
             )
-            plugin_dirs = get_plugin_dirs("git")
+            plugin_dirs = get_plugin_dirs()
             is_fast_mode_enabled = resolve_fast_mode(
                 self._fast_mode, self._model_name, get_user_config_instance().night_mode, datetime.now(timezone.utc)
             )

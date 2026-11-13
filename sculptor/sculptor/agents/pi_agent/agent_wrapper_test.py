@@ -396,7 +396,7 @@ def _agent_with_skill_dirs(
     env.get_user_home_directory.return_value = home_dir
     env.get_state_path.return_value = state_dir
     # Patch where it's looked up: agent_wrapper imports get_plugin_dirs at module level.
-    monkeypatch.setattr("sculptor.agents.pi_agent.agent_wrapper.get_plugin_dirs", lambda vcs_kind: plugin_dirs)
+    monkeypatch.setattr("sculptor.agents.pi_agent.agent_wrapper.get_plugin_dirs", lambda: plugin_dirs)
     return _make_agent(environment=env)
 
 

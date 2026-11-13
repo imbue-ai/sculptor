@@ -562,17 +562,6 @@ Write documentation in Markdown format.
 
 Use bash _only_ for simple cases or when we do not yet have a python environment set up.
 
-#### Commands typed into the user's shell
-
-Some commands reach the user's own login shell, which may be bash, zsh, fish, tcsh or anything else. A terminal agent's launch and resume commands, for example, are typed into the agent's terminal as if the user typed them. Write such a command as one POSIX script handed to `sh -c '<script>'`, as the bundled Claude registration does (`samples/terminal_agents/claude-code/claude-code.toml`). Every common shell passes single-quoted text through untouched, so `sh` alone parses the script, and syntax such as `${VAR:+…}` works whatever the user's shell is.
-
-- Keep `'`, `\` and `!` out of the script. A `'` ends the quoting, fish interprets `\` inside single quotes, and interactive csh and tcsh expand `!` inside single quotes.
-- Start the script with `exec`, so the program replaces `sh`.
-- Prefer passing values in through environment variables (`"$SCULPT_CLAUDE_BIN"`) over splicing them into the script. A spliced value lands inside the single quotes, so it must avoid the same three characters.
-- Do not detect the user's shell and switch to bash. The terminal is still the user's interactive shell after the program exits, and the program inherits the environment the user's own shell configuration sets up.
-
-When Sculptor starts the process itself, name the shell instead, as the workspace setup command does with `bash -l -c`.
-
 ### Logging
 
 Always use `loguru` for loggging.
