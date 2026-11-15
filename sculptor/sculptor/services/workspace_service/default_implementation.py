@@ -732,7 +732,9 @@ class DefaultWorkspaceService(WorkspaceService):
         checkout_path = workspace_checkout_path(workspace, repo_path)
         if checkout_path is None:
             raise WorkspaceNotFoundError(workspace.object_id)
-        return CheckoutLocation(repo_path=repo_path, checkout_path=checkout_path)
+        return CheckoutLocation(
+            repo_path=repo_path, checkout_path=checkout_path, checkout_name=str(workspace.object_id)
+        )
 
     def refresh_workspace_diff(
         self,

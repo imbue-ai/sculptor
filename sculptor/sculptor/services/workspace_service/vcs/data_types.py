@@ -21,6 +21,11 @@ class VcsCommandResult(FrozenModel):
     stderr: str
 
 
+_CHECKOUT_NAME_DESCRIPTION = (
+    "A unique, stable name for the checkout within its repository; Sculptor uses the workspace id"
+)
+
+
 class CheckoutSpec(FrozenModel):
     """What to create for a new workspace checkout."""
 
@@ -32,6 +37,7 @@ class CheckoutSpec(FrozenModel):
     new_ref_name: str | None = Field(
         description="The ref created for the workspace; None (clone only) leaves the base checked out"
     )
+    checkout_name: str = Field(description=_CHECKOUT_NAME_DESCRIPTION)
 
 
 class CheckoutLocation(FrozenModel):
@@ -39,6 +45,7 @@ class CheckoutLocation(FrozenModel):
 
     repo_path: Path = Field(description="The user's repository the checkout was made from")
     checkout_path: Path = Field(description="The directory holding the checkout's files")
+    checkout_name: str = Field(description=_CHECKOUT_NAME_DESCRIPTION)
 
 
 class RefNameStatus(StrEnum):

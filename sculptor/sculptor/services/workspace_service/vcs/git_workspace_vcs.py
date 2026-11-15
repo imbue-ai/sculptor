@@ -73,14 +73,18 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def create_checkout(self, spec: CheckoutSpec) -> CheckoutLocation:
         match self._initialization_strategy:
             case WorkspaceInitializationStrategy.IN_PLACE:
-                return CheckoutLocation(repo_path=spec.repo_path, checkout_path=spec.repo_path)
+                return CheckoutLocation(
+                    repo_path=spec.repo_path, checkout_path=spec.repo_path, checkout_name=spec.checkout_name
+                )
             case WorkspaceInitializationStrategy.CLONE:
                 self._create_clone(spec)
             case WorkspaceInitializationStrategy.WORKTREE:
                 self._create_worktree(spec)
             case _ as unreachable:
                 assert_never(unreachable)
-        return CheckoutLocation(repo_path=spec.repo_path, checkout_path=spec.checkout_path)
+        return CheckoutLocation(
+            repo_path=spec.repo_path, checkout_path=spec.checkout_path, checkout_name=spec.checkout_name
+        )
 
     def _create_clone(self, spec: CheckoutSpec) -> None:
         clone_repository(

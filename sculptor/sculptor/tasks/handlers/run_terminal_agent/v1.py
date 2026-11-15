@@ -276,7 +276,9 @@ def _run_terminal_agent_in_environment(
             environment_concurrency_group,
         )
         checkout = CheckoutLocation(
-            repo_path=project.get_local_user_path(), checkout_path=underlying_env.get_working_directory()
+            repo_path=project.get_local_user_path(),
+            checkout_path=underlying_env.get_working_directory(),
+            checkout_name=str(task_state.workspace_id),
         )
         refresher = PeriodicDiffRefresher(
             compute_fingerprint=lambda: vcs.compute_change_fingerprint(checkout),
