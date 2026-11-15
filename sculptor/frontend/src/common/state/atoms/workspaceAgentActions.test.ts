@@ -15,7 +15,7 @@ import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanel
 import {
   activeAgentIdAtomFamily,
   activeChatAgentIdAtomFamily,
-  canCommitAtomFamily,
+  canPromptActiveAgentAtomFamily,
   commitActionAtomFamily,
   createPrActionAtomFamily,
   lastFocusedChatAgentAtomFamily,
@@ -103,7 +103,7 @@ afterEach(() => {
   for (const workspaceId of [WS, WS_OTHER]) {
     activeAgentIdAtomFamily.remove(workspaceId);
     activeChatAgentIdAtomFamily.remove(workspaceId);
-    canCommitAtomFamily.remove(workspaceId);
+    canPromptActiveAgentAtomFamily.remove(workspaceId);
     commitActionAtomFamily.remove(workspaceId);
     createPrActionAtomFamily.remove(workspaceId);
     lastFocusedChatAgentAtomFamily.remove(workspaceId);
@@ -249,11 +249,11 @@ describe("lastFocusedChatAgentAtomFamily resolution", () => {
   });
 });
 
-describe("canCommitAtomFamily", () => {
+describe("canPromptActiveAgentAtomFamily", () => {
   it("is false when no chat agent resolves", () => {
     const store = createStore();
     seedLayout(store, {});
-    expect(store.get(canCommitAtomFamily(WS))).toBe(false);
+    expect(store.get(canPromptActiveAgentAtomFamily(WS))).toBe(false);
   });
 
   it("is false while the target agent has a queued message", () => {
@@ -268,7 +268,7 @@ describe("canCommitAtomFamily", () => {
       queuedChatMessages: [{ id: "queued-1" } as ChatMessage],
     });
 
-    expect(store.get(canCommitAtomFamily(WS))).toBe(false);
+    expect(store.get(canPromptActiveAgentAtomFamily(WS))).toBe(false);
   });
 
   it("is true when a target agent resolves and nothing is queued", () => {
@@ -279,7 +279,7 @@ describe("canCommitAtomFamily", () => {
       activePanel: { center: makeAgentPanelId("agent-a") },
     });
 
-    expect(store.get(canCommitAtomFamily(WS))).toBe(true);
+    expect(store.get(canPromptActiveAgentAtomFamily(WS))).toBe(true);
   });
 });
 
@@ -426,26 +426,26 @@ describe("activeAgentIdAtomFamily without agent panels", () => {
   });
 });
 
-describe("canCommitAtomFamily for terminal agents", () => {
+describe("canPromptActiveAgentAtomFamily for terminal agents", () => {
   it("is true for a prompt-capable terminal at its prompt", () => {
     const store = createStore();
     seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true, status: TaskStatus.READY });
 
-    expect(store.get(canCommitAtomFamily(WS))).toBe(true);
+    expect(store.get(canPromptActiveAgentAtomFamily(WS))).toBe(true);
   });
 
   it("is false once the prompt-capable terminal goes busy", () => {
     const store = createStore();
     seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true, status: TaskStatus.RUNNING });
 
-    expect(store.get(canCommitAtomFamily(WS))).toBe(false);
+    expect(store.get(canPromptActiveAgentAtomFamily(WS))).toBe(false);
   });
 
   it("is false for a non-opt-in terminal even when idle with a chat open behind it", () => {
     const store = createStore();
     seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: false, status: TaskStatus.READY });
 
-    expect(store.get(canCommitAtomFamily(WS))).toBe(false);
+    expect(store.get(canPromptActiveAgentAtomFamily(WS))).toBe(false);
   });
 });
 

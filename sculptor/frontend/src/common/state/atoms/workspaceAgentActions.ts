@@ -153,10 +153,10 @@ export const activeChatAgentIdAtomFamily = atomFamily((workspaceId: string) =>
  *      agent tab over it, that tab is the current agent,
  *   2. the first sub-section (preference order) whose active tab is an agent
  *      panel: that visible agent is authoritative, whatever its harness.
- *      A prompt-incapable terminal here resolves (and `canCommitAtomFamily`
- *      disables the action) rather than falling through — sending the prompt
- *      to a chat hidden behind the terminal the user is looking at would be
- *      invisible and surprising,
+ *      A prompt-incapable terminal here resolves (and
+ *      `canPromptActiveAgentAtomFamily` disables the action) rather than
+ *      falling through — sending the prompt to a chat hidden behind the
+ *      terminal the user is looking at would be invisible and surprising,
  *   3. no agent is visible (e.g. a static panel is the active tab
  *      everywhere): any open chat-capable agent panel, in tab order — chat
  *      messages queue and surface when the chat is re-shown, whereas typing
@@ -215,13 +215,14 @@ const promptRouteFor = (get: Getter, agentId: string): "chat" | "terminal" | und
 };
 
 /**
- * Whether the commit button may send right now: a target agent resolves and
- * can accept the prompt. Chat agents must have no queued messages (mirrors
- * the chat input, which disables sends while a message is queued so queue
- * promotion stays unambiguous); prompt-capable terminal agents must be at
- * their prompt (READY/WAITING, mirroring `useTerminalChatActions`).
+ * Whether the workspace's current agent can take an automated prompt right
+ * now: a target agent resolves and can accept the prompt. Controls that send
+ * one disable themselves while this is false. Chat agents must have no queued
+ * messages (mirrors the chat input, which disables sends while a message is
+ * queued so queue promotion stays unambiguous); prompt-capable terminal agents
+ * must be at their prompt (READY/WAITING, mirroring `useTerminalChatActions`).
  */
-export const canCommitAtomFamily = atomFamily((workspaceId: string) =>
+export const canPromptActiveAgentAtomFamily = atomFamily((workspaceId: string) =>
   atom<boolean>((get) => {
     const agentId = get(activeAgentIdAtomFamily(workspaceId));
     if (agentId === undefined) return false;
@@ -307,7 +308,7 @@ export const removeWorkspaceAgentActionState = (workspaceId: string): void => {
   lastFocusedChatAgentAtomFamily.remove(workspaceId);
   activeChatAgentIdAtomFamily.remove(workspaceId);
   activeAgentIdAtomFamily.remove(workspaceId);
-  canCommitAtomFamily.remove(workspaceId);
+  canPromptActiveAgentAtomFamily.remove(workspaceId);
   commitActionAtomFamily.remove(workspaceId);
   createPrActionAtomFamily.remove(workspaceId);
 };
