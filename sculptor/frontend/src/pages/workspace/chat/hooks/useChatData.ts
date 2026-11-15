@@ -67,13 +67,13 @@ export const useChatData = ({ agentId, workspaceID, appendTextRef, insertSkillRe
   const bottomSentinelRef = useSmoothStreamingViewportObserver();
   useSmoothStreamingOnAgentSwitch(agentId, bottomSentinelRef);
 
-  // `chatActionsAtom` is a single slot shared by workspace-scoped consumers
-  // (SkillsPanel, ActionsPanel, PrButton, the command palette), but several
-  // chat panels can be mounted at once — one per placed agent panel. Only the
-  // panel for the workspace's active chat agent registers its closures: that
-  // is the same resolution the consumers gate on, so actions reach the agent
-  // they display as their target instead of whichever panel bound last, and
-  // one panel unmounting cannot strand a surviving panel's registration.
+  // `chatActionsAtom` is a single slot shared by workspace-scoped consumers,
+  // but several chat panels can be mounted at once — one per placed agent
+  // panel. Only the panel for the workspace's active chat agent registers its
+  // closures: that is the same resolution the consumers gate on, so actions
+  // reach the agent they display as their target instead of whichever panel
+  // bound last, and one panel unmounting cannot strand a surviving panel's
+  // registration.
   const isChatActionsOwner = useAtomValue(activeChatAgentIdAtomFamily(workspaceID)) === agentId;
 
   // Bind the action closures whenever ownership/agentId/model/refs change. No
