@@ -205,6 +205,18 @@ def test_resolve_trunk_symbol_without_a_remote_falls_back_to_local_main_then_mas
     assert resolve_trunk_symbol(jj_cli, repo_path) == expected_symbol
 
 
+def test_resolve_trunk_symbol_is_none_when_a_user_trunk_alias_names_no_commit(
+    jj_cli: JjCli, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    run_jj(
+        jj_binary,
+        ("--ignore-working-copy", "config", "set", "--repo", 'revset-aliases."trunk()"', "present(develop@origin)"),
+        cwd=jj_colocated_repo.path,
+    )
+
+    assert resolve_trunk_symbol(jj_cli, jj_colocated_repo.path) is None
+
+
 def test_resolve_commit_id_returns_the_single_commit_a_revset_names(
     jj_cli: JjCli, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
 ) -> None:

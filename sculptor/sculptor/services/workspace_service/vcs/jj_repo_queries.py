@@ -71,14 +71,18 @@ def resolve_trunk_symbol(jj: JjCli, repo_dir: Path) -> str | None:
     """The bookmark symbol for the repository's trunk, such as `main@origin`.
 
     The first remote bookmark on `trunk()`; when `trunk()` is the root commit
-    (no remote has a trunk), local `main`, then `master`. None otherwise.
+    (no remote has a trunk), local `main`, then `master`. None otherwise,
+    including when a user's `trunk()` alias names no commit.
     """
     result = jj.run(
         ["log", "--no-graph", "--limit", "1", "-r", "trunk()", "-T", _ROOT_AND_REMOTE_BOOKMARKS_TEMPLATE],
         repo_dir,
         snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
     )
-    is_root_line, *bookmark_lines = result.stdout.splitlines()
+    lines = result.stdout.splitlines()
+    if not lines:
+        return None
+    is_root_line, *bookmark_lines = lines
     if json.loads(is_root_line):
         return _find_local_trunk_fallback(jj, repo_dir)
     for line in bookmark_lines:
