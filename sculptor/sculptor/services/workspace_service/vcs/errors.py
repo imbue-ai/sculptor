@@ -5,7 +5,7 @@ from sculptor.foundation.errors import ExpectedError
 
 
 class VcsCommandError(ExpectedError):
-    """A git or gh command could not be started, exited non-zero, or timed out."""
+    """A version-control command (git, gh or jj) could not be started, exited non-zero, or timed out."""
 
     def __init__(
         self,
@@ -23,15 +23,25 @@ class VcsCommandError(ExpectedError):
 
 
 class VcsCommandExitError(VcsCommandError):
-    """A git or gh command ran to completion and exited non-zero."""
+    """A version-control command ran to completion and exited non-zero."""
+
+
+class JjWorkingCopyStaleError(VcsCommandExitError):
+    """A jj command failed because the workspace's working copy is stale relative to its repository.
+
+    Raised whether or not the command was checked: a stale workspace is not an
+    ordinary failure, because every command that snapshots it fails until
+    `jj workspace update-stale` runs, while reads that ignore the working copy
+    keep working.
+    """
 
 
 class VcsCommandTimeoutError(VcsCommandError):
-    """A git or gh command ran past its timeout."""
+    """A version-control command ran past its timeout."""
 
 
 class VcsBinaryNotFoundError(VcsCommandError):
-    """The configured git or gh binary cannot be resolved."""
+    """The configured binary for a version-control tool cannot be resolved."""
 
 
 class InvalidRevisionError(ValueError):
