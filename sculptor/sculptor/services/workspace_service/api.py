@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.services.workspace_service.vcs.data_types import CommitRecord
 
 # The default workspace setup command when a project has not configured one.
 # Fetches the origin remote if present; succeeds silently if origin is missing
@@ -64,29 +65,6 @@ class FileAtRefResult(FrozenModel):
 
     content: str
     encoding: Literal["utf-8", "base64"]
-
-
-class CommitFileChange(FrozenModel):
-    """Per-file change within a single commit."""
-
-    path: str
-    status: Literal["M", "A", "D", "R"]
-    old_path: str | None
-    additions: int
-    deletions: int
-
-
-class CommitRecord(FrozenModel):
-    """A single commit in a workspace branch's history."""
-
-    hash: str
-    short_hash: str
-    message: str
-    author_name: str
-    author_email: str
-    timestamp: str
-    parent_hashes: list[str]
-    files: list[CommitFileChange]
 
 
 class WorkspaceNotFoundError(ExpectedError):

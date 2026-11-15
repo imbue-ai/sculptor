@@ -5,7 +5,6 @@ from typing import Literal
 from pydantic import Field
 
 from sculptor.foundation.pydantic_serialization import FrozenModel
-from sculptor.services.workspace_service.api import CommitRecord
 
 BranchDeletionPolicy = Literal["never", "delete_if_safe", "always"]
 """What `remove_checkout` does with the ref a workspace created; mirrors
@@ -59,6 +58,29 @@ class RefNameValidation(FrozenModel):
 
     ref_name: str
     status: RefNameStatus
+
+
+class CommitFileChange(FrozenModel):
+    """Per-file change within a single commit."""
+
+    path: str
+    status: Literal["M", "A", "D", "R"]
+    old_path: str | None
+    additions: int
+    deletions: int
+
+
+class CommitRecord(FrozenModel):
+    """A single commit in a workspace branch's history."""
+
+    hash: str
+    short_hash: str
+    message: str
+    author_name: str
+    author_email: str
+    timestamp: str
+    parent_hashes: list[str]
+    files: list[CommitFileChange]
 
 
 class GitHeadIdentity(FrozenModel):
