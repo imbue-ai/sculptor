@@ -1,10 +1,10 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DependenciesStatus, DependencyInfo } from "~/api";
-import { getDependenciesStatus, installDependency } from "~/api";
+import { installDependency } from "~/api";
 import { usePollingInterval } from "~/common/hooks/usePollingInterval";
-import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
+import { dependenciesStatusAtom, refreshDependenciesStatus } from "~/common/state/atoms/dependenciesStatus";
 import type { VoiceEngine, VoiceEngineState, VoiceError } from "~/common/voice/engineContract.ts";
 
 // The managed-install `tool` for the on-device voice-models bundle, passed to the
@@ -90,14 +90,13 @@ export type VoiceModelsInstall = {
 
 /**
  * Owns the managed voice-models install, mirroring the shared
- * `useManagedDependency` flow: fire-and-forget POST plus a
- * `getDependenciesStatus` poll as a WebSocket fallback, both writing the one
- * shared `dependenciesStatusAtom` — so every surface rendering install state
- * stays coherent, whichever one started the download.
+ * `useManagedDependency` flow: a fire-and-forget POST, then a status poll that
+ * decides when the install has finished. Install state renders from the one
+ * stream-fed `dependenciesStatusAtom`, so every surface showing it stays
+ * coherent, whichever one started the download.
  */
 export const useVoiceModelsInstall = (): VoiceModelsInstall => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
-  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
   const { startPolling, stopPolling } = usePollingInterval();
 
   const [isInstallingLocal, setIsInstallingLocal] = useState(false);
@@ -129,33 +128,27 @@ export const useVoiceModelsInstall = (): VoiceModelsInstall => {
         setIsInstallingLocal(false);
         return;
       }
+      // Each poll also makes the backend publish the status on the stream; the
+      // response only decides when to stop. A failed fetch (null) keeps polling.
       startPolling(async () => {
-        try {
-          const { data: deps } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-          if (deps) {
-            setDependenciesStatus(deps);
-          }
-          const polledInfo = selectVoiceModelsInfo(deps ?? null);
-          if (polledInfo?.installError) {
-            stopPolling();
-            setInstallErrorLocal(polledInfo.installError);
-            setIsInstallingLocal(false);
-            return;
-          }
+        const polledInfo = selectVoiceModelsInfo(await refreshDependenciesStatus());
+        if (polledInfo?.installError) {
+          stopPolling();
+          setInstallErrorLocal(polledInfo.installError);
+          setIsInstallingLocal(false);
+          return;
+        }
 
-          if (polledInfo?.installed && !polledInfo.installProgress) {
-            stopPolling();
-            setIsInstallingLocal(false);
-          }
-        } catch {
-          // Keep polling; transient status-fetch failures are expected mid-download.
+        if (polledInfo?.installed && !polledInfo.installProgress) {
+          stopPolling();
+          setIsInstallingLocal(false);
         }
       });
     } catch (error) {
       setInstallErrorLocal(error instanceof Error ? error.message : "Installation failed");
       setIsInstallingLocal(false);
     }
-  }, [setDependenciesStatus, startPolling, stopPolling]);
+  }, [startPolling, stopPolling]);
 
   const handleInstall = useCallback((): void => {
     void runInstall();

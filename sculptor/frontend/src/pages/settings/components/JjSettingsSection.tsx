@@ -1,11 +1,11 @@
 import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { Box, Button, Flex, Link, Progress, Select, Spinner, Text, TextField } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
 
 import type { JjIdentity } from "../../../api";
-import { ElementIds, getDependenciesStatus, setJjIdentity, UserConfigField } from "../../../api";
-import { dependenciesStatusAtom } from "../../../common/state/atoms/dependenciesStatus";
+import { ElementIds, setJjIdentity, UserConfigField } from "../../../api";
+import { dependenciesStatusAtom, refreshDependenciesStatus } from "../../../common/state/atoms/dependenciesStatus";
 import { jjSnapshotMaxNewFileSizeMibAtom } from "../../../common/state/atoms/userConfig";
 import { useManagedDependency } from "../hooks/useManagedDependency";
 import { JjAvailabilityCallout } from "./JjAvailabilityCallout.tsx";
@@ -23,7 +23,6 @@ type JjSettingsSectionProps = {
 
 export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): ReactElement => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
-  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
   const snapshotSizeMib = useAtomValue(jjSnapshotMaxNewFileSizeMibAtom);
 
   // Reset the draft when the saved value changes, during render rather than in an effect.
@@ -51,36 +50,24 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
     handleApplyCustomPath,
   } = useManagedDependency({ tool: "JJ", onSettingChange });
 
-  // skipWsAck: the dependencies endpoints open no data-model transaction, so no WS
-  // acknowledgment ever follows.
-  const refreshStatus = useCallback(async (): Promise<void> => {
-    try {
-      const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-      if (data) setDependenciesStatus(data);
-    } catch {
-      // Best-effort; the stream keeps delivering status.
-    }
-  }, [setDependenciesStatus]);
-
   // Identity and PATH changes made outside Sculptor send no event, so check again
-  // whenever the page opens.
+  // whenever the page opens. The re-checked status arrives on the stream.
   useEffect(() => {
-    void refreshStatus();
-  }, [refreshStatus]);
+    void refreshDependenciesStatus();
+  }, []);
 
   const handleRecheck = async (): Promise<void> => {
     setIsRechecking(true);
-    await refreshStatus();
+    await refreshDependenciesStatus();
     setIsRechecking(false);
   };
 
-  const saveIdentity = useCallback(
-    async (identity: JjIdentity): Promise<void> => {
-      const { data } = await setJjIdentity({ body: identity, meta: { skipWsAck: true } });
-      if (data) setDependenciesStatus(data);
-    },
-    [setDependenciesStatus],
-  );
+  // The backend publishes the status with the new identity on the stream.
+  // skipWsAck: the endpoint opens no data-model transaction, so no stream
+  // acknowledgement ever follows.
+  const saveIdentity = useCallback(async (identity: JjIdentity): Promise<void> => {
+    await setJjIdentity({ body: identity, meta: { skipWsAck: true } });
+  }, []);
 
   const handleSnapshotSizeBlur = (): void => {
     const parsed = parseInt(snapshotSizeValue, 10);

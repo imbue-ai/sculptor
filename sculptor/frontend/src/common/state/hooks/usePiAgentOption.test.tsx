@@ -52,23 +52,46 @@ describe("usePiAgentOption", () => {
     vi.clearAllMocks();
   });
 
-  it("re-checks availability on mount so a pi installed mid-session is picked up", async () => {
+  it("asks the backend to re-check on mount, and leaves the status to the stream", async () => {
     // The stream's last push predates the binary: pi reads unavailable.
     store.set(dependenciesStatusAtom, makeStatus({}));
     mockGetDependenciesStatus.mockResolvedValue({ data: PI_AVAILABLE_STATUS });
 
     const { result } = renderHook(() => usePiAgentOption(), { wrapper });
+    await act(async () => {});
 
-    expect(result.current.isPiAvailable).toBe(false);
-    await waitFor(() => {
-      expect(result.current.isPiAvailable).toBe(true);
-    });
     expect(mockGetDependenciesStatus).toHaveBeenCalledWith({ meta: { skipWsAck: true } });
+    expect(result.current.isPiAvailable).toBe(false);
+
+    // The backend publishes the re-checked status on the stream.
+    act(() => {
+      store.set(dependenciesStatusAtom, PI_AVAILABLE_STATUS);
+    });
+    expect(result.current.isPiAvailable).toBe(true);
+  });
+
+  it("keeps a newer stream frame when the re-check response lands after it", async () => {
+    store.set(dependenciesStatusAtom, makeStatus({}));
+    let resolveRecheck: (status: DependenciesStatus) => void = () => {};
+    mockGetDependenciesStatus.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRecheck = (status): void => resolve({ data: status });
+      }),
+    );
+
+    const { result } = renderHook(() => usePiAgentOption(), { wrapper });
+    act(() => {
+      store.set(dependenciesStatusAtom, PI_AVAILABLE_STATUS);
+    });
+    await act(async () => {
+      resolveRecheck(makeStatus({}));
+    });
+
+    expect(store.get(dependenciesStatusAtom)).toBe(PI_AVAILABLE_STATUS);
+    expect(result.current.isPiAvailable).toBe(true);
   });
 
   it("re-checks availability when a picker asks (e.g. on its dropdown opening)", async () => {
-    // The hook's consumer mounted before the binary appeared (e.g. the
-    // first-run dialog), so the mount re-check saw pi unavailable.
     store.set(dependenciesStatusAtom, makeStatus({}));
     mockGetDependenciesStatus.mockResolvedValue({ data: makeStatus({}) });
 
@@ -77,16 +100,12 @@ describe("usePiAgentOption", () => {
     await waitFor(() => {
       expect(mockGetDependenciesStatus).toHaveBeenCalledTimes(1);
     });
-    expect(result.current.isPiAvailable).toBe(false);
-
-    // pi lands on PATH afterwards; the picker's open-time refresh observes it.
-    mockGetDependenciesStatus.mockResolvedValue({ data: PI_AVAILABLE_STATUS });
     act(() => {
       result.current.refreshPiAvailability();
     });
 
     await waitFor(() => {
-      expect(result.current.isPiAvailable).toBe(true);
+      expect(mockGetDependenciesStatus).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -1,8 +1,25 @@
 import { createStore } from "jotai";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { DependenciesStatus, DependencyInfo, JjReadiness } from "~/api";
-import { dependenciesStatusAtom, isJjAvailableAtom, isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus";
+import {
+  dependenciesStatusAtom,
+  isJjAvailableAtom,
+  isPiAvailableAtom,
+  refreshDependenciesStatus,
+} from "~/common/state/atoms/dependenciesStatus";
+
+const { mockGetDependenciesStatus } = vi.hoisted(() => ({
+  mockGetDependenciesStatus: vi.fn(),
+}));
+
+vi.mock("~/api", async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...(original as object),
+    getDependenciesStatus: mockGetDependenciesStatus,
+  };
+});
 
 const makeInfo = (overrides: Partial<DependencyInfo>): DependencyInfo => ({ installed: false, ...overrides });
 
@@ -75,5 +92,21 @@ describe("isJjAvailableAtom", () => {
     const store = createStore();
     store.set(dependenciesStatusAtom, makeStatusWithJjReadiness(readiness));
     expect(store.get(isJjAvailableAtom)).toBe(false);
+  });
+});
+
+describe("refreshDependenciesStatus", () => {
+  it("returns the snapshot the backend computed, without waiting for a stream acknowledgement", async () => {
+    const status = makeStatus(makeInfo({ installed: true, isVersionInRange: true }));
+    mockGetDependenciesStatus.mockResolvedValue({ data: status });
+
+    await expect(refreshDependenciesStatus()).resolves.toBe(status);
+    expect(mockGetDependenciesStatus).toHaveBeenCalledWith({ meta: { skipWsAck: true } });
+  });
+
+  it("resolves to null when the request fails", async () => {
+    mockGetDependenciesStatus.mockRejectedValue(new Error("backend unreachable"));
+
+    await expect(refreshDependenciesStatus()).resolves.toBeNull();
   });
 });
