@@ -1,5 +1,5 @@
 import { ContextMenu, DropdownMenu, Flex, IconButton, Popover, Spinner, Text, Tooltip } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronDown, ChevronUp, CopyIcon, GitMergeIcon, Info, PlusIcon, TriangleAlert } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
@@ -8,9 +8,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PrStatusInfo } from "../../api";
 import { ElementIds } from "../../api";
 import { openInReusableTab } from "../../common/reusableTabTarget.ts";
-import { chatActionsAtom } from "../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../common/state/atoms/prStatus.ts";
 import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
+import { createPrActionAtomFamily } from "../../common/state/atoms/workspaceAgentActions.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
 import { buildCreatePrMessage } from "../../common/utils/agentPrompts.ts";
 import { toPrBaseRefName } from "../../common/utils/refNames.ts";
@@ -108,25 +108,33 @@ const CreatePrButtonFace = ({ onClick, isDisabled = false }: CreatePrButtonFaceP
   </button>
 );
 
-type CreatePrButtonProps = {
+type CreatePrInputs = {
+  workspaceId: string;
   targetBranch: string;
   gitProvider: GitProvider;
 };
 
-const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): ReactElement => {
+// Sends through the workspace-scoped action, so the prompt reaches the
+// workspace's current agent whether or not its chat panel is mounted.
+const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs): (() => void) => {
   const prCreationPrompt = useAtomValue(prCreationPromptAtom);
-  const chatActions = useAtomValue(chatActionsAtom);
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  const sendCreatePrMessage = useSetAtom(createPrActionAtomFamily(workspaceId));
 
-  const handleClick = (): void => {
-    const message = buildCreatePrMessage({ prompt: prCreationPrompt, targetBranch });
+  return (): void => {
     posthog.capture("pr.create_initiated", {
       git_provider: gitProvider,
       // The branch name is user-entered text (it can encode feature/ticket/
       // customer names), so it is deliberately not recorded.
     });
-    chatActions.sendMessage?.(message);
+    void sendCreatePrMessage(buildCreatePrMessage({ prompt: prCreationPrompt, targetBranch }));
   };
+};
+
+type CreatePrButtonProps = CreatePrInputs;
+
+const CreatePrButton = ({ workspaceId, targetBranch, gitProvider }: CreatePrButtonProps): ReactElement => {
+  const handleClick = useCreatePr({ workspaceId, targetBranch, gitProvider });
+  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
 
   return (
     <>
@@ -412,26 +420,19 @@ const ErrorPrButton = ({ error }: ErrorPrButtonProps): ReactElement => {
   );
 };
 
-type AssignPrButtonProps = {
+type AssignPrButtonProps = CreatePrInputs & {
   prStatus: PrStatusInfo;
-  targetBranch: string;
-  gitProvider: GitProvider;
   onSwitchTarget?: (newTarget: string) => void;
 };
 
-const AssignPrButton = ({ prStatus, targetBranch, gitProvider, onSwitchTarget }: AssignPrButtonProps): ReactElement => {
-  const prCreationPrompt = useAtomValue(prCreationPromptAtom);
-  const chatActions = useAtomValue(chatActionsAtom);
-
-  const handleCreate = (): void => {
-    const message = buildCreatePrMessage({ prompt: prCreationPrompt, targetBranch });
-    posthog.capture("pr.create_initiated", {
-      git_provider: gitProvider,
-      // The branch name is user-entered text (it can encode feature/ticket/
-      // customer names), so it is deliberately not recorded.
-    });
-    chatActions.sendMessage?.(message);
-  };
+const AssignPrButton = ({
+  prStatus,
+  workspaceId,
+  targetBranch,
+  gitProvider,
+  onSwitchTarget,
+}: AssignPrButtonProps): ReactElement => {
+  const handleCreate = useCreatePr({ workspaceId, targetBranch, gitProvider });
 
   const handleSwitchTarget = (): void => {
     if (prStatus.mismatchedPrTargetBranch && onSwitchTarget) {
@@ -514,13 +515,14 @@ export const PrButton = ({
       return (
         <AssignPrButton
           prStatus={prStatus}
+          workspaceId={workspaceId}
           targetBranch={targetBranch}
           gitProvider={gitProvider}
           onSwitchTarget={onSwitchTarget}
         />
       );
     }
-    return <CreatePrButton targetBranch={targetBranch} gitProvider={gitProvider} />;
+    return <CreatePrButton workspaceId={workspaceId} targetBranch={targetBranch} gitProvider={gitProvider} />;
   }
 
   if (prStatus.prState === "open") {

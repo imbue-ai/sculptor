@@ -1,18 +1,33 @@
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { PrStatusInfo } from "~/api";
-import { ElementIds } from "~/api";
+import type { CodingAgentTaskView, PrStatusInfo, UserConfig } from "~/api";
+import { ElementIds, LlmModel, TaskStatus } from "~/api";
 import { reusableTabTarget } from "~/common/reusableTabTarget.ts";
+import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
+import { commitPromptSendFailedToastAtom } from "~/common/state/atoms/toasts.ts";
+import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
+import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
+import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
+import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
 
 import { PrButton } from "./PrButton.tsx";
 
 // posthog isn't initialised in tests; the button captures an analytics event
 // on click, so stub it to a no-op.
 vi.mock("posthog-js", () => ({ posthog: { capture: vi.fn() } }));
+
+// The send API hits the backend; stub it so the prompt's destination can be
+// asserted deterministically.
+const { sendMessagesMock } = vi.hoisted(() => ({ sendMessagesMock: vi.fn() }));
+vi.mock("~/api", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, sendWorkspaceAgentMessages: sendMessagesMock };
+});
 
 const WORKSPACE_ID = "ws-pr-1";
 const PR_URL = "https://github.com/imbue-ai/sculptor/pull/392";
@@ -34,6 +49,8 @@ const prStatus = (overrides: Partial<PrStatusInfo>): PrStatusInfo => ({
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  sendMessagesMock.mockReset();
+  localStorage.clear();
 });
 
 describe("PrButton opens PRs in a reusable browser tab", () => {
@@ -98,5 +115,84 @@ describe("PrButton offers to adopt an existing PR only when it targets another b
 
     expect(screen.getByTestId(ElementIds.PR_BUTTON_ASSIGN)).toBeTruthy();
     expect(screen.queryByTestId(ElementIds.PR_BUTTON_CREATE)).toBeNull();
+  });
+});
+
+describe("PrButton sends the create-PR prompt to the workspace's agent", () => {
+  const AGENT_ID = "agent-pr-1";
+  const PR_PROMPT = "Open a pull request";
+  const EXPECTED_SEND = {
+    path: { workspace_id: WORKSPACE_ID, agent_id: AGENT_ID },
+    body: {
+      message: "Open a pull request\n\nTarget the pull request against `origin/main`.",
+      model: LlmModel.CLAUDE_4_SONNET,
+    },
+  };
+
+  // The agent's chat panel is open but the Changes panel is the active center
+  // tab, so no chat panel is mounted and none has registered chat actions.
+  const storeWithAgentBehindChangesTab = (status: PrStatusInfo): ReturnType<typeof createStore> => {
+    const store = storeWith(status);
+    store.set(userConfigAtom, { prCreationPrompt: PR_PROMPT } as unknown as UserConfig);
+    store.set(agentAtomFamily(AGENT_ID), {
+      id: AGENT_ID,
+      workspaceId: WORKSPACE_ID,
+      projectId: "proj-1",
+      status: TaskStatus.READY,
+      model: LlmModel.CLAUDE_4_SONNET,
+      harnessCapabilities: { supportsChatInterface: true },
+      isDeleted: false,
+    } as unknown as CodingAgentTaskView);
+    store.set(agentIdsAtom, [AGENT_ID]);
+    store.set(workspaceLayoutFamily(WORKSPACE_ID), {
+      ...EMPTY_WORKSPACE_LAYOUT,
+      placement: { [makeAgentPanelId(AGENT_ID)]: "center", changes: "center" },
+      order: { center: [makeAgentPanelId(AGENT_ID), "changes"] },
+      activePanel: { center: "changes" },
+    });
+    return store;
+  };
+
+  const renderPrButton = (store: ReturnType<typeof createStore>): void => {
+    renderWithProviders(<PrButton workspaceId={WORKSPACE_ID} targetBranch="origin/main" gitProvider="github" />, {
+      store,
+    });
+  };
+
+  it("sends from Create PR while no agent panel is mounted", () => {
+    renderPrButton(storeWithAgentBehindChangesTab(prStatus({ prState: "none" })));
+
+    fireEvent.click(screen.getByTestId(ElementIds.PR_BUTTON_CREATE));
+
+    expect(sendMessagesMock).toHaveBeenCalledTimes(1);
+    expect(sendMessagesMock).toHaveBeenCalledWith(EXPECTED_SEND);
+  });
+
+  // The app shell renders this atom as a toast, the same one every other
+  // Create PR and Commit entry point raises on a failed send.
+  it("raises the send-failed toast when Create PR's send fails", async () => {
+    const store = storeWithAgentBehindChangesTab(prStatus({ prState: "none" }));
+    renderPrButton(store);
+    sendMessagesMock.mockRejectedValueOnce(new Error("network down"));
+
+    fireEvent.click(screen.getByTestId(ElementIds.PR_BUTTON_CREATE));
+
+    await waitFor(() =>
+      expect(store.get(commitPromptSendFailedToastAtom)).toMatchObject({ title: "Couldn't send pull request prompt" }),
+    );
+  });
+
+  it("sends from the Assign PR menu's create item while no agent panel is mounted", async () => {
+    renderPrButton(
+      storeWithAgentBehindChangesTab(
+        prStatus({ prState: "none", mismatchedPrIid: 7, mismatchedPrTargetBranch: "release" }),
+      ),
+    );
+
+    await userEvent.click(screen.getByTestId(ElementIds.PR_BUTTON_ASSIGN));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /Create PR/ }));
+
+    expect(sendMessagesMock).toHaveBeenCalledTimes(1);
+    expect(sendMessagesMock).toHaveBeenCalledWith(EXPECTED_SEND);
   });
 });
