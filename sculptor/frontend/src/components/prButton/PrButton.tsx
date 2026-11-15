@@ -10,7 +10,10 @@ import { ElementIds } from "../../api";
 import { openInReusableTab } from "../../common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "../../common/state/atoms/prStatus.ts";
 import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
-import { createPrActionAtomFamily } from "../../common/state/atoms/workspaceAgentActions.ts";
+import {
+  canPromptActiveAgentAtomFamily,
+  createPrActionAtomFamily,
+} from "../../common/state/atoms/workspaceAgentActions.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
 import { buildCreatePrMessage } from "../../common/utils/agentPrompts.ts";
 import { toPrBaseRefName } from "../../common/utils/refNames.ts";
@@ -114,13 +117,20 @@ type CreatePrInputs = {
   gitProvider: GitProvider;
 };
 
+type CreatePrControl = {
+  isDisabled: boolean;
+  handleCreate: () => void;
+};
+
 // Sends through the workspace-scoped action, so the prompt reaches the
-// workspace's current agent whether or not its chat panel is mounted.
-const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs): (() => void) => {
+// workspace's current agent whether or not its chat panel is mounted. Like the
+// Commit button, the control is disabled while that agent cannot take a prompt.
+const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs): CreatePrControl => {
   const prCreationPrompt = useAtomValue(prCreationPromptAtom);
+  const canPromptAgent = useAtomValue(canPromptActiveAgentAtomFamily(workspaceId));
   const sendCreatePrMessage = useSetAtom(createPrActionAtomFamily(workspaceId));
 
-  return (): void => {
+  const handleCreate = (): void => {
     posthog.capture("pr.create_initiated", {
       git_provider: gitProvider,
       // The branch name is user-entered text (it can encode feature/ticket/
@@ -128,19 +138,21 @@ const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs)
     });
     void sendCreatePrMessage(buildCreatePrMessage({ prompt: prCreationPrompt, targetBranch }));
   };
+
+  return { isDisabled: !canPromptAgent, handleCreate };
 };
 
 type CreatePrButtonProps = CreatePrInputs;
 
 const CreatePrButton = ({ workspaceId, targetBranch, gitProvider }: CreatePrButtonProps): ReactElement => {
-  const handleClick = useCreatePr({ workspaceId, targetBranch, gitProvider });
+  const { isDisabled, handleCreate } = useCreatePr({ workspaceId, targetBranch, gitProvider });
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
 
   return (
     <>
       <ContextMenu.Root>
         <ContextMenu.Trigger>
-          <CreatePrButtonFace onClick={handleClick} />
+          <CreatePrButtonFace onClick={handleCreate} isDisabled={isDisabled} />
         </ContextMenu.Trigger>
         <ContextMenu.Content size="1">
           <ContextMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</ContextMenu.Item>
@@ -432,7 +444,7 @@ const AssignPrButton = ({
   gitProvider,
   onSwitchTarget,
 }: AssignPrButtonProps): ReactElement => {
-  const handleCreate = useCreatePr({ workspaceId, targetBranch, gitProvider });
+  const { isDisabled: isCreateDisabled, handleCreate } = useCreatePr({ workspaceId, targetBranch, gitProvider });
 
   const handleSwitchTarget = (): void => {
     if (prStatus.mismatchedPrTargetBranch && onSwitchTarget) {
@@ -451,7 +463,7 @@ const AssignPrButton = ({
         </div>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content size="1" align="end">
-        <DropdownMenu.Item onSelect={handleCreate}>
+        <DropdownMenu.Item onSelect={handleCreate} disabled={isCreateDisabled}>
           <PlusIcon size={12} />
           Create PR → <span className={styles.monoBranch}>{targetBranch}</span>
         </DropdownMenu.Item>
