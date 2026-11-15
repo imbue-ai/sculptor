@@ -1,9 +1,7 @@
-import { useSetAtom } from "jotai";
 import { useCallback, useReducer } from "react";
 
-import { cloneRemoteRepo, createInitialCommit, initializeGitRepository, initializeProject, listProjects } from "~/api";
+import { cloneRemoteRepo, createInitialCommit, initializeGitRepository, initializeProject } from "~/api";
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
-import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { getErrorMessage, HTTPException } from "~/common/utils/errors.ts";
 import { isElectron, selectProjectDirectory } from "~/electron/platform.ts";
@@ -147,19 +145,18 @@ export const useAddRepo = ({
   onSuccess?: () => void;
 }): UseAddRepoResult => {
   const [phase, dispatch] = useReducer(phaseReducer, initialPhase);
-  const updateProjects = useSetAtom(updateProjectsAtom);
 
   const finalizeProject = useCallback(
     async (path: string): Promise<void> => {
+      // While the stream is connected, the request resolves only after the stream
+      // has delivered the new project.
       await initializeProject({ body: { projectPath: path } });
-      const { data: projects } = await listProjects();
-      updateProjects(projects);
 
       dispatch({ type: "BACK_TO_FORM" });
       onSuccess?.();
       setToast({ title: "Repository added successfully", type: ToastType.SUCCESS });
     },
-    [updateProjects, setToast, onSuccess],
+    [setToast, onSuccess],
   );
 
   const handleOpenNewRepo = useCallback(

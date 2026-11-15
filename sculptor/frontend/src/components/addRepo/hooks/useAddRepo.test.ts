@@ -1,7 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import { createElement, type ReactElement, type ReactNode } from "react";
+import { describe, expect, it, vi } from "vitest";
+
+import type { Project } from "~/api";
+import { projectAtomFamily, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
+import { ToastType } from "~/common/state/atoms/toasts.ts";
 
 import type { AddRepoPhase } from "./useAddRepo.tsx";
-import { deriveDisplayName, deriveWebUrl, initialPhase, phaseReducer } from "./useAddRepo.tsx";
+import { deriveDisplayName, deriveWebUrl, initialPhase, phaseReducer, useAddRepo } from "./useAddRepo.tsx";
+
+const apiHarness = vi.hoisted(() => ({
+  initializeProject: vi.fn(),
+  listProjects: vi.fn(),
+}));
+
+vi.mock("~/api", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    initializeProject: apiHarness.initializeProject,
+    listProjects: apiHarness.listProjects,
+  };
+});
 
 describe("deriveDisplayName", () => {
   it("extracts owner/repo from an https URL with .git suffix", () => {
@@ -164,5 +185,35 @@ describe("phaseReducer", () => {
       errorMessage: "gh CLI not authenticated",
       localPathSuggestion: undefined,
     });
+  });
+});
+
+describe("useAddRepo", () => {
+  it("leaves the projects atom to the stream after adding a repo", async () => {
+    const streamedProject: Project = {
+      objectId: "prj-1",
+      organizationReference: "org-1",
+      name: "sculptor",
+      userGitRepoUrl: "file:///home/dev/code/sculptor",
+    };
+    const store = createStore();
+    store.set(updateProjectsAtom, [streamedProject]);
+    apiHarness.initializeProject.mockResolvedValue({ data: streamedProject });
+    apiHarness.listProjects.mockResolvedValue({ data: [{ ...streamedProject, name: "a stale copy" }] });
+    const setToast = vi.fn();
+    const onSuccess = vi.fn();
+    const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
+      createElement(Provider, { store }, children);
+    const { result } = renderHook(() => useAddRepo({ setToast, onSuccess }), { wrapper });
+
+    await act(async () => {
+      await result.current.handleOpenNewRepo("/home/dev/code/sculptor");
+    });
+
+    expect(apiHarness.initializeProject).toHaveBeenCalledWith({ body: { projectPath: "/home/dev/code/sculptor" } });
+    expect(store.get(projectAtomFamily(streamedProject.objectId))).toBe(streamedProject);
+    expect(onSuccess).toHaveBeenCalledOnce();
+    expect(setToast).toHaveBeenCalledWith({ title: "Repository added successfully", type: ToastType.SUCCESS });
+    expect(result.current.phase).toEqual(initialPhase);
   });
 });

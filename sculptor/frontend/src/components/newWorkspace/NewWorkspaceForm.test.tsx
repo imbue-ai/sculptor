@@ -1,13 +1,13 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DependenciesStatus, ModelOption, Project } from "~/api";
-import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
+import { ElementIds, getActiveProjects, WorkspaceInitializationStrategy } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
-import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
+import { projectAtomFamily, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { SettingsSection } from "~/pages/settings/sections.ts";
 
@@ -181,6 +181,29 @@ describe("NewWorkspaceForm", () => {
     mockCreateWorkspace.mockReset();
     mockUsePiModels.mockReset();
     window.localStorage.clear();
+  });
+
+  it("keeps the stream's copy of a project when the form's own project fetch lands later", async () => {
+    let resolveFetch: (projects: ReadonlyArray<Project>) => void = () => {};
+    vi.mocked(getActiveProjects).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = (projects): void =>
+            resolve({ data: projects } as Awaited<ReturnType<typeof getActiveProjects>>);
+        }) as ReturnType<typeof getActiveProjects>,
+    );
+    const { store } = renderForm();
+
+    const streamedProject = { objectId: "p1", name: "Repo One, renamed" } as Project;
+    act(() => {
+      store.set(updateProjectsAtom, [streamedProject]);
+    });
+    await act(async () => {
+      resolveFetch([{ objectId: "p1", name: "Repo One" } as Project]);
+    });
+
+    expect(store.get(projectAtomFamily("p1"))).toBe(streamedProject);
+    await waitFor(() => expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON)).toBeEnabled());
   });
 
   it("seeds the title and prompt fields from the open request", () => {

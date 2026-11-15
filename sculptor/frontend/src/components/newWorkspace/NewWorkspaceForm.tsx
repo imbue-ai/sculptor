@@ -1,5 +1,5 @@
 import { Button, Flex, Skeleton, Switch, Tooltip } from "@radix-ui/themes";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -18,7 +18,7 @@ import {
   type StoredAgentType,
 } from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
-import { projectsArrayAtom, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
+import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
@@ -117,7 +117,6 @@ export const NewWorkspaceForm = ({
 }: NewWorkspaceFormProps): ReactElement => {
   // State and hooks — atoms
   const projects = useAtomValue(projectsArrayAtom);
-  const updateProjects = useSetAtom(updateProjectsAtom);
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
   const isPiAvailable = useAtomValue(isPiAvailableAtom);
@@ -250,8 +249,9 @@ export const NewWorkspaceForm = ({
     };
   }, [setDraft]);
 
-  // Effects — load projects on mount. Fall back to the MRU project, then the
-  // first project, only when there is no valid seeded selection.
+  // Effects — pick the initial repo on mount: fall back to the MRU project, then
+  // the first project, only when there is no valid seeded selection. The fetched
+  // list feeds only this choice; the stream owns the projects atom.
   useEffect(() => {
     let isCancelled = false;
     const loadProjects = async (): Promise<void> => {
@@ -263,7 +263,6 @@ export const NewWorkspaceForm = ({
         if (isCancelled) return;
 
         const activeProjects = projectsResponse.data ?? [];
-        updateProjects(activeProjects);
 
         setSelectedProjectId((current) => {
           if (current !== null && activeProjects.some((p) => p.objectId === current)) {
@@ -290,7 +289,7 @@ export const NewWorkspaceForm = ({
     return (): void => {
       isCancelled = true;
     };
-  }, [updateProjects]);
+  }, []);
 
   // Effects — auto-select a repo the moment it's added through the RepoSelector's
   // Add Repository dialog, so the user lands on the repo they just added instead
