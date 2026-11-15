@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ElementIds } from "~/api";
 import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
 import { canCommitAtomFamily, commitActionAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
+import { buildCommitMessage } from "~/common/utils/agentPrompts.ts";
 
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
@@ -32,7 +33,7 @@ export const CommitButton = ({ workspaceId, changesCount, onCommit }: CommitButt
   const isDisabled = changesCount === 0 || !canCommit;
 
   const handleClick = (): void => {
-    void sendCommitMessage(commitPrompt);
+    void sendCommitMessage(buildCommitMessage({ prompt: commitPrompt }));
     onCommit?.();
   };
 

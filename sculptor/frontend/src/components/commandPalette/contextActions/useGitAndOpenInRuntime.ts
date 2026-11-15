@@ -11,6 +11,7 @@ import { repoInfoAtomFamily } from "../../../common/state/atoms/repoInfo.ts";
 import { commitPromptAtom, prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
 import { commitActionAtomFamily, createPrActionAtomFamily } from "../../../common/state/atoms/workspaceAgentActions.ts";
 import { getCachedWorkspaceDiff } from "../../../common/state/hooks/useWorkspaceDiff.ts";
+import { buildCommitMessage, buildCreatePrMessage } from "../../../common/utils/agentPrompts.ts";
 import { isMac } from "../../../electron/platform.ts";
 
 /**
@@ -56,12 +57,14 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
       // be the workspace on screen: the sidebar menu acts on whichever row
       // was right-clicked.
       commitChanges: (ws): void => {
-        void store.set(commitActionAtomFamily(ws.objectId), store.get(commitPromptAtom));
+        const message = buildCommitMessage({ prompt: store.get(commitPromptAtom) });
+        void store.set(commitActionAtomFamily(ws.objectId), message);
       },
       createMergeRequest: (ws): void => {
-        const prompt = store.get(prCreationPromptAtom);
-        const targetBranch = ws.targetBranch;
-        const message = targetBranch ? `${prompt}\n\nTarget the pull request against \`${targetBranch}\`.` : prompt;
+        const message = buildCreatePrMessage({
+          prompt: store.get(prCreationPromptAtom),
+          targetBranch: ws.targetBranch ?? null,
+        });
         void store.set(createPrActionAtomFamily(ws.objectId), message);
       },
       openMergeRequest: (ws): void => {

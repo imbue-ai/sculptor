@@ -12,6 +12,7 @@ import { chatActionsAtom } from "../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../common/state/atoms/prStatus.ts";
 import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
+import { buildCreatePrMessage } from "../../common/utils/agentPrompts.ts";
 import { toPrBaseRefName } from "../../common/utils/refNames.ts";
 import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
@@ -118,7 +119,7 @@ const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): Rea
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
 
   const handleClick = (): void => {
-    const message = `${prCreationPrompt}\n\nTarget the pull request against \`${targetBranch}\`.`;
+    const message = buildCreatePrMessage({ prompt: prCreationPrompt, targetBranch });
     posthog.capture("pr.create_initiated", {
       git_provider: gitProvider,
       // The branch name is user-entered text (it can encode feature/ticket/
@@ -423,7 +424,7 @@ const AssignPrButton = ({ prStatus, targetBranch, gitProvider, onSwitchTarget }:
   const chatActions = useAtomValue(chatActionsAtom);
 
   const handleCreate = (): void => {
-    const message = `${prCreationPrompt}\n\nTarget the pull request against \`${targetBranch}\`.`;
+    const message = buildCreatePrMessage({ prompt: prCreationPrompt, targetBranch });
     posthog.capture("pr.create_initiated", {
       git_provider: gitProvider,
       // The branch name is user-entered text (it can encode feature/ticket/
