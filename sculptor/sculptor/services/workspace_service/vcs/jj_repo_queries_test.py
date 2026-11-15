@@ -1,25 +1,39 @@
+import shutil
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
 from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
+from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
+from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmark
+from sculptor.services.workspace_service.vcs.jj_repo_queries import add_workspace
 from sculptor.services.workspace_service.vcs.jj_repo_queries import does_bookmark_exist
 from sculptor.services.workspace_service.vcs.jj_repo_queries import forget_bookmarks
+from sculptor.services.workspace_service.vcs.jj_repo_queries import forget_workspace
 from sculptor.services.workspace_service.vcs.jj_repo_queries import init_colocated
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
+from sculptor.services.workspace_service.vcs.jj_repo_queries import list_workspaces
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_remotes
+from sculptor.services.workspace_service.vcs.jj_repo_queries import read_workspace_config_path
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_commit_id
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_trunk_symbol
+from sculptor.services.workspace_service.vcs.jj_repo_queries import set_workspace_config
+from sculptor.services.workspace_service.vcs.jj_repo_queries import update_stale
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
 from sculptor.services.workspace_service.vcs.jj_revsets import local_bookmark_revset
+from sculptor.services.workspace_service.vcs.jj_revsets import revset_for_base
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
+from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import JjWorkspace
 from sculptor.testing.jj_repos import add_bare_origin
 from sculptor.testing.jj_repos import colocate_with_jj
+from sculptor.testing.jj_repos import make_workspace_stale
 from sculptor.testing.jj_repos import run_jj
 
 
@@ -65,6 +79,26 @@ def _make_colocated_repo_without_remote(jj_binary: JjBinary, repo_path: Path, br
 
 def _bookmarks_named(bookmarks: list[JjBookmark], name: str) -> list[JjBookmark]:
     return [bookmark for bookmark in bookmarks if bookmark.name == name]
+
+
+def _workspaces_by_name(jj_cli: JjCli, repo_dir: Path) -> dict[str, Path]:
+    return {entry.name: entry.root for entry in list_workspaces(jj_cli, repo_dir)}
+
+
+def _new_workspace_destination(repo: JjColocatedRepo) -> Path:
+    destination = repo.path.parent / "workspaces" / f"ws-{uuid4().hex[:8]}"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    return destination
+
+
+def _count_operations(jj_binary: JjBinary, repo_dir: Path) -> int:
+    output = run_jj(jj_binary, ("--ignore-working-copy", "op", "log", "--no-graph", "-T", 'id ++ "\\n"'), cwd=repo_dir)
+    return len(output.splitlines())
+
+
+def _read_config_value(jj_cli: JjCli, repo_dir: Path, key: str) -> str:
+    result = jj_cli.run(["config", "get", key], repo_dir, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY)
+    return result.stdout.strip()
 
 
 def test_is_jj_colocated_is_true_for_a_colocated_repository(jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo) -> None:
@@ -246,3 +280,164 @@ def test_forget_bookmarks_with_no_names_changes_nothing(jj_cli: JjCli, jj_coloca
     forget_bookmarks(jj_cli, jj_colocated_repo.path, [])
 
     assert list_bookmarks(jj_cli, jj_colocated_repo.path) == before
+
+
+def test_list_workspaces_reports_each_workspace_name_and_absolute_root(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo, jj_workspace: JjWorkspace
+) -> None:
+    workspaces = _workspaces_by_name(jj_cli, jj_colocated_repo.path)
+
+    assert workspaces.keys() == {"default", jj_workspace.name}
+    assert workspaces["default"] == jj_colocated_repo.path.resolve()
+    assert workspaces[jj_workspace.name] == jj_workspace.path.resolve()
+
+
+def test_list_workspaces_still_lists_a_workspace_whose_root_was_deleted(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo, jj_workspace: JjWorkspace
+) -> None:
+    shutil.rmtree(jj_workspace.path)
+
+    assert jj_workspace.name in _workspaces_by_name(jj_cli, jj_colocated_repo.path)
+
+
+def test_list_workspaces_reports_a_name_jj_would_quote_as_the_raw_name(
+    jj_cli: JjCli, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    awkward_name = 'ws "q" 1'
+    destination = _new_workspace_destination(jj_colocated_repo)
+    run_jj(
+        jj_binary,
+        ("workspace", "add", "--no-colocate", "--name", awkward_name, "-r", "main", str(destination)),
+        cwd=jj_colocated_repo.path,
+    )
+
+    assert _workspaces_by_name(jj_cli, jj_colocated_repo.path)[awkward_name] == destination.resolve()
+
+
+def test_add_workspace_creates_a_jj_only_checkout_whose_parent_commit_is_the_base(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    destination = _new_workspace_destination(jj_colocated_repo)
+    base_revset = revset_for_base("main@origin")
+
+    add_workspace(jj_cli, jj_colocated_repo.path, name="sculptor-ws", base_revset=base_revset, destination=destination)
+
+    base_commit_id = resolve_commit_id(jj_cli, jj_colocated_repo.path, base_revset)
+    assert (destination / ".jj").is_dir()
+    assert not (destination / ".git").exists()
+    assert (destination / "README.md").is_file()
+    assert resolve_commit_id(jj_cli, destination, JjRevset("@-")) == base_commit_id
+    assert _workspaces_by_name(jj_cli, jj_colocated_repo.path)["sculptor-ws"] == destination.resolve()
+
+
+def test_add_workspace_refuses_a_name_that_is_already_taken(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo, jj_workspace: JjWorkspace
+) -> None:
+    with pytest.raises(VcsCommandExitError):
+        add_workspace(
+            jj_cli,
+            jj_colocated_repo.path,
+            name=jj_workspace.name,
+            base_revset=local_bookmark_revset("main"),
+            destination=_new_workspace_destination(jj_colocated_repo),
+        )
+
+
+def test_add_workspace_refuses_a_destination_that_is_not_empty(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    destination = _new_workspace_destination(jj_colocated_repo)
+    destination.mkdir()
+    (destination / "existing.txt").write_text("already here\n")
+
+    with pytest.raises(VcsCommandExitError):
+        add_workspace(
+            jj_cli,
+            jj_colocated_repo.path,
+            name="sculptor-ws",
+            base_revset=local_bookmark_revset("main"),
+            destination=destination,
+        )
+
+
+def test_add_workspace_refuses_a_destination_whose_parent_is_missing(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    with pytest.raises(VcsCommandExitError):
+        add_workspace(
+            jj_cli,
+            jj_colocated_repo.path,
+            name="sculptor-ws",
+            base_revset=local_bookmark_revset("main"),
+            destination=jj_colocated_repo.path.parent / "missing_parent" / "ws",
+        )
+
+
+def test_forget_workspace_removes_the_workspace_from_the_repository(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo, jj_workspace: JjWorkspace
+) -> None:
+    forget_workspace(jj_cli, jj_colocated_repo.path, jj_workspace.name)
+
+    assert jj_workspace.name not in _workspaces_by_name(jj_cli, jj_colocated_repo.path)
+
+
+def test_forget_workspace_succeeds_when_the_directory_is_already_gone(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo, jj_workspace: JjWorkspace
+) -> None:
+    shutil.rmtree(jj_workspace.path)
+
+    forget_workspace(jj_cli, jj_colocated_repo.path, jj_workspace.name)
+
+    assert jj_workspace.name not in _workspaces_by_name(jj_cli, jj_colocated_repo.path)
+
+
+def test_forget_workspace_succeeds_for_an_unknown_name(jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo) -> None:
+    forget_workspace(jj_cli, jj_colocated_repo.path, "never-existed")
+
+    assert _workspaces_by_name(jj_cli, jj_colocated_repo.path).keys() == {"default"}
+
+
+def test_read_workspace_config_path_is_none_for_a_workspace_without_config_and_creates_nothing(
+    jj_cli: JjCli, jj_isolated_env: JjIsolatedEnv, jj_workspace: JjWorkspace
+) -> None:
+    assert read_workspace_config_path(jj_cli, jj_workspace.path) is None
+    assert not (jj_isolated_env.config_home_path / "jj" / "workspaces").exists()
+
+
+def test_set_workspace_config_applies_to_that_workspace_only_and_creates_no_operation(
+    jj_cli: JjCli, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo, jj_workspace: JjWorkspace
+) -> None:
+    operations_before = _count_operations(jj_binary, jj_workspace.path)
+
+    set_workspace_config(jj_cli, jj_workspace.path, "snapshot.max-new-file-size", "12345")
+
+    config_path = read_workspace_config_path(jj_cli, jj_workspace.path)
+    assert config_path is not None
+    assert "max-new-file-size = 12345" in config_path.read_text()
+    assert _read_config_value(jj_cli, jj_workspace.path, "snapshot.max-new-file-size") == "12345"
+    assert _read_config_value(jj_cli, jj_colocated_repo.path, "snapshot.max-new-file-size") != "12345"
+    assert _count_operations(jj_binary, jj_workspace.path) == operations_before
+
+
+def test_forget_workspace_leaves_the_workspace_config_file_behind(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo, jj_workspace: JjWorkspace
+) -> None:
+    set_workspace_config(jj_cli, jj_workspace.path, "snapshot.max-new-file-size", "12345")
+    config_path = read_workspace_config_path(jj_cli, jj_workspace.path)
+    assert config_path is not None
+
+    forget_workspace(jj_cli, jj_colocated_repo.path, jj_workspace.name)
+
+    assert config_path.is_file()
+
+
+def test_update_stale_brings_a_stale_workspace_back_into_use(
+    jj_cli: JjCli, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo, jj_workspace: JjWorkspace
+) -> None:
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, jj_workspace.path)
+    with pytest.raises(JjWorkingCopyStaleError):
+        jj_cli.run(["status"], jj_workspace.path, snapshot=JjSnapshotPolicy.SNAPSHOT)
+
+    update_stale(jj_cli, jj_workspace.path)
+
+    assert jj_cli.run(["status"], jj_workspace.path, snapshot=JjSnapshotPolicy.SNAPSHOT).returncode == 0

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import Field
 
 from sculptor.foundation.pydantic_serialization import FrozenModel
@@ -34,3 +36,12 @@ class JjBookmark(FrozenModel):
         if self.is_conflicted:
             return None
         return self.target_commit_ids[0]
+
+
+class JjWorkspaceEntry(FrozenModel):
+    """A workspace the repository records, as `jj workspace list` reports it."""
+
+    name: str
+    root: Path = Field(
+        description="Absolute; still listed after the directory is deleted, until the workspace is forgotten"
+    )

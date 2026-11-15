@@ -1,4 +1,4 @@
-"""Repository-level jj operations: colocation, bookmarks, trunk, commits and remotes.
+"""Repository-level jj operations: colocation, bookmarks, trunk, commits, remotes and workspaces.
 
 Reads pass `IGNORE_WORKING_COPY`, so they take no working-copy lock, add no
 operation and never snapshot anyone's edits.
@@ -15,6 +15,7 @@ from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmark
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
+from sculptor.services.workspace_service.vcs.jj_data_types import JjWorkspaceEntry
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
 from sculptor.services.workspace_service.vcs.jj_revsets import any_remote_bookmark_revset
 from sculptor.services.workspace_service.vcs.jj_revsets import exact_string_pattern
@@ -29,6 +30,9 @@ _JSON_LINES_BOOKMARK_TEMPLATE = 'json(self) ++ "\\n"'
 # The first line says whether the commit is the root commit; each later line is one of its remote bookmarks.
 _ROOT_AND_REMOTE_BOOKMARKS_TEMPLATE = 'json(root) ++ "\\n" ++ remote_bookmarks.map(|b| json(b) ++ "\\n").join("")'
 _TRUNK_FALLBACK_BOOKMARK_NAMES = ("main", "master")
+# The `name` keyword prints jj's quoted display form for names that need quoting; `json(name)` is the raw name.
+_WORKSPACE_LIST_TEMPLATE = 'json(name) ++ "\\t" ++ json(root) ++ "\\n"'
+_WORKSPACE_CONFIG_ID_FILE = Path(".jj") / "workspace-config-id"
 # `jj git remote list` appends this when a remote's push URL differs from its fetch URL.
 _PUSH_URL_SUFFIX = re.compile(r" \(push: .*\)$")
 
@@ -132,6 +136,78 @@ def forget_bookmarks(jj: JjCli, repo_dir: Path, names: Sequence[str]) -> None:
         repo_dir,
         snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
     )
+
+
+def list_workspaces(jj: JjCli, repo_dir: Path) -> list[JjWorkspaceEntry]:
+    """Every workspace the repository records, including ones whose directory has been deleted."""
+    result = jj.run(
+        ["workspace", "list", "-T", _WORKSPACE_LIST_TEMPLATE], repo_dir, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY
+    )
+    entries: list[JjWorkspaceEntry] = []
+    for line in result.stdout.splitlines():
+        name, root = line.split("\t")
+        entries.append(JjWorkspaceEntry(name=json.loads(name), root=Path(json.loads(root))))
+    return entries
+
+
+def add_workspace(jj: JjCli, repo_path: Path, *, name: str, base_revset: JjRevset, destination: Path) -> None:
+    """Create a jj-only workspace (`.jj` and no `.git`) at `destination`, its working copy a new child of `base_revset`.
+
+    Runs in the main repository and snapshots its working copy, because
+    `jj workspace add` refuses `--ignore-working-copy`. `destination`'s parent
+    must exist. A taken name or a non-empty destination raises
+    `VcsCommandExitError`.
+    """
+    jj.run(
+        [
+            "workspace",
+            "add",
+            "--no-colocate",
+            "--name",
+            name,
+            "-r",
+            base_revset,
+            "--sparse-patterns",
+            "full",
+            str(destination),
+        ],
+        repo_path,
+        snapshot=JjSnapshotPolicy.SNAPSHOT,
+    )
+
+
+def forget_workspace(jj: JjCli, repo_path: Path, name: str) -> None:
+    """Stop the repository tracking the workspace `name`; its directory and its workspace config are left alone.
+
+    Succeeds when the directory is already gone and when no workspace has that name.
+    """
+    jj.run(["workspace", "forget", name], repo_path, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY)
+
+
+def set_workspace_config(jj: JjCli, workspace_root: Path, key: str, value: str) -> None:
+    """Set `key` in the workspace's own jj config, read by every jj process in that workspace and no other.
+
+    Creates no operation. The file lives under the user's jj config directory,
+    and `jj workspace forget` leaves it behind.
+    """
+    jj.run(["config", "set", "--workspace", key, value], workspace_root, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY)
+
+
+def read_workspace_config_path(jj: JjCli, workspace_root: Path) -> Path | None:
+    """The workspace's own config file, or None when the workspace has never had one.
+
+    `jj config path --workspace` creates the config directory as a side effect,
+    so it runs only when `.jj/workspace-config-id` shows the directory exists.
+    """
+    if not (workspace_root / _WORKSPACE_CONFIG_ID_FILE).exists():
+        return None
+    result = jj.run(["config", "path", "--workspace"], workspace_root, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY)
+    return Path(result.stdout.strip())
+
+
+def update_stale(jj: JjCli, workspace_root: Path) -> None:
+    """Bring a stale workspace's working copy up to date with the repository."""
+    jj.run(["workspace", "update-stale"], workspace_root, snapshot=JjSnapshotPolicy.SNAPSHOT)
 
 
 def _find_local_trunk_fallback(jj: JjCli, repo_dir: Path) -> str | None:
