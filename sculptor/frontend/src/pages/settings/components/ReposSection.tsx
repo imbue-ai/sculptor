@@ -1,5 +1,5 @@
 import { Box, Button, Separator, Text } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { PlusIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useState } from "react";
@@ -7,7 +7,6 @@ import { useSearchParams } from "react-router-dom";
 
 import { deleteProject, ElementIds, type Project } from "~/api";
 import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
-import { removeProjectAtom } from "~/common/state/atoms/projects.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useProjects } from "~/common/state/hooks/useProjects.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
@@ -28,7 +27,6 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
   const [searchParams] = useSearchParams();
   const focusRepoId = searchParams.get("focusRepo");
   const allAgents = useAtomValue(agentsArrayAtom);
-  const removeProjectFromState = useSetAtom(removeProjectAtom);
   const [removeDialogState, setRemoveDialogState] = useState<RemoveDialogState>({ status: "closed" });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
@@ -66,7 +64,6 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
       await deleteProject({
         path: { project_id: projectId },
       });
-      removeProjectFromState(projectId);
 
       // If this was the last repo, reload so RequireOnboarding redirects to the add-repo step.
       if (projects.length === 1) {
@@ -87,7 +84,7 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
       });
       setRemoveDialogState({ status: "confirming", projectId, projectName, agentCount });
     }
-  }, [removeDialogState, setToast, removeProjectFromState, projects.length]);
+  }, [removeDialogState, setToast, projects.length]);
 
   const handleRemoveCancel = useCallback(() => {
     if (removeDialogState.status === "deleting") return;

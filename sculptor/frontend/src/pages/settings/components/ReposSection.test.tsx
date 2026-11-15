@@ -17,6 +17,7 @@ import { ReposSection } from "./ReposSection.tsx";
 const apiHarness = vi.hoisted(() => ({
   updateWorkspaceSetupCommand: vi.fn(),
   updateNamingPattern: vi.fn(),
+  deleteProject: vi.fn(),
 }));
 
 vi.mock("~/api", async (importOriginal) => {
@@ -25,6 +26,7 @@ vi.mock("~/api", async (importOriginal) => {
     ...actual,
     updateWorkspaceSetupCommand: apiHarness.updateWorkspaceSetupCommand,
     updateNamingPattern: apiHarness.updateNamingPattern,
+    deleteProject: apiHarness.deleteProject,
   };
 });
 
@@ -41,8 +43,8 @@ const PROJECT: Project = {
 let store = createStore();
 const setToast = vi.fn();
 
-const renderSection = (): RenderResult => {
-  const result = render(
+const renderReposSection = (): RenderResult =>
+  render(
     <QueryClientProvider client={queryClient}>
       <Provider store={store}>
         <MemoryRouter>
@@ -53,6 +55,9 @@ const renderSection = (): RenderResult => {
       </Provider>
     </QueryClientProvider>,
   );
+
+const renderSection = (): RenderResult => {
+  const result = renderReposSection();
   fireEvent.click(screen.getByTestId(ElementIds.SETTINGS_REPO_ROW_CONFIG_TOGGLE));
   return result;
 };
@@ -182,5 +187,28 @@ describe("a successful repo config save", () => {
     expect(getSetupCommandInput().value).toBe("make fast");
     expect(getNamingPatternInput().value).toBe("dev/{ticket}");
     expect(setToast).not.toHaveBeenCalled();
+  });
+});
+
+describe("a successful repo removal", () => {
+  it("leaves the project atom to the stream", async () => {
+    // A second repo keeps the section from reloading the page to re-run onboarding.
+    const otherProject: Project = {
+      ...PROJECT,
+      objectId: "prj-2",
+      name: "other",
+      userGitRepoUrl: "file:///home/dev/code/other",
+    };
+    store.set(updateProjectsAtom, [otherProject]);
+    apiHarness.deleteProject.mockResolvedValue({ data: undefined });
+    renderReposSection();
+
+    fireEvent.click(screen.getAllByTestId(ElementIds.SETTINGS_REMOVE_REPO_BUTTON)[0]);
+    fireEvent.click(await screen.findByTestId(ElementIds.SETTINGS_REMOVE_REPO_CONFIRM));
+    await act(flushMicrotasks);
+
+    expect(apiHarness.deleteProject).toHaveBeenCalledWith({ path: { project_id: PROJECT.objectId } });
+    expect(setToast).toHaveBeenCalledWith({ type: ToastType.SUCCESS, title: "Repository removed successfully" });
+    expect(store.get(projectAtomFamily(PROJECT.objectId))).toBe(PROJECT);
   });
 });
