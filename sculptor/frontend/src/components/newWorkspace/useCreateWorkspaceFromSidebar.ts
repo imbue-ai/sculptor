@@ -92,8 +92,10 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
       const modeRules = WORKSPACE_MODE_RULES[mode];
       const rememberedSourceBranch = sameRepoSettings?.sourceBranch ?? "";
       setIsPreparing(true);
+      const doesSeedCurrentBranch =
+        modeRules.sourceBranch.rule !== "unused" && modeRules.sourceBranch.seed === "current-branch";
       const sourceBranch =
-        modeRules.sourceBranch !== "unused" && !rememberedSourceBranch
+        doesSeedCurrentBranch && !rememberedSourceBranch
           ? await fetchCurrentBranchOrBlank(projectId)
           : rememberedSourceBranch;
       const branchName =

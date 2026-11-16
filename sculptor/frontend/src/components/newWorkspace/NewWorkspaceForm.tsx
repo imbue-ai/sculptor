@@ -29,7 +29,11 @@ import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { hasNoUsableModel } from "~/common/utils/modelConstants.ts";
 import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
-import { hasRequiredCreationFields, WORKSPACE_MODE_RULES } from "~/common/utils/workspaceModeRules.ts";
+import {
+  defaultSourceFor,
+  hasRequiredCreationFields,
+  WORKSPACE_MODE_RULES,
+} from "~/common/utils/workspaceModeRules.ts";
 import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
@@ -213,7 +217,10 @@ export const NewWorkspaceForm = ({
     shuffleNonce,
   });
 
-  const sourceBranch = useMemo(() => userSelectedBranch ?? repoInfo?.currentBranch, [userSelectedBranch, repoInfo]);
+  const sourceBranch = useMemo(
+    () => userSelectedBranch ?? defaultSourceFor({ mode, currentBranch: repoInfo?.currentBranch }),
+    [userSelectedBranch, mode, repoInfo],
+  );
   const modeRules = WORKSPACE_MODE_RULES[mode];
 
   // Effects — stash the form's entries whenever it unmounts, whatever closed
@@ -588,8 +595,8 @@ export const NewWorkspaceForm = ({
           <ModeSelect value={mode} onChange={handleModeChange} className={styles.toolbarPill} />
 
           {repoInfo ? (
-            modeRules.sourceBranch === "unused" ? (
-              <Tooltip content="In-place workspaces use the current branch in your repository">
+            modeRules.sourceBranch.rule === "unused" ? (
+              <Tooltip content={modeRules.sourceBranch.whyUnused}>
                 <span style={{ display: "flex" }}>
                   <BranchSelector
                     fetchRepoInfo={fetchRepoInfo}
