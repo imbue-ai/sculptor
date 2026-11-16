@@ -32,30 +32,6 @@ class _ReadOnlyGitRepoSharedMethods(_GitRepoSharedMethods, ABC):
         """Get a reference to the git repository."""
         ...
 
-    def is_branch_ref(self, branch: str) -> bool:
-        try:
-            self._run_git(["rev-parse", "--verify", f"refs/heads/{branch}"])
-            return True
-        except GitRepoError:
-            return False
-
-    def is_valid_branch_name(self, branch: str) -> bool:
-        """Whether `branch` is a legal git branch name.
-
-        Defers to `git check-ref-format --branch`, the authoritative validator,
-        so names git would reject (spaces, `:`, `~`, a trailing `.`, a leading
-        `-`, etc.) are caught before they reach `git worktree add -b`, which
-        would otherwise fail with an opaque error deep inside async environment
-        setup rather than at the point the name was chosen.
-        """
-        if not branch:
-            return False
-        try:
-            self._run_git(["check-ref-format", "--branch", branch])
-            return True
-        except GitRepoError:
-            return False
-
     def get_current_commit_hash(self) -> str:
         return self._run_git(["rev-parse", "HEAD"]).strip()
 

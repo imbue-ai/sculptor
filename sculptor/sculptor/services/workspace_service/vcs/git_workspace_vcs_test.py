@@ -3,6 +3,7 @@ import shlex
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -27,6 +28,8 @@ from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import DEFAULT_GIT_WORKSPACE_SETUP_COMMAND
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 
+_CHECKOUT_NAME = uuid4().hex
+
 
 def _git(cwd: Path, arguments: Sequence[str]) -> str:
     return run_blocking(["git", *arguments], cwd=cwd).stdout.strip()
@@ -49,7 +52,7 @@ def _branch_exists(repo: Path, branch: str) -> bool:
 
 
 def _in_place(repo: Path) -> CheckoutLocation:
-    return CheckoutLocation(repo_path=repo, checkout_path=repo)
+    return CheckoutLocation(repo_path=repo, checkout_path=repo, checkout_name=_CHECKOUT_NAME)
 
 
 def _record_git_arguments(directory: Path) -> Path:
@@ -88,7 +91,11 @@ def in_place_vcs(git_cli: GitCli, test_root_concurrency_group: ConcurrencyGroup)
 def worktree(worktree_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path) -> CheckoutLocation:
     """A worktree of `git_repo` on branch `feature`, created through the seam."""
     spec = CheckoutSpec(
-        repo_path=git_repo, checkout_path=tmp_path / "env" / "code", base_ref="main", new_ref_name="feature"
+        repo_path=git_repo,
+        checkout_path=tmp_path / "env" / "code",
+        base_ref="main",
+        new_ref_name="feature",
+        checkout_name=_CHECKOUT_NAME,
     )
     return worktree_vcs.create_checkout(spec)
 
@@ -105,7 +112,13 @@ def test_create_checkout_adds_a_worktree_on_a_new_branch_off_the_base(
 def test_create_checkout_fails_for_a_worktree_with_a_missing_base(
     worktree_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path
 ) -> None:
-    spec = CheckoutSpec(repo_path=git_repo, checkout_path=tmp_path / "code", base_ref="nope", new_ref_name="feature")
+    spec = CheckoutSpec(
+        repo_path=git_repo,
+        checkout_path=tmp_path / "code",
+        base_ref="nope",
+        new_ref_name="feature",
+        checkout_name=_CHECKOUT_NAME,
+    )
 
     with pytest.raises(VcsCommandError):
         worktree_vcs.create_checkout(spec)
@@ -113,23 +126,57 @@ def test_create_checkout_fails_for_a_worktree_with_a_missing_base(
     assert not _branch_exists(git_repo, "feature")
 
 
+def test_create_checkout_fails_for_a_worktree_whose_directory_already_has_files(
+    worktree_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path
+) -> None:
+    checkout_path = tmp_path / "code"
+    checkout_path.mkdir()
+    (checkout_path / "existing.txt").write_text("kept\n")
+    spec = CheckoutSpec(
+        repo_path=git_repo,
+        checkout_path=checkout_path,
+        base_ref="main",
+        new_ref_name="feature",
+        checkout_name=_CHECKOUT_NAME,
+    )
+
+    with pytest.raises(VcsCommandError):
+        worktree_vcs.create_checkout(spec)
+
+    assert (checkout_path / "existing.txt").read_text() == "kept\n"
+
+
 def test_create_checkout_requires_a_base_and_a_branch_for_a_worktree(
     worktree_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path
 ) -> None:
     with pytest.raises(InvalidCheckoutSpecError):
         worktree_vcs.create_checkout(
-            CheckoutSpec(repo_path=git_repo, checkout_path=tmp_path / "code", base_ref=None, new_ref_name="feature")
+            CheckoutSpec(
+                repo_path=git_repo,
+                checkout_path=tmp_path / "code",
+                base_ref=None,
+                new_ref_name="feature",
+                checkout_name=_CHECKOUT_NAME,
+            )
         )
     with pytest.raises(InvalidCheckoutSpecError):
         worktree_vcs.create_checkout(
-            CheckoutSpec(repo_path=git_repo, checkout_path=tmp_path / "code", base_ref="main", new_ref_name=None)
+            CheckoutSpec(
+                repo_path=git_repo,
+                checkout_path=tmp_path / "code",
+                base_ref="main",
+                new_ref_name=None,
+                checkout_name=_CHECKOUT_NAME,
+            )
         )
 
 
 def test_create_checkout_in_place_uses_the_repository_and_creates_nothing(
     in_place_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path
 ) -> None:
-    spec = CheckoutSpec(repo_path=git_repo, checkout_path=git_repo, base_ref=None, new_ref_name=None)
+    spec = CheckoutSpec(
+        repo_path=git_repo, checkout_path=git_repo, base_ref=None, new_ref_name=None, checkout_name=_CHECKOUT_NAME
+    )
 
     assert in_place_vcs.create_checkout(spec) == _in_place(git_repo)
     assert _git(git_repo, ["worktree", "list", "--porcelain"]).count("worktree ") == 1
@@ -141,14 +188,50 @@ def test_create_checkout_clones_and_creates_the_requested_branch(
     _git(git_repo, ["branch", "base"])
     destination = tmp_path / "env" / "code"
     destination.parent.mkdir()
-    spec = CheckoutSpec(repo_path=git_repo, checkout_path=destination, base_ref="base", new_ref_name="feature")
+    spec = CheckoutSpec(
+        repo_path=git_repo,
+        checkout_path=destination,
+        base_ref="base",
+        new_ref_name="feature",
+        checkout_name=_CHECKOUT_NAME,
+    )
 
     location = clone_vcs.create_checkout(spec)
 
-    assert location == CheckoutLocation(repo_path=git_repo, checkout_path=destination)
+    assert location == CheckoutLocation(repo_path=git_repo, checkout_path=destination, checkout_name=_CHECKOUT_NAME)
     assert (destination / ".git").is_dir()
     assert _git(destination, ["symbolic-ref", "--short", "HEAD"]) == "feature"
     assert not _branch_exists(git_repo, "feature")
+
+
+@pytest.mark.parametrize(
+    "initialization_strategy",
+    [
+        WorkspaceInitializationStrategy.IN_PLACE,
+        WorkspaceInitializationStrategy.CLONE,
+        WorkspaceInitializationStrategy.WORKTREE,
+    ],
+)
+def test_create_checkout_names_the_location_as_the_spec_does(
+    initialization_strategy: WorkspaceInitializationStrategy,
+    git_cli: GitCli,
+    test_root_concurrency_group: ConcurrencyGroup,
+    git_repo: Path,
+    tmp_path: Path,
+) -> None:
+    vcs = GitWorkspaceVcs(initialization_strategy, git_cli, test_root_concurrency_group)
+    destination = tmp_path / "env" / "code"
+    destination.parent.mkdir()
+    checkout_name = uuid4().hex
+    spec = CheckoutSpec(
+        repo_path=git_repo,
+        checkout_path=destination,
+        base_ref="main",
+        new_ref_name="feature",
+        checkout_name=checkout_name,
+    )
+
+    assert vcs.create_checkout(spec).checkout_name == checkout_name
 
 
 def test_verify_checkout_accepts_a_git_checkout(worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation) -> None:
@@ -229,7 +312,9 @@ def test_remove_checkout_survives_a_repository_that_is_gone(worktree_vcs: GitWor
     missing = tmp_path / "missing"
 
     worktree_vcs.remove_checkout(
-        CheckoutLocation(repo_path=missing, checkout_path=missing / "code"), "feature", "always"
+        CheckoutLocation(repo_path=missing, checkout_path=missing / "code", checkout_name=_CHECKOUT_NAME),
+        "feature",
+        "always",
     )
 
 
@@ -307,8 +392,27 @@ def test_validate_new_ref_name_accepts_an_unused_well_formed_name(
     assert worktree_vcs.validate_new_ref_name(git_repo, "feat/new").status == RefNameStatus.AVAILABLE
 
 
+def test_validate_new_ref_name_accepts_a_name_that_only_a_commit_has(
+    worktree_vcs: GitWorkspaceVcs, git_repo: Path
+) -> None:
+    commit_id = _git(git_repo, ["rev-parse", "HEAD"])
+
+    assert worktree_vcs.validate_new_ref_name(git_repo, commit_id[:12]).status == RefNameStatus.AVAILABLE
+
+
 def test_validate_new_ref_name_rejects_malformed_names(worktree_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
-    for name in ("", "bad..name", "-leading-dash", "has space", "trailing.lock"):
+    for name in (
+        "",
+        "bad..name",
+        "-leading-dash",
+        "has space",
+        "trailing.lock",
+        "trailing.",
+        "with:colon",
+        "with~tilde",
+        # A prompt pasted into the branch name field.
+        "imbue/board-demo-workspaceRun: git checkout -b dev/scu-1634-board-demo  (just create that branch, then stop).",
+    ):
         assert worktree_vcs.validate_new_ref_name(git_repo, name).status == RefNameStatus.MALFORMED, name
 
 
@@ -635,15 +739,10 @@ def test_discard_file_changes_rejects_paths_outside_the_checkout(
     assert traversal.error_message == "Path traversal is not allowed"
 
 
-def test_get_pull_request_refs_reports_the_branch_and_origin(
-    worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation, git_repo: Path
+def test_get_pull_request_refs_reports_the_checked_out_branch(
+    worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation
 ) -> None:
-    _git(git_repo, ["remote", "add", "origin", "git@github.com:owner/repo.git"])
-
-    refs = worktree_vcs.get_pull_request_refs(worktree)
-
-    assert refs.head_ref_names == ("feature",)
-    assert refs.origin_url == "git@github.com:owner/repo.git"
+    assert worktree_vcs.get_pull_request_refs(worktree).head_ref_names == ("feature",)
 
 
 def test_get_pull_request_refs_has_no_head_for_a_detached_checkout(
@@ -651,10 +750,7 @@ def test_get_pull_request_refs_has_no_head_for_a_detached_checkout(
 ) -> None:
     _git(git_repo, ["checkout", "-q", "--detach"])
 
-    refs = in_place_vcs.get_pull_request_refs(_in_place(git_repo))
-
-    assert refs.head_ref_names == ()
-    assert refs.origin_url is None
+    assert in_place_vcs.get_pull_request_refs(_in_place(git_repo)).head_ref_names == ()
 
 
 def test_agent_environment_adds_nothing_for_git(worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation) -> None:
@@ -689,7 +785,7 @@ def test_compute_change_fingerprint_is_none_outside_a_repository(
 def test_tripwire_escapes_operations_that_swallow_git_failures(in_place_vcs: GitWorkspaceVcs, tmp_path: Path) -> None:
     jj_workspace = tmp_path / "jj_workspace"
     (jj_workspace / ".jj").mkdir(parents=True)
-    location = CheckoutLocation(repo_path=jj_workspace, checkout_path=jj_workspace)
+    location = CheckoutLocation(repo_path=jj_workspace, checkout_path=jj_workspace, checkout_name=_CHECKOUT_NAME)
 
     with pytest.raises(GitCommandInJjWorkspaceError):
         in_place_vcs.compute_diff_artifact(location, target_ref="main", context_lines=3)

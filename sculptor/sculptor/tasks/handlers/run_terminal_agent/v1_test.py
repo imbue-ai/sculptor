@@ -18,6 +18,7 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
@@ -50,6 +51,7 @@ from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_age
 from sculptor.tasks.handlers.run_terminal_agent.v1 import _run_terminal_agent_in_environment
 from sculptor.tasks.handlers.run_terminal_agent.v1 import launch_command_for_start
 from sculptor.tasks.handlers.run_terminal_agent.v1 import run_terminal_agent_task_v1
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
 @pytest.fixture
@@ -105,6 +107,8 @@ def environment(
         project_id=project.object_id,
         concurrency_group=test_root_concurrency_group,
         repo_host_path=code_dir,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     try:
         yield environment

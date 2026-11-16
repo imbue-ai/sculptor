@@ -3,14 +3,14 @@ from abc import abstractmethod
 from pathlib import Path
 
 from sculptor.interfaces.agents.artifacts import DiffArtifact
-from sculptor.services.workspace_service.api import FileAtRefResult
-from sculptor.services.workspace_service.api import GitOperationResult
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitCommitHistory
 from sculptor.services.workspace_service.vcs.data_types import GitHeadIdentity
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.data_types import PullRequestRefs
 from sculptor.services.workspace_service.vcs.data_types import RefNameValidation
 from sculptor.services.workspace_service.vcs.data_types import RevisionDiff

@@ -8,6 +8,7 @@ import pytest
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.primitives.ids import LocalEnvironmentID
@@ -16,11 +17,13 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import UserReference
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.state.messages import Message
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
 @pytest.fixture
@@ -78,6 +81,8 @@ def environment(
         project_id=project.object_id,
         concurrency_group=test_root_concurrency_group,
         repo_host_path=code_dir,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     try:
         yield environment

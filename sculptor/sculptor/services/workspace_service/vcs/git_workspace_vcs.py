@@ -11,18 +11,18 @@ from loguru import logger
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.artifacts import DiffArtifact
-from sculptor.services.workspace_service.api import CommitFileChange
-from sculptor.services.workspace_service.api import CommitRecord
-from sculptor.services.workspace_service.api import FileAtRefResult
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
-from sculptor.services.workspace_service.api import GitOperationResult
 from sculptor.services.workspace_service.environment_manager.environments.clone_strategy import clone_repository
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
+from sculptor.services.workspace_service.vcs.data_types import CommitFileChange
+from sculptor.services.workspace_service.vcs.data_types import CommitRecord
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitCommitHistory
 from sculptor.services.workspace_service.vcs.data_types import GitHeadIdentity
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.data_types import PullRequestRefs
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.data_types import RefNameValidation
@@ -39,7 +39,6 @@ from sculptor.services.workspace_service.vcs.git_log_parsing import parse_name_s
 from sculptor.services.workspace_service.vcs.git_log_parsing import parse_numstat_lines
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
-from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
 # Fetches the origin remote if present, and succeeds silently when there is no
@@ -73,14 +72,18 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def create_checkout(self, spec: CheckoutSpec) -> CheckoutLocation:
         match self._initialization_strategy:
             case WorkspaceInitializationStrategy.IN_PLACE:
-                return CheckoutLocation(repo_path=spec.repo_path, checkout_path=spec.repo_path)
+                return CheckoutLocation(
+                    repo_path=spec.repo_path, checkout_path=spec.repo_path, checkout_name=spec.checkout_name
+                )
             case WorkspaceInitializationStrategy.CLONE:
                 self._create_clone(spec)
             case WorkspaceInitializationStrategy.WORKTREE:
                 self._create_worktree(spec)
             case _ as unreachable:
                 assert_never(unreachable)
-        return CheckoutLocation(repo_path=spec.repo_path, checkout_path=spec.checkout_path)
+        return CheckoutLocation(
+            repo_path=spec.repo_path, checkout_path=spec.checkout_path, checkout_name=spec.checkout_name
+        )
 
     def _create_clone(self, spec: CheckoutSpec) -> None:
         clone_repository(
@@ -617,19 +620,13 @@ class GitWorkspaceVcs(WorkspaceVcs):
         return result.returncode == 0
 
     def get_pull_request_refs(self, location: CheckoutLocation) -> PullRequestRefs:
-        """The checked-out branch as the only head candidate, plus the origin URL.
+        """The checked-out branch as the only head candidate.
 
         A detached HEAD has no candidate. Failures read as "nothing to look up",
         so PR polling reports no pull request rather than erroring.
         """
-        checkout = location.checkout_path
-        branch_name = self._read_checked_out_branch(checkout)
-        try:
-            origin_url = read_origin_url(self._git, checkout)
-        except VcsCommandError as e:
-            logger.debug("Cannot read the origin of {}: {}", checkout, e)
-            origin_url = None
-        return PullRequestRefs(head_ref_names=() if branch_name is None else (branch_name,), origin_url=origin_url)
+        branch_name = self._read_checked_out_branch(location.checkout_path)
+        return PullRequestRefs(head_ref_names=() if branch_name is None else (branch_name,))
 
     def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:
         return AgentVcsEnvironment()

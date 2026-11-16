@@ -17,6 +17,7 @@ from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRen
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.process_manager import ClaudeProcessManager
 from sculptor.config.user_config import UserConfig
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
@@ -29,6 +30,7 @@ from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
@@ -43,6 +45,7 @@ from sculptor.state.chat_state import QuestionOption
 from sculptor.state.chat_state import UserQuestion
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
 @pytest.fixture
@@ -59,6 +62,8 @@ def local_environment(
             project_id=ProjectID(),
             concurrency_group=test_root_concurrency_group,
             repo_host_path=repo_dir,
+            vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+            workspace_id=WorkspaceID(),
         )
         mock_cg = MagicMock(spec=ConcurrencyGroup)
         dep_service = DependencyManagementService.model_construct(concurrency_group=mock_cg)

@@ -34,6 +34,7 @@ from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
@@ -44,6 +45,10 @@ from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.terminal_agent_registry import registry as registry_module
 from sculptor.services.user_config.user_config import get_privacy_settings_for_telemetry
 from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
+from sculptor.services.workspace_service.vcs.data_types import RefNameValidation
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
@@ -360,6 +365,23 @@ def test_create_workspace_applies_the_branch_name_rules(
         assert expected_detail in response.json()["detail"]
 
 
+def test_create_workspace_conflicts_when_the_repository_cannot_be_read(
+    client: TestClient, test_project: Project, tmp_path: Path
+) -> None:
+    project_path = test_project.get_local_user_path()
+    moved_path = tmp_path / "moved-project-repo"
+    project_path.rename(moved_path)
+    try:
+        response = _post_create_workspace(
+            client, test_project, WorkspaceInitializationStrategy.WORKTREE, "main", "imbue/new-branch"
+        )
+    finally:
+        moved_path.rename(project_path)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == f"The repository at {project_path} could not be read"
+
+
 def test_start_task_returns_404_for_a_missing_project(client: TestClient) -> None:
     response = client.post(
         f"/api/v1/projects/{ProjectID()}/tasks",
@@ -435,6 +457,70 @@ def test_validate_new_branch_name_reports_validity_and_collision(
     # An existing branch (the fixture repo's default) is legal but collides.
     existing = _validate_new_branch_name(client, test_project, "main")
     assert existing == {"isValid": True, "alreadyExists": True}
+
+
+# Names git accepts and has no branch for, so only the workspace VCS can reject them.
+_NAME_THE_VCS_CALLS_MALFORMED = "imbue/vcs-says-malformed"
+_NAME_THE_VCS_CALLS_TAKEN = "imbue/vcs-says-taken"
+
+
+@pytest.fixture
+def vcs_name_verdicts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, str]]:
+    """Make the git VCS reject the two names above; returns the (repository, name) pairs it was asked about."""
+    asked: list[tuple[Path, str]] = []
+    status_by_name = {
+        _NAME_THE_VCS_CALLS_MALFORMED: RefNameStatus.MALFORMED,
+        _NAME_THE_VCS_CALLS_TAKEN: RefNameStatus.ALREADY_EXISTS,
+    }
+
+    def _validate(self: GitWorkspaceVcs, repo_path: Path, ref_name: str) -> RefNameValidation:
+        asked.append((repo_path, ref_name))
+        return RefNameValidation(ref_name=ref_name, status=status_by_name.get(ref_name, RefNameStatus.AVAILABLE))
+
+    monkeypatch.setattr(GitWorkspaceVcs, "validate_new_ref_name", _validate)
+    return asked
+
+
+def test_validate_new_branch_name_reports_what_the_workspace_vcs_decides(
+    client: TestClient, test_project: Project, vcs_name_verdicts: list[tuple[Path, str]]
+) -> None:
+    assert _validate_new_branch_name(client, test_project, _NAME_THE_VCS_CALLS_MALFORMED) == {
+        "isValid": False,
+        "alreadyExists": False,
+    }
+    assert _validate_new_branch_name(client, test_project, _NAME_THE_VCS_CALLS_TAKEN) == {
+        "isValid": True,
+        "alreadyExists": True,
+    }
+    assert _validate_new_branch_name(client, test_project, "imbue/vcs-says-available") == {
+        "isValid": True,
+        "alreadyExists": False,
+    }
+    assert {repo_path for repo_path, _ in vcs_name_verdicts} == {test_project.get_local_user_path()}
+
+
+@pytest.mark.parametrize(
+    ("requested_branch_name", "expected_status", "expected_detail"),
+    [
+        pytest.param(_NAME_THE_VCS_CALLS_MALFORMED, 400, "not a valid git branch name", id="malformed"),
+        pytest.param(_NAME_THE_VCS_CALLS_TAKEN, 409, "already exists", id="already-exists"),
+    ],
+)
+def test_create_workspace_rejects_the_branch_names_the_workspace_vcs_rejects(
+    client: TestClient,
+    test_project: Project,
+    vcs_name_verdicts: list[tuple[Path, str]],
+    requested_branch_name: str,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    response = _post_create_workspace(
+        client, test_project, WorkspaceInitializationStrategy.WORKTREE, "main", requested_branch_name
+    )
+
+    assert response.status_code == expected_status, response.text
+    assert expected_detail in response.json()["detail"]
+    assert vcs_name_verdicts == [(test_project.get_local_user_path(), requested_branch_name)]
 
 
 def test_terminal_agent_does_not_carry_a_model(
@@ -1634,3 +1720,30 @@ def test_setup_rerun_conflicts_when_setup_command_is_cleared(
 
     assert response.status_code == 409
     assert response.json()["detail"] == {"error": "no setup command configured"}
+
+
+def test_setup_rerun_conflicts_when_the_vcs_finds_the_checkout_unusable(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        transaction.update_project_fields(test_project.object_id, workspace_setup_command="true")
+        transaction.update_workspace_fields(workspace.object_id, environment_id=str(tmp_path / "environment"))
+    verified_checkout_names: list[str] = []
+
+    def _reject_checkout(self: GitWorkspaceVcs, location: CheckoutLocation) -> None:
+        verified_checkout_names.append(location.checkout_name)
+        raise EnvironmentNotFoundError(f"No usable checkout at {location.checkout_path}")
+
+    monkeypatch.setattr(GitWorkspaceVcs, "verify_checkout", _reject_checkout)
+
+    response = client.post(f"/api/v1/workspaces/{workspace.object_id}/setup/rerun")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {"error": "environment not ready"}
+    assert verified_checkout_names == [str(workspace.object_id)]

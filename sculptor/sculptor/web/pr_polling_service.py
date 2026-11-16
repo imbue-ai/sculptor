@@ -598,7 +598,11 @@ class PrPollingService(Service):
         checkout_path = self._workspace_service.get_workspace_working_directory(workspace, transaction)
         if checkout_path is None:
             return None
-        return CheckoutLocation(repo_path=project.get_local_user_path(), checkout_path=checkout_path)
+        return CheckoutLocation(
+            repo_path=project.get_local_user_path(),
+            checkout_path=checkout_path,
+            checkout_name=str(workspace.object_id),
+        )
 
     def _enqueue(self, workspace_id: WorkspaceID, delay: float) -> None:
         with self._pending_lock:

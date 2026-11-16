@@ -115,6 +115,7 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 from sculptor.interfaces.environments.base import ARTIFACTS_DIRECTORY
 from sculptor.interfaces.environments.base import STATE_DIRECTORY
 from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
+from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TypeIDPrefixMismatchError
@@ -176,6 +177,8 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
@@ -673,15 +676,25 @@ def _validate_workspace_creation_request(
 
     if not requested_branch_name:
         return
-    with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
-        if not repo.is_valid_branch_name(requested_branch_name):
+    vcs = services.workspace_service.get_workspace_vcs(initialization_strategy)
+    project_path = project.get_local_user_path()
+    try:
+        validation = vcs.validate_new_ref_name(project_path, requested_branch_name)
+    except VcsCommandError as e:
+        raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
+    match validation.status:
+        case RefNameStatus.AVAILABLE:
+            return
+        case RefNameStatus.MALFORMED:
             # Reject illegal ref names here so the user gets an actionable
-            # error at creation, rather than an opaque WorktreeError raised
-            # later when `git worktree add -b` runs during async environment
-            # setup (and is surfaced only in the agent panel).
+            # error at creation, rather than an opaque failure later when the
+            # checkout is created during async environment setup (and is
+            # surfaced only in the agent panel).
             raise HTTPException(status_code=400, detail=f"'{requested_branch_name}' is not a valid git branch name")
-        if repo.is_branch_ref(requested_branch_name):
+        case RefNameStatus.ALREADY_EXISTS:
             raise HTTPException(status_code=409, detail=f"Branch '{requested_branch_name}' already exists")
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 @router.post("/api/v1/projects/{project_id}/tasks")
@@ -904,7 +917,12 @@ def create_workspace_v2(
         update_most_recently_used_project(project_id=validated_project_id)
         logger.info("Created workspace {} for project {}", workspace.object_id, workspace_request.project_id)
         setup_command = (
-            resolve_workspace_setup_command(project.workspace_setup_command)
+            resolve_workspace_setup_command(
+                project.workspace_setup_command,
+                services.workspace_service.get_workspace_vcs(
+                    workspace.initialization_strategy
+                ).default_setup_command(),
+            )
             if workspace.initialization_strategy
             in (WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE)
             else None
@@ -1028,7 +1046,14 @@ def rerun_workspace_setup(
         initialization_strategy = workspace.initialization_strategy
         # Resolve through the project's tri-state default helper so a `None`
         # stored value runs the current default and `""` (user-cleared) blocks.
-        command = resolve_workspace_setup_command(project.workspace_setup_command) if project is not None else None
+        command = (
+            resolve_workspace_setup_command(
+                project.workspace_setup_command,
+                workspace_service.get_workspace_vcs(initialization_strategy).default_setup_command(),
+            )
+            if project is not None
+            else None
+        )
     if command is None or not command.strip():
         raise HTTPException(status_code=409, detail={"error": "no setup command configured"})
     if environment_id is None or project_id is None or project_path is None:
@@ -1037,13 +1062,18 @@ def rerun_workspace_setup(
         existing = workspace_service.setup_runner.get_state(workspace_id)
         if existing is not None and existing.status == "running":
             raise HTTPException(status_code=409, detail={"error": "setup already running"})
-    environment = workspace_service.environment_manager.resume_environment(
-        environment_id=environment_id,
-        project_path=project_path,
-        project_id=project_id,
-        concurrency_group=workspace_service.concurrency_group,
-        initialization_strategy=initialization_strategy,
-    )
+    try:
+        environment = workspace_service.environment_manager.resume_environment(
+            environment_id=environment_id,
+            project_path=project_path,
+            project_id=project_id,
+            concurrency_group=workspace_service.concurrency_group,
+            vcs=workspace_service.get_workspace_vcs(initialization_strategy),
+            workspace_id=WorkspaceID(workspace_id),
+            initialization_strategy=initialization_strategy,
+        )
+    except EnvironmentNotFoundError as e:
+        raise HTTPException(status_code=409, detail={"error": "environment not ready"}) from e
     state_dir = environment.to_host_path(environment.get_state_path())
     workspace_service.setup_runner.start(
         workspace_id=workspace_id,
@@ -3693,15 +3723,16 @@ def validate_new_branch_name(
     project_id: str,
     name: str,
     request: Request,
+    mode: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
     user_session: UserSession = Depends(get_user_session),
 ) -> NewBranchNameValidationResponse:
     """Validate a prospective new workspace branch name in the project's repo.
 
-    Reports whether `name` is a legal git ref (`is_valid`) and whether it
-    collides with an existing local branch (`already_exists`). Backs the Add
-    Workspace form's inline error; `create_workspace_v2` re-checks both as the
-    authoritative gate. When the name is illegal, the collision check is skipped
-    (git can't resolve an invalid ref anyway).
+    Reports whether `name` is a legal ref name (`is_valid`) and whether it
+    collides with an existing branch (`already_exists`), as the VCS of a `mode`
+    workspace decides. Backs the Add Workspace form's inline error;
+    `create_workspace_v2` re-checks both as the authoritative gate. An illegal
+    name is never reported as colliding.
     """
     validated_project_id = validate_project_id(project_id)
     services = get_services_from_request_or_websocket(request)
@@ -3719,13 +3750,21 @@ def validate_new_branch_name(
         if not project.is_path_accessible:
             return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
 
+    vcs = services.workspace_service.get_workspace_vcs(mode)
     try:
-        with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
-            is_valid = repo.is_valid_branch_name(trimmed)
-            already_exists = is_valid and repo.is_branch_ref(trimmed)
-            return NewBranchNameValidationResponse(is_valid=is_valid, already_exists=already_exists)
-    except GitRepoNotFoundError:
+        validation = vcs.validate_new_ref_name(project.get_local_user_path(), trimmed)
+    except VcsCommandError as e:
+        logger.debug("Cannot validate branch name {!r}: {}", trimmed, e)
         return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
+    match validation.status:
+        case RefNameStatus.AVAILABLE:
+            return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
+        case RefNameStatus.MALFORMED:
+            return NewBranchNameValidationResponse(is_valid=False, already_exists=False)
+        case RefNameStatus.ALREADY_EXISTS:
+            return NewBranchNameValidationResponse(is_valid=True, already_exists=True)
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 @router.get("/api/v1/projects/{project_id}/repo_info")

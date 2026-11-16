@@ -10,13 +10,19 @@ from sculptor.database.models import Project
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.git import get_repo_base_path
+from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import RequestID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.workspace_service.environment_manager.api import EnvironmentManager
 from sculptor.services.workspace_service.environment_manager.default_implementation import DefaultEnvironmentManager
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.testing.workspace_vcs import make_test_git_cli
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
 @pytest.fixture
@@ -66,6 +72,8 @@ def test_simple_local_environment_run(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     try:
         process = environment.run_process_in_background(["echo", "hello"], secrets={})
@@ -99,6 +107,8 @@ def test_simple_local_environment_run_with_content(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     try:
         process = environment.run_process_in_background(["cat", test_file_name], secrets={})
@@ -127,6 +137,8 @@ def test_create_environment_directly(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
 
     try:
@@ -149,6 +161,8 @@ def test_resume_environment(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     environment_id = environment.environment_id
     environment.close()
@@ -158,6 +172,8 @@ def test_resume_environment(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
 
     try:
@@ -183,6 +199,8 @@ def _create_clone_with_env_file(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.CLONE, concurrency_group),
+        workspace_id=WorkspaceID(),
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
     )
     environment_id = environment.environment_id
@@ -209,6 +227,8 @@ def test_resume_environment_recopies_env_file_in_clone_mode(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.CLONE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
         sculptor_folder=project_path / "fake_sculptor",
     )
@@ -239,6 +259,8 @@ def test_resume_environment_deletes_env_file_when_source_removed(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.CLONE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
         sculptor_folder=project_path / "fake_sculptor",
     )
@@ -250,3 +272,58 @@ def test_resume_environment_deletes_env_file_when_source_removed(
         assert not dest_env.exists()
     finally:
         resumed.destroy()
+
+
+class _CheckoutRejectingGitWorkspaceVcs(GitWorkspaceVcs):
+    """Git version control that finds every resumed checkout unusable, as another VCS may."""
+
+    def __init__(
+        self, initialization_strategy: WorkspaceInitializationStrategy, concurrency_group: ConcurrencyGroup
+    ) -> None:
+        super().__init__(initialization_strategy, make_test_git_cli(concurrency_group), concurrency_group)
+        self.verified_locations: list[CheckoutLocation] = []
+
+    def verify_checkout(self, location: CheckoutLocation) -> None:
+        self.verified_locations.append(location)
+        raise EnvironmentNotFoundError(f"No usable checkout at {location.checkout_path}")
+
+
+def test_resume_environment_fails_when_the_vcs_finds_the_checkout_unusable(
+    initial_commit_repo: tuple[Path, str],
+    test_root_concurrency_group: ConcurrencyGroup,
+    environment_manager: EnvironmentManager,
+    test_project: Project,
+) -> None:
+    project_path = initial_commit_repo[0]
+    workspace_id = WorkspaceID()
+    environment = environment_manager.create_environment(
+        project_path=project_path,
+        project_id=test_project.object_id,
+        concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.CLONE, test_root_concurrency_group),
+        workspace_id=workspace_id,
+        initialization_strategy=WorkspaceInitializationStrategy.CLONE,
+    )
+    environment_id = environment.environment_id
+    environment.close()
+    vcs = _CheckoutRejectingGitWorkspaceVcs(WorkspaceInitializationStrategy.CLONE, test_root_concurrency_group)
+
+    try:
+        with pytest.raises(EnvironmentNotFoundError):
+            environment_manager.resume_environment(
+                environment_id=environment_id,
+                project_path=project_path,
+                project_id=test_project.object_id,
+                concurrency_group=test_root_concurrency_group,
+                vcs=vcs,
+                workspace_id=workspace_id,
+                initialization_strategy=WorkspaceInitializationStrategy.CLONE,
+            )
+    finally:
+        environment_manager.delete_environment(environment_id)
+
+    assert vcs.verified_locations == [
+        CheckoutLocation(
+            repo_path=project_path, checkout_path=Path(environment_id) / "code", checkout_name=str(workspace_id)
+        )
+    ]

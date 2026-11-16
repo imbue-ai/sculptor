@@ -5,7 +5,6 @@ from typing import Literal
 from pydantic import Field
 
 from sculptor.foundation.pydantic_serialization import FrozenModel
-from sculptor.services.workspace_service.api import CommitRecord
 
 BranchDeletionPolicy = Literal["never", "delete_if_safe", "always"]
 """What `remove_checkout` does with the ref a workspace created; mirrors
@@ -21,6 +20,11 @@ class VcsCommandResult(FrozenModel):
     stderr: str
 
 
+_CHECKOUT_NAME_DESCRIPTION = (
+    "A unique, stable name for the checkout within its repository; Sculptor uses the workspace id"
+)
+
+
 class CheckoutSpec(FrozenModel):
     """What to create for a new workspace checkout."""
 
@@ -32,6 +36,7 @@ class CheckoutSpec(FrozenModel):
     new_ref_name: str | None = Field(
         description="The ref created for the workspace; None (clone only) leaves the base checked out"
     )
+    checkout_name: str = Field(description=_CHECKOUT_NAME_DESCRIPTION)
 
 
 class CheckoutLocation(FrozenModel):
@@ -39,6 +44,7 @@ class CheckoutLocation(FrozenModel):
 
     repo_path: Path = Field(description="The user's repository the checkout was made from")
     checkout_path: Path = Field(description="The directory holding the checkout's files")
+    checkout_name: str = Field(description=_CHECKOUT_NAME_DESCRIPTION)
 
 
 class RefNameStatus(StrEnum):
@@ -52,6 +58,29 @@ class RefNameValidation(FrozenModel):
 
     ref_name: str
     status: RefNameStatus
+
+
+class CommitFileChange(FrozenModel):
+    """Per-file change within a single commit."""
+
+    path: str
+    status: Literal["M", "A", "D", "R"]
+    old_path: str | None
+    additions: int
+    deletions: int
+
+
+class CommitRecord(FrozenModel):
+    """A single commit in a workspace branch's history."""
+
+    hash: str
+    short_hash: str
+    message: str
+    author_name: str
+    author_email: str
+    timestamp: str
+    parent_hashes: list[str]
+    files: list[CommitFileChange]
 
 
 class GitHeadIdentity(FrozenModel):
@@ -79,13 +108,28 @@ class RevisionDiff(FrozenModel):
     parent_commit_id: str | None = Field(description="None for a root commit")
 
 
+class GitOperationResult(FrozenModel):
+    """Result of a git operation (commit, etc.)."""
+
+    success: bool
+    stdout: str
+    stderr: str
+    error_message: str | None = None
+
+
+class FileAtRefResult(FrozenModel):
+    """Result of reading a file at a specific git ref."""
+
+    content: str
+    encoding: Literal["utf-8", "base64"]
+
+
 class PullRequestRefs(FrozenModel):
     """What PR polling needs to find a workspace's pull request."""
 
     head_ref_names: tuple[str, ...] = Field(
         description="Candidate PR head names, most likely first; empty when there is nothing to look up"
     )
-    origin_url: str | None = Field(description="The `origin` remote's URL; None when there is no origin")
 
 
 class AgentVcsEnvironment(FrozenModel):

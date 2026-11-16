@@ -45,9 +45,6 @@ from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
-from sculptor.services.workspace_service.api import CommitRecord
-from sculptor.services.workspace_service.api import FileAtRefResult
-from sculptor.services.workspace_service.api import GitOperationResult
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceService
@@ -70,6 +67,9 @@ from sculptor.services.workspace_service.setup_command_runner import SetupStateC
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.services.workspace_service.vcs.checkout_paths import workspace_checkout_path
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.data_types import CommitRecord
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
@@ -187,7 +187,10 @@ class DefaultWorkspaceService(WorkspaceService):
                 # current default (so we keep `pending` and the runner picks it
                 # up on first open), an empty string means the user explicitly
                 # cleared it (demote to `not_configured`).
-                command = resolve_workspace_setup_command(project.workspace_setup_command)
+                command = resolve_workspace_setup_command(
+                    project.workspace_setup_command,
+                    self.get_workspace_vcs(workspace.initialization_strategy).default_setup_command(),
+                )
                 if not command:
                     self._persist_setup_state(
                         SetupStateChanged(
@@ -249,7 +252,7 @@ class DefaultWorkspaceService(WorkspaceService):
             git_cli=GitCli(workspace_concurrency_group, dependency_management_service.resolve_binary_path),
         )
 
-    def _get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
+    def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
         match initialization_strategy:
             case (
                 WorkspaceInitializationStrategy.IN_PLACE
@@ -302,10 +305,11 @@ class DefaultWorkspaceService(WorkspaceService):
         if description is None:
             description = uuid.uuid4().hex[:8]
 
-        # Record the user's HEAD as the workspace's starting point.
+        # Record the commit the workspace starts from: its source branch's, or
+        # the user's checked-out commit when it has none.
         project_path = project.get_local_user_path()
-        vcs = self._get_workspace_vcs(initialization_strategy)
-        source_git_hash = vcs.resolve_base_commit_id(project_path, "HEAD")
+        vcs = self.get_workspace_vcs(initialization_strategy)
+        source_git_hash = vcs.resolve_base_commit_id(project_path, source_branch or "HEAD")
 
         # Use the caller-provided target branch if given, otherwise resolve a
         # sensible default from the user's repo.
@@ -316,7 +320,9 @@ class DefaultWorkspaceService(WorkspaceService):
         # "use the current default", `""` means "user cleared", and any other
         # value is the user's custom command. Setup runs on any fresh isolated
         # checkout — both CLONE and WORKTREE.
-        resolved_setup_command = resolve_workspace_setup_command(project.workspace_setup_command)
+        resolved_setup_command = resolve_workspace_setup_command(
+            project.workspace_setup_command, vcs.default_setup_command()
+        )
         has_command = resolved_setup_command is not None and resolved_setup_command != ""
         is_clone_or_worktree = initialization_strategy in (
             WorkspaceInitializationStrategy.CLONE,
@@ -403,7 +409,7 @@ class DefaultWorkspaceService(WorkspaceService):
             environment_id = workspace.environment_id
             environment_manager = self.environment_manager
             requested_branch_name = workspace.requested_branch_name
-            vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+            vcs = self.get_workspace_vcs(workspace.initialization_strategy)
             try:
                 checkout_location: CheckoutLocation | None = self._get_checkout_location(workspace, transaction)
             except WorkspaceNotFoundError:
@@ -429,16 +435,19 @@ class DefaultWorkspaceService(WorkspaceService):
                 setup_runner.cancel(str(workspace_id))
                 # Detach the checkout from the user's repository before the rmtree
                 # below, so a worktree's gitfile entry is cleaned up and the branch
-                # deletion policy is applied.
-                if checkout_location is None:
-                    logger.info("Skipping checkout removal for workspace {}: its project is gone", workspace_id)
-                else:
-                    vcs.remove_checkout(
-                        checkout_location,
-                        requested_branch_name,
-                        get_user_config_instance().workspace_branch_deletion_policy,
-                    )
-                environment_manager.delete_environment(environment_id)
+                # deletion policy is applied. The environment directory is removed
+                # even if detaching fails.
+                try:
+                    if checkout_location is None:
+                        logger.info("Skipping checkout removal for workspace {}: its project is gone", workspace_id)
+                    else:
+                        vcs.remove_checkout(
+                            checkout_location,
+                            requested_branch_name,
+                            get_user_config_instance().workspace_branch_deletion_policy,
+                        )
+                finally:
+                    environment_manager.delete_environment(environment_id)
                 logger.info("Deleted environment {} for workspace {}", environment_id, workspace_id)
 
             # Run the slow teardown (worktree removal + shutil.rmtree of the whole
@@ -513,6 +522,8 @@ class DefaultWorkspaceService(WorkspaceService):
                     project_path=project_path,
                     project_id=project.object_id,
                     concurrency_group=concurrency_group,
+                    vcs=self.get_workspace_vcs(workspace.initialization_strategy),
+                    workspace_id=workspace.object_id,
                     initialization_strategy=workspace.initialization_strategy,
                     env_var_override=env_var_override,
                 )
@@ -540,6 +551,8 @@ class DefaultWorkspaceService(WorkspaceService):
                         project_path=project_path,
                         project_id=project.object_id,
                         concurrency_group=concurrency_group,
+                        vcs=self.get_workspace_vcs(workspace.initialization_strategy),
+                        workspace_id=workspace.object_id,
                         initialization_strategy=workspace.initialization_strategy,
                         source_branch=workspace.source_branch,
                         requested_branch_name=workspace.requested_branch_name,
@@ -636,7 +649,14 @@ class DefaultWorkspaceService(WorkspaceService):
                 # Resolve the project's tri-state setup command: `None` means
                 # "use the current default", `""` means "user cleared, run nothing",
                 # and any other value is the user's custom command.
-                setup_command_to_run = resolve_workspace_setup_command(project.workspace_setup_command)
+                setup_command_to_run = (
+                    None
+                    if workspace is None
+                    else resolve_workspace_setup_command(
+                        project.workspace_setup_command,
+                        self.get_workspace_vcs(workspace.initialization_strategy).default_setup_command(),
+                    )
+                )
                 if (
                     workspace is not None
                     and workspace.setup_status == "pending"
@@ -732,7 +752,9 @@ class DefaultWorkspaceService(WorkspaceService):
         checkout_path = workspace_checkout_path(workspace, repo_path)
         if checkout_path is None:
             raise WorkspaceNotFoundError(workspace.object_id)
-        return CheckoutLocation(repo_path=repo_path, checkout_path=checkout_path)
+        return CheckoutLocation(
+            repo_path=repo_path, checkout_path=checkout_path, checkout_name=str(workspace.object_id)
+        )
 
     def refresh_workspace_diff(
         self,
@@ -771,7 +793,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 target_branch = workspace.target_branch if include_target_branch_diff else None
 
             # Generate the diff artifact (outside transaction — may be slow)
-            vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+            vcs = self.get_workspace_vcs(workspace.initialization_strategy)
             diff_artifact = vcs.compute_diff_artifact(location, target_branch, effective_context_lines)
 
             # Store the artifact to disk
@@ -895,7 +917,7 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         result = vcs.discard_file_changes(location, file_path)
         self.maybe_refresh_workspace_diff(workspace_id)
         return result
@@ -912,7 +934,7 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         revision_diff = vcs.get_revision_diff(location, commit_hash)
         return (revision_diff.diff, revision_diff.commit_id, revision_diff.parent_commit_id)
 
@@ -927,7 +949,7 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         history = vcs.get_revision_history(
             location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
         )
@@ -946,7 +968,7 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         try:
             return vcs.list_files(location)
         except CheckoutFilesUnavailableError as e:
@@ -966,5 +988,5 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         return vcs.read_file_at_revision(location, file_path, git_ref)

@@ -2,12 +2,14 @@ import shutil
 from pathlib import Path
 
 from sculptor.config.user_config import DependencyPaths
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
@@ -16,6 +18,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.vcs.turn_diff_tracker import make_turn_diff_tracker
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
 def _in_place_environment(
@@ -27,6 +30,8 @@ def _in_place_environment(
         project_id=ProjectID(),
         concurrency_group=concurrency_group,
         repo_host_path=repo,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, concurrency_group),
+        workspace_id=WorkspaceID(),
         sculptor_folder=workspace / "sculptor_folder",
     )
     dependency_management_service = DependencyManagementService(

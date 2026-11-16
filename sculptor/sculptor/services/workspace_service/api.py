@@ -3,7 +3,6 @@ from abc import abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
-from typing import Literal
 from typing import TYPE_CHECKING
 
 from sculptor.database.models import Project
@@ -13,7 +12,6 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.errors import ExpectedError
 from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
-from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import TaskID
@@ -28,65 +26,26 @@ if TYPE_CHECKING:
     from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.services.workspace_service.vcs.data_types import CommitRecord
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
-# The default workspace setup command when a project has not configured one.
-# Fetches the origin remote if present; succeeds silently if origin is missing
-# (e.g. repos without an `origin` remote) so workspace startup isn't blocked.
-DEFAULT_WORKSPACE_SETUP_COMMAND = "git fetch origin 2>/dev/null || true"
 
-
-def resolve_workspace_setup_command(stored_command: str | None) -> str | None:
+def resolve_workspace_setup_command(stored_command: str | None, default_command: str) -> str | None:
     """Resolve a project's stored setup command to the command that should actually run.
 
     Tri-state semantics:
-    - ``None``: project has never been configured → run the current default.
+    - ``None``: project has never been configured → run ``default_command``,
+      the workspace VCS's ``default_setup_command()``.
     - ``""``: user explicitly cleared the command → run nothing.
     - other string: user's custom command → run as-is.
     """
     if stored_command is None:
-        return DEFAULT_WORKSPACE_SETUP_COMMAND
+        return default_command
     if stored_command == "":
         return None
     return stored_command
-
-
-class GitOperationResult(FrozenModel):
-    """Result of a git operation (commit, etc.)."""
-
-    success: bool
-    stdout: str
-    stderr: str
-    error_message: str | None = None
-
-
-class FileAtRefResult(FrozenModel):
-    """Result of reading a file at a specific git ref."""
-
-    content: str
-    encoding: Literal["utf-8", "base64"]
-
-
-class CommitFileChange(FrozenModel):
-    """Per-file change within a single commit."""
-
-    path: str
-    status: Literal["M", "A", "D", "R"]
-    old_path: str | None
-    additions: int
-    deletions: int
-
-
-class CommitRecord(FrozenModel):
-    """A single commit in a workspace branch's history."""
-
-    hash: str
-    short_hash: str
-    message: str
-    author_name: str
-    author_email: str
-    timestamp: str
-    parent_hashes: list[str]
-    files: list[CommitFileChange]
 
 
 class WorkspaceNotFoundError(ExpectedError):
@@ -157,6 +116,10 @@ class WorkspaceService(Service, ABC):
         the scanning machinery. Returns None when the branch is unknown (the
         workspace hasn't been scanned yet, or the scanner isn't running).
         """
+
+    @abstractmethod
+    def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
+        """The version control for workspaces of the given kind."""
 
     # Workspace Operations
 

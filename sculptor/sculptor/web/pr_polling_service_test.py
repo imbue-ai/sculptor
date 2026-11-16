@@ -171,7 +171,7 @@ def _register_checkout(
     state = _WorkspacePollState(
         workspace_id=workspace_id,
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
-        checkout_location=CheckoutLocation(repo_path=repo, checkout_path=checkout),
+        checkout_location=CheckoutLocation(repo_path=repo, checkout_path=checkout, checkout_name=str(workspace_id)),
         target_branch=target_branch,
         is_open=True,
     )
@@ -965,7 +965,9 @@ def _candidate(
     svc._workspace_poll_state[workspace_id] = _WorkspacePollState(
         workspace_id=workspace_id,
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
-        checkout_location=CheckoutLocation(repo_path=_WORKING_DIR, checkout_path=_WORKING_DIR),
+        checkout_location=CheckoutLocation(
+            repo_path=_WORKING_DIR, checkout_path=_WORKING_DIR, checkout_name=str(workspace_id)
+        ),
         target_branch=target_branch,
         is_open=is_open,
     )

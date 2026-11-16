@@ -249,12 +249,6 @@ class _StubGitRepo(ReadOnlyGitRepo):
     def get_current_git_branch(self) -> str:
         return _stub()
 
-    def is_branch_ref(self, branch: str) -> bool:
-        return _stub(branch)
-
-    def is_valid_branch_name(self, branch: str) -> bool:
-        return _stub(branch)
-
     def _run_git(self, args: list[str]) -> str:
         return _stub(args)
 
