@@ -1258,8 +1258,13 @@ class DependencyManagementService(Service):
 
         Running no jj, this can trail a change made outside Sculptor, so a gate
         about to let jj act on the user's repository calls `probe_jj_readiness`.
+        Before the first status is computed it probes jj alone, rather than
+        every tool, and stores nothing.
         """
-        return self.get_status().jj_readiness
+        status = self._status
+        if status is None:
+            return self.probe_jj_readiness()
+        return status.jj_readiness
 
     def probe_jj_readiness(self) -> JjReadiness:
         """JJ_AVAILABLE as jj reports it now, for a gate about to let jj act on the user's repository."""

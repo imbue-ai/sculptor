@@ -101,7 +101,7 @@ def test_probing_jj_readiness_finds_an_identity_removed_since_the_status_was_com
     service: DependencyManagementService,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert service.get_jj_readiness() == JjAvailable(
+    assert service.get_status().jj_readiness == JjAvailable(
         blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL)
     )
     monkeypatch.delenv("JJ_USER")
@@ -115,3 +115,14 @@ def test_probing_jj_readiness_finds_an_identity_removed_since_the_status_was_com
         blocker=JjBlocker.NO_IDENTITY,
         suggested_identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL),
     )
+
+
+def test_reading_jj_readiness_before_any_status_is_computed_runs_only_jj_and_stores_nothing(
+    recording_git_and_jj: RecordingBinaries,  # noqa: F811
+    service: DependencyManagementService,
+) -> None:
+    readiness = service.get_jj_readiness()
+
+    assert isinstance(readiness, JjAvailable)
+    assert [run.split()[0] for run in recording_git_and_jj.read_runs()] == ["jj", "jj"]
+    assert service.get_last_computed_status() is None
