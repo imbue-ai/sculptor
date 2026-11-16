@@ -139,18 +139,6 @@ def test_the_revisions_of_a_git_workspace_conflict(
     assert "commits" in response.json()["detail"]
 
 
-def test_the_revisions_of_a_jj_workspace_with_a_stale_working_copy_conflict(
-    client: TestClient, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo, jj_workspace_row: Workspace
-) -> None:
-    assert jj_workspace_row.environment_id is not None
-    make_workspace_stale(jj_binary, jj_colocated_repo.path, Path(jj_workspace_row.environment_id) / "code")
-
-    response = client.get(f"/api/v1/workspaces/{jj_workspace_row.object_id}/revisions")
-
-    assert response.status_code == 409, response.text
-    assert "stale" in response.json()["detail"]
-
-
 def test_the_revisions_of_an_unknown_workspace_are_not_found(client: TestClient) -> None:
     response = client.get(f"/api/v1/workspaces/{WorkspaceID()}/revisions")
 
@@ -204,6 +192,31 @@ def test_a_stale_jj_workspace_reports_stale_and_recovers_on_request(
     _wait_for_jj_state(queue, workspace_id, lambda state: not state.is_working_copy_stale)
     # `jj status` snapshots, so it fails while the working copy is stale.
     run_jj(jj_binary, ("status",), cwd=checkout)
+
+
+def test_a_stale_jj_workspace_serves_its_revisions_as_last_recorded_and_reports_stale(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_workspace_row: Workspace,
+) -> None:
+    workspace_id = jj_workspace_row.object_id
+    assert jj_workspace_row.environment_id is not None
+    checkout = Path(jj_workspace_row.environment_id) / "code"
+    (checkout / "notes.md").write_text("notes\n")
+    run_jj(jj_binary, ("commit", "-m", "Add notes"), cwd=checkout)
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    test_services.workspace_service.add_observer(queue)
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout)
+
+    response = client.get(f"/api/v1/workspaces/{workspace_id}/revisions")
+
+    assert response.status_code == 200, response.text
+    working_copy, described = response.json()["revisions"]
+    assert working_copy["isWorkingCopy"]
+    assert described["description"] == "Add notes"
+    _wait_for_jj_state(queue, workspace_id, lambda state: state.is_working_copy_stale)
 
 
 def test_updating_the_working_copy_of_a_git_workspace_conflicts(

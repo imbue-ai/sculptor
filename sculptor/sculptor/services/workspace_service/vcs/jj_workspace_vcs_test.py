@@ -932,6 +932,33 @@ def test_get_revision_history_is_empty_without_any_fork_point(
     assert history == JjRevisionHistory(revisions=(), fork_point=None)
 
 
+def test_get_revision_history_raises_for_a_stale_workspace(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout.checkout_path)
+
+    with pytest.raises(JjWorkingCopyStaleError):
+        jj_vcs.get_revision_history(checkout, target_ref=_BASE, base_commit_id=None)
+
+
+def test_get_recorded_revision_history_reads_a_stale_workspace_as_last_recorded_without_an_operation(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout.checkout_path)
+    operations_before = _count_operations(jj_binary, jj_colocated_repo.path)
+
+    history = jj_vcs.get_recorded_revision_history(checkout, target_ref=_BASE, base_commit_id=None)
+
+    assert history.fork_point == _commit_id(jj_binary, jj_colocated_repo.path, "main@origin")
+    working_copy, first = history.revisions
+    assert working_copy.is_working_copy
+    # The edit snapshotted before the operation restore is not in the working copy as recorded.
+    assert working_copy.files == ()
+    assert first.description == "first"
+    assert _count_operations(jj_binary, jj_colocated_repo.path) == operations_before
+
+
 def test_get_revision_diff_diffs_a_revision_against_its_parent(
     jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
 ) -> None:

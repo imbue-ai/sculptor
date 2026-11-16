@@ -1,12 +1,14 @@
 import json
 import threading
 import uuid
+from collections.abc import Callable
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from queue import Queue
 from typing import Generator
 from typing import Self
+from typing import TypeVar
 from typing import assert_never
 from typing import cast
 
@@ -113,6 +115,8 @@ _DIFF_METADATA_FILENAME = "DIFF.meta.json"
 # the maximum a caller is allowed to request.
 _DEFAULT_DIFF_CONTEXT_LINES = 3
 _MAX_DIFF_CONTEXT_LINES = 50
+
+_SnapshottingResultT = TypeVar("_SnapshottingResultT")
 
 
 class DefaultWorkspaceService(WorkspaceService):
@@ -315,8 +319,10 @@ class DefaultWorkspaceService(WorkspaceService):
         vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         assert isinstance(vcs, JjWorkspaceVcs), "jj workspaces have jj version control"
         try:
-            with self._tracking_stale_working_copy(workspace.object_id):
-                outcome = vcs.create_initial_bookmark(location, workspace.target_branch, requested_bookmark)
+            outcome = self._run_tracking_stale_working_copy(
+                workspace.object_id,
+                lambda: vcs.create_initial_bookmark(location, workspace.target_branch, requested_bookmark),
+            )
         except VcsCommandError as e:
             logger.debug("Cannot create bookmark {} in workspace {}: {}", requested_bookmark, workspace.object_id, e)
             return None
@@ -999,8 +1005,9 @@ class DefaultWorkspaceService(WorkspaceService):
 
             # Generate the diff artifact (outside transaction — may be slow)
             vcs = self.get_workspace_vcs(workspace.initialization_strategy)
-            with self._tracking_stale_working_copy(workspace_id):
-                diff_artifact = vcs.compute_diff_artifact(location, target_branch, effective_context_lines)
+            diff_artifact = self._run_tracking_stale_working_copy(
+                workspace_id, lambda: vcs.compute_diff_artifact(location, target_branch, effective_context_lines)
+            )
 
             # Store the artifact to disk
             artifact_dir = self._get_workspace_artifact_dir(workspace_id)
@@ -1040,15 +1047,26 @@ class DefaultWorkspaceService(WorkspaceService):
         finally:
             lock.release()
 
-    @contextmanager
-    def _tracking_stale_working_copy(self, workspace_id: WorkspaceID) -> Generator[None, None, None]:
-        """Mark the workspace stale when the snapshotting call inside fails as stale, and fresh when it succeeds."""
+    def _run_tracking_stale_working_copy(
+        self,
+        workspace_id: WorkspaceID,
+        run: Callable[[], _SnapshottingResultT],
+        run_when_stale: Callable[[], _SnapshottingResultT] | None = None,
+    ) -> _SnapshottingResultT:
+        """Run a snapshotting call, marking the workspace fresh when it succeeds and stale when it fails as stale.
+
+        With `run_when_stale`, a stale working copy is answered by that call, which
+        must not snapshot; without it, the stale error is raised.
+        """
         try:
-            yield
+            result = run()
         except JjWorkingCopyStaleError:
             self._stale_working_copies.mark_stale(workspace_id)
-            raise
+            if run_when_stale is None:
+                raise
+            return run_when_stale()
         self._stale_working_copies.mark_fresh(workspace_id)
+        return result
 
     def maybe_refresh_workspace_diff(
         self,
@@ -1193,10 +1211,14 @@ class DefaultWorkspaceService(WorkspaceService):
 
         location = self._get_checkout_location(workspace, transaction)
         vcs = self.get_workspace_vcs(workspace.initialization_strategy)
-        with self._tracking_stale_working_copy(workspace_id):
-            return vcs.get_revision_history(
+        return self._run_tracking_stale_working_copy(
+            workspace_id,
+            lambda: vcs.get_revision_history(
                 location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
-            )
+            ),
+            # A stale workspace still shows its revisions, as its repository last recorded them.
+            lambda: _read_recorded_revision_history(vcs, location, workspace),
+        )
 
     def update_stale_working_copy(self, workspace_id: WorkspaceID, transaction: DataModelTransaction) -> None:
         workspace = transaction.get_workspace(workspace_id)
@@ -1255,3 +1277,12 @@ class DefaultWorkspaceService(WorkspaceService):
         location = self._get_checkout_location(workspace, transaction)
         vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         return vcs.read_file_at_revision(location, file_path, git_ref)
+
+
+def _read_recorded_revision_history(
+    vcs: WorkspaceVcs, location: CheckoutLocation, workspace: Workspace
+) -> JjRevisionHistory:
+    assert isinstance(vcs, JjWorkspaceVcs), "only a jj workspace's working copy goes stale"
+    return vcs.get_recorded_revision_history(
+        location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
+    )
