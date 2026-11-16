@@ -22,10 +22,12 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.jj_workspace_poller import JjWorkspacePoller
 from sculptor.services.workspace_service.stale_working_copy_registry import StaleWorkingCopyRegistry
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
+from sculptor.services.workspace_service.vcs.jj_workspace_vcs import JjWorkspaceVcs
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import run_jj
+from sculptor.testing.workspace_vcs import make_test_git_cli
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.data_types import WorkspaceTargetBranchesInfo
@@ -261,6 +263,44 @@ def test_a_workspaces_own_bookmarks_are_not_offered_as_its_targets(harness: _Har
         targets for workspace_id, targets in targets_by_workspace.items() if workspace_id != other.object_id
     )
     assert "own" not in own_targets.target_branches
+
+
+def test_every_offered_target_is_one_the_workspaces_vcs_accepts_as_a_target(
+    harness: _Harness, test_root_concurrency_group: ConcurrencyGroup, jj_binary: JjBinary
+) -> None:
+    workspace, checkout = harness.add_workspace()
+    harness.jj(checkout, "commit", "-m", "side a")
+    harness.jj(checkout, "bookmark", "create", "-r", "@-", "own")
+    harness.jj(checkout, "new", "-m", "side b", "main")
+    harness.jj(checkout, "commit", "-m", "side b")
+    operation_before_bookmark = harness.jj(
+        checkout, "--ignore-working-copy", "op", "log", "--no-graph", "--limit", "1", "-T", "id"
+    )
+    harness.jj(checkout, "bookmark", "create", "-r", "@-", "forked")
+    harness.jj(
+        checkout,
+        "--at-op",
+        operation_before_bookmark,
+        "--ignore-working-copy",
+        "bookmark",
+        "create",
+        "forked",
+        "-r",
+        "own",
+    )
+    vcs = JjWorkspaceVcs(
+        JjCli(test_root_concurrency_group, lambda tool: str(jj_binary.path) if tool is Dependency.JJ else None),
+        make_test_git_cli(test_root_concurrency_group),
+        lambda: 10,
+    )
+
+    (targets,) = _targets(harness.scan())
+
+    state = harness.poller.get_jj_state(workspace.object_id)
+    assert state is not None
+    accepted_targets = vcs.list_target_candidates(harness.repo.path)
+    assert set(targets.target_branches) | set(state.bookmarks) == set(accepted_targets)
+    assert "forked" not in accepted_targets
 
 
 def test_a_stale_mark_is_published_and_cleared_without_running_jj(harness: _Harness) -> None:

@@ -46,7 +46,6 @@ from sculptor.services.workspace_service.vcs.git_repo_queries import is_well_for
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
-from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionRecord
@@ -63,10 +62,10 @@ from sculptor.services.workspace_service.vcs.jj_repo_queries import read_remotes
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_workspace_config_path
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_commit_id
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_trunk_symbol
+from sculptor.services.workspace_service.vcs.jj_repo_queries import select_target_candidates
 from sculptor.services.workspace_service.vcs.jj_repo_queries import set_workspace_config
 from sculptor.services.workspace_service.vcs.jj_repo_queries import snapshot_working_copy
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
-from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import is_full_commit_id
 from sculptor.services.workspace_service.vcs.jj_revsets import local_bookmark_revset
 from sculptor.services.workspace_service.vcs.jj_revsets import parse_bookmark_symbol
@@ -336,11 +335,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
 
     def list_target_candidates(self, repo_path: Path) -> list[str]:
         """Every local and remote bookmark that points at one commit, as a jj symbol such as `main@origin`."""
-        return [
-            format_bookmark_symbol(JjBookmarkSymbol(name=bookmark.name, remote=bookmark.remote))
-            for bookmark in list_bookmarks(self._jj, repo_path)
-            if bookmark.commit_id is not None
-        ]
+        return select_target_candidates(list_bookmarks(self._jj, repo_path))
 
     def validate_new_ref_name(self, repo_path: Path, ref_name: str) -> RefNameValidation:
         """A bookmark name must be a valid git branch name without `@`, and unused locally, on every remote and in git.

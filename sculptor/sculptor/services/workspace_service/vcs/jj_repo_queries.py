@@ -70,6 +70,18 @@ def list_bookmarks(jj: JjCli, repo_dir: Path) -> list[JjBookmark]:
     return [bookmark for bookmark in bookmarks if bookmark.remote != _GIT_TRACKING_REMOTE]
 
 
+def select_target_candidates(bookmarks: Sequence[JjBookmark]) -> list[str]:
+    """The bookmarks a workspace may target, as jj symbols such as `main@origin`.
+
+    Each must point at one commit, so a conflicted or absent bookmark is left out.
+    """
+    return [
+        format_bookmark_symbol(JjBookmarkSymbol(name=bookmark.name, remote=bookmark.remote))
+        for bookmark in bookmarks
+        if bookmark.commit_id is not None
+    ]
+
+
 def list_tracked_bookmark_names(jj: JjCli, repo_dir: Path, revset: JjRevset) -> set[str]:
     """The local bookmarks on `revset` that track a bookmark on a real remote."""
     result = jj.run(
