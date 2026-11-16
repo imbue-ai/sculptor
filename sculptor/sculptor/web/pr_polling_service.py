@@ -286,12 +286,11 @@ class _PullRequestLookup:
     """What one poll looks a workspace's pull request up by.
 
     Carries everything the batched round and the per-workspace fallback need
-    without re-reading git: the workspace's repo identity (``name_with_owner``,
-    ``None`` if the origin couldn't be parsed into owner/repo — such a workspace
-    is always unmatched and falls back) and its ``head_ref_name`` (the index
-    key), the PR base its target names (``base_ref_name``) for the per-workspace
-    derivation, and the checkout and environment gh runs with. Short-circuited
-    workspaces (no PR head / on target / non-GitHub) never get one.
+    without re-reading git: the workspace's repository by owner and name, its
+    ``head_ref_name`` (with the repository, the index key), the PR base its
+    target names (``base_ref_name``) for the per-workspace derivation, and the
+    checkout and environment gh runs with. Short-circuited workspaces (no PR
+    head / on target / non-GitHub / no owner and name) never get one.
     """
 
     workspace_id: WorkspaceID
@@ -300,7 +299,12 @@ class _PullRequestLookup:
     head_ref_name: str
     base_ref_name: str
     host: str
-    name_with_owner: str | None
+    repository_owner: str
+    repository_name: str
+
+    @property
+    def name_with_owner(self) -> str:
+        return f"{self.repository_owner}/{self.repository_name}"
 
 
 def _build_pr_index(nodes: Sequence[dict]) -> dict[tuple[str, str], list[dict]]:
@@ -733,9 +737,7 @@ class PrPollingService(Service):
 
         unmatched_count = 0
         for candidate in candidates:
-            nodes = (
-                index.get((candidate.name_with_owner, candidate.head_ref_name)) if candidate.name_with_owner else None
-            )
+            nodes = index.get((candidate.name_with_owner, candidate.head_ref_name))
             if nodes:
                 # The branch carries at least one of the user's open PRs — derive
                 # this workspace's status directly from them (open if one targets
@@ -819,8 +821,8 @@ class PrPollingService(Service):
 
         Applies the short-circuits *before* a workspace can enter a round or
         fallback: not ready (no checkout) → ``None``; no PR head (e.g. a detached
-        HEAD) or no target / non-GitHub origin / on the target branch → ``none``
-        with zero gh calls. The heads and the base come from the workspace's VCS;
+        HEAD) or no target / non-GitHub origin / an origin with no owner and name /
+        on the target branch → ``none`` with zero gh calls. The heads and the base come from the workspace's VCS;
         the origin is read from the main repository, which exists even when a
         checkout has no ``.git`` of its own.
         """
@@ -850,6 +852,9 @@ class PrPollingService(Service):
         if head_ref_names[0] == base_ref_name:
             return no_pr_status
         owner_and_name = parse_remote_owner_and_name(origin_url)
+        if owner_and_name is None:
+            return no_pr_status
+        repository_owner, repository_name = owner_and_name
         return _PullRequestLookup(
             workspace_id=workspace_id,
             working_dir=location.checkout_path,
@@ -857,7 +862,8 @@ class PrPollingService(Service):
             head_ref_name=head_ref_names[0],
             base_ref_name=base_ref_name,
             host=extract_remote_hostname(origin_url),
-            name_with_owner=f"{owner_and_name[0]}/{owner_and_name[1]}" if owner_and_name is not None else None,
+            repository_owner=repository_owner,
+            repository_name=repository_name,
         )
 
     def _log_round_failure_once(self, workspace_id: WorkspaceID, error: Exception) -> None:
@@ -873,7 +879,7 @@ class PrPollingService(Service):
         )
 
     def _gh_runner(self, lookup: _PullRequestLookup) -> GhRunner:
-        """Run gh in the workspace's checkout, where gh expands ``{owner}``/``{repo}`` from its remotes."""
+        """Run gh in the workspace's checkout, with the environment its VCS gives it, such as jj's ``GH_REPO``."""
         return lambda arguments: run_gh_with_retry(self._runners.git, arguments, lookup.working_dir, lookup.gh_env)
 
     def _emit_status(self, workspace_id: WorkspaceID, status: PrStatusInfo) -> None:
@@ -1154,6 +1160,13 @@ class PrPollingService(Service):
         deferred = self._respect_throttle()
         if deferred is not None:
             return deferred
-        status = fetch_pr_status(self._gh_runner(lookup), workspace_id, lookup.head_ref_name, lookup.base_ref_name)
+        status = fetch_pr_status(
+            self._gh_runner(lookup),
+            workspace_id,
+            lookup.head_ref_name,
+            lookup.base_ref_name,
+            lookup.repository_owner,
+            lookup.repository_name,
+        )
         self._note_rate_limit(status)
         return status

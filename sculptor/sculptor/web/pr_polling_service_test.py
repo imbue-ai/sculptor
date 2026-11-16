@@ -160,7 +160,10 @@ def _make_fake_gh(directory: Path, nodes: list[dict]) -> Path:
     """A gh that answers the per-workspace query with `nodes` and records the directory it ran in."""
     payload = directory / "gh-payload.json"
     payload.write_text(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
-    return _write_script(directory / "gh", f'pwd -P > "{directory / "gh-cwd"}"\ncat "{payload}"')
+    return _write_script(
+        directory / "gh",
+        f'pwd -P > "{directory / "gh-cwd"}"\nprintf "%s\\n" "$@" > "{directory / "gh-args"}"\ncat "{payload}"',
+    )
 
 
 def _make_git_cli(concurrency_group: ConcurrencyGroup, gh: Path | None) -> GitCli:
@@ -251,6 +254,21 @@ def test_detached_head_reports_no_pr_without_running_gh(
 
 
 @pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_a_github_origin_without_an_owner_and_name_reports_no_pr_without_running_gh(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", "https://github.example.com/enterprise/org/repo.git")
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", None)
+    # gh cannot be resolved, so running it would surface as `cli_missing`.
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    workspace_id, state = _register_checkout(svc, repo, checkout)
+
+    status = svc._fetch_status(workspace_id, state)
+
+    assert status == PrStatusInfo(workspace_id=workspace_id, pr_state="none")
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
 def test_round_reads_the_origin_from_the_main_repo_not_the_checkout(
     test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
 ) -> None:
@@ -263,7 +281,7 @@ def test_round_reads_the_origin_from_the_main_repo_not_the_checkout(
 
     assert lookup is not None
     assert lookup.host == "github.example.com"
-    assert lookup.name_with_owner == "org/repo"
+    assert (lookup.repository_owner, lookup.repository_name) == ("org", "repo")
     assert lookup.head_ref_name == "feat-1"
     assert lookup.working_dir == checkout
 
@@ -515,6 +533,8 @@ def test_a_jj_workspace_is_looked_up_through_jj_and_runs_no_git_in_its_checkout(
     assert isinstance(status, PrStatusInfo)
     assert (status.pr_state, status.pr_iid, status.mismatched_pr_iid) == ("open", 7, None)
     assert Path((tmp_path / "gh-cwd").read_text().strip()) == checkout.resolve()
+    gh_arguments = (tmp_path / "gh-args").read_text().splitlines()
+    assert {"owner=sculptor-tests", "name=jj-fixture", "branch=feat-1"} <= set(gh_arguments)
 
 
 # ---------------------------------------------------------------------------
@@ -1184,7 +1204,8 @@ def _candidate(
         head_ref_name=head_ref_name,
         base_ref_name=target_branch,
         host=host,
-        name_with_owner=repo,
+        repository_owner=repo.split("/")[0],
+        repository_name=repo.split("/")[1],
     )
 
 

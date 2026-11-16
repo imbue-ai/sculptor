@@ -19,6 +19,8 @@ def fetch_pr_status(
     workspace_id: WorkspaceID,
     head_ref_name: str,
     base_ref_name: str,
+    repository_owner: str,
+    repository_name: str,
 ) -> PrStatusInfo:
     """Fetch PR status from GitHub for a workspace's PR head and the base its target names.
 
@@ -34,7 +36,9 @@ def fetch_pr_status(
     verifying the origin is GitHub before calling this function.
     """
     try:
-        return _fetch_pr_status_inner(run_gh, workspace_id, head_ref_name, base_ref_name)
+        return _fetch_pr_status_inner(
+            run_gh, workspace_id, head_ref_name, base_ref_name, repository_owner, repository_name
+        )
     except CliStatusError as e:
         logger.debug("PR status check failed ({}): {}", e.category, e)
         return PrStatusInfo(
@@ -50,12 +54,14 @@ def _fetch_pr_status_inner(
     workspace_id: WorkspaceID,
     head_ref_name: str,
     base_ref_name: str,
+    repository_owner: str,
+    repository_name: str,
 ) -> PrStatusInfo:
     """Inner implementation that raises CliStatusError on CLI failures."""
     # One `gh api graphql` call returns every PR on this source branch (across
     # all states) *with* its check/review/comment detail, so we group by each
     # PR's ``state`` and dispatch locally rather than issuing a second query.
-    all_prs = _fetch_prs_with_details(run_gh, head_ref_name)
+    all_prs = _fetch_prs_with_details(run_gh, head_ref_name, repository_owner, repository_name)
     open_prs = [pr for pr in all_prs if pr.get("state") == "OPEN"]
     merged_prs = [pr for pr in all_prs if pr.get("state") == "MERGED"]
     closed_prs = [pr for pr in all_prs if pr.get("state") == "CLOSED"]
@@ -157,8 +163,8 @@ _PR_QUERY_LIMIT = 5
 # the CI babysitter can act on a conflicted PR.
 # ``isInMergeQueue`` reports whether the PR is sitting in the repository's merge
 # queue, which the open-PR button surfaces as a "Merge queued" state.
-# ``{owner}`` / ``{repo}`` in the field args are expanded by gh from the
-# working directory's ``origin`` remote, so no repo plumbing is needed here.
+# The repository is passed by owner and name rather than as gh's ``{owner}`` /
+# ``{repo}`` placeholders, which gh can only fill from a ``.git`` it finds.
 _GRAPHQL_PR_QUERY = """
 query($owner: String!, $name: String!, $branch: String!, $limit: Int!) {
   repository(owner: $owner, name: $name) {
@@ -183,7 +189,9 @@ query($owner: String!, $name: String!, $branch: String!, $limit: Int!) {
 """
 
 
-def _fetch_prs_with_details(run_gh: GhRunner, source_branch: str) -> list[dict]:
+def _fetch_prs_with_details(
+    run_gh: GhRunner, source_branch: str, repository_owner: str, repository_name: str
+) -> list[dict]:
     """Fetch all PRs (open/merged/closed) for a source branch, with detail.
 
     Issues a single ``gh api graphql`` request. Each returned node carries its
@@ -202,10 +210,10 @@ def _fetch_prs_with_details(run_gh: GhRunner, source_branch: str) -> list[dict]:
         "graphql",
         "-f",
         f"query={_GRAPHQL_PR_QUERY}",
-        "-F",
-        "owner={owner}",
-        "-F",
-        "name={repo}",
+        "-f",
+        f"owner={repository_owner}",
+        "-f",
+        f"name={repository_name}",
         "-f",
         f"branch={source_branch}",
         "-F",
