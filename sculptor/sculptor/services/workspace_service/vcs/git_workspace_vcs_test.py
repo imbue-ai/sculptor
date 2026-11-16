@@ -370,8 +370,27 @@ def test_validate_new_ref_name_accepts_an_unused_well_formed_name(
     assert worktree_vcs.validate_new_ref_name(git_repo, "feat/new").status == RefNameStatus.AVAILABLE
 
 
+def test_validate_new_ref_name_accepts_a_name_that_only_a_commit_has(
+    worktree_vcs: GitWorkspaceVcs, git_repo: Path
+) -> None:
+    commit_id = _git(git_repo, ["rev-parse", "HEAD"])
+
+    assert worktree_vcs.validate_new_ref_name(git_repo, commit_id[:12]).status == RefNameStatus.AVAILABLE
+
+
 def test_validate_new_ref_name_rejects_malformed_names(worktree_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
-    for name in ("", "bad..name", "-leading-dash", "has space", "trailing.lock"):
+    for name in (
+        "",
+        "bad..name",
+        "-leading-dash",
+        "has space",
+        "trailing.lock",
+        "trailing.",
+        "with:colon",
+        "with~tilde",
+        # A prompt pasted into the branch name field.
+        "imbue/board-demo-workspaceRun: git checkout -b dev/scu-1634-board-demo  (just create that branch, then stop).",
+    ):
         assert worktree_vcs.validate_new_ref_name(git_repo, name).status == RefNameStatus.MALFORMED, name
 
 
