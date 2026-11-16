@@ -22,6 +22,7 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.service import Service
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.jj_availability import can_jj_read
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.project_jj_state_service.colocation_preflight import read_colocation_preflight
 from sculptor.services.project_service.api import ProjectService
@@ -102,13 +103,13 @@ def derive_project_jj_state(
 def is_colocation_gone(facts: JjWorkspaceCreationFacts, *, is_repository_present: bool) -> bool:
     """Whether the repository asks for jj workspaces but jj finds no colocation, so the flag should be turned off.
 
-    Without jj, colocation cannot be read; without the repository, as on a
-    drive that is not mounted, there is nothing to read. Neither counts as gone.
+    While jj cannot read, colocation cannot be read; without the repository, as
+    on a drive that is not mounted, there is nothing to read. Neither counts as gone.
     """
     return (
         is_repository_present
         and facts.use_jj_for_new_workspaces
-        and facts.jj_readiness.blocker is None
+        and can_jj_read(facts.jj_readiness)
         and not facts.is_colocated
     )
 

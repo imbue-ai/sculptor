@@ -1,20 +1,16 @@
 """The rules for a directory inside a jj workspace offered as a Sculptor project: resolve it to its colocated repository, or refuse it."""
 
 from pathlib import Path
-from typing import assert_never
 
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.jj_availability import can_jj_read
 from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.workspace_service.vcs.git_cli import find_jj_workspace_root
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
-from sculptor.web.data_types import JjAvailable
-from sculptor.web.data_types import JjNoIdentity
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
-from sculptor.web.data_types import JjShadowed
-from sculptor.web.data_types import JjUnsupportedGit
 from sculptor.web.data_types import JjUnsupportedVersion
 
 _JJ_DIRECTORY = Path(".jj")
@@ -107,15 +103,6 @@ def _find_linked_repository_root(jj_workspace_root: Path) -> Path | None:
 
 
 def _raise_if_jj_is_unusable(jj_workspace_root: Path, jj_readiness: JjReadiness) -> None:
-    """Raise `JjUnusableForProjectError` unless jj can read the repository.
-
-    Reading needs no author identity and runs no git, and Sculptor reads with its own jj, whichever jj the
-    user's shell runs.
-    """
-    match jj_readiness:
-        case JjAvailable() | JjUnsupportedGit() | JjNoIdentity() | JjShadowed():
-            return
-        case JjNotInstalled() | JjNotRunnable() | JjUnsupportedVersion():
-            raise JjUnusableForProjectError(jj_workspace_root, jj_readiness)
-        case _ as unreachable:
-            assert_never(unreachable)
+    """Raise `JjUnusableForProjectError` unless jj can read the repository."""
+    if not can_jj_read(jj_readiness):
+        raise JjUnusableForProjectError(jj_workspace_root, jj_readiness)

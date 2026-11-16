@@ -9,7 +9,7 @@ export type ColocationSwitchState =
   | { kind: "OFF" };
 
 /**
- * While jj is unavailable the backend cannot read colocation and reports every
+ * While jj cannot read, the backend cannot read colocation and reports every
  * repository ABSENT, so availability decides first.
  */
 export const getColocationSwitchState = (inputs: {

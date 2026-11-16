@@ -9,11 +9,14 @@ from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.jj_availability import JjUnavailableError
+from sculptor.services.jj_availability import can_jj_read
 from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.jj_availability import prepare_jj_for_launch
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.testing.jj_readiness import BLOCKERS_THAT_LET_JJ_READ
+from sculptor.testing.jj_readiness import BLOCKERS_THAT_STOP_JJ_READING
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
@@ -90,6 +93,20 @@ def test_an_unavailable_jj_is_described_from_its_readiness_and_refused(
     with pytest.raises(JjUnavailableError) as raised:
         require_jj_available(readiness)
     assert str(raised.value) == expected_reason
+
+
+@pytest.mark.parametrize("readiness", BLOCKERS_THAT_LET_JJ_READ)
+def test_jj_can_still_read_with_a_blocker_that_stops_only_writes(readiness: JjReadiness) -> None:
+    assert can_jj_read(readiness) is True
+
+
+@pytest.mark.parametrize("readiness", BLOCKERS_THAT_STOP_JJ_READING)
+def test_jj_cannot_read_while_it_is_missing_does_not_run_or_is_unsupported(readiness: JjReadiness) -> None:
+    assert can_jj_read(readiness) is False
+
+
+def test_an_available_jj_can_read() -> None:
+    assert can_jj_read(JjAvailable(blocker=None, identity=_IDENTITY)) is True
 
 
 def test_an_available_jj_has_no_unavailability_to_describe() -> None:

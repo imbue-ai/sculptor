@@ -2,6 +2,7 @@
 
 from sculptor.database.models import Project
 from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.services.jj_availability import can_jj_read
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
 from sculptor.web.data_types import JjReadiness
@@ -25,9 +26,9 @@ def gather_jj_workspace_creation_facts(
 ) -> JjWorkspaceCreationFacts:
     """Read the facts for `project`'s repository now, taking jj's readiness as given.
 
-    Checking colocation runs jj, so while jj is unavailable the repository reads as not colocated.
+    Checking colocation runs jj, so while jj cannot read the repository reads as not colocated.
     """
-    is_colocated = jj_readiness.blocker is None and is_jj_colocated(jj, project.get_local_user_path())
+    is_colocated = can_jj_read(jj_readiness) and is_jj_colocated(jj, project.get_local_user_path())
     return JjWorkspaceCreationFacts(
         use_jj_for_new_workspaces=project.use_jj_for_new_workspaces,
         is_colocated=is_colocated,
