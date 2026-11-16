@@ -140,3 +140,7 @@ class AgentVcsEnvironment(FrozenModel):
 
     path_prefixes: tuple[Path, ...] = Field(default=(), description="Directories prepended to PATH")
     environment_variables: dict[str, str] = Field(default_factory=dict)
+    chat_agent_environment_variables: dict[str, str] = Field(
+        default_factory=dict,
+        description="Added for chat agents only, whose commands run with no terminal for an editor or prompt",
+    )

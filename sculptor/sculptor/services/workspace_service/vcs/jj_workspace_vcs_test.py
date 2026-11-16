@@ -36,6 +36,8 @@ from sculptor.testing.jj_repos import colocate_with_jj
 from sculptor.testing.jj_repos import make_github_looking_origin
 from sculptor.testing.jj_repos import make_workspace_stale
 from sculptor.testing.jj_repos import run_jj
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.utils.build import get_internal_folder
 
 _SNAPSHOT_LIMIT_MIB = 10
 _MEBIBYTE = 1024 * 1024
@@ -974,25 +976,78 @@ def test_compute_change_fingerprint_is_none_when_jj_fails(jj_vcs: JjWorkspaceVcs
     assert jj_vcs.compute_change_fingerprint(checkout) is None
 
 
-def test_agent_environment_points_gh_at_a_github_origin_and_stops_git_above_the_checkout(
-    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_colocated_repo: JjColocatedRepo
+def test_agent_environment_puts_jj_on_path_points_gh_at_a_github_origin_and_stops_git_above_the_checkout(
+    jj_vcs: JjWorkspaceVcs,
+    checkout: CheckoutLocation,
+    jj_colocated_repo: JjColocatedRepo,
+    isolated_sculptor_folder: Path,  # noqa: F811
 ) -> None:
     make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
 
     environment = jj_vcs.agent_environment(checkout)
 
     assert environment == AgentVcsEnvironment(
+        path_prefixes=(get_internal_folder() / "jj-bin",),
         environment_variables={
             "GH_REPO": "github.com/sculptor-tests/jj-fixture",
             "GIT_CEILING_DIRECTORIES": str(checkout.checkout_path.parent),
-        }
+        },
+        chat_agent_environment_variables={"JJ_EDITOR": "false"},
     )
 
 
 def test_agent_environment_sets_no_gh_repo_for_an_origin_off_github(
-    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+    jj_vcs: JjWorkspaceVcs,
+    checkout: CheckoutLocation,
+    isolated_sculptor_folder: Path,  # noqa: F811
 ) -> None:
     assert "GH_REPO" not in jj_vcs.agent_environment(checkout).environment_variables
+
+
+def test_a_process_on_the_agent_environment_path_finds_the_resolved_jj_when_none_is_on_path(
+    jj_vcs: JjWorkspaceVcs,
+    checkout: CheckoutLocation,
+    jj_binary: JjBinary,
+    isolated_sculptor_folder: Path,  # noqa: F811
+) -> None:
+    path_without_jj = os.pathsep.join(["/usr/bin", "/bin"])
+    assert shutil.which("jj", path=path_without_jj) is None
+    environment = jj_vcs.agent_environment(checkout)
+    agent_path = os.pathsep.join([*(str(prefix) for prefix in environment.path_prefixes), path_without_jj])
+
+    found_jj = shutil.which("jj", path=agent_path)
+    version = subprocess.run(
+        ["jj", "--version"],
+        cwd=checkout.checkout_path,
+        env={**os.environ, "PATH": agent_path},
+        capture_output=True,
+        text=True,
+    )
+
+    assert found_jj is not None and Path(found_jj).resolve() == jj_binary.path.resolve()
+    assert version.returncode == 0, version.stderr
+    assert version.stdout.startswith(f"jj {jj_binary.version}")
+
+
+def test_the_chat_agent_variables_make_a_jj_command_that_opens_an_editor_fail_at_once(
+    jj_vcs: JjWorkspaceVcs,
+    checkout: CheckoutLocation,
+    jj_binary: JjBinary,
+    isolated_sculptor_folder: Path,  # noqa: F811
+) -> None:
+    environment = jj_vcs.agent_environment(checkout)
+
+    describe = subprocess.run(
+        [str(jj_binary.path), "describe"],
+        cwd=checkout.checkout_path,
+        env={**os.environ, "EDITOR": "vi", **environment.chat_agent_environment_variables},
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert describe.returncode != 0
 
 
 def test_git_finds_no_enclosing_repository_from_a_checkout_under_the_agent_environment(

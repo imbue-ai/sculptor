@@ -146,6 +146,11 @@ class JjCli:
             command=tuple(command), returncode=result.returncode, stdout=result.stdout, stderr=result.stderr
         )
 
+    def find_binary(self) -> Path | None:
+        """The jj binary this runner runs, or None when jj cannot be resolved."""
+        binary = self._resolve_binary_path(Dependency.JJ)
+        return None if binary is None else Path(binary)
+
     def _resolve_binary(self) -> str:
         binary = self._resolve_binary_path(Dependency.JJ)
         if binary is None:

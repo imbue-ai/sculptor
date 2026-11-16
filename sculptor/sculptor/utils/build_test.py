@@ -1,25 +1,13 @@
 import os
-from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from loguru import logger
 
-from sculptor.utils.build import SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
 from sculptor.utils.build import get_internal_folder
 from sculptor.utils.build import get_jj_bin_dir
 from sculptor.utils.build import get_sculpt_bin_dir
-from sculptor.utils.build import get_sculptor_folder
-
-
-@pytest.fixture
-def isolated_sculptor_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    sculptor_folder = tmp_path / "sculptor"
-    monkeypatch.setenv(SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG, str(sculptor_folder))
-    get_sculptor_folder.cache_clear()
-    yield sculptor_folder
-    get_sculptor_folder.cache_clear()
 
 
 def _make_executable(path: Path) -> Path:
@@ -113,7 +101,8 @@ def test_get_sculpt_bin_dir_creates_symlink_when_target_present(tmp_path: Path) 
 
 
 def test_jj_bin_dir_holds_only_a_jj_link_to_the_resolved_binary(
-    isolated_sculptor_folder: Path, tmp_path: Path
+    isolated_sculptor_folder: Path,  # noqa: F811
+    tmp_path: Path,
 ) -> None:
     jj_binary = _make_executable(tmp_path / "managed" / "jj")
 
@@ -125,7 +114,8 @@ def test_jj_bin_dir_holds_only_a_jj_link_to_the_resolved_binary(
 
 
 def test_jj_bin_dir_relinks_jj_when_the_resolved_binary_changes(
-    isolated_sculptor_folder: Path, tmp_path: Path
+    isolated_sculptor_folder: Path,  # noqa: F811
+    tmp_path: Path,
 ) -> None:
     get_jj_bin_dir(_make_executable(tmp_path / "old" / "jj"))
     new_binary = _make_executable(tmp_path / "new" / "jj")
@@ -136,7 +126,10 @@ def test_jj_bin_dir_relinks_jj_when_the_resolved_binary_changes(
     assert (jj_bin_dir / "jj").readlink() == new_binary
 
 
-def test_jj_bin_dir_drops_the_jj_link_when_jj_is_unresolvable(isolated_sculptor_folder: Path, tmp_path: Path) -> None:
+def test_jj_bin_dir_drops_the_jj_link_when_jj_is_unresolvable(
+    isolated_sculptor_folder: Path,  # noqa: F811
+    tmp_path: Path,
+) -> None:
     get_jj_bin_dir(_make_executable(tmp_path / "managed" / "jj"))
 
     jj_bin_dir = get_jj_bin_dir(None)
