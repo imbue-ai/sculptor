@@ -19,10 +19,11 @@ import { parseDiff } from "~/pages/workspace/utils/diff.ts";
 
 import { diffScopeAtomFamily } from "./atoms/diffPanel.ts";
 import styles from "./CombinedDiffView.module.scss";
+import { diffBaseCommitId } from "./diffBase.ts";
 import { DiffScopePicker } from "./DiffScopePicker.tsx";
 import { LargeDiffGate } from "./LargeDiffGate.tsx";
 import { PierreDiffView } from "./PierreDiffView.tsx";
-import type { DiffScope, DiffViewType } from "./types/diffPanel.ts";
+import type { DiffViewType } from "./types/diffPanel.ts";
 import { useFileLines } from "./useFileLines.ts";
 
 type FileChangeEntry = DiffData["fileChanges"][number];
@@ -35,8 +36,7 @@ const FileSection = ({
   viewType,
   overflow,
   themeType,
-  scope,
-  mergeBaseRef,
+  baseCommitId,
   onToggleCollapse,
 }: {
   fc: FileChangeEntry;
@@ -45,9 +45,8 @@ const FileSection = ({
   viewType: DiffViewType;
   overflow: "wrap" | "scroll";
   themeType: "light" | "dark" | "system";
-  scope: DiffScope;
-  /** Commit SHA of merge-base(target, HEAD) for the vs-target-branch scope. */
-  mergeBaseRef?: string;
+  /** The commit the active scope's diff was taken against; null shows no before-image. */
+  baseCommitId: string | null;
   onToggleCollapse: (filePath: string) => void;
 }): ReactElement => {
   const filePath = fc.fileNames.referenceFileName;
@@ -106,8 +105,7 @@ const FileSection = ({
           viewType={fileStatus === "A" || fileStatus === "D" ? "unified" : viewType}
           overflow={overflow}
           themeType={themeType}
-          scope={scope}
-          mergeBaseRef={mergeBaseRef}
+          baseCommitId={baseCommitId}
           className={styles.embeddedDiff}
         />
       )}
@@ -128,8 +126,7 @@ const ExpandableFileDiff = ({
   viewType,
   overflow,
   themeType,
-  scope,
-  mergeBaseRef,
+  baseCommitId,
   className,
 }: {
   workspaceId: string;
@@ -140,23 +137,15 @@ const ExpandableFileDiff = ({
   viewType: DiffViewType;
   overflow: "wrap" | "scroll";
   themeType: "light" | "dark" | "system";
-  scope: DiffScope;
-  /** Commit SHA of merge-base(target, HEAD) for the vs-target-branch scope. */
-  mergeBaseRef?: string;
+  baseCommitId: string | null;
   className?: string;
 }): ReactElement => {
-  // The active diff has two possible base refs depending on the scope picker:
-  //   - "uncommitted"      → HEAD..workdir, so oldLines must come from HEAD
-  //   - "vs-target-branch" → merge-base(target, HEAD)..workdir, so oldLines must
-  //     come from the merge-base commit — NOT the target-branch tip, which may
-  //     have diverged since the merge-base and be shorter.
-  // A mismatch between the diff's old-side line numbers and the fetched
-  // oldLines causes Pierre's renderHunks to crash (and Shiki "Invalid
-  // decoration position" errors).  Mirrors the per-scope handling in the
-  // single-file DiffPanel view.  Falls back to the target branch (undefined →
-  // getBaseRef) only when the merge-base is unknown.
-  const baseRefOverride = scope === "vs-target-branch" ? mergeBaseRef : "HEAD";
-  const { oldLines, newLines } = useFileLines(workspaceId, filePath, previousFilePath, fileStatus, baseRefOverride);
+  // oldLines must come from the exact commit the diff was taken against: a
+  // mismatch between the diff's old-side line numbers and the fetched oldLines
+  // crashes Pierre's renderHunks (and raises Shiki "Invalid decoration
+  // position" errors). The target-branch tip, for one, may have moved on since
+  // the merge base and be shorter.
+  const { oldLines, newLines } = useFileLines(workspaceId, filePath, previousFilePath, fileStatus, baseCommitId);
   return (
     <LargeDiffGate diffString={diffString}>
       {({ visibleDiff, isTruncated }) => (
@@ -223,10 +212,7 @@ export const CombinedDiffView = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const activeDiffString = scope === "vs-target-branch" ? diff?.targetBranchDiff : diff?.uncommittedDiff;
-  // Old-side content ref for the vs-target-branch scope: the merge-base commit
-  // the targetBranchDiff was computed against.  Empty when unavailable, in which
-  // case ExpandableFileDiff falls back to the target branch tip.
-  const mergeBaseRef = diff?.targetBranchMergeBase || undefined;
+  const baseCommitId = diffBaseCommitId({ diff, scope });
 
   const fileChanges = useMemo(() => {
     if (!activeDiffString) return [];
@@ -378,8 +364,7 @@ export const CombinedDiffView = ({
                   viewType={viewType}
                   overflow={overflow}
                   themeType={effectiveThemeType}
-                  scope={scope}
-                  mergeBaseRef={mergeBaseRef}
+                  baseCommitId={baseCommitId}
                   onToggleCollapse={toggleCollapse}
                 />
               ))}

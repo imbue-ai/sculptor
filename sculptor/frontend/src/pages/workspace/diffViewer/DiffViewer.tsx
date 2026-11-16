@@ -165,11 +165,7 @@ export const DiffViewer = ({
     shouldSkipFileLines ? null : content.filePath,
     shouldSkipFileLines ? null : content.previousFilePath,
     shouldSkipFileLines ? null : content.status,
-    // The vs-target-branch diff is computed against merge-base(target, HEAD), so
-    // its old-side line numbers reference the merge-base — fetch oldLines from
-    // that exact commit. Fall back to undefined (→ target branch) only when the
-    // merge-base is unknown. The uncommitted scope diffs against HEAD.
-    content.isTargetBranchDiff ? (content.targetBranchMergeBase ?? undefined) : "HEAD",
+    content.baseCommitId,
   );
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -350,6 +346,7 @@ export const DiffViewer = ({
           filePath={filePath}
           fileStatus={status}
           previousFilePath={previousFilePath}
+          baseCommitId={content.baseCommitId}
         />
       );
     }

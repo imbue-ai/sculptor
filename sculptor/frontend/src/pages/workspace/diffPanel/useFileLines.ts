@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 
-import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceFileContent } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 
@@ -15,30 +14,15 @@ type FileLines = {
   newLines: Array<string> | undefined;
 };
 
-/**
- * Determine the base git ref for the "old" side of a diff.
- * The target (base) branch is preferred because the "old" content should come
- * from the branch we're diffing against.  Falls back to the source branch or
- * "main" when neither is available.
- */
-const getBaseRef = (targetBranch: string | undefined, sourceBranch: string | undefined): string => {
-  if (targetBranch) {
-    return targetBranch;
-  }
-
-  if (sourceBranch) {
-    return sourceBranch;
-  }
-  return "main";
-};
-
 const splitContentIntoLines = (content: string | undefined): Array<string> | undefined =>
   content != null ? content.split(SPLIT_WITH_NEWLINES) : undefined;
 
 /**
- * Fetches the old (base-ref) and new (working-directory) full file content for
- * a single file so Pierre can render expandable hunk separators.
+ * Fetches the old (at `baseCommitId`) and new (working-directory) full file
+ * content for a single file so Pierre can render expandable hunk separators.
  *
+ * `baseCommitId` is the commit the diff was taken against, as the backend named
+ * it; null means the diff has no single base, so no old content is fetched.
  * Skips fetching when the file status makes one side unnecessary (e.g. new
  * files have no old content; deleted files have no new content). Routes
  * through `useWorkspaceFileContent`, which keys by `(workspaceId, filePath,
@@ -51,20 +35,16 @@ export const useFileLines = (
   filePath: string | null,
   previousFilePath: string | null,
   fileStatus: FileStatus | null,
-  baseRefOverride?: string,
+  baseCommitId: string | null,
 ): FileLines => {
-  const workspace = useWorkspace(workspaceId);
-  const baseRef =
-    baseRefOverride ?? getBaseRef(workspace?.targetBranch ?? undefined, workspace?.sourceBranch ?? undefined);
-
   const isNewFile = fileStatus === "A";
   const isDeletedFile = fileStatus === "D";
+  const isOldContentWanted = !isNewFile && filePath !== null && baseCommitId !== null;
 
-  // Old content — skip for new files
   const { data: oldContent } = useWorkspaceFileContent(
-    isNewFile || !filePath ? null : workspaceId,
-    isNewFile ? null : (previousFilePath ?? filePath),
-    baseRef,
+    isOldContentWanted ? workspaceId : null,
+    isOldContentWanted ? (previousFilePath ?? filePath) : null,
+    baseCommitId,
   );
 
   // New content — skip for deleted files
