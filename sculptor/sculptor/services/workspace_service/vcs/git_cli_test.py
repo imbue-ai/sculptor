@@ -167,6 +167,24 @@ def test_a_directory_that_does_not_exist_raises_vcs_command_error(git_cli: GitCl
         git_cli.run_git(["status"], tmp_path / "missing", is_read_only=True)
 
 
+def test_a_missing_directory_inside_a_jj_workspace_raises_vcs_command_error_not_the_tripwire(
+    git_cli: GitCli, tmp_path: Path
+) -> None:
+    workspace = _make_jj_only_workspace(tmp_path / "jj_workspace")
+
+    with pytest.raises(VcsCommandError):
+        git_cli.run_git(["status"], workspace / "deleted_checkout" / "code", is_read_only=True)
+
+
+def test_find_jj_workspace_root_finds_no_workspace_for_a_missing_directory(tmp_path: Path) -> None:
+    workspace = _make_jj_only_workspace(tmp_path / "jj_workspace")
+    existing = workspace / "checkout"
+    existing.mkdir()
+
+    assert find_jj_workspace_root(existing) == workspace
+    assert find_jj_workspace_root(workspace / "deleted_checkout") is None
+
+
 def test_an_unresolvable_git_binary_raises_vcs_binary_not_found(
     git_cli: GitCli, git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

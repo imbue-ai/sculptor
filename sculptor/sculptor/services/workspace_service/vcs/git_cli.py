@@ -64,8 +64,12 @@ def find_jj_workspace_root(directory: Path) -> Path | None:
 
     Walks up as git's own repository discovery does, stopping at the first
     directory holding `.git` or `.jj`. Only a `.jj` with no `.git` beside it is a
-    jj workspace: a colocated repository has both, and git works there.
+    jj workspace: a colocated repository has both, and git works there. A
+    directory that does not exist is in no workspace, so git fails there the
+    ordinary way.
     """
+    if not directory.is_dir():
+        return None
     for candidate in (directory, *directory.parents):
         has_git = (candidate / ".git").exists()
         has_jj = (candidate / ".jj").exists()
