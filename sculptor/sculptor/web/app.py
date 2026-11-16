@@ -3357,7 +3357,7 @@ def get_dependencies_status(
 ) -> DependenciesStatus:
     """Check every dependency now and return the status, which every open window is also sent."""
     services = get_services_from_request_or_websocket(request)
-    return services.dependency_management_service.refresh_status()
+    return services.dependency_management_service.recheck_status()
 
 
 @router.post("/api/v1/dependencies/install")

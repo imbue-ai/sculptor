@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import sculptor.services.user_config.user_config as user_config_module
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.recording_binaries import RecordingBinaries
 from sculptor.testing.recording_binaries import recording_git_and_jj  # noqa: F401
 from sculptor.web.data_types import DependenciesStatus
@@ -95,3 +96,24 @@ def test_changing_the_dependency_paths_tells_every_window_the_fresh_status(
 
     assert response.status_code == 200, response.text
     assert window.get(timeout=5.0).jj.path == str(jj_binary.path)
+
+
+def test_re_checking_the_dependencies_asks_the_login_shell_again_where_a_refresh_does_not(
+    recording_git_and_jj: RecordingBinaries,  # noqa: F811
+    jj_isolated_env: JjIsolatedEnv,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile_runs_log = jj_isolated_env.home_path / "profile_runs.log"
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    (jj_isolated_env.home_path / ".bash_profile").write_text(f'echo ran >> "{profile_runs_log}"\n')
+    test_services.dependency_management_service.get_status()
+    test_services.dependency_management_service.refresh_status()
+    runs_before_the_re_check = profile_runs_log.read_text().splitlines()
+
+    response = client.get("/api/v1/config/dependencies")
+
+    assert response.status_code == 200, response.text
+    assert runs_before_the_re_check == ["ran"]
+    assert profile_runs_log.read_text().splitlines() == ["ran", "ran"]

@@ -88,6 +88,13 @@ class DependencyCheckResult(FrozenModel):
     probe_error: str | None = None
 
 
+class _LoginShellAnswer(FrozenModel):
+    """Which other jj the user's login shell ran, when last asked with `sculptor_jj` first on PATH."""
+
+    sculptor_jj: str
+    login_shell_jj: LoginShellJj | None
+
+
 class JjIdentityError(Exception):
     """jj's author identity could not be written to the user's jj config."""
 
@@ -661,6 +668,9 @@ class DependencyManagementService(Service):
     # Set to have the status refresher recompute the status now rather than at its next timed refresh.
     _status_refresh_requested: threading.Event = PrivateAttr(default_factory=threading.Event)
     _status_refresher_thread: ObservableThread | None = PrivateAttr(default=None)
+    # The login shell's last answer, which every status computation reuses until a re-check or a
+    # move of Sculptor's jj. Guarded by _status_computation_lock.
+    _login_shell_answer: _LoginShellAnswer | None = PrivateAttr(default=None)
     _observer_queues: set[Queue[Any]] = PrivateAttr(default_factory=set)
     # Cooperative cancellation: set by stop() so the background install thread
     # can wrap up at the next chunk boundary instead of being interrupted by
@@ -826,12 +836,23 @@ class DependencyManagementService(Service):
             status = self._status
             if status is not None:
                 return status
-            return self._compute_and_publish_status()
+            return self._compute_and_publish_status(is_login_shell_asked_again=False)
 
     def refresh_status(self) -> DependenciesStatus:
-        """Compute every dependency's status now, keep it for reads, and push it to every observer."""
+        """Compute every dependency's status now, keep it for reads, and push it to every observer.
+
+        The user's login shell, which runs their whole profile, is asked which jj it
+        runs only the first time, and again when the jj Sculptor resolves moves; other
+        refreshes, the timed ones included, keep its last answer. An edit to the
+        user's shell profile is therefore seen on `recheck_status` or at restart.
+        """
         with self._status_computation_lock:
-            return self._compute_and_publish_status()
+            return self._compute_and_publish_status(is_login_shell_asked_again=False)
+
+    def recheck_status(self) -> DependenciesStatus:
+        """`refresh_status` for the user's explicit re-check, which also asks the user's login shell again."""
+        with self._status_computation_lock:
+            return self._compute_and_publish_status(is_login_shell_asked_again=True)
 
     def _run_status_refresher(self) -> None:
         """Recompute the status on a slow timer, and soon after a refresh is requested, until the service stops."""
@@ -855,13 +876,13 @@ class DependencyManagementService(Service):
                     logger.opt(exception=True).warning("Dependency status refresh failed")
                     has_warned_refresh_failure = True
 
-    def _compute_and_publish_status(self) -> DependenciesStatus:
+    def _compute_and_publish_status(self, is_login_shell_asked_again: bool) -> DependenciesStatus:
         """Compute, store and push the status; call only while holding ``_status_computation_lock``.
 
         Delta detection is handled by the stream layer (``stream_everything``),
         so the status is pushed whether or not it changed.
         """
-        status = self._get_status()
+        status = self._get_status(is_login_shell_asked_again)
         with self._observer_lock:
             self._status = status
             for queue in self._observer_queues:
@@ -1244,8 +1265,11 @@ class DependencyManagementService(Service):
         if process is None or process is self._gh_auth_session:
             self._gh_auth_session = None
 
-    def _get_status(self) -> DependenciesStatus:
-        """Compute the current status of all dependencies (no side effects)."""
+    def _get_status(self, is_login_shell_asked_again: bool) -> DependenciesStatus:
+        """Compute the current status of all dependencies; call only while holding ``_status_computation_lock``.
+
+        Its one side effect is keeping the login shell's answer, when it asks the shell.
+        """
         git_check = self.check_installed(Dependency.GIT)
         claude_check = self.check_installed(Dependency.CLAUDE)
         pi_check = self.check_installed(Dependency.PI)
@@ -1301,10 +1325,8 @@ class DependencyManagementService(Service):
         gh_info = self._get_remote_cli_info(Dependency.GH)
 
         jj_readiness = self._jj_readiness_from_check(jj_check)
-        # Only this full computation asks a login shell, since that runs the user's whole
-        # profile; gates combine their own jj probe with its answer.
         login_shell_jj = (
-            self._find_login_shell_jj(jj_check.path)
+            self._read_login_shell_jj(jj_check.path, is_login_shell_asked_again)
             if isinstance(jj_readiness, JjAvailable) and jj_check.path is not None
             else None
         )
@@ -1408,6 +1430,17 @@ class DependencyManagementService(Service):
                 name=identity.name or git_identity.name, email=identity.email or git_identity.email
             ),
         )
+
+    def _read_login_shell_jj(self, sculptor_jj: str, is_asked_again: bool) -> LoginShellJj | None:
+        """The login shell's answer for `sculptor_jj`, asking the shell only when told to or when it has not been asked about `sculptor_jj`.
+
+        Gates never come here: they combine their own jj probe with the last status's answer.
+        """
+        answer = self._login_shell_answer
+        if is_asked_again or answer is None or answer.sculptor_jj != sculptor_jj:
+            answer = _LoginShellAnswer(sculptor_jj=sculptor_jj, login_shell_jj=self._find_login_shell_jj(sculptor_jj))
+            self._login_shell_answer = answer
+        return answer.login_shell_jj
 
     def _find_login_shell_jj(self, sculptor_jj: str) -> LoginShellJj | None:
         """The other jj an interactive login shell of the user's runs with `sculptor_jj` first on PATH, as a workspace terminal does.

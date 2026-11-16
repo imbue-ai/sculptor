@@ -1111,6 +1111,8 @@ class DependenciesStatus(SerializableModel):
     jj_readiness: JjReadiness
     # The other jj an interactive login shell runs when Sculptor puts its own jj first on PATH, as in
     # a workspace terminal. None when the shell runs Sculptor's jj, or when jj is not otherwise ready.
+    # The shell is asked on the first computation, on a re-check and when Sculptor's jj moves; other
+    # computations keep its last answer.
     login_shell_jj: LoginShellJj | None = None
     # The renderer's speech-to-text model bundle — a managed artifact (data
     # files, no binary), so only its installed/version/progress/error fields
