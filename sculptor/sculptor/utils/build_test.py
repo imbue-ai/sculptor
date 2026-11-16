@@ -4,7 +4,12 @@ from unittest.mock import patch
 
 from loguru import logger
 
+from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjColocatedRepo
+from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.utils.build import _get_repo_root
 from sculptor.utils.build import get_internal_folder
 from sculptor.utils.build import get_jj_bin_dir
 from sculptor.utils.build import get_sculpt_bin_dir
@@ -136,3 +141,31 @@ def test_jj_bin_dir_drops_the_jj_link_when_jj_is_unresolvable(
 
     assert jj_bin_dir.is_dir()
     assert list(jj_bin_dir.iterdir()) == []
+
+
+def test_repo_root_is_the_nearest_git_checkout_above_the_source(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    source_directory = checkout / "sculptor" / "sculptor" / "utils"
+    source_directory.mkdir(parents=True)
+    run_blocking(["git", "init", "-q"], cwd=checkout)
+
+    assert _get_repo_root(source_directory) == checkout
+
+
+def test_repo_root_is_a_jj_workspace_nested_in_another_checkout_not_the_checkout_around_it(
+    tmp_path: Path, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    enclosing_checkout = tmp_path / "enclosing_checkout"
+    enclosing_checkout.mkdir()
+    run_blocking(["git", "init", "-q"], cwd=enclosing_checkout)
+    jj_workspace = enclosing_checkout / ".dev_sculptor" / "workspaces" / "ws" / "code"
+    jj_workspace.parent.mkdir(parents=True)
+    run_jj(
+        jj_binary,
+        ("workspace", "add", "--no-colocate", "--name", "ws", "-r", "main@origin", str(jj_workspace)),
+        cwd=jj_colocated_repo.path,
+    )
+    source_directory = jj_workspace / "sculptor" / "sculptor" / "utils"
+    source_directory.mkdir(parents=True)
+
+    assert _get_repo_root(source_directory) == jj_workspace

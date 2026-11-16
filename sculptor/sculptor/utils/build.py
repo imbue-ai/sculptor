@@ -140,14 +140,17 @@ def is_dev_build() -> bool:
     return Version(version.__version__).is_devrelease
 
 
-def _get_repo_root() -> Path | None:
-    """Find the repository root by looking for a .git directory.
+def _get_repo_root(start_directory: Path) -> Path | None:
+    """Find the repository root: the nearest directory, from ``start_directory`` up, holding ``.git`` or ``.jj``.
 
-    Returns None if we can't find a repository root (e.g., in a packaged build).
+    A jj workspace of this repository has ``.jj`` and no ``.git``, and when
+    Sculptor runs from source it sits inside another checkout, whose root a
+    search for ``.git`` alone would find instead. Returns None if we can't
+    find a repository root (e.g., in a packaged build).
     """
-    current = Path(__file__).resolve().parent
+    current = start_directory
     while current != current.parent:
-        if (current / ".git").exists():
+        if (current / ".git").exists() or (current / ".jj").is_dir():
             return current
         current = current.parent
     return None
@@ -209,7 +212,7 @@ def get_sculptor_folder() -> Path:
         logger.info("Sculptor folder: {} (from {} env var)", path, SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG)
     elif not is_packaged():
         # Running from source: use the repo root so each checkout has its own data
-        repo_root = _get_repo_root()
+        repo_root = _get_repo_root(Path(__file__).resolve().parent)
         if repo_root is not None:
             path = repo_root / ".dev_sculptor"
         else:
