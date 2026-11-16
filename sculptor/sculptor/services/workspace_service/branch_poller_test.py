@@ -31,6 +31,7 @@ from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.branch_poller import WorkspaceBranchPoller
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.testing.local_git_repo import LocalGitRepo
 from sculptor.web.data_types import StreamingUpdateSourceTypes
@@ -93,7 +94,7 @@ def _build_poller(
     return WorkspaceBranchPoller(
         concurrency_group=cg,
         data_model_service=_FakeDataModelService(workspaces),  # type: ignore[arg-type]
-        vcs_runners=VcsRunners(git=git_cli),
+        vcs_runners=VcsRunners(git=git_cli, jj=JjCli(cg, lambda tool: None)),
         resolve_working_dir=resolve_working_dir or (lambda workspace: working_dirs.get(workspace.object_id)),
         refresh_diff_on_branch_change=refresh_diff_on_branch_change,
     )
