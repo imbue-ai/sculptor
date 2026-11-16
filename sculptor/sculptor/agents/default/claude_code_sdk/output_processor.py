@@ -45,6 +45,7 @@ from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import AgentTransientError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ContentBlockTypes
@@ -746,6 +747,9 @@ class ClaudeOutputProcessor:
                     self.tool_use_map,
                     self.diff_tracker,
                 )
+            except GitCommandInJjWorkspaceError:
+                # The jj tripwire marks a dispatch bug, not a malformed line, so it ends the turn.
+                raise
             except Exception as e:
                 # Two failure modes are contained here so one bad line degrades
                 # to a visible warning instead of killing the whole turn (an
