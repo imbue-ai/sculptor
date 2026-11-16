@@ -66,6 +66,21 @@ def list_bookmarks(jj: JjCli, repo_dir: Path) -> list[JjBookmark]:
     return [bookmark for bookmark in bookmarks if bookmark.remote != _GIT_TRACKING_REMOTE]
 
 
+def list_tracked_bookmark_names(jj: JjCli, repo_dir: Path, revset: JjRevset) -> set[str]:
+    """The local bookmarks on `revset` that track a bookmark on a real remote."""
+    result = jj.run(
+        ["bookmark", "list", "--tracked", "-r", revset, "-T", _JSON_LINES_BOOKMARK_TEMPLATE],
+        repo_dir,
+        snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+    )
+    bookmarks = (_parse_bookmark(json.loads(line)) for line in result.stdout.splitlines())
+    return {
+        bookmark.name
+        for bookmark in bookmarks
+        if bookmark.remote is not None and bookmark.remote != _GIT_TRACKING_REMOTE and bookmark.is_tracked
+    }
+
+
 def resolve_trunk_symbol(jj: JjCli, repo_dir: Path) -> str | None:
     """The bookmark symbol for the repository's trunk, such as `main@origin`.
 

@@ -71,3 +71,19 @@ class JjStackProjection(FrozenModel):
         if not self.pr_head_candidates:
             return None
         return self.pr_head_candidates[0]
+
+
+class JjHeadIdentity(FrozenModel):
+    """What a jj workspace's working copy is, and which bookmarks name its stack."""
+
+    working_copy_change_id: str
+    working_copy_change_id_prefix: str = Field(description="The shortest prefix that identifies the change uniquely")
+    description_first_line: str = Field(description="Empty when the working copy has no description")
+    is_working_copy_empty: bool
+    bookmarks: tuple[str, ...] = Field(description="The local bookmarks on the stack, nearest the working copy first")
+    primary_bookmark: str | None
+    unbookmarked_revision_count: int = Field(
+        description="Described revisions above the primary bookmark; every described revision when there is none"
+    )
+    has_conflict: bool = Field(description="Whether the working copy has unresolved conflicts")
+    is_divergent: bool = Field(description="Whether the working copy's change has more than one visible commit")

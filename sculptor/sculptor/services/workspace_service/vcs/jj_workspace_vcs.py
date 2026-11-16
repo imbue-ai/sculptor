@@ -7,6 +7,7 @@ snapshotting read in a stale workspace raises `JjWorkingCopyStaleError`, unless
 the interface gives the method a failure value of its own.
 """
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from loguru import logger
 from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
+from sculptor.services.workspace_service.vcs.data_types import PullRequestRefs
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.data_types import RefNameValidation
 from sculptor.services.workspace_service.vcs.errors import InvalidCheckoutSpecError
@@ -24,17 +26,25 @@ from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
 from sculptor.services.workspace_service.vcs.git_repo_queries import is_well_formed_branch_name
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
+from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
+from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
+from sculptor.services.workspace_service.vcs.jj_data_types import JjStackProjection
+from sculptor.services.workspace_service.vcs.jj_data_types import JjStackRevision
 from sculptor.services.workspace_service.vcs.jj_repo_queries import add_workspace
 from sculptor.services.workspace_service.vcs.jj_repo_queries import does_bookmark_exist
 from sculptor.services.workspace_service.vcs.jj_repo_queries import forget_workspace
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
+from sculptor.services.workspace_service.vcs.jj_repo_queries import list_tracked_bookmark_names
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_workspaces
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_commit_id
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_trunk_symbol
 from sculptor.services.workspace_service.vcs.jj_repo_queries import set_workspace_config
+from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
 from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
+from sculptor.services.workspace_service.vcs.jj_revsets import parse_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import revset_for_base
+from sculptor.services.workspace_service.vcs.jj_stack_projection import project_jj_stack
 
 # Fetches the origin remote if present, and succeeds silently when there is no
 # origin, so workspace startup is never blocked on it.
@@ -46,6 +56,21 @@ SnapshotSizeLimitReader = Callable[[], int]
 _SNAPSHOT_MAX_NEW_FILE_SIZE_KEY = "snapshot.max-new-file-size"
 _BYTES_PER_MEBIBYTE = 1024 * 1024
 _STORE_LINK = Path(".jj") / "repo"
+_WORKING_COPY = JjRevset("@")
+# Far more revisions than any workspace's stack holds; it bounds a target that shares no history with the stack.
+_MAX_STACK_REVISIONS = 500
+# One JSON array per line: commit id, change id, shortest unique change id prefix,
+# first line of the description, then the empty, conflict and divergent flags.
+_WORKING_COPY_TEMPLATE = (
+    '"[" ++ json(commit_id) ++ "," ++ json(change_id) ++ "," ++ json(change_id.shortest().prefix())'
+    + ' ++ "," ++ json(description.first_line()) ++ "," ++ json(empty) ++ "," ++ json(conflict)'
+    + ' ++ "," ++ json(divergent) ++ "]\\n"'
+)
+# One JSON array per line: the commit, then the names of its unconflicted local bookmarks.
+_STACK_REVISION_TEMPLATE = (
+    '"[" ++ json(self) ++ ",[" ++ local_bookmarks.filter(|b| !b.conflict()).map(|b| json(b.name())).join(",")'
+    + ' ++ "]]\\n"'
+)
 
 
 class JjWorkspaceVcs:
@@ -145,3 +170,120 @@ class JjWorkspaceVcs:
 
     def default_setup_command(self) -> str:
         return DEFAULT_JJ_WORKSPACE_SETUP_COMMAND
+
+    def read_identity(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
+    ) -> JjHeadIdentity:
+        """The working copy as last snapshotted, and the bookmarks on the workspace's stack.
+
+        The stack is the working copy's ancestors that are not the target's; with
+        no resolvable target, its mutable ancestors.
+        """
+        checkout = location.checkout_path
+        result = self._jj.run(
+            ["log", "--no-graph", "-r", _WORKING_COPY, "-T", _WORKING_COPY_TEMPLATE],
+            checkout,
+            snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+        )
+        commit_id, change_id, change_id_prefix, description_first_line, is_empty, has_conflict, is_divergent = (
+            json.loads(result.stdout)
+        )
+        projection = self._project_stack(checkout, commit_id, target_ref, requested_ref_name)
+        return JjHeadIdentity(
+            working_copy_change_id=change_id,
+            working_copy_change_id_prefix=change_id_prefix,
+            description_first_line=description_first_line,
+            is_working_copy_empty=is_empty,
+            bookmarks=projection.bookmarks,
+            primary_bookmark=projection.primary_bookmark,
+            unbookmarked_revision_count=projection.unbookmarked_revision_count,
+            has_conflict=has_conflict,
+            is_divergent=is_divergent,
+        )
+
+    def get_pull_request_refs(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
+    ) -> PullRequestRefs:
+        """The stack's bookmarks, most likely PR head first, never the target's own name.
+
+        Failures read as "nothing to look up", so PR polling reports no pull
+        request rather than erroring.
+        """
+        checkout = location.checkout_path
+        try:
+            commit_id = self._read_working_copy_commit_id(checkout)
+            projection = self._project_stack(checkout, commit_id, target_ref, requested_ref_name)
+        except VcsCommandError as e:
+            logger.debug("Cannot read the bookmarks of {}: {}", checkout, e)
+            return PullRequestRefs(head_ref_names=())
+        return PullRequestRefs(head_ref_names=projection.pr_head_candidates)
+
+    def _read_working_copy_commit_id(self, checkout: Path) -> str:
+        """The working-copy commit as last snapshotted."""
+        result = self._jj.run(
+            ["log", "--no-graph", "-r", _WORKING_COPY, "-T", "commit_id"],
+            checkout,
+            snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+        )
+        return result.stdout.strip()
+
+    def _project_stack(
+        self, repo_dir: Path, working_copy_commit_id: str, target_ref: str | None, requested_ref_name: str | None
+    ) -> JjStackProjection:
+        stack = _stack_revset(JjRevset(working_copy_commit_id), self._resolve_target_commit_id(repo_dir, target_ref))
+        revisions = self._read_stack_revisions(repo_dir, stack)
+        has_bookmarks = any(revision.bookmarks for revision in revisions)
+        tracked_bookmark_names = list_tracked_bookmark_names(self._jj, repo_dir, stack) if has_bookmarks else set()
+        return project_jj_stack(
+            revisions,
+            working_copy_commit_id,
+            requested_ref_name,
+            _target_bookmark_name(target_ref),
+            tracked_bookmark_names,
+        )
+
+    def _resolve_target_commit_id(self, repo_dir: Path, target_ref: str | None) -> str | None:
+        """The one commit `target_ref` names; None when it is unset, malformed, absent or conflicted."""
+        if target_ref is None:
+            return None
+        try:
+            target_revset = revset_for_base(target_ref)
+        except InvalidRevisionError:
+            return None
+        return resolve_commit_id(self._jj, repo_dir, target_revset)
+
+    def _read_stack_revisions(self, repo_dir: Path, stack: JjRevset) -> list[JjStackRevision]:
+        result = self._jj.run(
+            ["log", "--no-graph", "--limit", str(_MAX_STACK_REVISIONS), "-r", stack, "-T", _STACK_REVISION_TEMPLATE],
+            repo_dir,
+            snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+        )
+        revisions: list[JjStackRevision] = []
+        for line in result.stdout.splitlines():
+            commit, bookmarks = json.loads(line)
+            revisions.append(
+                JjStackRevision(
+                    commit_id=commit["commit_id"],
+                    parent_commit_ids=tuple(commit["parents"]),
+                    bookmarks=tuple(bookmarks),
+                    is_described=commit["description"] != "",
+                )
+            )
+        return revisions
+
+
+def _stack_revset(working_copies: JjRevset, target_commit_id: str | None) -> JjRevset:
+    """The working copies and their ancestors that are not the target's; without a target, their mutable ancestors."""
+    if target_commit_id is None:
+        return JjRevset(f"(::({working_copies}) & mutable()) | ({working_copies})")
+    return JjRevset(f"(::({working_copies}) ~ ::{target_commit_id}) | ({working_copies})")
+
+
+def _target_bookmark_name(target_ref: str | None) -> str | None:
+    """The bookmark name in a target symbol, such as `main` for `main@origin`."""
+    if target_ref is None:
+        return None
+    try:
+        return parse_bookmark_symbol(target_ref).name
+    except InvalidRevisionError:
+        return None

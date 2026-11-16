@@ -12,11 +12,13 @@ from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import InvalidCheckoutSpecError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
+from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
 from sculptor.services.workspace_service.vcs.jj_workspace_vcs import DEFAULT_JJ_WORKSPACE_SETUP_COMMAND
 from sculptor.services.workspace_service.vcs.jj_workspace_vcs import JjWorkspaceVcs
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import colocate_with_jj
+from sculptor.testing.jj_repos import make_workspace_stale
 from sculptor.testing.jj_repos import run_jj
 
 _SNAPSHOT_LIMIT_MIB = 10
@@ -76,6 +78,20 @@ def _untrack_main(jj_binary: JjBinary, repo: JjColocatedRepo) -> None:
 def _push_bookmark_from(jj_binary: JjBinary, repo_dir: Path, name: str, revision: str) -> None:
     _jj(jj_binary, repo_dir, "--ignore-working-copy", "bookmark", "create", name, "-r", revision)
     _jj(jj_binary, repo_dir, "--ignore-working-copy", "git", "push", "--bookmark", name)
+
+
+def _commit_change(jj_binary: JjBinary, checkout: Path, file_name: str, content: str, message: str) -> None:
+    """Write `file_name` and commit it as `message`, leaving a new empty working copy on top."""
+    (checkout / file_name).write_text(content)
+    _jj(jj_binary, checkout, "commit", "-m", message)
+
+
+def _set_bookmarks(jj_binary: JjBinary, checkout: Path, revision: str, *names: str) -> None:
+    _jj(jj_binary, checkout, "--ignore-working-copy", "bookmark", "set", "--allow-backwards", *names, "-r", revision)
+
+
+def _latest_operation(jj_binary: JjBinary, repo_dir: Path) -> str:
+    return _jj(jj_binary, repo_dir, "--ignore-working-copy", "op", "log", "--no-graph", "--limit", "1", "-T", "id")
 
 
 @pytest.fixture
@@ -326,3 +342,223 @@ def test_verify_checkout_reports_a_checkout_directory_that_is_gone(
 
     with pytest.raises(EnvironmentNotFoundError):
         jj_vcs.verify_checkout(checkout)
+
+
+def test_read_identity_of_a_fresh_workspace_reports_an_empty_undescribed_working_copy_without_bookmarks(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    change_id = _jj(
+        jj_binary, checkout.checkout_path, "--ignore-working-copy", "log", "--no-graph", "-r", "@", "-T", "change_id"
+    )
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert identity == JjHeadIdentity(
+        working_copy_change_id=change_id,
+        working_copy_change_id_prefix=identity.working_copy_change_id_prefix,
+        description_first_line="",
+        is_working_copy_empty=True,
+        bookmarks=(),
+        primary_bookmark=None,
+        unbookmarked_revision_count=0,
+        has_conflict=False,
+        is_divergent=False,
+    )
+    assert identity.working_copy_change_id_prefix
+    assert change_id.startswith(identity.working_copy_change_id_prefix)
+
+
+def test_read_identity_reports_the_working_copy_description_first_line_and_its_snapshotted_edits(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    (checkout.checkout_path / "notes.txt").write_text("notes\n")
+    _jj(jj_binary, checkout.checkout_path, "describe", "-m", "Add notes\n\nWith a longer body.")
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name=None)
+
+    assert identity.description_first_line == "Add notes"
+    assert not identity.is_working_copy_empty
+    assert identity.unbookmarked_revision_count == 1
+
+
+def test_read_identity_with_one_bookmark_counts_the_described_revisions_above_it(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "feat")
+    _commit_change(jj_binary, checkout.checkout_path, "b.txt", "b\n", "second")
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert identity.bookmarks == ("feat",)
+    assert identity.primary_bookmark == "feat"
+    assert identity.unbookmarked_revision_count == 1
+
+
+def test_read_identity_with_many_bookmarks_orders_them_nearest_first_and_prefers_the_requested_name_on_a_tie(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "lower")
+    _commit_change(jj_binary, checkout.checkout_path, "b.txt", "b\n", "second")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "aa-other", "zz-requested")
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name="zz-requested")
+
+    assert identity.bookmarks == ("zz-requested", "aa-other", "lower")
+    assert identity.primary_bookmark == "zz-requested"
+    assert identity.unbookmarked_revision_count == 0
+
+
+def test_read_identity_prefers_a_bookmark_that_tracks_a_remote_on_a_tie(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "aa-local", "zz-pushed")
+    _jj(jj_binary, checkout.checkout_path, "--ignore-working-copy", "git", "push", "--bookmark", "zz-pushed")
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name=None)
+
+    assert identity.bookmarks == ("zz-pushed", "aa-local")
+
+
+def test_read_identity_never_makes_the_targets_own_name_primary(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "main")
+
+    identity = jj_vcs.read_identity(checkout, target_ref="main@origin", requested_ref_name=None)
+
+    assert identity.bookmarks == ("main",)
+    assert identity.primary_bookmark is None
+    assert identity.unbookmarked_revision_count == 1
+
+
+def test_read_identity_leaves_out_a_conflicted_bookmark(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    workspace = checkout.checkout_path
+    _commit_change(jj_binary, workspace, "a.txt", "a\n", "first")
+    _commit_change(jj_binary, workspace, "b.txt", "b\n", "second")
+    _jj(jj_binary, workspace, "--ignore-working-copy", "new", "--no-edit", "-m", "off the stack", "@--")
+    _set_bookmarks(jj_binary, workspace, "@--", "kept", "split")
+    operation = _latest_operation(jj_binary, workspace)
+    # Concurrent moves to two siblings, neither descending from the other, leave the bookmark conflicted.
+    _set_bookmarks(jj_binary, workspace, "@-", "split")
+    _jj(
+        jj_binary,
+        workspace,
+        "--ignore-working-copy",
+        "--at-op",
+        operation,
+        "bookmark",
+        "set",
+        "split",
+        "-r",
+        'description(exact:"off the stack\\n")',
+    )
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name="split")
+
+    assert identity.bookmarks == ("kept",)
+    assert identity.primary_bookmark == "kept"
+
+
+def test_read_identity_reports_a_conflicted_working_copy(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    workspace = checkout.checkout_path
+    _commit_change(jj_binary, workspace, "README.md", "one\n", "side one")
+    _jj(jj_binary, workspace, "new", "-m", "side two", "main@origin")
+    _commit_change(jj_binary, workspace, "README.md", "two\n", "side two")
+    _jj(jj_binary, workspace, "new", 'description(exact:"side one\\n")', 'description(exact:"side two\\n")')
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name=None)
+
+    assert identity.has_conflict
+
+
+def test_read_identity_reports_a_divergent_working_copy(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    workspace = checkout.checkout_path
+    change_id = _jj(jj_binary, workspace, "--ignore-working-copy", "log", "--no-graph", "-r", "@", "-T", "change_id")
+    operation = _latest_operation(jj_binary, workspace)
+    _jj(jj_binary, workspace, "--ignore-working-copy", "describe", "-m", "version a", "@")
+    _jj(
+        jj_binary,
+        workspace,
+        "--ignore-working-copy",
+        "--at-op",
+        operation,
+        "describe",
+        "-m",
+        "version b",
+        f"change_id({change_id})",
+    )
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name=None)
+
+    assert identity.is_divergent
+
+
+@pytest.mark.parametrize("target_ref", [None, "missing@origin", "not a symbol"])
+def test_read_identity_without_a_usable_target_uses_the_workspaces_mutable_stack(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, target_ref: str | None
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "feat")
+
+    identity = jj_vcs.read_identity(checkout, target_ref=target_ref, requested_ref_name=None)
+
+    assert identity.bookmarks == ("feat",)
+
+
+def test_read_identity_neither_snapshots_nor_adds_an_operation(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    (checkout.checkout_path / "unsnapshotted.txt").write_text("not yet seen by jj\n")
+    operations_before = _count_operations(jj_binary, checkout.checkout_path)
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name=None)
+
+    assert identity.is_working_copy_empty
+    assert _count_operations(jj_binary, checkout.checkout_path) == operations_before
+
+
+def test_read_identity_keeps_working_in_a_stale_workspace(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout.checkout_path)
+
+    identity = jj_vcs.read_identity(checkout, target_ref=_BASE, requested_ref_name=None)
+
+    assert identity.bookmarks == ()
+
+
+def test_get_pull_request_refs_has_no_head_without_a_bookmark(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+) -> None:
+    assert jj_vcs.get_pull_request_refs(checkout, target_ref=_BASE, requested_ref_name="feat").head_ref_names == ()
+
+
+def test_get_pull_request_refs_lists_the_stack_bookmarks_most_likely_first_without_the_targets_name(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "lower", "main")
+    _commit_change(jj_binary, checkout.checkout_path, "b.txt", "b\n", "second")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "upper")
+
+    refs = jj_vcs.get_pull_request_refs(checkout, target_ref="main@origin", requested_ref_name=None)
+
+    assert refs.head_ref_names == ("upper", "lower")
+
+
+def test_get_pull_request_refs_has_no_head_when_the_checkout_is_gone(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+) -> None:
+    shutil.rmtree(checkout.checkout_path)
+
+    assert jj_vcs.get_pull_request_refs(checkout, target_ref=_BASE, requested_ref_name=None).head_ref_names == ()
