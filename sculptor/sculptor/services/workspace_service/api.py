@@ -65,6 +65,14 @@ class FileNotFoundAtRefError(ExpectedError):
         super().__init__(f"File {file_path} not found at ref {git_ref}: {detail}")
 
 
+class WorkspaceCommitHistoryUnavailableError(ExpectedError):
+    """Raised when a workspace's history is not a list of git commits, as in a jj workspace."""
+
+    def __init__(self, workspace_id: WorkspaceID) -> None:
+        self.workspace_id = workspace_id
+        super().__init__(f"Workspace {workspace_id} has revisions, not git commits")
+
+
 class WorkspaceFilesUnavailableError(ExpectedError):
     """Raised when the workspace file list cannot be produced right now.
 

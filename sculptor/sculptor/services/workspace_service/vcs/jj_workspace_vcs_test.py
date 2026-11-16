@@ -21,6 +21,7 @@ from sculptor.services.workspace_service.vcs.errors import InvalidCheckoutSpecEr
 from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
@@ -122,6 +123,10 @@ def jj_vcs(jj_cli: JjCli, git_cli: GitCli, snapshot_limit: _SnapshotLimit) -> Jj
 def checkout(jj_vcs: JjWorkspaceVcs, jj_colocated_repo: JjColocatedRepo) -> CheckoutLocation:
     """A jj workspace of `jj_colocated_repo` created through the seam, based on `main@origin`."""
     return jj_vcs.create_checkout(_spec(jj_colocated_repo, jj_colocated_repo.path.parent / "env" / "code"))
+
+
+def test_jj_workspace_vcs_implements_the_vcs_seam(jj_vcs: JjWorkspaceVcs) -> None:
+    assert isinstance(jj_vcs, WorkspaceVcs)
 
 
 @pytest.mark.parametrize("is_main_tracked", [True, False])

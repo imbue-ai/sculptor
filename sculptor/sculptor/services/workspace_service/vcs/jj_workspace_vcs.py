@@ -43,6 +43,7 @@ from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_log_parsing import CommitFileStatus
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
 from sculptor.services.workspace_service.vcs.git_repo_queries import is_well_formed_branch_name
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
@@ -131,7 +132,7 @@ _REVISION_RECORD_TEMPLATE = (
 )
 
 
-class JjWorkspaceVcs:
+class JjWorkspaceVcs(WorkspaceVcs):
     """Version control for workspaces that are jj workspaces of the user's colocated repository.
 
     The jj workspace is named by the checkout name. git is used only in the

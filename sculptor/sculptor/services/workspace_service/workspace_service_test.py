@@ -822,6 +822,7 @@ def test_delete_workspace_removes_the_environment_even_when_checkout_removal_fai
     def _fail_removal(
         self: GitWorkspaceVcs,
         location: CheckoutLocation,
+        target_ref: str | None,
         created_ref_name: str | None,
         deletion_policy: BranchDeletionPolicy,
     ) -> None:
@@ -1143,6 +1144,7 @@ def test_delete_worktree_workspace_stops_terminals_before_removing_worktree(
             def _record_terminal_liveness(
                 self: GitWorkspaceVcs,
                 location: CheckoutLocation,
+                target_ref: str | None,
                 created_ref_name: str | None,
                 deletion_policy: BranchDeletionPolicy,
             ) -> None:

@@ -124,10 +124,13 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def remove_checkout(
         self,
         location: CheckoutLocation,
+        target_ref: str | None,
         created_ref_name: str | None,
         deletion_policy: BranchDeletionPolicy,
     ) -> None:
         """Remove a worktree and apply `deletion_policy` to its branch; other kinds leave the repository alone.
+
+        git needs no `target_ref`: the only branch a worktree owns is the one it was created on.
 
         `created_ref_name` is the branch the worktree was created on. When it no
         longer exists because it was renamed inside the worktree (the agent's
@@ -307,7 +310,10 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def default_setup_command(self) -> str:
         return DEFAULT_GIT_WORKSPACE_SETUP_COMMAND
 
-    def read_identity(self, location: CheckoutLocation) -> GitHeadIdentity:
+    def read_identity(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
+    ) -> GitHeadIdentity:
+        """The checked-out branch; git's identity depends on neither the target nor the requested name."""
         return read_head_identity(self._git, location.checkout_path)
 
     def compute_diff_artifact(
@@ -614,8 +620,10 @@ class GitWorkspaceVcs(WorkspaceVcs):
             return False
         return result.returncode == 0
 
-    def get_pull_request_refs(self, location: CheckoutLocation) -> PullRequestRefs:
-        """The checked-out branch as the only head candidate.
+    def get_pull_request_refs(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
+    ) -> PullRequestRefs:
+        """The checked-out branch as the only head candidate, whatever the target and requested name.
 
         A detached HEAD has no candidate. Failures read as "nothing to look up",
         so PR polling reports no pull request rather than erroring.

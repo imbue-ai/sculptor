@@ -241,7 +241,9 @@ def test_verify_checkout_accepts_a_git_checkout(worktree_vcs: GitWorkspaceVcs, w
 def test_remove_checkout_deletes_a_merged_branch_when_safe(
     worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation, git_repo: Path
 ) -> None:
-    worktree_vcs.remove_checkout(worktree, "feature", "delete_if_safe")
+    worktree_vcs.remove_checkout(
+        worktree, target_ref="main", created_ref_name="feature", deletion_policy="delete_if_safe"
+    )
 
     assert not worktree.checkout_path.exists()
     assert not _branch_exists(git_repo, "feature")
@@ -252,7 +254,9 @@ def test_remove_checkout_keeps_an_unmerged_branch_when_deleting_only_if_safe(
 ) -> None:
     _commit_file(worktree.checkout_path, "new.txt", "new\n", "unmerged")
 
-    worktree_vcs.remove_checkout(worktree, "feature", "delete_if_safe")
+    worktree_vcs.remove_checkout(
+        worktree, target_ref="main", created_ref_name="feature", deletion_policy="delete_if_safe"
+    )
 
     assert not worktree.checkout_path.exists()
     assert _branch_exists(git_repo, "feature")
@@ -263,7 +267,7 @@ def test_remove_checkout_always_deletes_an_unmerged_branch(
 ) -> None:
     _commit_file(worktree.checkout_path, "new.txt", "new\n", "unmerged")
 
-    worktree_vcs.remove_checkout(worktree, "feature", "always")
+    worktree_vcs.remove_checkout(worktree, target_ref="main", created_ref_name="feature", deletion_policy="always")
 
     assert not _branch_exists(git_repo, "feature")
 
@@ -271,7 +275,7 @@ def test_remove_checkout_always_deletes_an_unmerged_branch(
 def test_remove_checkout_never_deletes_the_branch_under_the_never_policy(
     worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation, git_repo: Path
 ) -> None:
-    worktree_vcs.remove_checkout(worktree, "feature", "never")
+    worktree_vcs.remove_checkout(worktree, target_ref="main", created_ref_name="feature", deletion_policy="never")
 
     assert not worktree.checkout_path.exists()
     assert _branch_exists(git_repo, "feature")
@@ -282,7 +286,7 @@ def test_remove_checkout_deletes_the_branch_the_created_one_was_renamed_to(
 ) -> None:
     _git(worktree.checkout_path, ["branch", "-m", "feature", "renamed"])
 
-    worktree_vcs.remove_checkout(worktree, "feature", "always")
+    worktree_vcs.remove_checkout(worktree, target_ref="main", created_ref_name="feature", deletion_policy="always")
 
     assert not _branch_exists(git_repo, "renamed")
 
@@ -293,7 +297,7 @@ def test_remove_checkout_leaves_an_unrelated_branch_alone_after_the_created_one_
     _git(worktree.checkout_path, ["checkout", "-q", "-b", "unrelated"])
     _git(git_repo, ["branch", "-D", "feature"])
 
-    worktree_vcs.remove_checkout(worktree, "feature", "always")
+    worktree_vcs.remove_checkout(worktree, target_ref="main", created_ref_name="feature", deletion_policy="always")
 
     assert _branch_exists(git_repo, "unrelated")
 
@@ -303,7 +307,7 @@ def test_remove_checkout_survives_a_worktree_directory_that_is_already_gone(
 ) -> None:
     run_blocking(["rm", "-rf", str(worktree.checkout_path)])
 
-    worktree_vcs.remove_checkout(worktree, "feature", "always")
+    worktree_vcs.remove_checkout(worktree, target_ref="main", created_ref_name="feature", deletion_policy="always")
 
     assert not _branch_exists(git_repo, "feature")
 
@@ -313,21 +317,24 @@ def test_remove_checkout_survives_a_repository_that_is_gone(worktree_vcs: GitWor
 
     worktree_vcs.remove_checkout(
         CheckoutLocation(repo_path=missing, checkout_path=missing / "code", checkout_name=_CHECKOUT_NAME),
-        "feature",
-        "always",
+        target_ref="main",
+        created_ref_name="feature",
+        deletion_policy="always",
     )
 
 
 def test_remove_checkout_skips_a_worktree_with_no_recorded_branch(
     worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation
 ) -> None:
-    worktree_vcs.remove_checkout(worktree, None, "always")
+    worktree_vcs.remove_checkout(worktree, target_ref="main", created_ref_name=None, deletion_policy="always")
 
     assert worktree.checkout_path.exists()
 
 
 def test_remove_checkout_leaves_an_in_place_repository_alone(in_place_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
-    in_place_vcs.remove_checkout(_in_place(git_repo), "main", "always")
+    in_place_vcs.remove_checkout(
+        _in_place(git_repo), target_ref="main", created_ref_name="main", deletion_policy="always"
+    )
 
     assert _branch_exists(git_repo, "main")
 
@@ -437,7 +444,9 @@ def test_default_setup_command_fetches_origin_without_failing(worktree_vcs: GitW
 
 
 def test_read_identity_reports_the_worktree_branch(worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation) -> None:
-    assert worktree_vcs.read_identity(worktree) == GitHeadIdentity(branch_name="feature")
+    assert worktree_vcs.read_identity(worktree, target_ref="main", requested_ref_name="feature") == GitHeadIdentity(
+        branch_name="feature"
+    )
 
 
 def test_compute_diff_artifact_includes_modified_and_untracked_files(
@@ -766,7 +775,9 @@ def test_discard_file_changes_rejects_paths_outside_the_checkout(
 def test_get_pull_request_refs_reports_the_checked_out_branch(
     worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation
 ) -> None:
-    assert worktree_vcs.get_pull_request_refs(worktree).head_ref_names == ("feature",)
+    assert worktree_vcs.get_pull_request_refs(worktree, target_ref="main", requested_ref_name=None).head_ref_names == (
+        "feature",
+    )
 
 
 def test_get_pull_request_refs_has_no_head_for_a_detached_checkout(
@@ -774,7 +785,12 @@ def test_get_pull_request_refs_has_no_head_for_a_detached_checkout(
 ) -> None:
     _git(git_repo, ["checkout", "-q", "--detach"])
 
-    assert in_place_vcs.get_pull_request_refs(_in_place(git_repo)).head_ref_names == ()
+    assert (
+        in_place_vcs.get_pull_request_refs(
+            _in_place(git_repo), target_ref="main", requested_ref_name=None
+        ).head_ref_names
+        == ()
+    )
 
 
 def test_agent_environment_adds_nothing_for_git(worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation) -> None:
@@ -816,6 +832,6 @@ def test_tripwire_escapes_operations_that_swallow_git_failures(in_place_vcs: Git
     with pytest.raises(GitCommandInJjWorkspaceError):
         in_place_vcs.compute_change_fingerprint(location)
     with pytest.raises(GitCommandInJjWorkspaceError):
-        in_place_vcs.get_pull_request_refs(location)
+        in_place_vcs.get_pull_request_refs(location, target_ref="main", requested_ref_name=None)
     with pytest.raises(GitCommandInJjWorkspaceError):
         in_place_vcs.get_revision_history(location, target_ref="main", base_commit_id=None)
