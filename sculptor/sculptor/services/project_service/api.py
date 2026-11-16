@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Callable
 from pathlib import Path
 
 from sculptor.database.models import Project
@@ -27,6 +28,14 @@ class ProjectService(Service, ABC):
     @abstractmethod
     def activate_project(self, project: Project) -> None:
         """Activate a project."""
+
+    @abstractmethod
+    def add_activation_observer(self, observer: Callable[[Project], None]) -> None:
+        """Call `observer` with each project activated from now on, on the thread that activates it."""
+
+    @abstractmethod
+    def remove_activation_observer(self, observer: Callable[[Project], None]) -> None:
+        """Stop calling `observer` on activation."""
 
     @abstractmethod
     def initialize_project(

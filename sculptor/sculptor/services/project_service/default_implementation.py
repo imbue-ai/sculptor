@@ -1,4 +1,5 @@
 import threading
+from collections.abc import Callable
 from pathlib import Path
 
 from loguru import logger
@@ -37,6 +38,7 @@ class DefaultProjectService(ProjectService):
     # Set of currently active projects, where the first one is the most recently activated
     _active_projects: tuple[Project, ...] = PrivateAttr(default_factory=tuple)
     _project_activation_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    _activation_observers: tuple[Callable[[Project], None], ...] = PrivateAttr(default=())
     # Path monitoring thread fields
     _monitoring_thread: ObservableThread | None = PrivateAttr(default=None)
     _stop_event: threading.Event | None = PrivateAttr(default=None)
@@ -62,6 +64,19 @@ class DefaultProjectService(ProjectService):
             # move the project to the front of the list
             self._active_projects = (project,) + tuple(
                 p for p in self._active_projects if p.object_id != project.object_id
+            )
+            observers = self._activation_observers
+        for observer in observers:
+            observer(project)
+
+    def add_activation_observer(self, observer: Callable[[Project], None]) -> None:
+        with self._project_activation_lock:
+            self._activation_observers = (*self._activation_observers, observer)
+
+    def remove_activation_observer(self, observer: Callable[[Project], None]) -> None:
+        with self._project_activation_lock:
+            self._activation_observers = tuple(
+                registered for registered in self._activation_observers if registered != observer
             )
 
     def initialize_project(
