@@ -16,7 +16,10 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.common import generate_id
+from sculptor.foundation.event_utils import ShutdownEvent
 from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import MessageTypes
@@ -42,6 +45,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolUseBlock
@@ -58,11 +62,13 @@ from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_mess
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
+from sculptor.tasks.handlers.run_agent.v1 import AgentTaskFailure
 from sculptor.tasks.handlers.run_agent.v1 import _build_agent_path
 from sculptor.tasks.handlers.run_agent.v1 import _eager_fetch_pi_models_into_state
 from sculptor.tasks.handlers.run_agent.v1 import _run_agent_in_environment
 from sculptor.tasks.handlers.run_agent.v1 import _save_messages
 from sculptor.tasks.handlers.run_agent.v1 import _send_user_input_message
+from sculptor.tasks.handlers.run_agent.v1 import on_exception
 
 
 def test_drop_already_processed_messages_with_processed_id() -> None:
@@ -2468,3 +2474,21 @@ def test_crash_before_any_output_with_empty_queue_synthesizes_settlement(
 
     post_scan = _scan_history(local_task, services)
     assert post_scan.dangling_chat_message_id is None, "the settlement terminalizes the dangling request"
+
+
+def test_running_git_in_a_jj_workspace_fails_the_agent_with_an_error_log(
+    local_task: Task, services: ServiceCollectionForTask
+) -> None:
+    """The tripwire marks a dispatch bug, so it is logged at ERROR, which fails any test that trips it."""
+    checkout = Path("/environments/environment/code")
+    with pytest.raises(GitCommandInJjWorkspaceError) as raised:
+        raise GitCommandInJjWorkspaceError(("git", "status"), checkout, checkout)
+
+    with expect_exact_logged_errors(["ran git in a jj workspace"]):
+        with record_logged_error_levels() as levels:
+            with pytest.raises(AgentTaskFailure):
+                on_exception(
+                    raised.value, local_task.object_id, local_task.user_reference, services, ShutdownEvent.build_root()
+                )
+
+    assert levels == ["ERROR"]
