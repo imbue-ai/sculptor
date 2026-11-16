@@ -84,6 +84,9 @@ def _make_service() -> PrPollingService:
     svc._rate_limit_by_host = {}
     svc._round_failed_hosts = set()
     svc._cold_start_logged_hosts = set()
+    svc._round_failing_workspace_ids = set()
+    svc._first_fallback_failure_by_workspace = {}
+    svc._jj_workspace_logged_workspace_ids = set()
     svc._governed_interval = None
     workspace_service = MagicMock()
     workspace_service.get_workspace_working_directory.return_value = None
@@ -376,6 +379,105 @@ def test_jj_checkout_is_logged_once_at_error_across_rounds_and_fallback_polls(
     assert first_poll is None
     assert second_poll is None
     assert levels == ["ERROR"]
+
+
+def _rebuild_poll_state(svc: PrPollingService, state: _WorkspacePollState) -> _WorkspacePollState:
+    """Replace a workspace's poll state with a fresh one, as every workspace update does."""
+    rebuilt = _WorkspacePollState(
+        workspace_id=state.workspace_id,
+        initialization_strategy=state.initialization_strategy,
+        checkout_location=state.checkout_location,
+        target_branch=state.target_branch,
+        requested_branch_name=state.requested_branch_name,
+        is_open=state.is_open,
+    )
+    svc._workspace_poll_state[state.workspace_id] = rebuilt
+    return rebuilt
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_jj_checkout_is_logged_once_at_error_even_after_its_poll_state_is_rebuilt(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    _, state = _register_checkout(svc, repo, _make_jj_checkout(tmp_path / "jj-checkout"))
+
+    with expect_exact_logged_errors([_JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+            _rebuild_poll_state(svc, state)
+            svc._run_round(_make_user_config())
+
+    assert levels == ["ERROR"]
+
+
+class _UnexpectedResolverError(Exception):
+    """Raised by a binary resolver standing in for a failure no handler anticipates."""
+
+
+def _raise_unexpected_resolver_error(tool: Dependency) -> str | None:
+    raise _UnexpectedResolverError(f"cannot resolve {tool}")
+
+
+def _make_service_whose_jj_fails_unexpectedly(concurrency_group: ConcurrencyGroup) -> PrPollingService:
+    svc = _make_service_with_git(concurrency_group, _make_git_cli(concurrency_group, None))
+    svc._runners = VcsRunners(git=svc._runners.git, jj=JjCli(concurrency_group, _raise_unexpected_resolver_error))
+    return svc
+
+
+# What PR polling logs, once per workspace, when the round cannot resolve a workspace.
+_ROUND_SKIP_LOG = "PR search round skips workspace"
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_round_skips_a_workspace_that_fails_unexpectedly_and_still_resolves_the_others(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    on_target_checkout = _make_repo(tmp_path / "on-target", "main", _GITHUB_ORIGIN)
+    svc = _make_service_whose_jj_fails_unexpectedly(test_root_concurrency_group)
+    failing_ws, failing_state = _register_checkout(
+        svc,
+        repo,
+        _make_jj_checkout(tmp_path / "jj-checkout"),
+        target_branch="main@origin",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+    on_target_ws, _ = _register_checkout(svc, repo, on_target_checkout)
+
+    with expect_exact_logged_errors([_ROUND_SKIP_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+            _rebuild_poll_state(svc, failing_state)
+            svc._run_round(_make_user_config())
+
+    assert levels == ["LOW_PRIORITY"]
+    assert failing_ws not in svc._cache
+    assert svc._cache[on_target_ws] == PrStatusInfo(workspace_id=on_target_ws, pr_state="none")
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_a_failing_fallback_poll_is_logged_once_even_after_its_poll_state_is_rebuilt(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    svc = _make_service_whose_jj_fails_unexpectedly(test_root_concurrency_group)
+    workspace_id, state = _register_checkout(
+        svc,
+        repo,
+        _make_jj_checkout(tmp_path / "jj-checkout"),
+        target_branch="main@origin",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+
+    with expect_exact_logged_errors(["Failed to get PR status for workspace"]):
+        with record_logged_error_levels() as levels:
+            first_poll = svc._execute_poll(workspace_id, state)
+            second_poll = svc._execute_poll(workspace_id, _rebuild_poll_state(svc, state))
+
+    assert (first_poll, second_poll) == (None, None)
+    assert levels == ["LOW_PRIORITY"]
 
 
 @pytest.mark.usefixtures("decoy_gh_on_path")

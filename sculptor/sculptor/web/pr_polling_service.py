@@ -41,7 +41,6 @@ from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_f
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
-from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
@@ -338,9 +337,7 @@ class _WorkspacePollState:
         "requested_branch_name",
         "is_open",
         "is_deleted",
-        "first_failure",
         "poll_generation",
-        "is_jj_workspace_logged",
     )
 
     def __init__(
@@ -359,10 +356,7 @@ class _WorkspacePollState:
         self.requested_branch_name = requested_branch_name
         self.is_open = is_open
         self.is_deleted = False
-        self.first_failure: tuple[datetime.datetime, Exception] | None = None
         self.poll_generation: int = 0
-        # Whether git running in this workspace's jj checkout has been logged.
-        self.is_jj_workspace_logged = False
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +408,14 @@ class PrPollingService(Service):
     _round_failed_hosts: set[str] = PrivateAttr(default_factory=set)
     # Hosts whose cold-start unmatched-fetch count has already been logged.
     _cold_start_logged_hosts: set[str] = PrivateAttr(default_factory=set)
+    # What is remembered so a lasting per-workspace failure is logged when it starts, not every
+    # round or poll. Kept here, not on the poll state, because every workspace update rebuilds that.
+    # The first fallback failure is kept with its time for the trace of later ones.
+    _round_failing_workspace_ids: set[WorkspaceID] = PrivateAttr(default_factory=set)
+    _first_fallback_failure_by_workspace: dict[WorkspaceID, tuple[datetime.datetime, Exception]] = PrivateAttr(
+        default_factory=dict
+    )
+    _jj_workspace_logged_workspace_ids: set[WorkspaceID] = PrivateAttr(default_factory=set)
 
     def __init__(
         self,
@@ -551,6 +553,9 @@ class PrPollingService(Service):
             state.is_deleted = True
         self._cache.pop(workspace_id, None)
         self._matched_workspaces.discard(workspace_id)
+        self._round_failing_workspace_ids.discard(workspace_id)
+        self._first_fallback_failure_by_workspace.pop(workspace_id, None)
+        self._jj_workspace_logged_workspace_ids.discard(workspace_id)
 
     def on_branch_changed(self, workspace_id: WorkspaceID) -> None:
         """Invalidate cached result and force-enqueue for immediate poll.
@@ -565,9 +570,9 @@ class PrPollingService(Service):
         # The workspace's identity changed — any "matched by the last round" flag
         # is stale, so don't let it suppress this immediate fallback fetch.
         self._matched_workspaces.discard(workspace_id)
+        self._first_fallback_failure_by_workspace.pop(workspace_id, None)
         state = self._workspace_poll_state.get(workspace_id)
         if state is not None:
-            state.first_failure = None
             state.poll_generation += 1
 
         # Force-enqueue by clearing pending status first, so this bypasses
@@ -792,18 +797,18 @@ class PrPollingService(Service):
         """Resolve a workspace for the round, emitting its status when it short-circuits.
 
         Returns a candidate only for a GitHub workspace off its target branch (the
-        population the search can match). A ``VcsCommandError`` or the jj tripwire
-        while reading one workspace skips that workspace for this round instead of
-        failing the round.
+        population the search can match). Any failure while reading one workspace
+        skips that workspace for this round instead of ending the round for all.
         """
         try:
             lookup = self._resolve_pull_request_lookup(workspace_id, state)
-        except VcsCommandError as e:
-            logger.debug("PR search round: skipping workspace {}: {}", workspace_id, e)
-            return None
         except GitCommandInJjWorkspaceError as e:
-            self._log_jj_workspace_once(state, e)
+            self._log_jj_workspace_once(workspace_id, e)
             return None
+        except Exception as e:
+            self._log_round_failure_once(workspace_id, e)
+            return None
+        self._round_failing_workspace_ids.discard(workspace_id)
         if isinstance(lookup, PrStatusInfo):
             self._emit_status(workspace_id, lookup)
             return None
@@ -853,6 +858,18 @@ class PrPollingService(Service):
             base_ref_name=base_ref_name,
             host=extract_remote_hostname(origin_url),
             name_with_owner=f"{owner_and_name[0]}/{owner_and_name[1]}" if owner_and_name is not None else None,
+        )
+
+    def _log_round_failure_once(self, workspace_id: WorkspaceID, error: Exception) -> None:
+        """Log that the round cannot resolve a workspace when that starts, not on every round it lasts."""
+        if workspace_id in self._round_failing_workspace_ids:
+            logger.trace("PR search round still skipping workspace {}: {}", workspace_id, error)
+            return
+        self._round_failing_workspace_ids.add(workspace_id)
+        log_exception(
+            error,
+            f"PR search round skips workspace {workspace_id} until it can be read",
+            priority=ExceptionPriority.LOW_PRIORITY,
         )
 
     def _gh_runner(self, lookup: _PullRequestLookup) -> GhRunner:
@@ -1049,19 +1066,20 @@ class PrPollingService(Service):
     ) -> PrStatusInfo | _CooldownDeferred | None:
         try:
             status = self._fetch_status(workspace_id, state)
-            state.first_failure = None
+            self._first_fallback_failure_by_workspace.pop(workspace_id, None)
             return status
         except GitCommandInJjWorkspaceError as e:
-            self._log_jj_workspace_once(state, e)
+            self._log_jj_workspace_once(workspace_id, e)
             return None
         except Exception as e:
-            if state.first_failure is None:
-                state.first_failure = (datetime.datetime.now(), e)
+            first_failure = self._first_fallback_failure_by_workspace.get(workspace_id)
+            if first_failure is None:
+                self._first_fallback_failure_by_workspace[workspace_id] = (datetime.datetime.now(), e)
                 log_exception(
                     e, message="Failed to get PR status for workspace", priority=ExceptionPriority.LOW_PRIORITY
                 )
                 return None
-            original_time, original_exc = state.first_failure
+            original_time, original_exc = first_failure
             logger.trace(
                 "Still failing to get PR status: {} (original was {} @ {})",
                 e,
@@ -1070,12 +1088,12 @@ class PrPollingService(Service):
             )
             return None
 
-    def _log_jj_workspace_once(self, state: _WorkspacePollState, error: GitCommandInJjWorkspaceError) -> None:
+    def _log_jj_workspace_once(self, workspace_id: WorkspaceID, error: GitCommandInJjWorkspaceError) -> None:
         """Report at ERROR, once per workspace, that PR polling ran git in a jj workspace, which is a dispatch bug."""
-        if state.is_jj_workspace_logged:
+        if workspace_id in self._jj_workspace_logged_workspace_ids:
             return
-        state.is_jj_workspace_logged = True
-        log_exception(error, f"PR polling skips workspace {state.workspace_id}: it ran git in a jj workspace")
+        self._jj_workspace_logged_workspace_ids.add(workspace_id)
+        log_exception(error, f"PR polling skips workspace {workspace_id}: it ran git in a jj workspace")
 
     def _respect_throttle(self) -> _CooldownDeferred | None:
         """Apply the global throttle before an API-backed poll.
