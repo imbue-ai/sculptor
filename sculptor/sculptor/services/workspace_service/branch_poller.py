@@ -58,9 +58,11 @@ from sculptor.services.git_repo_service.git_ref_scanning import stat_signature
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
+from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
+from sculptor.web.cli_status_utils import strip_remote_prefix
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceBranchInfo
 from sculptor.web.data_types import WorkspaceTargetBranchesInfo
@@ -117,6 +119,7 @@ class WorkspaceBranchPoller:
         # projection in ``_target_info_by_workspace``).
         self._remote_signature_by_common_dir: dict[Path, RemoteRefsSignature] = {}
         self._target_candidates_by_common_dir: dict[Path, tuple[str, ...]] = {}
+        self._remote_names_by_common_dir: dict[Path, frozenset[str]] = {}
         # Workspaces and repositories whose last scan failed, so a lasting failure is logged once.
         self._failed_scan_keys: set[WorkspaceID | Path] = set()
 
@@ -348,12 +351,14 @@ class WorkspaceBranchPoller:
         try:
             main_repo_path = resolve_main_repo_path(self._runners.git, working_dir)
             target_candidates = tuple(vcs.list_target_candidates(main_repo_path))
+            remote_names = read_remote_names(self._runners.git, main_repo_path)
         except VcsCommandError as e:
             logger.warning("Failed to list target candidates for {}: {}", common_dir, e)
             return
 
         self._remote_signature_by_common_dir[common_dir] = signature
         self._target_candidates_by_common_dir[common_dir] = target_candidates
+        self._remote_names_by_common_dir[common_dir] = remote_names
 
     def _update_target_branches(self, workspace: Workspace, common_dir: Path) -> None:
         target_candidates = self._target_candidates_by_common_dir.get(common_dir)
@@ -364,13 +369,19 @@ class WorkspaceBranchPoller:
         current_branch = current.current_branch if current is not None else None
         # Exclude the workspace's own branch — diffing a branch against itself is a no-op.
         target_branches = tuple(branch for branch in target_candidates if branch != current_branch)
-
-        previous = self._target_info_by_workspace.get(workspace.object_id)
-        if previous is not None and previous.target_branches == target_branches:
-            return
-        self._publish_target_info(
-            WorkspaceTargetBranchesInfo(workspace_id=workspace.object_id, target_branches=target_branches)
+        remote_names = self._remote_names_by_common_dir[common_dir]
+        named_refs = (
+            target_branches if workspace.target_branch is None else (*target_branches, workspace.target_branch)
         )
+        target_info = WorkspaceTargetBranchesInfo(
+            workspace_id=workspace.object_id,
+            target_branches=target_branches,
+            pr_base_names={ref: strip_remote_prefix(ref, remote_names) for ref in named_refs},
+        )
+
+        if self._target_info_by_workspace.get(workspace.object_id) == target_info:
+            return
+        self._publish_target_info(target_info)
 
     def _refresh_diff_safely(self, workspace_id: WorkspaceID) -> None:
         try:
@@ -405,3 +416,4 @@ class WorkspaceBranchPoller:
         for common_dir in stale_common_dirs:
             self._remote_signature_by_common_dir.pop(common_dir, None)
             self._target_candidates_by_common_dir.pop(common_dir, None)
+            self._remote_names_by_common_dir.pop(common_dir, None)

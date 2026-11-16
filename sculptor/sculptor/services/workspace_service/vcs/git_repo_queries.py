@@ -63,6 +63,12 @@ def resolve_main_repo_path(git: GitCli, checkout_path: Path) -> Path:
     return main_repo_path
 
 
+def read_remote_names(git: GitCli, repo_path: Path) -> frozenset[str]:
+    """The names of the repository's remotes, such as `origin`."""
+    output = git.run_git(["remote"], repo_path, is_read_only=True).stdout
+    return frozenset(line.strip() for line in output.splitlines() if line.strip())
+
+
 def read_origin_url(git: GitCli, repo_path: Path) -> str | None:
     """The URL of the `origin` remote, or None when there is no such remote."""
     result = git.run_git(

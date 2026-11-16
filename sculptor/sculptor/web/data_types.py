@@ -81,6 +81,9 @@ class WorkspaceTargetBranchesInfo(SerializableModel):
 
     workspace_id: WorkspaceID
     target_branches: tuple[str, ...]
+    pr_base_names: dict[str, str] = Field(
+        description="For every target branch and the workspace's own target, the branch a pull request names as its base"
+    )
 
 
 class WorkspaceJjStateInfo(SerializableModel):

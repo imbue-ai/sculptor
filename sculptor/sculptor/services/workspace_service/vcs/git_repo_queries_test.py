@@ -9,6 +9,7 @@ from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
+from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
 
 
@@ -75,3 +76,14 @@ def test_read_origin_url_returns_the_origin_remote(git_cli: GitCli, git_repo: Pa
 
 def test_read_origin_url_is_none_without_an_origin(git_cli: GitCli, git_repo: Path) -> None:
     assert read_origin_url(git_cli, git_repo) is None
+
+
+def test_read_remote_names_lists_every_remote(git_cli: GitCli, git_repo: Path) -> None:
+    run_blocking(["git", "remote", "add", "origin", "git@github.com:owner/repo.git"], cwd=git_repo)
+    run_blocking(["git", "remote", "add", "upstream", "git@github.com:upstream/repo.git"], cwd=git_repo)
+
+    assert read_remote_names(git_cli, git_repo) == frozenset({"origin", "upstream"})
+
+
+def test_read_remote_names_is_empty_without_remotes(git_cli: GitCli, git_repo: Path) -> None:
+    assert read_remote_names(git_cli, git_repo) == frozenset()
