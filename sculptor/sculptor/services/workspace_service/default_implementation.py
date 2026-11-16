@@ -435,16 +435,19 @@ class DefaultWorkspaceService(WorkspaceService):
                 setup_runner.cancel(str(workspace_id))
                 # Detach the checkout from the user's repository before the rmtree
                 # below, so a worktree's gitfile entry is cleaned up and the branch
-                # deletion policy is applied.
-                if checkout_location is None:
-                    logger.info("Skipping checkout removal for workspace {}: its project is gone", workspace_id)
-                else:
-                    vcs.remove_checkout(
-                        checkout_location,
-                        requested_branch_name,
-                        get_user_config_instance().workspace_branch_deletion_policy,
-                    )
-                environment_manager.delete_environment(environment_id)
+                # deletion policy is applied. The environment directory is removed
+                # even if detaching fails.
+                try:
+                    if checkout_location is None:
+                        logger.info("Skipping checkout removal for workspace {}: its project is gone", workspace_id)
+                    else:
+                        vcs.remove_checkout(
+                            checkout_location,
+                            requested_branch_name,
+                            get_user_config_instance().workspace_branch_deletion_policy,
+                        )
+                finally:
+                    environment_manager.delete_environment(environment_id)
                 logger.info("Deleted environment {} for workspace {}", environment_id, workspace_id)
 
             # Run the slow teardown (worktree removal + shutil.rmtree of the whole

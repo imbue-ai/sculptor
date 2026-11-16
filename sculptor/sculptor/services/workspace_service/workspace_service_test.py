@@ -17,9 +17,11 @@ from sculptor.config.settings import TEST_LOG_PATH
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import DiffStatus
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.git import get_repo_base_path
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.base import Environment
 from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
@@ -763,6 +765,82 @@ def test_delete_workspace_offloads_environment_teardown_off_request_thread(
     )
 
 
+def _open_agent_environment_and_read_its_id(
+    test_service_collection: CompleteServiceCollection,
+    project: Project,
+    workspace_id: WorkspaceID,
+    concurrency_group: ConcurrencyGroup,
+) -> str | None:
+    """Open an agent environment in the workspace, then return the environment id the workspace records."""
+    with test_service_collection.workspace_service.agent_environment_context(
+        project=project,
+        workspace_id=workspace_id,
+        task_id=TaskID(),
+        concurrency_group=concurrency_group,
+        root_progress_handle=RootProgressHandle(),
+        shutdown_event=GLOBAL_SHUTDOWN_EVENT,
+    ):
+        pass
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = transaction.get_workspace(workspace_id)
+    assert workspace is not None
+    return workspace.environment_id
+
+
+class _CheckoutRemovalFailure(Exception):
+    """An unexpected failure while removing a checkout, outside the `VcsCommandError` family."""
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_delete_workspace_removes_the_environment_even_when_checkout_removal_fails(
+    test_service_collection: CompleteServiceCollection,
+    test_project: Project,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_service = test_service_collection.workspace_service
+    assert isinstance(workspace_service, DefaultWorkspaceService)
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = workspace_service.create_workspace(
+            project=test_project,
+            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="Checkout removal failure",
+            transaction=transaction,
+        )
+    with test_root_concurrency_group.make_concurrency_group("env_test") as concurrency_group:
+        environment_id = _open_agent_environment_and_read_its_id(
+            test_service_collection, test_project, workspace.object_id, concurrency_group
+        )
+    assert environment_id is not None and Path(environment_id).exists()
+    existing_manager = workspace_service.environment_manager
+    assert isinstance(existing_manager, DefaultEnvironmentManager)
+    recording_manager = _ThreadRecordingEnvironmentManager(data_model_service=existing_manager.data_model_service)
+    workspace_service.environment_manager = recording_manager
+
+    def _fail_removal(
+        self: GitWorkspaceVcs,
+        location: CheckoutLocation,
+        created_ref_name: str | None,
+        deletion_policy: BranchDeletionPolicy,
+    ) -> None:
+        raise _CheckoutRemovalFailure(f"Cannot remove {location.checkout_path}")
+
+    monkeypatch.setattr(GitWorkspaceVcs, "remove_checkout", _fail_removal)
+
+    with expect_exact_logged_errors(["Error in thread"]):
+        with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+            workspace_service.delete_workspace(workspace.object_id, transaction)
+        assert recording_manager._teardown_done.wait(timeout=10.0), "environment teardown never ran"
+        deletion_thread = recording_manager._teardown_threads[0]
+        assert isinstance(deletion_thread, ObservableThread)
+        with pytest.raises(_CheckoutRemovalFailure):
+            deletion_thread.join(timeout=10.0)
+
+    assert not Path(environment_id).exists()
+
+
 def _initialize_project_without_setup_command(
     test_service_collection: CompleteServiceCollection, repo_path: Path, transaction: DataModelTransaction
 ) -> Project:
@@ -870,28 +948,6 @@ def test_environment_creation_names_the_checkout_after_the_workspace(
             assert (agent_environment.get_working_directory() / ".git").is_file()
 
     assert [spec.checkout_name for spec in created_specs] == [str(workspace.object_id)]
-
-
-def _open_agent_environment_and_read_its_id(
-    test_service_collection: CompleteServiceCollection,
-    project: Project,
-    workspace_id: WorkspaceID,
-    concurrency_group: ConcurrencyGroup,
-) -> str | None:
-    """Open an agent environment in the workspace, then return the environment id the workspace records."""
-    with test_service_collection.workspace_service.agent_environment_context(
-        project=project,
-        workspace_id=workspace_id,
-        task_id=TaskID(),
-        concurrency_group=concurrency_group,
-        root_progress_handle=RootProgressHandle(),
-        shutdown_event=GLOBAL_SHUTDOWN_EVENT,
-    ):
-        pass
-    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
-        workspace = transaction.get_workspace(workspace_id)
-    assert workspace is not None
-    return workspace.environment_id
 
 
 def test_environment_is_recreated_when_the_vcs_finds_the_resumed_checkout_unusable(
