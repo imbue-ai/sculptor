@@ -95,6 +95,9 @@ _TEMP_DIR_PREFIX = "tmp-"
 _DOWNLOAD_CHUNK_SIZE_BYTES = 65536
 # Versions to keep when a tool has no ManagedTool conformer to override it.
 _DEFAULT_RETENTION_KEEP = 2
+# How often a running service recomputes the status with no event asking for it,
+# because a tool can be installed, removed or reconfigured outside Sculptor.
+_DEPENDENCY_STATUS_REFRESH_INTERVAL_SECONDS = 60.0
 
 
 def _is_valid_custom_binary(value: str) -> bool:
@@ -118,6 +121,22 @@ def _configured_binary_value(config: UserConfig, tool: Dependency) -> str:
             return config.dependency_paths.jj
         case Dependency.GIT | Dependency.GH:
             raise ValueError(f"{tool} has no managed binary mode")
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _dependency_info_for_tool(status: DependenciesStatus, tool: Dependency) -> DependencyInfo:
+    match tool:
+        case Dependency.CLAUDE:
+            return status.claude
+        case Dependency.GIT:
+            return status.git
+        case Dependency.PI:
+            return status.pi
+        case Dependency.JJ:
+            return status.jj
+        case Dependency.GH:
+            return status.gh
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -605,6 +624,9 @@ class DependencyManagementService(Service):
     _observer_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     # The last computed status, which every read is served from; None until the first computation.
     _status: DependenciesStatus | None = PrivateAttr(default=None)
+    # Set to have the status refresher recompute the status now rather than at its next timed refresh.
+    _status_refresh_requested: threading.Event = PrivateAttr(default_factory=threading.Event)
+    _status_refresher_thread: ObservableThread | None = PrivateAttr(default=None)
     _observer_queues: set[Queue[Any]] = PrivateAttr(default_factory=set)
     # Cooperative cancellation: set by stop() so the background install thread
     # can wrap up at the next chunk boundary instead of being interrupted by
@@ -620,19 +642,26 @@ class DependencyManagementService(Service):
     def start(self) -> None:
         self._cleanup_stale_state()
         self._auto_install_if_needed()
+        self._status_refresher_thread = self.concurrency_group.start_new_thread(
+            target=self._run_status_refresher, name="dependency-status-refresher", is_checked=False
+        )
 
     def stop(self) -> None:
         """Signal any in-flight install to wrap up before the concurrency group exits.
 
         ``Service.run()`` calls ``stop()`` while the concurrency group is still
         ACTIVE. We set the cancellation event so the download loop returns at the
-        next chunk boundary (and the progress notifier wakes from its wait), then
-        wait for each thread to finish — including the download thread's
-        ``finally`` block — so the group's ``__exit__`` doesn't race with that
-        cleanup. Bounded by a timeout so a stuck install can't block shutdown.
+        next chunk boundary (and the progress notifier and status refresher wake
+        from their waits), then wait for each thread to finish — including the
+        download thread's ``finally`` block — so the group's ``__exit__`` doesn't
+        race with that cleanup. Bounded by a timeout so a stuck install can't block
+        shutdown.
         """
         self._stop_requested.set()
+        self._status_refresh_requested.set()
         threads = list(self._install_thread.values())
+        if self._status_refresher_thread is not None:
+            threads.append(self._status_refresher_thread)
         installer = self._voice_models_installer
         if installer is not None and installer.thread is not None:
             threads.append(installer.thread)
@@ -770,6 +799,34 @@ class DependencyManagementService(Service):
         with self._status_computation_lock:
             return self._compute_and_publish_status()
 
+    def _request_status_refresh(self) -> None:
+        """Have a running service recompute the status soon, on its refresher thread."""
+        self._status_refresh_requested.set()
+
+    def _run_status_refresher(self) -> None:
+        """Recompute the status on a slow timer, and soon after a refresh is requested, until the service stops."""
+        has_warned_refresh_failure = False
+        while True:
+            self._status_refresh_requested.wait(_DEPENDENCY_STATUS_REFRESH_INTERVAL_SECONDS)
+            if self._stop_requested.is_set():
+                return
+            # Cleared before computing, so a request made during this refresh gets one of its own.
+            self._status_refresh_requested.clear()
+            try:
+                self.refresh_status()
+                has_warned_refresh_failure = False
+            except InvalidConcurrencyGroupStateError:
+                logger.debug("Stopping the dependency status refresher: concurrency group is exiting")
+                return
+            except Exception:
+                # Warn only on the first failure of a streak, so a status that keeps
+                # failing to compute does not log every interval.
+                if has_warned_refresh_failure:
+                    logger.debug("Dependency status refresh failed (repeat)")
+                else:
+                    logger.opt(exception=True).warning("Dependency status refresh failed")
+                    has_warned_refresh_failure = True
+
     def _compute_and_publish_status(self) -> DependenciesStatus:
         """Compute, store and push the status; call only while holding ``_status_computation_lock``.
 
@@ -784,7 +841,19 @@ class DependencyManagementService(Service):
         return status
 
     def resolve_binary_path(self, tool: Dependency) -> str | None:
-        """Resolve the binary path for a dependency based on the active mode."""
+        """Resolve the binary path for a dependency based on the active mode.
+
+        A path other than the last computed status's means the tool was installed,
+        removed or moved since, as when a jj command fails because jj went away, so
+        a refresh is requested.
+        """
+        path = self._resolve_configured_binary_path(tool)
+        status = self._status
+        if status is not None and _dependency_info_for_tool(status, tool).path != path:
+            self._request_status_refresh()
+        return path
+
+    def _resolve_configured_binary_path(self, tool: Dependency) -> str | None:
         match tool:
             case Dependency.CLAUDE:
                 return self._resolve_claude_path()
@@ -1267,8 +1336,16 @@ class DependencyManagementService(Service):
         return status.jj_readiness
 
     def probe_jj_readiness(self) -> JjReadiness:
-        """JJ_AVAILABLE as jj reports it now, for a gate about to let jj act on the user's repository."""
-        return self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
+        """JJ_AVAILABLE as jj reports it now, for a gate about to let jj act on the user's repository.
+
+        A readiness other than the last computed status's requests a refresh, so
+        every window and the jj poller learn of it too.
+        """
+        readiness = self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
+        status = self._status
+        if status is not None and status.jj_readiness != readiness:
+            self._request_status_refresh()
+        return readiness
 
     def _jj_readiness_from_check(self, check: DependencyCheckResult) -> JjReadiness:
         if check.path is None:

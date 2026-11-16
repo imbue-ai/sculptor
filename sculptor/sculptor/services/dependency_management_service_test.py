@@ -731,6 +731,7 @@ class TestCleanup:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
             service.start()
+            service.stop()
 
         assert not (claude_dir / "tmp-stale").exists()
 
@@ -2562,6 +2563,7 @@ class TestCleanupStaleStatePi:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
             service.start()
+            service.stop()
 
         assert not (pi_dir / "tmp-stale").exists()
         remaining = sorted(d.name for d in pi_dir.iterdir() if d.is_dir() and d.name.startswith("version-"))
