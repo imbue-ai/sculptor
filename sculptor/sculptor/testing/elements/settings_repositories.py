@@ -165,6 +165,14 @@ class PlaywrightRepositoriesSettingsElement(PlaywrightIntegrationTestElement):
         """Get the link to the Jujutsu page that the jj controls show while jj is unavailable."""
         return self.get_by_role("link", name="Open Jujutsu settings").first
 
+    def get_jj_unavailable_reason(self, reason: str) -> Locator:
+        """Get the jj controls' sentence saying why jj is unavailable, as the backend words it."""
+        return self.get_by_text(reason).first
+
+    def get_jj_recheck_button(self) -> Locator:
+        """Get the button that re-checks jj's availability while the jj controls are disabled."""
+        return self.get_by_role("button", name="Re-check").first
+
     def open_jj_settings(self) -> PlaywrightJjSettingsElement:
         """Follow the jj controls' link to the Jujutsu page, which replaces this section's content."""
         self.get_open_jj_settings_link().click()

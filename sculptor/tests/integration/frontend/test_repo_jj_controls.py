@@ -53,10 +53,52 @@ def test_repo_jj_controls_are_disabled_without_jj(sculptor_instance_factory_: Sc
         expect(repos_settings.get_jj_colocation_switch()).not_to_be_checked()
         expect(repos_settings.get_use_jj_for_new_workspaces_switch()).to_be_disabled()
         expect(repos_settings.get_jj_badge()).to_have_count(0)
+        expect(
+            repos_settings.get_jj_unavailable_reason(
+                "jj is not installed: install it or set its path on the Jujutsu settings page"
+            )
+        ).to_be_visible()
 
         jj_section = repos_settings.open_jj_settings()
 
         expect(jj_section.get_availability()).to_contain_text("jj is not installed")
+
+
+@user_story("to fix jj outside Sculptor and have the repository jj controls notice")
+def test_repo_jj_controls_recheck_a_jj_identity_set_outside_sculptor(
+    sculptor_instance_factory_: SculptorInstanceFactory, jj_binary: JjBinary
+) -> None:
+    _use_jj_binary(sculptor_instance_factory_, jj_binary)
+    # The backend reads jj's identity with the environment agents get, which overlays
+    # the instance's .env, so the identity comes from a file this test owns.
+    sculptor_folder = sculptor_instance_factory_._delegate.sculptor_folder
+    jj_config_path = sculptor_folder / "jj-user-config.toml"
+    jj_config_path.write_text("")
+    (sculptor_folder / ".env").write_text(f"JJ_CONFIG={jj_config_path}\n")
+    no_identity_reason = "jj has no author identity"
+
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        repos_settings = _open_repo_config(instance)
+        colocation_switch = repos_settings.get_jj_colocation_switch()
+        expect(colocation_switch).to_be_disabled()
+        expect(repos_settings.get_jj_unavailable_reason(no_identity_reason)).to_be_visible()
+
+        jj_config_path.write_text('[user]\nname = "Ada Lovelace"\nemail = "ada@example.com"\n')
+        repos_settings.get_jj_recheck_button().click()
+
+        expect(colocation_switch).to_be_enabled()
+        expect(repos_settings.get_jj_unavailable_reason(no_identity_reason)).to_be_hidden()
+
+        # Opening the Repositories section checks again by itself. The Git section
+        # is the way back because the Jujutsu section also checks when it opens.
+        jj_config_path.write_text("")
+        settings_page = navigate_to_settings_page(page=instance.page)
+        settings_page.click_on_git()
+        repos_settings = settings_page.click_on_repositories()
+        repos_settings.expand_repo_config()
+
+        expect(repos_settings.get_jj_colocation_switch()).to_be_disabled()
+        expect(repos_settings.get_jj_unavailable_reason(no_identity_reason)).to_be_visible()
 
 
 @user_story("to make a plain git repository a jj colocation from Settings")
