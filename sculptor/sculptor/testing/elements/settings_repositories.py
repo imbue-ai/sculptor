@@ -4,6 +4,7 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
+from sculptor.testing.elements.settings_jj import PlaywrightJjSettingsElement
 from sculptor.testing.utils import get_playwright_modifier_key
 
 _REMOVE_BUTTON_NAME = "Remove repo & agents"
@@ -128,7 +129,8 @@ class PlaywrightRepositoriesSettingsElement(PlaywrightIntegrationTestElement):
         instances, where an earlier test may have already saved the same value.
         """
         setup_input = self.get_setup_command_input()
-        expect(setup_input).to_be_visible()
+        # A row that tracks the default is disabled, and empty, until the backend names the default.
+        expect(setup_input).to_be_enabled()
         current_value = setup_input.input_value()
         setup_input.fill(command)
         if command.strip() == current_value.strip():
@@ -139,6 +141,41 @@ class PlaywrightRepositoriesSettingsElement(PlaywrightIntegrationTestElement):
             lambda response: "workspace_setup_command" in response.url and response.request.method == "PUT"
         ):
             setup_input.blur()
+
+    def get_jj_badge(self) -> Locator:
+        """Get the `jj` badge in the first repo row's header, shown when the repo creates jj workspaces."""
+        return self.get_by_test_id(ElementIDs.REPO_JJ_BADGE).first
+
+    def get_jj_colocation_switch(self) -> Locator:
+        """Get the "colocated jj repository" switch of the first (expanded) repo."""
+        return self.get_by_test_id(ElementIDs.REPO_JJ_COLOCATION_SWITCH).first
+
+    def get_jj_colocation_initializing(self) -> Locator:
+        """Get the loading text the colocation switch shows while a colocation runs."""
+        return self.get_by_text("Initializing jujutsu colocation").first
+
+    def get_jj_colocation_error(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.JJ_COLOCATION_ERROR).first
+
+    def get_use_jj_for_new_workspaces_switch(self) -> Locator:
+        """Get the "use jj for new workspaces" switch of the first (expanded) repo."""
+        return self.get_by_test_id(ElementIDs.REPO_JJ_USE_FOR_NEW_WORKSPACES_SWITCH).first
+
+    def get_open_jj_settings_link(self) -> Locator:
+        """Get the link to the Jujutsu page that the jj controls show while jj is unavailable."""
+        return self.get_by_role("link", name="Open Jujutsu settings").first
+
+    def open_jj_settings(self) -> PlaywrightJjSettingsElement:
+        """Follow the jj controls' link to the Jujutsu page, which replaces this section's content."""
+        self.get_open_jj_settings_link().click()
+        return PlaywrightJjSettingsElement(locator=self._locator, page=self._page)
+
+    def get_jj_colocation_dialog(self) -> Locator:
+        # Radix dialogs render in a page-level portal, not inside the section.
+        return self._page.get_by_test_id(ElementIDs.JJ_COLOCATION_DIALOG)
+
+    def get_jj_colocation_dialog_confirm(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.JJ_COLOCATION_DIALOG_CONFIRM)
 
     def _get_repo_row(self, repo_name: str, path_contains: str | None = None) -> Locator:
         """Find a repo row containing the given name and optional path substring."""
