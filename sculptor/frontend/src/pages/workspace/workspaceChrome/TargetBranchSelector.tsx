@@ -4,22 +4,25 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import { ElementIds } from "~/api";
-import { toRemoteRefName } from "~/common/utils/refNames.ts";
+import type { WorkspaceVcs } from "~/common/utils/workspaceVcs.ts";
 import type { BadgeInfo } from "~/components/BranchCombobox.tsx";
 import { BranchCombobox, type BranchWithBadges } from "~/components/BranchCombobox.tsx";
 
 import styles from "./TargetBranchSelector.module.scss";
 
 type MismatchInfo = {
-  /** The branch the existing PR targets (bare name, e.g. "main") */
-  targetBranch: string;
-  /** Badge to show on that branch in the dropdown (e.g. "PR #847") */
+  /** The base branch the existing PR targets, as the code host names it (e.g. "main") */
+  prBaseName: string;
+  /** Badge to show on the candidates that open PRs into that base (e.g. "PR #847") */
   badge: BadgeInfo;
 };
 
 type TargetBranchSelectorProps = {
+  vcs: WorkspaceVcs;
   currentTargetBranch: string | null;
   targetBranches: Array<string>;
+  /** The PR base name of each candidate, from the backend. */
+  prBaseNames: Readonly<Record<string, string>>;
   onBranchChange: (branch: string) => void;
   onOpenChange?: (open: boolean) => void;
   variant?: "default" | "amber";
@@ -27,8 +30,10 @@ type TargetBranchSelectorProps = {
 };
 
 export const TargetBranchSelector = ({
+  vcs,
   currentTargetBranch,
   targetBranches,
+  prBaseNames,
   onBranchChange,
   onOpenChange,
   variant = "default",
@@ -37,14 +42,14 @@ export const TargetBranchSelector = ({
   const branches: Array<BranchWithBadges> = useMemo(() => {
     return targetBranches.map((branch) => ({
       branch,
-      badges: mismatch && branch === toRemoteRefName(mismatch.targetBranch) ? [mismatch.badge] : [],
+      badges: mismatch && prBaseNames[branch] === mismatch.prBaseName ? [mismatch.badge] : [],
     }));
-  }, [targetBranches, mismatch]);
+  }, [targetBranches, prBaseNames, mismatch]);
 
   // A missing target is shown as a warning: until the user picks one, the
   // workspace has nothing to open a pull request into.
   const isAmber = variant === "amber" || currentTargetBranch === null;
-  const label = currentTargetBranch ?? "No target branch";
+  const label = currentTargetBranch ?? (vcs === "jj" ? "No target bookmark" : "No target branch");
 
   return (
     <BranchCombobox

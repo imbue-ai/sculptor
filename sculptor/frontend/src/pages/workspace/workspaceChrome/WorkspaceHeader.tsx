@@ -10,7 +10,8 @@ import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
-import { toPrBaseRefName, toRemoteRefName } from "~/common/utils/refNames.ts";
+import { findTargetForPrBase, isPrBaseOtherThanTarget } from "~/common/utils/prBaseNames.ts";
+import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getCollapsedSidebarToggleClearance } from "~/electron/platform.ts";
 import { extensionWorkspaceWidgetsAtom } from "~/extensions/extensionRegistry.ts";
@@ -104,7 +105,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const gitProvider = useGitProvider(projectID ?? "");
   const currentTargetBranch = useWorkspaceTarget(workspaceID);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
-  const targetBranches = useWorkspaceTargetBranches(workspaceID);
+  const { targetBranches, prBaseNames } = useWorkspaceTargetBranches(workspaceID);
 
   // Internal state
   const [isTargetBranchOpen, setIsTargetBranchOpen] = useState<boolean>(false);
@@ -121,38 +122,44 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
     [workspaceID],
   );
 
+  // Retarget the workspace at the candidate that opens pull requests into an
+  // existing PR's base.
   const handleSwitchTarget = useCallback(
-    async (newTarget: string): Promise<void> => {
-      // PRs live on the origin remote, so prefer its ref for the branch.
-      const remoteRef = toRemoteRefName(newTarget);
-      const fullBranch =
-        targetBranches.find((b) => b === remoteRef) ??
-        targetBranches.find((b) => b.endsWith(`/${newTarget}`)) ??
-        remoteRef;
+    async (prBaseName: string): Promise<void> => {
+      const newTarget = findTargetForPrBase({ prBaseName, targetBranches, prBaseNames });
+      if (newTarget === null) {
+        console.error("No target opens pull requests into", prBaseName);
+        return;
+      }
+
       try {
-        await updateWorkspace({ path: { workspace_id: workspaceID }, body: { targetBranch: fullBranch } });
+        await updateWorkspace({ path: { workspace_id: workspaceID }, body: { targetBranch: newTarget } });
       } catch (e) {
         console.error("Failed to switch target branch:", e);
       }
     },
-    [workspaceID, targetBranches],
+    [workspaceID, targetBranches, prBaseNames],
   );
 
   // JSX and rendering logic
-  // Only show mismatch when the PR's target branch differs from the current
-  // workspace target, compared the way PR status matches them.
+  // Only show mismatch when the PR's base differs from the current workspace
+  // target's, by the backend's base names.
   const hasMismatch =
     currentTargetBranch !== null &&
     prStatus?.prState === "none" &&
     prStatus.mismatchedPrIid != null &&
     prStatus.mismatchedPrTargetBranch != null &&
-    prStatus.mismatchedPrTargetBranch !== toPrBaseRefName(currentTargetBranch);
+    isPrBaseOtherThanTarget({
+      prBaseName: prStatus.mismatchedPrTargetBranch,
+      targetRef: currentTargetBranch,
+      prBaseNames,
+    });
   // Stable reference so the useMemo inside TargetBranchSelector doesn't thrash.
   const mismatchForSelector = useMemo(
     () =>
       hasMismatch
         ? {
-            targetBranch: prStatus.mismatchedPrTargetBranch!,
+            prBaseName: prStatus.mismatchedPrTargetBranch!,
             badge: {
               text: `PR #${prStatus.mismatchedPrIid}`,
               tooltip: "Open PR targets this branch",
@@ -179,6 +186,8 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   // GitHub CLI, so the PR button stays gated on the git provider.
   const canCreatePr = gitProvider !== null;
   const isMismatched = mismatchForSelector != null;
+
+  const vcs = workspaceVcsOf(workspace);
 
   // Surface the workspace's init mode next to the branch — but only for the
   // non-default strategies (worktree is the default and stays unlabeled).
@@ -239,11 +248,17 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
 
       {/* Arrow + target branch */}
       <span className={styles.arrowSeparator}>&rarr;</span>
-      <Tooltip content="Target branch" side="bottom" open={isTargetBranchOpen ? false : undefined}>
+      <Tooltip
+        content={vcs === "jj" ? "Target bookmark" : "Target branch"}
+        side="bottom"
+        open={isTargetBranchOpen ? false : undefined}
+      >
         <span>
           <TargetBranchSelector
+            vcs={vcs}
             currentTargetBranch={currentTargetBranch}
             targetBranches={targetBranches}
+            prBaseNames={prBaseNames}
             onBranchChange={handleTargetBranchChange}
             onOpenChange={setIsTargetBranchOpen}
             variant={isMismatched ? "amber" : "default"}
