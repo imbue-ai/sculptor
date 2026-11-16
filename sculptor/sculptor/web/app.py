@@ -154,6 +154,7 @@ from sculptor.services.user_config.user_config import replace_config
 from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
 from sculptor.services.voice_models import find_voice_model_file
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
+from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import resolve_workspace_setup_command
@@ -1337,6 +1338,8 @@ def get_workspace_commits(
             commits, fork_point = services.workspace_service.get_commit_history(validated_workspace_id, transaction)
         except WorkspaceNotFoundError:
             return CommitHistoryResponse(commits=[], fork_point=None)
+        except WorkspaceCommitHistoryUnavailableError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
 
         return CommitHistoryResponse(
             commits=[
