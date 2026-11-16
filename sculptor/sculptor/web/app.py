@@ -943,8 +943,8 @@ _PREVIEW_BRANCH_NAME_GIT_TIMEOUT = 5.0
 def preview_branch_name(
     request: Request,
     project_id: str,
+    mode: WorkspaceInitializationStrategy,
     workspace_name: str = "",
-    mode: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
     user_session: UserSession = Depends(get_user_session),
 ) -> PreviewBranchNameResponse:
     """Resolve the auto-filled branch-name preview for the Add Workspace form.
@@ -3729,7 +3729,7 @@ def validate_new_branch_name(
     project_id: str,
     name: str,
     request: Request,
-    mode: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
+    mode: WorkspaceInitializationStrategy,
     user_session: UserSession = Depends(get_user_session),
 ) -> NewBranchNameValidationResponse:
     """Validate a prospective new workspace branch name in the project's repo.

@@ -434,10 +434,26 @@ def test_workspace_endpoints_report_working_directory_and_current_branch(
     assert "currentBranch" in body
 
 
+@pytest.mark.parametrize(
+    "url_template",
+    [
+        "/api/v1/projects/{project_id}/validate-new-branch-name?name=imbue/brand-new",
+        "/api/v1/workspaces/preview-branch-name?project_id={project_id}",
+    ],
+)
+def test_branch_name_endpoints_require_the_workspace_kind(
+    client: TestClient, test_project: Project, url_template: str
+) -> None:
+    response = client.get(url_template.format(project_id=test_project.object_id))
+
+    assert response.status_code == 422, response.text
+    assert [error["loc"] for error in response.json()["detail"]] == [["query", "mode"]]
+
+
 def _validate_new_branch_name(client: TestClient, project: Project, name: str) -> dict:
     response = client.get(
         f"/api/v1/projects/{project.object_id}/validate-new-branch-name",
-        params={"name": name},
+        params={"name": name, "mode": "WORKTREE"},
     )
     assert response.status_code == 200, response.text
     return response.json()

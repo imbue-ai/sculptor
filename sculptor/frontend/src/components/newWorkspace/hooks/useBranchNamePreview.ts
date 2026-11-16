@@ -66,8 +66,12 @@ const branchNamePreviewQueryKey = (
   isValid: projectId !== null,
 });
 
-const validateNewBranchNameQueryKey = (projectId: string | null, name: string): BackendQueryKeyResult => ({
-  key: [SCULPTOR_QUERY_KEY_PREFIX, "project", projectId, "validateNewBranchName", name] as const,
+const validateNewBranchNameQueryKey = (
+  projectId: string | null,
+  name: string,
+  mode: WorkspaceInitializationStrategy,
+): BackendQueryKeyResult => ({
+  key: [SCULPTOR_QUERY_KEY_PREFIX, "project", projectId, "validateNewBranchName", mode, name] as const,
   isValid: projectId !== null,
 });
 
@@ -89,11 +93,12 @@ const fetchBranchNamePreview = async (
 const fetchBranchNameValidation = async (
   projectId: string,
   name: string,
+  mode: WorkspaceInitializationStrategy,
   signal: AbortSignal,
 ): Promise<NewBranchNameValidationResponse | null> => {
   const { data } = await validateNewBranchName({
     path: { project_id: projectId },
-    query: { name },
+    query: { name, mode },
     meta: { signal },
   });
   return data ?? null;
@@ -144,11 +149,11 @@ export const useBranchNamePreview = ({
   // Debounce the displayed value before the validation check so it fires on the
   // settled name, not on every intermediate keystroke or preview update.
   const debouncedBranchName = useDebouncedValue(displayedValue.trim(), VALIDATION_DEBOUNCE_MS);
-  const validationKey = validateNewBranchNameQueryKey(projectId, debouncedBranchName);
+  const validationKey = validateNewBranchNameQueryKey(projectId, debouncedBranchName, mode);
   const isValidationEnabled = validationKey.isValid && doesModeUseBranchName && debouncedBranchName !== "";
   const validationQuery = useQuery({
     queryKey: validationKey.key,
-    queryFn: ({ signal }) => fetchBranchNameValidation(projectId!, debouncedBranchName, signal),
+    queryFn: ({ signal }) => fetchBranchNameValidation(projectId!, debouncedBranchName, mode, signal),
     enabled: isValidationEnabled,
     placeholderData: keepPreviousData,
     retry: false,
