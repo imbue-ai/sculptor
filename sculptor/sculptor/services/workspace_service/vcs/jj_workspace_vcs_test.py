@@ -575,6 +575,17 @@ def test_get_pull_request_refs_lists_the_stack_bookmarks_most_likely_first_witho
     assert refs.head_ref_names == ("upper", "lower")
 
 
+def test_get_pull_request_refs_names_the_targets_bookmark_as_the_base(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+) -> None:
+    def read_base(target_ref: str | None) -> str | None:
+        return jj_vcs.get_pull_request_refs(checkout, target_ref=target_ref, requested_ref_name=None).base_ref_name
+
+    assert read_base("release/1.0@origin") == "release/1.0"
+    assert read_base("main") == "main"
+    assert read_base(None) is None
+
+
 def test_get_pull_request_refs_has_no_head_when_the_checkout_is_gone(
     jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
 ) -> None:

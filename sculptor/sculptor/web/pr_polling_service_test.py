@@ -513,6 +513,7 @@ def test_a_jj_workspace_is_looked_up_through_jj_and_runs_no_git_in_its_checkout(
 
     assert levels == []
     assert isinstance(status, PrStatusInfo)
+    assert (status.pr_state, status.pr_iid, status.mismatched_pr_iid) == ("open", 7, None)
     assert Path((tmp_path / "gh-cwd").read_text().strip()) == checkout.resolve()
 
 

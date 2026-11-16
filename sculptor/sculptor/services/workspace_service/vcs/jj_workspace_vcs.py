@@ -398,15 +398,19 @@ class JjWorkspaceVcs(WorkspaceVcs):
     def get_pull_request_refs(
         self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
     ) -> PullRequestRefs:
-        """The stack's bookmarks, most likely PR head first, never the target's own name; none when jj fails."""
+        """The stack's bookmarks, most likely PR head first, never the target's own name, with that name as the base.
+
+        No heads when jj fails.
+        """
         checkout = location.checkout_path
+        base_ref_name = _target_bookmark_name(target_ref)
         try:
             commit_id = self._read_working_copy_commit_id(checkout)
             projection = self._project_stack(checkout, commit_id, target_ref, requested_ref_name)
         except VcsCommandError as e:
             logger.debug("Cannot read the bookmarks of {}: {}", checkout, e)
-            return PullRequestRefs(head_ref_names=())
-        return PullRequestRefs(head_ref_names=projection.pr_head_candidates)
+            return PullRequestRefs(head_ref_names=(), base_ref_name=base_ref_name)
+        return PullRequestRefs(head_ref_names=projection.pr_head_candidates, base_ref_name=base_ref_name)
 
     def _read_working_copy_commit_id(self, checkout: Path) -> str:
         """The working-copy commit as last snapshotted."""

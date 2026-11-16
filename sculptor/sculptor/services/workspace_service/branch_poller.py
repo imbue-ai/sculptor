@@ -62,9 +62,9 @@ from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
+from sculptor.services.workspace_service.vcs.git_repo_queries import strip_remote_prefix
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
-from sculptor.web.cli_status_utils import strip_remote_prefix
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceBranchInfo
 from sculptor.web.data_types import WorkspaceTargetBranchesInfo

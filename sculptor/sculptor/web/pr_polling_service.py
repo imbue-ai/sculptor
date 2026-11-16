@@ -42,7 +42,6 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
-from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
 from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
 from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
@@ -51,7 +50,6 @@ from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.cli_status_utils import GhRunner
 from sculptor.web.cli_status_utils import run_gh_with_retry
-from sculptor.web.cli_status_utils import strip_remote_prefix
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_status import GithubRateLimit
@@ -822,8 +820,9 @@ class PrPollingService(Service):
         Applies the short-circuits *before* a workspace can enter a round or
         fallback: not ready (no checkout) → ``None``; no PR head (e.g. a detached
         HEAD) or no target / non-GitHub origin / on the target branch → ``none``
-        with zero gh calls. The origin and remote names are read from the main
-        repository, which exists even when a checkout has no ``.git`` of its own.
+        with zero gh calls. The heads and the base come from the workspace's VCS;
+        the origin is read from the main repository, which exists even when a
+        checkout has no ``.git`` of its own.
         """
         location = self._resolve_checkout_location(workspace_id, state)
         if location is None:
@@ -838,15 +837,16 @@ class PrPollingService(Service):
             self.concurrency_group,
             read_jj_snapshot_max_new_file_size_mib,
         )
-        head_ref_names = vcs.get_pull_request_refs(
+        refs = vcs.get_pull_request_refs(
             location, target_ref=target_branch, requested_ref_name=state.requested_branch_name
-        ).head_ref_names
-        if not head_ref_names:
+        )
+        head_ref_names = refs.head_ref_names
+        base_ref_name = refs.base_ref_name
+        if not head_ref_names or base_ref_name is None:
             return no_pr_status
         origin_url = read_origin_url(self._runners.git, location.repo_path)
         if origin_url is None or not is_github_remote_url(origin_url):
             return no_pr_status
-        base_ref_name = strip_remote_prefix(target_branch, read_remote_names(self._runners.git, location.repo_path))
         if head_ref_names[0] == base_ref_name:
             return no_pr_status
         owner_and_name = parse_remote_owner_and_name(origin_url)

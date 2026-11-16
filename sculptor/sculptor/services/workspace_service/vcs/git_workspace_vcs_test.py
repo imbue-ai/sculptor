@@ -794,6 +794,21 @@ def test_get_pull_request_refs_has_no_head_for_a_detached_checkout(
     )
 
 
+def test_get_pull_request_refs_names_the_branch_the_target_is_on_its_remote_as_the_base(
+    worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation, git_repo: Path
+) -> None:
+    _git(git_repo, ["remote", "add", "upstream", "https://github.com/upstream/repo.git"])
+
+    def read_base(target_ref: str | None) -> str | None:
+        return worktree_vcs.get_pull_request_refs(
+            worktree, target_ref=target_ref, requested_ref_name=None
+        ).base_ref_name
+
+    assert read_base("upstream/feature/foo") == "feature/foo"
+    assert read_base("release/1.0") == "release/1.0"
+    assert read_base(None) is None
+
+
 def test_agent_environment_adds_nothing_for_git(worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation) -> None:
     assert worktree_vcs.agent_environment(worktree) == AgentVcsEnvironment()
 
