@@ -97,7 +97,9 @@ def test_the_facts_of_a_colocated_repository_with_jj_available(
     project = _make_project(jj_colocated_repo.path, use_jj_for_new_workspaces=True)
 
     facts = gather_jj_workspace_creation_facts(
-        project, _make_jj_cli(test_root_concurrency_group, jj_binary.path), dependency_management_service
+        project,
+        _make_jj_cli(test_root_concurrency_group, jj_binary.path),
+        dependency_management_service.probe_jj_readiness(),
     )
 
     assert facts == JjWorkspaceCreationFacts(
@@ -115,7 +117,9 @@ def test_the_facts_take_the_flag_from_the_project(
     project = _make_project(jj_colocated_repo.path, use_jj_for_new_workspaces=False)
 
     facts = gather_jj_workspace_creation_facts(
-        project, _make_jj_cli(test_root_concurrency_group, jj_binary.path), dependency_management_service
+        project,
+        _make_jj_cli(test_root_concurrency_group, jj_binary.path),
+        dependency_management_service.probe_jj_readiness(),
     )
 
     assert facts.use_jj_for_new_workspaces is False
@@ -135,7 +139,9 @@ def test_a_plain_git_repository_is_not_colocated(
     project = _make_project(repo_path, use_jj_for_new_workspaces=True)
 
     facts = gather_jj_workspace_creation_facts(
-        project, _make_jj_cli(test_root_concurrency_group, jj_binary.path), dependency_management_service
+        project,
+        _make_jj_cli(test_root_concurrency_group, jj_binary.path),
+        dependency_management_service.probe_jj_readiness(),
     )
 
     assert facts.is_colocated is False
@@ -152,7 +158,7 @@ def test_colocation_is_not_checked_while_jj_is_unavailable(
 
     # A runner that cannot find jj raises if it is ever asked to run.
     facts = gather_jj_workspace_creation_facts(
-        project, _make_jj_cli(test_root_concurrency_group, None), dependency_management_service
+        project, _make_jj_cli(test_root_concurrency_group, None), dependency_management_service.probe_jj_readiness()
     )
 
     assert facts == JjWorkspaceCreationFacts(

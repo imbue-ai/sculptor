@@ -685,7 +685,9 @@ def _validate_jj_workspace_creation_request(
     project_path = project.get_local_user_path()
     jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
     try:
-        facts = gather_jj_workspace_creation_facts(project, jj, services.dependency_management_service)
+        facts = gather_jj_workspace_creation_facts(
+            project, jj, services.dependency_management_service.probe_jj_readiness()
+        )
     except VcsCommandError as e:
         raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
     jj_unavailability = describe_jj_unavailability(facts.jj_readiness)

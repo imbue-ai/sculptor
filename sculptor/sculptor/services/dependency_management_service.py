@@ -1224,6 +1224,10 @@ class DependencyManagementService(Service):
         """JJ_AVAILABLE: whether Sculptor can use the resolved jj, or the first check that fails."""
         return self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
 
+    def probe_jj_readiness(self) -> JjReadiness:
+        """JJ_AVAILABLE as jj reports it now, for a gate about to let jj act on the user's repository."""
+        return self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
+
     def _jj_readiness_from_check(self, check: DependencyCheckResult) -> JjReadiness:
         if check.path is None:
             return JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)

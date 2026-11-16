@@ -56,7 +56,7 @@ def prepare_jj_for_launch(dependency_management_service: DependencyManagementSer
     Run it only right before launching a process in a jj workspace, never from a
     poller or a read, so nothing else can change which jj a running agent finds.
     """
-    require_jj_available(dependency_management_service.get_jj_readiness())
+    require_jj_available(dependency_management_service.probe_jj_readiness())
     binary = dependency_management_service.resolve_binary_path(Dependency.JJ)
     if binary is None:
         raise JjUnavailableError(_NOT_INSTALLED_REASON)

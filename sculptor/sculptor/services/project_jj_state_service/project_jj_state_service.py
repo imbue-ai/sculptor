@@ -178,7 +178,9 @@ class ProjectJjStateService(Service):
 
         Raises `JjUnavailableError` or `RepositoryNotColocatedError`.
         """
-        facts = gather_jj_workspace_creation_facts(project, self.vcs_runners.jj, self.dependency_management_service)
+        facts = gather_jj_workspace_creation_facts(
+            project, self.vcs_runners.jj, self.dependency_management_service.probe_jj_readiness()
+        )
         require_jj_available(facts.jj_readiness)
         if not facts.is_colocated:
             raise RepositoryNotColocatedError(f"Project {project.object_id} is not a jj colocation")
@@ -212,7 +214,7 @@ class ProjectJjStateService(Service):
         `ColocationAlreadyRunningError`; raises `VcsCommandError` when git
         cannot read the repository.
         """
-        jj_readiness = self.dependency_management_service.get_jj_readiness()
+        jj_readiness = self.dependency_management_service.probe_jj_readiness()
         require_jj_available(jj_readiness)
         with self._lock:
             self._raise_if_colocation_running(project.object_id)
@@ -303,7 +305,7 @@ class ProjectJjStateService(Service):
             return
         try:
             facts = gather_jj_workspace_creation_facts(
-                project, self.vcs_runners.jj, self.dependency_management_service
+                project, self.vcs_runners.jj, self.dependency_management_service.get_jj_readiness()
             )
         except VcsCommandError as e:
             logger.debug("Cannot read the jj colocation of {}: {}", project.object_id, e)
