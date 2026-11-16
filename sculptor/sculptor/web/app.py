@@ -118,7 +118,6 @@ from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
 from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
-from sculptor.primitives.ids import TypeIDPrefixMismatchError
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.ids import create_organization_id
 from sculptor.primitives.ids import create_user_id
@@ -319,6 +318,9 @@ from sculptor.web.middleware import resolve_stream_scope
 from sculptor.web.middleware import run_sync_function_with_debugging_support_if_enabled
 from sculptor.web.middleware import shutdown_event as shutdown_event_impl
 from sculptor.web.open_with import open_path_in_external_app
+from sculptor.web.path_id_validation import validate_project_id
+from sculptor.web.path_id_validation import validate_task_id
+from sculptor.web.path_id_validation import validate_workspace_id
 from sculptor.web.remote_repos import remote_repos_router
 from sculptor.web.skills import discover_skills
 from sculptor.web.streams import Scope
@@ -335,51 +337,6 @@ from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload
 UpdateT = TypeVar("UpdateT", bound=StreamingUpdate)
 
 _SERVER_START_TIME = time.time()
-
-
-def validate_project_id(project_id: str) -> ProjectID:
-    """Validate and return a ProjectID, raising HTTPException if invalid."""
-    try:
-        return ProjectID(project_id)
-    except (typeid.errors.TypeIDException, TypeIDPrefixMismatchError, ValueError) as e:
-        raise HTTPException(
-            status_code=422,
-            detail=[
-                {
-                    "loc": ["path", "project_id"],
-                    "msg": f"Invalid project ID format: {project_id}",
-                    "type": "value_error",
-                }
-            ],
-        ) from e
-
-
-def validate_task_id(task_id: str) -> TaskID:
-    """Validate and return a TaskID, raising HTTPException if invalid."""
-    try:
-        return TaskID(task_id)
-    except (typeid.errors.TypeIDException, TypeIDPrefixMismatchError, ValueError) as e:
-        raise HTTPException(
-            status_code=422,
-            detail=[{"loc": ["path", "task_id"], "msg": f"Invalid task ID format: {task_id}", "type": "value_error"}],
-        ) from e
-
-
-def validate_workspace_id(workspace_id: str) -> WorkspaceID:
-    """Validate and return a WorkspaceID, raising HTTPException if invalid."""
-    try:
-        return WorkspaceID(workspace_id)
-    except (typeid.errors.TypeIDException, TypeIDPrefixMismatchError, ValueError) as e:
-        raise HTTPException(
-            status_code=422,
-            detail=[
-                {
-                    "loc": ["path", "workspace_id"],
-                    "msg": f"Invalid workspace ID format: {workspace_id}",
-                    "type": "value_error",
-                }
-            ],
-        ) from e
 
 
 def _project_path_from_git_repo_url(user_git_repo_url: str | None) -> str | None:
