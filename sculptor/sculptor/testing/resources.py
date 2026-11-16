@@ -828,6 +828,7 @@ class AlreadyRunningServiceCollection(CompleteServiceCollection):
             btw_service=from_collection.btw_service,
             ci_babysitter_service=from_collection.ci_babysitter_service,
             pi_login_service=from_collection.pi_login_service,
+            project_jj_state_service=from_collection.project_jj_state_service,
         )
 
     @contextmanager
