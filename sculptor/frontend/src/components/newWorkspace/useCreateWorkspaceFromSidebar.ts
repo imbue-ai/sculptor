@@ -1,8 +1,7 @@
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useState } from "react";
 
-import type { WorkspaceInitializationStrategy } from "~/api";
-import { getCurrentBranch, previewBranchName } from "~/api";
+import { getCurrentBranch, previewBranchName, WorkspaceInitializationStrategy } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { repositoryWorkspaceVcsAtomFamily } from "~/common/state/atoms/repositoryWorkspaceVcs.ts";
@@ -86,10 +85,13 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
   const createFromSidebar = useCallback(
     async (projectId: string): Promise<void> => {
       const remembered = lastSettingsByProjectId[projectId];
-      const mode = resolveCreationMode({
-        remembered: remembered?.mode,
-        vcs: store.get(repositoryWorkspaceVcsAtomFamily(projectId)),
-      });
+      const vcs = store.get(repositoryWorkspaceVcsAtomFamily(projectId));
+      const mode = resolveCreationMode({ remembered: remembered?.mode, vcs });
+      // The dialog says why a jj workspace cannot be created now, and links to where it can be fixed.
+      if (vcs === "jj-unavailable" && mode === WorkspaceInitializationStrategy.JJ_WORKSPACE) {
+        setModalState({ open: true, presetProjectId: projectId });
+        return;
+      }
       // Normalize the remembered type, mirroring the dialog's seeding. A bare
       // "terminal" stays: it is a legitimate first-agent choice here. This
       // direct-create has no picker to steer to Settings, so a remembered "pi"

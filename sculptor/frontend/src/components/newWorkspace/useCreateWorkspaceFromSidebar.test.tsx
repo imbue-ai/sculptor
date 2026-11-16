@@ -4,6 +4,7 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as ApiModule from "~/api";
+import type { DependenciesStatus, Project } from "~/api";
 import {
   createWorkspaceAgent,
   createWorkspaceV2,
@@ -12,6 +13,9 @@ import {
   WorkspaceInitializationStrategy,
 } from "~/api";
 import type * as NavigationModule from "~/common/hooks/navigation.ts";
+import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
+import { projectJjStateAtomFamily } from "~/common/state/atoms/projectJjState.ts";
+import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 
 import {
   lastCreationSettingsByProjectIdAtom,
@@ -46,8 +50,10 @@ const { IN_PLACE, CLONE, WORKTREE, JJ_WORKSPACE } = WorkspaceInitializationStrat
 
 const renderSidebarCreate = (
   byProjectId: Readonly<Record<string, { mode: WorkspaceInitializationStrategy; sourceBranch?: string }>>,
+  prepareStore: (store: ReturnType<typeof createStore>) => void = (): void => {},
 ): { store: ReturnType<typeof createStore>; createFromSidebar: (projectId: string) => Promise<void> } => {
   const store = createStore();
+  prepareStore(store);
   store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude" });
   store.set(lastCreationSettingsByProjectIdAtom, byProjectId);
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
@@ -134,6 +140,63 @@ describe("useCreateWorkspaceFromSidebar", () => {
     const body = getWorkspaceRequestBody();
     expect(body.initializationStrategy).toBe(WORKTREE);
     expect(body.sourceBranch).toBe("main");
+  });
+
+  describe("in a repository that uses jj for new workspaces", () => {
+    const useJjRepository =
+      (isJjAvailable: boolean) =>
+      (store: ReturnType<typeof createStore>): void => {
+        store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One", useJjForNewWorkspaces: true } as Project]);
+        store.set(projectJjStateAtomFamily("p1"), {
+          projectId: "p1",
+          colocation: isJjAvailable ? "COLOCATED" : "ABSENT",
+          colocationError: null,
+          createsJjWorkspaces: isJjAvailable,
+        });
+        store.set(dependenciesStatusAtom, {
+          pi: { installed: false },
+          jjReadiness: isJjAvailable
+            ? { blocker: null, identity: { name: "Dev", email: "dev@example.com" } }
+            : { blocker: "NOT_INSTALLED" },
+        } as DependenciesStatus);
+      };
+
+    it("creates a jj workspace that starts from its target, with a fresh bookmark name", async () => {
+      const { createFromSidebar } = renderSidebarCreate({}, useJjRepository(true));
+
+      await createFromSidebarFor(createFromSidebar);
+
+      expect(getCurrentBranch).not.toHaveBeenCalled();
+      expect(vi.mocked(previewBranchName).mock.calls[0][0].query).toEqual(
+        expect.objectContaining({ project_id: "p1", mode: JJ_WORKSPACE }),
+      );
+      const body = getWorkspaceRequestBody();
+      expect(body.initializationStrategy).toBe(JJ_WORKSPACE);
+      expect(body.requestedBranchName).toBe("dev/fresh-slug");
+      expect(body.sourceBranch).toBeUndefined();
+    });
+
+    it("replaces a worktree remembered for the repository with a jj workspace", async () => {
+      const { createFromSidebar } = renderSidebarCreate(
+        { p1: { mode: WORKTREE, sourceBranch: "main" } },
+        useJjRepository(true),
+      );
+
+      await createFromSidebarFor(createFromSidebar);
+
+      const body = getWorkspaceRequestBody();
+      expect(body.initializationStrategy).toBe(JJ_WORKSPACE);
+      expect(body.sourceBranch).toBeUndefined();
+    });
+
+    it("opens the dialog, which says why, instead of creating while jj is unavailable", async () => {
+      const { store, createFromSidebar } = renderSidebarCreate({}, useJjRepository(false));
+
+      await createFromSidebarFor(createFromSidebar);
+
+      expect(createWorkspaceV2).not.toHaveBeenCalled();
+      expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: true, presetProjectId: "p1" });
+    });
   });
 
   it("creates an in-place workspace without looking up any branch", async () => {
