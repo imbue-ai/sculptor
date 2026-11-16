@@ -31,22 +31,18 @@ from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
-# The default workspace setup command when a project has not configured one.
-# Fetches the origin remote if present; succeeds silently if origin is missing
-# (e.g. repos without an `origin` remote) so workspace startup isn't blocked.
-DEFAULT_WORKSPACE_SETUP_COMMAND = "git fetch origin 2>/dev/null || true"
 
-
-def resolve_workspace_setup_command(stored_command: str | None) -> str | None:
+def resolve_workspace_setup_command(stored_command: str | None, default_command: str) -> str | None:
     """Resolve a project's stored setup command to the command that should actually run.
 
     Tri-state semantics:
-    - ``None``: project has never been configured → run the current default.
+    - ``None``: project has never been configured → run ``default_command``,
+      the workspace VCS's ``default_setup_command()``.
     - ``""``: user explicitly cleared the command → run nothing.
     - other string: user's custom command → run as-is.
     """
     if stored_command is None:
-        return DEFAULT_WORKSPACE_SETUP_COMMAND
+        return default_command
     if stored_command == "":
         return None
     return stored_command

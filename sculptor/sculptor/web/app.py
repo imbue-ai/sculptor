@@ -905,7 +905,12 @@ def create_workspace_v2(
         update_most_recently_used_project(project_id=validated_project_id)
         logger.info("Created workspace {} for project {}", workspace.object_id, workspace_request.project_id)
         setup_command = (
-            resolve_workspace_setup_command(project.workspace_setup_command)
+            resolve_workspace_setup_command(
+                project.workspace_setup_command,
+                services.workspace_service.get_workspace_vcs(
+                    workspace.initialization_strategy
+                ).default_setup_command(),
+            )
             if workspace.initialization_strategy
             in (WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE)
             else None
@@ -1029,7 +1034,14 @@ def rerun_workspace_setup(
         initialization_strategy = workspace.initialization_strategy
         # Resolve through the project's tri-state default helper so a `None`
         # stored value runs the current default and `""` (user-cleared) blocks.
-        command = resolve_workspace_setup_command(project.workspace_setup_command) if project is not None else None
+        command = (
+            resolve_workspace_setup_command(
+                project.workspace_setup_command,
+                workspace_service.get_workspace_vcs(initialization_strategy).default_setup_command(),
+            )
+            if project is not None
+            else None
+        )
     if command is None or not command.strip():
         raise HTTPException(status_code=409, detail={"error": "no setup command configured"})
     if environment_id is None or project_id is None or project_path is None:

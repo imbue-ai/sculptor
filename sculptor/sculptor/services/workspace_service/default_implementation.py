@@ -187,7 +187,10 @@ class DefaultWorkspaceService(WorkspaceService):
                 # current default (so we keep `pending` and the runner picks it
                 # up on first open), an empty string means the user explicitly
                 # cleared it (demote to `not_configured`).
-                command = resolve_workspace_setup_command(project.workspace_setup_command)
+                command = resolve_workspace_setup_command(
+                    project.workspace_setup_command,
+                    self.get_workspace_vcs(workspace.initialization_strategy).default_setup_command(),
+                )
                 if not command:
                     self._persist_setup_state(
                         SetupStateChanged(
@@ -316,7 +319,9 @@ class DefaultWorkspaceService(WorkspaceService):
         # "use the current default", `""` means "user cleared", and any other
         # value is the user's custom command. Setup runs on any fresh isolated
         # checkout — both CLONE and WORKTREE.
-        resolved_setup_command = resolve_workspace_setup_command(project.workspace_setup_command)
+        resolved_setup_command = resolve_workspace_setup_command(
+            project.workspace_setup_command, vcs.default_setup_command()
+        )
         has_command = resolved_setup_command is not None and resolved_setup_command != ""
         is_clone_or_worktree = initialization_strategy in (
             WorkspaceInitializationStrategy.CLONE,
@@ -640,7 +645,14 @@ class DefaultWorkspaceService(WorkspaceService):
                 # Resolve the project's tri-state setup command: `None` means
                 # "use the current default", `""` means "user cleared, run nothing",
                 # and any other value is the user's custom command.
-                setup_command_to_run = resolve_workspace_setup_command(project.workspace_setup_command)
+                setup_command_to_run = (
+                    None
+                    if workspace is None
+                    else resolve_workspace_setup_command(
+                        project.workspace_setup_command,
+                        self.get_workspace_vcs(workspace.initialization_strategy).default_setup_command(),
+                    )
+                )
                 if (
                     workspace is not None
                     and workspace.setup_status == "pending"
