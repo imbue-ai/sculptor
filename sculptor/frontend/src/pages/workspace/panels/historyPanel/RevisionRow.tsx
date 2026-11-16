@@ -109,7 +109,13 @@ export const RevisionRow = ({
     >
       <Flex>
         <CommitGraph isHead={revision.isWorkingCopy} hideTopLine={isFirst} />
-        <Flex direction="column" flexGrow="1" className={historyStyles.commitInfo} onClick={onToggle}>
+        <Flex
+          direction="column"
+          flexGrow="1"
+          className={historyStyles.commitInfo}
+          onClick={onToggle}
+          data-testid={ElementIds.REVISION_ENTRY_SUMMARY}
+        >
           <Text
             size="2"
             weight="medium"

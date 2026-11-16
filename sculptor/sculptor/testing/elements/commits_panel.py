@@ -9,7 +9,7 @@ from sculptor.testing.elements.explorer_layout import get_explorer_layout_in
 
 
 class PlaywrightCommitsPanelElement(PlaywrightIntegrationTestElement):
-    """Page Object Model for the Commits panel.
+    """Page Object Model for the Commits panel, labelled Revisions in a jj workspace.
 
     The Commits panel pairs the commit history (graph terminus, commit rows,
     merge spur, per-commit popover with its file rows) with its own embedded
@@ -51,6 +51,17 @@ class PlaywrightCommitsPanelElement(PlaywrightIntegrationTestElement):
 
     def get_tree_rows(self, entry: Locator) -> Locator:
         return entry.get_by_test_id(ElementIDs.FILE_BROWSER_TREE_ROW)
+
+    def get_revision_entries(self) -> Locator:
+        """Get the revision rows a jj workspace's panel lists, newest first."""
+        return self.get_by_test_id(ElementIDs.REVISION_ENTRY)
+
+    def get_revision_summary(self, entry: Locator) -> Locator:
+        """Get a revision row's summary, which lists or hides its files on click."""
+        return entry.get_by_test_id(ElementIDs.REVISION_ENTRY_SUMMARY)
+
+    def get_revisions_fork_point(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.REVISIONS_FORK_POINT)
 
 
 def get_commits_panel_in(section_root: Locator, page: Page) -> PlaywrightCommitsPanelElement:
