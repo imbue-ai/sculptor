@@ -344,6 +344,38 @@ def test_create_workspace_captures_source_git_hash(
     assert all(c in "0123456789abcdef" for c in source_git_hash)
 
 
+def _git_output(repo_path: Path, arguments: list[str]) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo_path), *arguments], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def test_create_workspace_records_the_source_branch_commit_rather_than_the_checked_out_one(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    _git_output(repo_path, ["checkout", "-q", "-b", "feature"])
+    (repo_path / "feature.txt").write_text("feature work\n")
+    _git_output(repo_path, ["add", "feature.txt"])
+    _git_output(repo_path, ["-c", "user.name=Test", "-c", "user.email=test@test.com", "commit", "-q", "-m", "feature"])
+    _git_output(repo_path, ["checkout", "-q", "main"])
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        project = _initialize_project_without_setup_command(test_service_collection, repo_path, transaction)
+        workspace = test_service_collection.workspace_service.create_workspace(
+            project=project,
+            initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+            source_branch="feature",
+            requested_branch_name=f"from-feature-{uuid4().hex[:8]}",
+            description="Started from a feature branch",
+            transaction=transaction,
+        )
+
+    assert workspace.source_git_hash == _git_output(repo_path, ["rev-parse", "feature"])
+    assert workspace.source_git_hash != _git_output(repo_path, ["rev-parse", "HEAD"])
+
+
 def test_get_workspace_diff_generates_on_demand_when_artifact_missing(
     test_service_collection: CompleteServiceCollection,
     test_project: Project,

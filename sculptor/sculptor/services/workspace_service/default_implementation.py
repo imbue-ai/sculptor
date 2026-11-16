@@ -305,10 +305,11 @@ class DefaultWorkspaceService(WorkspaceService):
         if description is None:
             description = uuid.uuid4().hex[:8]
 
-        # Record the user's HEAD as the workspace's starting point.
+        # Record the commit the workspace starts from: its source branch's, or
+        # the user's checked-out commit when it has none.
         project_path = project.get_local_user_path()
         vcs = self.get_workspace_vcs(initialization_strategy)
-        source_git_hash = vcs.resolve_base_commit_id(project_path, "HEAD")
+        source_git_hash = vcs.resolve_base_commit_id(project_path, source_branch or "HEAD")
 
         # Use the caller-provided target branch if given, otherwise resolve a
         # sensible default from the user's repo.
