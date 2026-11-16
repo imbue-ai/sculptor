@@ -972,6 +972,74 @@ def test_pipeline_failed_dispatch_dedupes_per_pipeline_id(
     assert state.last_dispatched_pipeline_failed_id == 2
 
 
+def _make_jj_prompt_config(jj_failed_prompt: str | None, jj_conflict_prompt: str | None) -> UserConfig:
+    config = _make_user_config()
+    babysitter = config.ci_babysitter.model_copy(
+        update={"jj_pipeline_failed_prompt": jj_failed_prompt, "jj_merge_conflict_prompt": jj_conflict_prompt}
+    )
+    return config.model_copy(update={"ci_babysitter": babysitter})
+
+
+def test_a_jj_workspace_gets_the_jj_prompts_when_they_are_set(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    env.workspace = env.workspace.model_copy(
+        update={"initialization_strategy": WorkspaceInitializationStrategy.JJ_WORKSPACE}
+    )
+    patch_user_config.config = _make_jj_prompt_config("JJ_FAILED_PROMPT", "JJ_CONFLICT_PROMPT")
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    coordinator._handle_status(
+        _make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1, has_conflicts=True)
+    )
+
+    assert [message.text for message, _ in task_service.create_message_calls] == [
+        "JJ_FAILED_PROMPT",
+        "JJ_CONFLICT_PROMPT",
+    ]
+
+
+def test_a_jj_workspace_falls_back_to_the_git_prompts_when_the_jj_prompts_are_unset(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    env.workspace = env.workspace.model_copy(
+        update={"initialization_strategy": WorkspaceInitializationStrategy.JJ_WORKSPACE}
+    )
+    patch_user_config.config = _make_jj_prompt_config(None, None)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    coordinator._handle_status(
+        _make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1, has_conflicts=True)
+    )
+
+    assert [message.text for message, _ in task_service.create_message_calls] == [
+        "FAILED_PROMPT",
+        "CONFLICT_PROMPT",
+    ]
+
+
+def test_a_git_workspace_keeps_the_git_prompts_when_the_jj_prompts_are_set(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    patch_user_config.config = _make_jj_prompt_config("JJ_FAILED_PROMPT", "JJ_CONFLICT_PROMPT")
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    coordinator._handle_status(
+        _make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1, has_conflicts=True)
+    )
+
+    assert [message.text for message, _ in task_service.create_message_calls] == [
+        "FAILED_PROMPT",
+        "CONFLICT_PROMPT",
+    ]
+
+
 # Agent resolution for babysitter tasks: _resolve_babysitter_agent maps the
 # user's setting (MRU or a pinned harness) + the workspace's most-recent agent
 # to a ChatAgent / DriveableTerminal / Disabled result.

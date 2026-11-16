@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 from queue import Empty
 from queue import Queue
+from typing import assert_never
 
 from loguru import logger
 from pydantic import PrivateAttr
@@ -29,6 +30,7 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.pydantic_serialization import SerializableModel
@@ -116,6 +118,23 @@ class Disabled:
 
 
 ResolvedBabysitterAgent = ChatAgent | DriveableTerminal | Disabled
+
+
+def pick_babysitter_prompt(
+    git_prompt: str, jj_prompt: str | None, initialization_strategy: WorkspaceInitializationStrategy
+) -> str:
+    """The prompt for a workspace of this kind: a jj workspace's own prompt when one is set, else the git prompt."""
+    match initialization_strategy:
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            return git_prompt
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            return git_prompt if jj_prompt is None else jj_prompt
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _driveable_terminal_from_registration(registration_id: str) -> DriveableTerminal | None:
@@ -390,9 +409,11 @@ class CIBabysitterCoordinator(Service):
             return
 
         if transition is Transition.PIPELINE_FAILED:
-            prompt_text = config.ci_babysitter.pipeline_failed_prompt
+            git_prompt = config.ci_babysitter.pipeline_failed_prompt
+            jj_prompt = config.ci_babysitter.jj_pipeline_failed_prompt
         elif transition is Transition.MERGE_CONFLICT:
-            prompt_text = config.ci_babysitter.merge_conflict_prompt
+            git_prompt = config.ci_babysitter.merge_conflict_prompt
+            jj_prompt = config.ci_babysitter.jj_merge_conflict_prompt
         else:
             logger.error("CIBabysitterCoordinator: _dispatch_prompt called with non-actionable {}", transition)
             return
@@ -401,7 +422,13 @@ class CIBabysitterCoordinator(Service):
         # gates above stay here; only delivery differs per agent kind, via the
         # single deliver_prompt_to_agent seam below.
         with self._data_model_service.open_transaction(RequestID()) as transaction:
+            workspace = transaction.get_workspace(state.workspace_id)
+            if workspace is None:
+                logger.debug("CIBabysitterCoordinator: workspace={} is gone, not dispatching", state.workspace_id)
+                return
             resolved = self._resolve_babysitter_agent(state.workspace_id, state.project_id, config, transaction)
+        prompt_text = pick_babysitter_prompt(git_prompt, jj_prompt, workspace.initialization_strategy)
+
         if isinstance(resolved, Disabled):
             # No spawn, no task. The reason surfaces to the UI on every status
             # read, which recomputes persistent reasons proactively.
