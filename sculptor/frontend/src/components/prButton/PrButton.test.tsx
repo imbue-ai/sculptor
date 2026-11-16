@@ -96,6 +96,27 @@ describe("PrButton without a target branch", () => {
 
     expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeDisabled();
   });
+
+  it.each([
+    { kind: WorkspaceInitializationStrategy.WORKTREE, noun: "branch" },
+    { kind: WorkspaceInitializationStrategy.JJ_WORKSPACE, noun: "bookmark" },
+  ])("says a $kind workspace has no target $noun", async ({ kind, noun }) => {
+    const store = storeWith(prStatus({ prState: "none" }));
+    store.set(workspaceAtomFamily(WORKSPACE_ID), {
+      objectId: WORKSPACE_ID,
+      projectId: "proj-1",
+      initializationStrategy: kind,
+      targetBranch: null,
+    } as Workspace);
+    renderWithProviders(<PrButton workspaceId={WORKSPACE_ID} targetBranch={null} gitProvider="github" />, { store });
+
+    // A disabled button receives no pointer events, so the tooltip hangs off its wrapper.
+    const createButton = screen.getByTestId(ElementIds.PR_BUTTON_CREATE);
+    await userEvent.hover(createButton.parentElement ?? createButton);
+
+    const text = `Sculptor couldn't find a target ${noun} for this workspace. Pick one from the target selector to create a PR.`;
+    expect((await screen.findAllByText(text)).length).toBeGreaterThan(0);
+  });
 });
 
 describe("PrButton offers to adopt an existing PR only when it targets another branch", () => {

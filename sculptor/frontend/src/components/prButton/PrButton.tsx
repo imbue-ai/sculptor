@@ -13,7 +13,9 @@ import { canCreatePrAtomFamily, createPrActionAtomFamily } from "../../common/st
 import { workspaceTargetBranchesAtomFamily } from "../../common/state/atoms/workspaceTargetBranches.ts";
 import { useEditAgentPrompt } from "../../common/state/hooks/useEditAgentPrompt.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
+import { useWorkspace } from "../../common/state/hooks/useWorkspace.ts";
 import { isPrBaseOtherThanTarget } from "../../common/utils/prBaseNames.ts";
+import { WORKSPACE_MODE_RULES } from "../../common/utils/workspaceModeRules.ts";
 import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
 import { PrPromptDialog } from "./PrPromptDialog.tsx";
@@ -172,8 +174,10 @@ const CreatePrButton = ({ workspaceId, targetBranch, gitProvider }: CreatePrButt
 
 // Without a target branch there is nothing to open a pull request into, so
 // Create PR stays in place but disabled until the user picks a target.
-const NoTargetPrButton = (): ReactElement => (
-  <Tooltip content="Sculptor couldn't find a target branch for this workspace. Pick one from the target selector to create a PR.">
+const NoTargetPrButton = ({ refNoun }: { refNoun: "branch" | "bookmark" }): ReactElement => (
+  <Tooltip
+    content={`Sculptor couldn't find a target ${refNoun} for this workspace. Pick one from the target selector to create a PR.`}
+  >
     {/* Radix Tooltip does not fire on a disabled button, so the span carries the hover. */}
     <span style={{ display: "inline-flex" }}>
       <CreatePrButtonFace isDisabled />
@@ -494,6 +498,7 @@ export const PrButton = ({
 }: PrButtonProps): ReactElement | null => {
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceId));
   const prBaseNames = useAtomValue(workspaceTargetBranchesAtomFamily(workspaceId))?.prBaseNames ?? {};
+  const workspace = useWorkspace(workspaceId);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const effectiveError: EffectiveError | null = prStatus?.errorCategory
@@ -524,7 +529,9 @@ export const PrButton = ({
     }
 
     if (targetBranch === null) {
-      return <NoTargetPrButton />;
+      // A workspace not loaded yet has no kind to name its refs by; git's word stands in.
+      const refNoun = workspace === null ? "branch" : WORKSPACE_MODE_RULES[workspace.initializationStrategy].nameNoun;
+      return <NoTargetPrButton refNoun={refNoun} />;
     }
 
     const isMismatchRelevant =

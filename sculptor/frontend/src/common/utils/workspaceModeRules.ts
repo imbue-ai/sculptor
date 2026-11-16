@@ -16,7 +16,7 @@ type SourceFieldRule =
   { rule: "unused"; whyUnused: string } | { rule: "optional" | "required"; seed: "current-branch" | "none" };
 
 type WorkspaceModeRules = {
-  /** What the name the workspace creates is: a git branch or a jj bookmark. */
+  /** What the mode's refs are called, git branches or jj bookmarks: the name it creates, its source and its target. */
   nameNoun: "branch" | "bookmark";
   /** The new branch or bookmark the workspace creates (`requestedBranchName`). */
   branchName: CreationFieldRule;
