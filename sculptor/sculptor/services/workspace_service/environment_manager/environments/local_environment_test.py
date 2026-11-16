@@ -21,11 +21,16 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.testing.jj_launch_environment import JjLaunchEnvironment
+from sculptor.testing.jj_launch_environment import jj_environment_nested_in_git_repository  # noqa: F401
+from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.local_git_repo import LocalGitRepo
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
 from sculptor.testing.workspace_vcs import make_test_git_cli
 from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
@@ -101,14 +106,16 @@ def clone_test_ctx(
 def test_run_setup_subprocess_happy_path(local_environment: LocalEnvironment) -> None:
     chunks: list[bytes] = []
     pids: list[int] = []
-    rc = local_environment.run_setup_subprocess("echo hi", chunks.append, pids.append, Event())
+    rc = local_environment.run_setup_subprocess("echo hi", chunks.append, pids.append, Event(), AgentVcsEnvironment())
     assert rc == 0
     assert b"hi" in b"".join(chunks)
 
 
 def test_run_setup_subprocess_on_pid_invoked_once(local_environment: LocalEnvironment) -> None:
     pids: list[int] = []
-    rc = local_environment.run_setup_subprocess("true", lambda _data: None, pids.append, Event())
+    rc = local_environment.run_setup_subprocess(
+        "true", lambda _data: None, pids.append, Event(), AgentVcsEnvironment()
+    )
     assert rc == 0
     assert len(pids) == 1
     # start_new_session=True makes the bash child its own pgid leader, so
@@ -128,7 +135,7 @@ def test_run_setup_subprocess_on_pid_called_before_chunks(local_environment: Loc
         pids.append(pid)
         events.append("pid")
 
-    rc = local_environment.run_setup_subprocess("echo hello", _on_chunk, _on_pid, Event())
+    rc = local_environment.run_setup_subprocess("echo hello", _on_chunk, _on_pid, Event(), AgentVcsEnvironment())
     assert rc == 0
     assert len(pids) == 1
     assert events[0] == "pid"
@@ -151,7 +158,7 @@ def test_run_setup_subprocess_on_pid_skipped_on_pgid_failure(
     monkeypatch.setattr(os, "getpgid", _bad_pgid)
     pids: list[int] = []
     with pytest.raises(RuntimeError, match="start_new_session did not take effect"):
-        local_environment.run_setup_subprocess("true", lambda _data: None, pids.append, Event())
+        local_environment.run_setup_subprocess("true", lambda _data: None, pids.append, Event(), AgentVcsEnvironment())
     assert pids == []
 
 
@@ -170,7 +177,7 @@ def test_run_setup_subprocess_cwd_is_working_directory(clone_test_ctx: CloneTest
         sculptor_folder=clone_test_ctx.sculptor_folder,
     )
     chunks: list[bytes] = []
-    rc = env.run_setup_subprocess("pwd", chunks.append, lambda _pid: None, Event())
+    rc = env.run_setup_subprocess("pwd", chunks.append, lambda _pid: None, Event(), AgentVcsEnvironment())
     assert rc == 0
     captured = b"".join(chunks).decode()
     expected = str(env.get_working_directory().resolve())
@@ -182,16 +189,41 @@ def test_run_setup_subprocess_cwd_is_working_directory(clone_test_ctx: CloneTest
     )
 
 
+def test_the_setup_command_of_a_jj_workspace_finds_the_managed_jj_and_cannot_run_git(
+    jj_environment_nested_in_git_repository: JjLaunchEnvironment,  # noqa: F811
+    jj_binary: JjBinary,
+) -> None:
+    launch = jj_environment_nested_in_git_repository
+    chunks: list[bytes] = []
+
+    exit_code = launch.environment.run_setup_subprocess(
+        "jj --version && ! git status",
+        chunks.append,
+        lambda _pid: None,
+        Event(),
+        launch.vcs.agent_environment(launch.location),
+    )
+
+    output = b"".join(chunks).decode()
+    assert exit_code == 0, output
+    assert f"jj {jj_binary.version}" in output
+    assert "not a git repository" in output
+
+
 def test_run_setup_subprocess_non_zero_exit(local_environment: LocalEnvironment) -> None:
     chunks: list[bytes] = []
-    rc = local_environment.run_setup_subprocess("exit 7", chunks.append, lambda _pid: None, Event())
+    rc = local_environment.run_setup_subprocess(
+        "exit 7", chunks.append, lambda _pid: None, Event(), AgentVcsEnvironment()
+    )
     assert rc == 7
 
 
 def test_run_setup_subprocess_stdin_closed(local_environment: LocalEnvironment) -> None:
     chunks: list[bytes] = []
     start = time.monotonic()
-    rc = local_environment.run_setup_subprocess("read x; echo done", chunks.append, lambda _pid: None, Event())
+    rc = local_environment.run_setup_subprocess(
+        "read x; echo done", chunks.append, lambda _pid: None, Event(), AgentVcsEnvironment()
+    )
     elapsed = time.monotonic() - start
     # `read` should fail immediately because stdin is /dev/null (EOF), so the
     # command exits without hanging.
@@ -210,7 +242,9 @@ def test_run_setup_subprocess_cancel(local_environment: LocalEnvironment) -> Non
 
     threading.Thread(target=_trigger_cancel, daemon=True).start()
     start = time.monotonic()
-    rc = local_environment.run_setup_subprocess("sleep 60", chunks.append, lambda _pid: None, cancel)
+    rc = local_environment.run_setup_subprocess(
+        "sleep 60", chunks.append, lambda _pid: None, cancel, AgentVcsEnvironment()
+    )
     elapsed = time.monotonic() - start
     assert elapsed < 10.0
     assert rc != 0
@@ -238,7 +272,7 @@ def test_run_setup_subprocess_kills_process_group(local_environment: LocalEnviro
 
     threading.Thread(target=_trigger_cancel, daemon=True).start()
     rc = local_environment.run_setup_subprocess(
-        'bash -c "echo $$; sleep 60" & wait', _capture_pid, lambda _pid: None, cancel
+        'bash -c "echo $$; sleep 60" & wait', _capture_pid, lambda _pid: None, cancel, AgentVcsEnvironment()
     )
     assert rc != 0
     if "child" in pid_holder:
@@ -258,7 +292,9 @@ def test_run_setup_subprocess_handles_process_lookup_error(
         raise ProcessLookupError(3, "No such process")
 
     monkeypatch.setattr(os, "getpgid", _always_raise)
-    rc = local_environment.run_setup_subprocess("true", lambda _data: None, lambda _pid: None, Event())
+    rc = local_environment.run_setup_subprocess(
+        "true", lambda _data: None, lambda _pid: None, Event(), AgentVcsEnvironment()
+    )
     assert rc == 0
 
 

@@ -2,6 +2,7 @@ import json
 import threading
 import uuid
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from queue import Queue
 from typing import Generator
@@ -711,6 +712,13 @@ class DefaultWorkspaceService(WorkspaceService):
             root_progress_handle=root_progress_handle,
             task_id=str(task_id),
         )
+        vcs_environment = self.get_workspace_vcs(environment.initialization_strategy).agent_environment(
+            CheckoutLocation(
+                repo_path=project.get_local_user_path(),
+                checkout_path=environment.get_working_directory(),
+                checkout_name=str(workspace_id),
+            )
+        )
 
         # Wrap the environment in AgentExecutionEnvironment for per-task namespacing
         agent_environment = LocalAgentExecutionEnvironment(
@@ -778,7 +786,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 self.setup_runner.start(
                     workspace_id=str(workspace_id),
                     command=setup_command_to_run,
-                    subprocess_runner=environment.run_setup_subprocess,
+                    subprocess_runner=partial(environment.run_setup_subprocess, vcs_environment=vcs_environment),
                     shutdown_event_source=environment.concurrency_group.shutdown_event,
                     state_dir=state_dir,
                     on_persist=self._persist_setup_state,

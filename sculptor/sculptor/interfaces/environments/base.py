@@ -20,6 +20,7 @@ from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.interfaces.terminal_manager import TerminalManager
 from sculptor.primitives.ids import ProjectID
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 
 # https://github.com/python/typeshed/tree/main/stdlib/_typeshed
 if TYPE_CHECKING:
@@ -290,14 +291,17 @@ class Environment(BaseModel, abc.ABC):
         on_chunk: Callable[[bytes], None],
         on_pid: Callable[[int], None],
         shutdown_event: ReadOnlyEvent,
+        vcs_environment: AgentVcsEnvironment,
     ) -> int:
         """Run the workspace setup command as a non-interactive bash login subprocess.
 
         Streams combined stdout+stderr bytes through ``on_chunk``. cwd is the
-        workspace repo root. stdin is closed. Cancel propagates when
-        ``shutdown_event`` is set: SIGINT, then SIGTERM after ~2s, then SIGKILL
-        after ~5s, all sent to the process group. Returns the process exit
-        code (negative if the cancel ladder killed it via signal).
+        workspace repo root, and ``vcs_environment`` (the workspace version
+        control's agent environment) is applied over the process environment.
+        stdin is closed. Cancel propagates when ``shutdown_event`` is set:
+        SIGINT, then SIGTERM after ~2s, then SIGKILL after ~5s, all sent to the
+        process group. Returns the process exit code (negative if the cancel
+        ladder killed it via signal).
 
         ``on_pid`` is invoked exactly once with the OS PID of the bash
         subprocess, immediately after spawn succeeds and before any chunk is

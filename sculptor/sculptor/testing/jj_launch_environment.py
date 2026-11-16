@@ -2,8 +2,10 @@
 
 The backend has no jj on its PATH and resolves jj only through a managed copy
 staged in the test's own Sculptor folder, so a process that finds jj found it
-through what Sculptor put on its PATH. The workspace's environment directory
-sits inside a git repository, as workspaces do when Sculptor runs from source.
+through what Sculptor put on its PATH. HOME is a fresh directory, so a login
+shell reads no developer profile that puts another jj on PATH. The workspace's
+environment directory sits inside a git repository, as workspaces do when
+Sculptor runs from source.
 
 A test module requesting the fixture also imports `isolated_sculptor_folder`
 from `sculptor.testing.sculptor_folder`, which it depends on.
@@ -79,6 +81,9 @@ def jj_environment_nested_in_git_repository(
     git_only_bin.mkdir()
     (git_only_bin / "git").symlink_to(git_binary)
     monkeypatch.setenv("PATH", os.pathsep.join([str(git_only_bin), *_SYSTEM_PATH_WITHOUT_JJ]))
+    home_without_profile = tmp_path / "home"
+    home_without_profile.mkdir()
+    monkeypatch.setenv("HOME", str(home_without_profile))
     assert shutil.which("jj") is None
 
     enclosing_git_repository = tmp_path / "enclosing_git_repository"

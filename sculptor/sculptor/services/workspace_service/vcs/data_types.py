@@ -1,4 +1,5 @@
 import os
+from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
@@ -157,3 +158,10 @@ class AgentVcsEnvironment(FrozenModel):
         '/usr/bin'
         """
         return os.pathsep.join([*(str(prefix) for prefix in self.path_prefixes), *([path] if path else [])])
+
+    def applied_to(self, environment: Mapping[str, str]) -> dict[str, str]:
+        """`environment` with `environment_variables` set over it and `path_prefixes` in front of its PATH."""
+        applied = {**environment, **self.environment_variables}
+        if self.path_prefixes:
+            applied["PATH"] = self.prefix_path(environment.get("PATH", ""))
+        return applied

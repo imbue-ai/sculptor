@@ -19,6 +19,7 @@ import traceback
 import tracemalloc
 import urllib.parse
 from asyncio import CancelledError
+from functools import partial
 from importlib import resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -188,6 +189,7 @@ from sculptor.services.workspace_service.jj_workspace_creation import creates_jj
 from sculptor.services.workspace_service.jj_workspace_creation import gather_jj_workspace_creation_facts
 from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_config_value
@@ -1110,23 +1112,29 @@ def rerun_workspace_setup(
         existing = workspace_service.setup_runner.get_state(workspace_id)
         if existing is not None and existing.status == "running":
             raise HTTPException(status_code=409, detail={"error": "setup already running"})
+    vcs = workspace_service.get_workspace_vcs(initialization_strategy)
     try:
         environment = workspace_service.environment_manager.resume_environment(
             environment_id=environment_id,
             project_path=project_path,
             project_id=project_id,
             concurrency_group=workspace_service.concurrency_group,
-            vcs=workspace_service.get_workspace_vcs(initialization_strategy),
+            vcs=vcs,
             workspace_id=WorkspaceID(workspace_id),
             initialization_strategy=initialization_strategy,
         )
     except EnvironmentNotFoundError as e:
         raise HTTPException(status_code=409, detail={"error": "environment not ready"}) from e
+    vcs_environment = vcs.agent_environment(
+        CheckoutLocation(
+            repo_path=project_path, checkout_path=environment.get_working_directory(), checkout_name=workspace_id
+        )
+    )
     state_dir = environment.to_host_path(environment.get_state_path())
     workspace_service.setup_runner.start(
         workspace_id=workspace_id,
         command=command,
-        subprocess_runner=environment.run_setup_subprocess,
+        subprocess_runner=partial(environment.run_setup_subprocess, vcs_environment=vcs_environment),
         shutdown_event_source=environment.concurrency_group.shutdown_event,
         state_dir=state_dir,
         on_persist=workspace_service._persist_setup_state,

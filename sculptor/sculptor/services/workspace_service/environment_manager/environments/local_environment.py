@@ -45,6 +45,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import get_workspaces_folder
@@ -359,6 +360,7 @@ class LocalEnvironment(Environment):
         on_chunk: Callable[[bytes], None],
         on_pid: Callable[[int], None],
         shutdown_event: ReadOnlyEvent,
+        vcs_environment: AgentVcsEnvironment,
     ) -> int:
         # Run setup in the agent's working directory: for CLONE workspaces
         # this is the freshly-cloned copy under workspace/code/, not the
@@ -370,7 +372,7 @@ class LocalEnvironment(Environment):
         else:
             merged = {**self._project_env_vars, **os.environ}
         merged.pop("CLAUDECODE", None)
-        env = {k: v for k, v in merged.items() if v is not None}
+        env = vcs_environment.applied_to({k: v for k, v in merged.items() if v is not None})
         logger.info("Starting setup subprocess in workspace: {}", self.workspace_path)
         process = subprocess.Popen(
             ["bash", "-l", "-c", command],
