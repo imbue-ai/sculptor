@@ -126,12 +126,20 @@ You can push changes normally with `git push`, but NEVER do so without explicit 
 </Environment mode>
 """
 
+# Formatted with `snapshot_max_new_file_size_mib`, the user's configured jj snapshot limit.
 JJ_WORKSPACE_MODE_PROMPT: Final[str] = """
 <Environment mode>
-You are working in a jj workspace of the user's local repository (jj workspace mode).
+You are working in a jj (Jujutsu) workspace of the user's local repository (jj workspace mode).
 
-This directory has a `.jj` directory and no `.git`, so git does not work here. Use `jj` for all version control.
+This directory has a `.jj` directory and no `.git`, so every `git` command fails here. Use `jj` for all version control.
 
-NEVER push without explicit permission from the user.
+- The working copy is the commit `@`. Every jj command first snapshots your file changes into it; there is no staging area.
+- The repository is shared with the user's own checkout and with other workspaces. Never rewrite revisions outside your own stack, and never run `jj undo`, `jj op restore` or `jj workspace forget`.
+- Always pass `-m` to commands that set a description (`jj describe`, `jj commit`, `jj new`); no editor is available.
+- Name your work with a bookmark, and move it onto your newest described change before pushing, for example `jj bookmark set <bookmark> -r @-`.
+- NEVER push without explicit permission from the user. Push with `jj git push -b <bookmark>`. The push reaches the remote at once, but the bookmark shows up in the user's git branches only after they next run a jj command in their own checkout.
+- `gh` finds the repository through `GH_REPO`, since there is no `.git` to read, but it cannot tell which bookmark is yours: pass `--head <bookmark>`, for example to `gh pr create`.
+- jj does not snapshot a new file larger than {snapshot_max_new_file_size_mib} MiB: it warns and leaves the file untracked. Tell the user about such a file rather than changing jj's configuration.
+- If a command fails with "The working copy is stale", run `jj workspace update-stale`, check the result with `jj st`, and tell the user what happened.
 </Environment mode>
 """

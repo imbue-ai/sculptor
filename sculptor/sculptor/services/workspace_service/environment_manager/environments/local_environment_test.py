@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from sculptor.config.user_config import UserConfig
 from sculptor.database.workspace_enums import GitInitializationStrategy
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
@@ -19,6 +20,7 @@ from sculptor.foundation.secrets_utils import Secret
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
@@ -531,6 +533,44 @@ def test_get_system_prompt_dispatches_on_initialization_strategy(local_environme
     assert "jj workspace" in jj_prompt
     assert "no `.git`" in jj_prompt
     assert "worktree" not in jj_prompt
+
+
+def test_the_jj_mode_prompt_states_the_standing_rules_and_the_configured_snapshot_limit(
+    local_environment: LocalEnvironment,
+) -> None:
+    set_user_config_instance(
+        UserConfig(
+            user_email="test@example.com",
+            user_id=uuid4().hex,
+            organization_id=uuid4().hex,
+            instance_id=uuid4().hex,
+            jj_snapshot_max_new_file_size_mib=25,
+        )
+    )
+    local_environment.initialization_strategy = WorkspaceInitializationStrategy.JJ_WORKSPACE
+    try:
+        jj_prompt = local_environment.get_system_prompt()
+    finally:
+        set_user_config_instance(None)
+
+    assert jj_prompt is not None
+    standing_rules = (
+        "no `.git`",
+        "Use `jj` for all version control",
+        "working copy is the commit `@`",
+        "shared with the user's own checkout",
+        "`jj undo`, `jj op restore` or `jj workspace forget`",
+        "Always pass `-m`",
+        "move it onto your newest described change",
+        "NEVER push without explicit permission",
+        "`jj git push -b <bookmark>`",
+        "only after they next run a jj command",
+        "`--head <bookmark>`",
+        "larger than 25 MiB",
+        "`jj workspace update-stale`",
+        "`jj st`",
+    )
+    assert [rule for rule in standing_rules if rule not in jj_prompt] == []
 
 
 def test_create_worktree_happy_path(tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup) -> None:
