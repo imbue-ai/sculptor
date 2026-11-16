@@ -50,18 +50,23 @@ def resolve_requested_branch_name(
 ) -> str | None:
     """Resolve ``requested_branch_name`` to send when creating a workspace.
 
-    For WORKTREE without an explicit ``--branch-name``, mirror the UI by
-    calling ``/api/v1/workspaces/preview-branch-name`` to auto-fill a slug
-    derived from the workspace name (or a random one if no name was given).
-    For other strategies, pass the user's value through untouched and let
-    the backend validate.
+    For WORKTREE, or JJ_WORKSPACE (whose name is its bookmark's), without an
+    explicit ``--branch-name``, mirror the UI by calling
+    ``/api/v1/workspaces/preview-branch-name`` to auto-fill a slug derived
+    from the workspace name (or a random one if no name was given). For other
+    strategies, pass the user's value through untouched and let the backend
+    validate.
     """
     if branch_name is not None:
         return branch_name
     match strategy:
-        case WorkspaceInitializationStrategy.WORKTREE:
-            return _preview_worktree_branch_name(
-                client=client, project_id=project_id, workspace_name=workspace_name, json_output=json_output
+        case WorkspaceInitializationStrategy.WORKTREE | WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            return _preview_branch_name(
+                client=client,
+                project_id=project_id,
+                strategy=strategy,
+                workspace_name=workspace_name,
+                json_output=json_output,
             )
         case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.IN_PLACE:
             return None
@@ -69,22 +74,27 @@ def resolve_requested_branch_name(
             assert_never(unreachable)
 
 
-def _preview_worktree_branch_name(
-    *, client: Client, project_id: str, workspace_name: str | None, json_output: bool
+def _preview_branch_name(
+    *,
+    client: Client,
+    project_id: str,
+    strategy: WorkspaceInitializationStrategy,
+    workspace_name: str | None,
+    json_output: bool,
 ) -> str:
     try:
         preview = preview_branch_name.sync(
             client=client,
             project_id=project_id,
             workspace_name=workspace_name or "",
-            mode=WorkspaceInitializationStrategy.WORKTREE,
+            mode=strategy,
         )
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
     if preview is None:
         cli_error(
-            "Failed to resolve branch name for WORKTREE workspace",
+            f"Failed to resolve branch name for {strategy} workspace",
             detail="No response from server",
             json_output=json_output,
         )
