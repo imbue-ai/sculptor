@@ -9,7 +9,8 @@ type JjBlocker = NonNullable<JjReadiness["blocker"]>;
 
 type BlockerCopy = {
   title: string;
-  action: (minimumVersion: string) => string;
+  /** Takes the oldest version of the tool the blocker is about. */
+  action: (requiredVersion: string) => string;
 };
 
 const BLOCKER_COPY = {
@@ -25,6 +26,11 @@ const BLOCKER_COPY = {
     title: "This jj version is not supported.",
     action: (minimumVersion) =>
       `Sculptor needs jj ${minimumVersion} or a newer compatible version. Install the managed copy below, or point Sculptor at a compatible jj.`,
+  },
+  UNSUPPORTED_GIT: {
+    title: "jj cannot fetch or push with the git it finds.",
+    action: (minimumVersion) =>
+      `jj needs git ${minimumVersion} or newer. Install one first on your PATH, or set jj's git.executable-path to it, then Re-check.`,
   },
   NO_IDENTITY: {
     title: "jj has no author identity.",
@@ -47,6 +53,13 @@ const describeFinding = (readiness: Exclude<JjReadiness, JjAvailable>): string |
       return readiness.version === null
         ? `${readiness.path} reports no recognizable jj version`
         : `${readiness.path} reports jj ${readiness.version}`;
+    case "UNSUPPORTED_GIT":
+      if (readiness.path === null) {
+        return "jj finds no git";
+      }
+      return readiness.version === null
+        ? `${readiness.path} reports no recognizable git version`
+        : `${readiness.path} reports git ${readiness.version}`;
     case "NOT_INSTALLED":
     case "NO_IDENTITY":
       return null;
@@ -90,7 +103,9 @@ export const JjAvailabilityCallout = ({ readiness, jj, minimumVersion }: JjAvail
             <Code size="2">{finding}</Code>
           </Callout.Text>
         )}
-        <Callout.Text>{copy.action(minimumVersion)}</Callout.Text>
+        <Callout.Text>
+          {copy.action(readiness.blocker === "UNSUPPORTED_GIT" ? readiness.minimumVersion : minimumVersion)}
+        </Callout.Text>
       </Flex>
     </Callout.Root>
   );

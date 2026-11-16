@@ -14,6 +14,7 @@ from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import JjShadowed
+from sculptor.web.data_types import JjUnsupportedGit
 from sculptor.web.data_types import JjUnsupportedVersion
 
 _JJ_DIRECTORY = Path(".jj")
@@ -108,10 +109,11 @@ def _find_linked_repository_root(jj_workspace_root: Path) -> Path | None:
 def _raise_if_jj_is_unusable(jj_workspace_root: Path, jj_readiness: JjReadiness) -> None:
     """Raise `JjUnusableForProjectError` unless jj can read the repository.
 
-    Reading needs no author identity, and Sculptor reads with its own jj, whichever jj the user's shell runs.
+    Reading needs no author identity and runs no git, and Sculptor reads with its own jj, whichever jj the
+    user's shell runs.
     """
     match jj_readiness:
-        case JjAvailable() | JjNoIdentity() | JjShadowed():
+        case JjAvailable() | JjUnsupportedGit() | JjNoIdentity() | JjShadowed():
             return
         case JjNotInstalled() | JjNotRunnable() | JjUnsupportedVersion():
             raise JjUnusableForProjectError(jj_workspace_root, jj_readiness)

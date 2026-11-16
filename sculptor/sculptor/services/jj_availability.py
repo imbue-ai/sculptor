@@ -15,6 +15,7 @@ from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import JjShadowed
+from sculptor.web.data_types import JjUnsupportedGit
 from sculptor.web.data_types import JjUnsupportedVersion
 
 _NOT_INSTALLED_REASON = "jj is not installed: install it or set its path on the Jujutsu settings page"
@@ -37,6 +38,17 @@ def describe_jj_unavailability(readiness: JjReadiness) -> str | None:
             return (
                 f"jj {version or '(unknown version)'} at {path} is not supported:"
                 + f" Sculptor needs jj {JJ_PINNED_VERSION} or a newer compatible version"
+            )
+        case JjUnsupportedGit(path=None, minimum_version=minimum_version):
+            return (
+                f"jj finds no git to fetch and push with: install git {minimum_version} or newer,"
+                + " or set jj's git.executable-path to one"
+            )
+        case JjUnsupportedGit(path=path, version=version, minimum_version=minimum_version):
+            return (
+                f"jj runs git {version or '(unknown version)'} at {path} to fetch and push, but jj needs"
+                + f" git {minimum_version} or newer: install a newer git first on PATH, or set jj's"
+                + " git.executable-path to one"
             )
         case JjNoIdentity():
             return "jj has no author identity: set its user.name and user.email on the Jujutsu settings page"

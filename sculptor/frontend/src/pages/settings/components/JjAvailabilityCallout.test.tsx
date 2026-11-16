@@ -74,6 +74,29 @@ describe("JjAvailabilityCallout", () => {
     expect(availabilityText()).toContain("/usr/bin/jj reports no recognizable jj version");
   });
 
+  it("names the git jj runs and the oldest git jj accepts when that git is too old", () => {
+    render(
+      renderCallout(
+        { blocker: "UNSUPPORTED_GIT", path: "/usr/bin/git", version: "2.39.5", minimumVersion: "2.42.0" },
+        { installed: true, version: "0.46.0", source: "MANAGED", path: "/managed/jj" },
+      ),
+    );
+    expect(availabilityText()).toContain("/usr/bin/git reports git 2.39.5");
+    expect(availabilityText()).toContain("jj needs git 2.42.0 or newer");
+    expect(availabilityText()).toContain("git.executable-path");
+  });
+
+  it("says when jj finds no git to run", () => {
+    render(
+      renderCallout(
+        { blocker: "UNSUPPORTED_GIT", path: null, version: null, minimumVersion: "2.42.0" },
+        { installed: true, version: "0.46.0", source: "MANAGED", path: "/managed/jj" },
+      ),
+    );
+    expect(availabilityText()).toContain("jj finds no git");
+    expect(availabilityText()).toContain("jj needs git 2.42.0 or newer");
+  });
+
   it("names the jj the login shell runs instead of Sculptor's and says how to stop it", () => {
     render(
       renderCallout(

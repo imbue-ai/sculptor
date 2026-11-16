@@ -27,6 +27,7 @@ from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import JjShadowed
+from sculptor.web.data_types import JjUnsupportedGit
 from sculptor.web.data_types import JjUnsupportedVersion
 
 _IDENTITY = JjIdentity(name="Jordan Bookmarker", email="jordan@example.com")
@@ -52,6 +53,20 @@ _IDENTITY = JjIdentity(name="Jordan Bookmarker", email="jordan@example.com")
             JjUnsupportedVersion(blocker=JjBlocker.UNSUPPORTED_VERSION, path="/opt/jj", version="0.28.2"),
             f"jj 0.28.2 at /opt/jj is not supported: Sculptor needs jj {JJ_PINNED_VERSION} or a newer compatible version",
             id="unsupported-version",
+        ),
+        pytest.param(
+            JjUnsupportedGit(
+                blocker=JjBlocker.UNSUPPORTED_GIT, path="/usr/bin/git", version="2.39.5", minimum_version="2.42.0"
+            ),
+            "jj runs git 2.39.5 at /usr/bin/git to fetch and push, but jj needs git 2.42.0 or newer:"
+            + " install a newer git first on PATH, or set jj's git.executable-path to one",
+            id="unsupported-git",
+        ),
+        pytest.param(
+            JjUnsupportedGit(blocker=JjBlocker.UNSUPPORTED_GIT, path=None, version=None, minimum_version="2.42.0"),
+            "jj finds no git to fetch and push with: install git 2.42.0 or newer, or set jj's git.executable-path"
+            + " to one",
+            id="no-git",
         ),
         pytest.param(
             JjNoIdentity(blocker=JjBlocker.NO_IDENTITY, suggested_identity=_IDENTITY),
@@ -132,3 +147,23 @@ def test_preparing_a_launch_refuses_a_jj_version_sculptor_does_not_support_and_l
 
     assert str(raised.value).startswith(f"jj 0.28.2 at {old_jj} is not supported")
     assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path
+
+
+def test_preparing_a_launch_refuses_while_the_git_jj_runs_is_too_old_to_fetch_with(
+    dependency_management_service: DependencyManagementService,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    isolated_sculptor_folder: Path,  # noqa: F811
+    tmp_path: Path,
+) -> None:
+    old_git = tmp_path / "git"
+    old_git.write_text("#!/bin/sh\necho 'git version 2.39.5'\n")
+    old_git.chmod(0o755)
+    jj_isolated_env.jj_config_path.write_text(f'[git]\nexecutable-path = "{old_git}"\n')
+    _resolve_jj_to(jj_binary.path)
+
+    with pytest.raises(JjUnavailableError) as raised:
+        prepare_jj_for_launch(dependency_management_service)
+
+    assert str(raised.value).startswith(f"jj runs git 2.39.5 at {old_git} to fetch and push")
+    assert not (get_jj_bin_dir() / "jj").is_symlink()

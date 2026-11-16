@@ -26,6 +26,7 @@ from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.jj_availability import describe_jj_unavailability
+from sculptor.services.jj_version import JJ_MINIMUM_GIT_VERSION
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
@@ -38,6 +39,7 @@ from sculptor.services.workspace_service.environment_manager.environments import
 from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
+from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
 from sculptor.utils.build import get_jj_bin_dir
@@ -47,6 +49,7 @@ from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.data_types import CreateWorkspaceRequestV2
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.data_types import JjUnsupportedGit
 from sculptor.web.data_types import UpdateWorkspaceRequest
 
 
@@ -173,6 +176,34 @@ def test_creating_a_jj_workspace_needs_jj_to_be_available(
 
     assert response.status_code == 412, response.text
     assert "jj is not installed" in _detail(response)
+    assert _list_workspace_strategies(test_services) == []
+
+
+def test_creating_a_jj_workspace_is_refused_while_the_git_jj_runs_is_too_old_to_fetch_with(
+    jj_resolved_to_the_pinned_binary: None,
+    client: TestClient,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_isolated_env: JjIsolatedEnv,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    project = _register_project(test_services, jj_colocated_repo.path, use_jj_for_new_workspaces=True)
+    old_git = tmp_path / "git"
+    old_git.write_text("#!/bin/sh\necho 'git version 2.39.5 (Apple Git-154)'\n")
+    old_git.chmod(0o755)
+    jj_isolated_env.jj_config_path.write_text(f'[git]\nexecutable-path = "{old_git}"\n')
+
+    response = _post_jj_workspace(client, project)
+
+    assert response.status_code == 412, response.text
+    assert _detail(response) == describe_jj_unavailability(
+        JjUnsupportedGit(
+            blocker=JjBlocker.UNSUPPORTED_GIT,
+            path=str(old_git),
+            version="2.39.5",
+            minimum_version=JJ_MINIMUM_GIT_VERSION,
+        )
+    )
     assert _list_workspace_strategies(test_services) == []
 
 
