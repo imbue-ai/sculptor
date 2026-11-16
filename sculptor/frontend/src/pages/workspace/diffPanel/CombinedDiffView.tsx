@@ -8,6 +8,7 @@ import { ElementIds } from "~/api";
 import { appThemeAtom, fileBrowserLineWrappingAtom } from "~/common/state/atoms/userConfig.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
+import { useWorkspaceVcs } from "~/common/state/hooks/useWorkspaceVcs.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { CommitButton } from "~/pages/workspace/panels/fileBrowser/CommitButton.tsx";
 import { FileDropdownMenu } from "~/pages/workspace/panels/fileBrowser/FileDropdownMenu.tsx";
@@ -204,6 +205,7 @@ export const CombinedDiffView = ({
 }: CombinedDiffViewProps): ReactElement => {
   const workspace = useWorkspace(workspaceId);
   const hasTargetBranch = workspace?.targetBranch != null;
+  const vcs = useWorkspaceVcs(workspaceId);
   const { data: diff } = useWorkspaceDiff(workspaceId);
   const [scope, setScope] = useAtom(diffScopeAtomFamily(workspaceId));
   const overflow = useAtomValue(fileBrowserLineWrappingAtom);
@@ -340,7 +342,7 @@ export const CombinedDiffView = ({
           >
             {areAllCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
           </TooltipIconButton>
-          <DiffScopePicker scope={scope} onScopeChange={setScope} hasTargetBranch={hasTargetBranch} />
+          <DiffScopePicker scope={scope} onScopeChange={setScope} vcs={vcs} hasTargetBranch={hasTargetBranch} />
         </div>
       )}
       {isActive &&

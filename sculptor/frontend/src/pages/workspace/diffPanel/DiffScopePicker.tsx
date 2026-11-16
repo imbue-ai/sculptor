@@ -2,13 +2,21 @@ import { SegmentedControl } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
+import type { WorkspaceVcs } from "~/common/utils/workspaceVcs.ts";
 
 import styles from "./DiffScopePicker.module.scss";
 import type { DiffScope } from "./types/diffPanel.ts";
 
+// The uncommitted scope is jj's working copy: the diff of `@` against its parent.
+const UNCOMMITTED_LABEL_BY_VCS: Readonly<Record<WorkspaceVcs, string>> = {
+  git: "Uncommitted",
+  jj: "Working copy",
+};
+
 type DiffScopePickerProps = {
   scope: DiffScope;
   onScopeChange: (scope: DiffScope) => void;
+  vcs: WorkspaceVcs;
   hasTargetBranch?: boolean;
   uncommittedCount?: number;
   allCount?: number;
@@ -22,6 +30,7 @@ const formatLabel = (inputs: { label: string; count: number | undefined }): stri
 export const DiffScopePicker = ({
   scope,
   onScopeChange,
+  vcs,
   hasTargetBranch = true,
   uncommittedCount,
   allCount,
@@ -45,7 +54,7 @@ export const DiffScopePicker = ({
         </SegmentedControl.Item>
       )}
       <SegmentedControl.Item value="uncommitted" data-testid={ElementIds.DIFF_SCOPE_UNCOMMITTED}>
-        {formatLabel({ label: "Uncommitted", count: uncommittedCount })}
+        {formatLabel({ label: UNCOMMITTED_LABEL_BY_VCS[vcs], count: uncommittedCount })}
       </SegmentedControl.Item>
     </SegmentedControl.Root>
   );

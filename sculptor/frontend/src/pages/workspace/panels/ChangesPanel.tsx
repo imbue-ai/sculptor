@@ -11,6 +11,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
+import { useWorkspaceVcs } from "~/common/state/hooks/useWorkspaceVcs.ts";
 import {
   activeDiffTabAtomFamily,
   changesSelectionFromTab,
@@ -41,6 +42,7 @@ import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const workspace = useWorkspace(workspaceId);
   const hasTargetBranch = workspace?.targetBranch != null;
+  const vcs = useWorkspaceVcs(workspaceId);
 
   const [scope, setScope] = useAtom(changesScopeAtomFamily(workspaceId));
   const viewMode = useAtomValue(fileBrowserViewModeAtomFamily(workspaceId));
@@ -156,6 +158,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
         <DiffScopePicker
           scope={scope}
           onScopeChange={setScope}
+          vcs={vcs}
           hasTargetBranch={hasTargetBranch}
           uncommittedCount={uncommittedStatusMap.size}
           allCount={allStatusMap.size}
