@@ -51,7 +51,12 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
 
   const uncommittedStatusMap = useFileStatusMap(workspaceId, "uncommitted");
   const allStatusMap = useFileStatusMap(workspaceId, "vs-target-branch");
-  const { discardFile } = useDiscardFile(workspaceId);
+  const {
+    discardFile,
+    isDiscarding,
+    errorMessage: discardErrorMessage,
+    resetError: resetDiscardError,
+  } = useDiscardFile(workspaceId);
 
   // Clicked-file selection, persisted per-workspace so it survives the panel
   // unmounting on a section-tab switch (reconciled with the atom-driven one below).
@@ -73,23 +78,31 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
     [setSelected],
   );
 
-  const handleDiscardRequest = useCallback((filePath: string): void => {
-    setDiscardTarget(filePath);
-  }, []);
+  const handleDiscardRequest = useCallback(
+    (filePath: string): void => {
+      resetDiscardError();
+      setDiscardTarget(filePath);
+    },
+    [resetDiscardError],
+  );
 
+  // The dialog stays open until the discard lands, so a failure is shown in it.
   const handleDiscardConfirm = useCallback((): void => {
-    if (discardTarget) {
-      void discardFile(discardTarget);
+    if (discardTarget === null) {
+      return;
+    }
+    const discardedPath = discardTarget;
+    discardFile(discardedPath, () => {
       // Clear the viewer if the discarded file is the one being shown, whether it
       // is driven by the local click or by a shared single-kind diff tab (an agent
       // open / chat file-chip). Clearing only the local half would leave the tab
       // still resolving to the just-discarded file.
-      setSelected((prev) => (prev?.filePath === discardTarget ? null : prev));
-      if (activeTab?.kind === "single" && changesSelectionFromTab(activeTab)?.filePath === discardTarget) {
+      setSelected((prev) => (prev?.filePath === discardedPath ? null : prev));
+      if (activeTab?.kind === "single" && changesSelectionFromTab(activeTab)?.filePath === discardedPath) {
         closeDiffTab({ workspaceId, filePath: activeTab.filePath });
       }
       setDiscardTarget(null);
-    }
+    });
   }, [discardTarget, discardFile, setSelected, activeTab, closeDiffTab, workspaceId]);
 
   // After committing, the uncommitted changes clear, so reset the viewer. Drop
@@ -183,6 +196,9 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
           if (!open) setDiscardTarget(null);
         }}
         filePath={discardTarget ?? ""}
+        vcs={vcs}
+        isDiscarding={isDiscarding}
+        errorMessage={discardErrorMessage}
         onConfirm={handleDiscardConfirm}
       />
     </Flex>
