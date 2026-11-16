@@ -46,6 +46,7 @@ def project_jj_stack(
         unbookmarked_revision_count=_count_described_revisions_above(
             primary_commit_id, distance_by_commit_id.keys(), revision_by_commit_id
         ),
+        newest_described_commit_ids=_find_newest_described_revisions(distance_by_commit_id, revision_by_commit_id),
     )
 
 
@@ -76,6 +77,22 @@ def _count_described_revisions_above(
     else:
         counted_commit_ids = _descendants_of(primary_commit_id, reachable_commit_ids, revision_by_commit_id)
     return sum(1 for commit_id in counted_commit_ids if revision_by_commit_id[commit_id].is_described)
+
+
+def _find_newest_described_revisions(
+    distance_by_commit_id: Mapping[str, int], revision_by_commit_id: Mapping[str, JjStackRevision]
+) -> tuple[str, ...]:
+    """The described reachable revisions that no other described one descends from, nearest the working copy first."""
+    reachable_commit_ids = distance_by_commit_id.keys()
+    described_commit_ids = {
+        commit_id for commit_id in reachable_commit_ids if revision_by_commit_id[commit_id].is_described
+    }
+    newest = [
+        commit_id
+        for commit_id in described_commit_ids
+        if not described_commit_ids & _descendants_of(commit_id, reachable_commit_ids, revision_by_commit_id)
+    ]
+    return tuple(sorted(newest, key=lambda commit_id: (distance_by_commit_id[commit_id], commit_id)))
 
 
 def _descendants_of(

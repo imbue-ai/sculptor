@@ -47,6 +47,7 @@ from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
+from sculptor.services.workspace_service.vcs.jj_data_types import JjInitialBookmarkOutcome
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionRecord
 from sculptor.services.workspace_service.vcs.jj_data_types import JjStackProjection
@@ -406,6 +407,35 @@ class JjWorkspaceVcs(WorkspaceVcs):
         return PullRequestRefs(
             head_ref_names=projection.pr_head_candidates, base_ref_name=bookmark_name_of_symbol(target_ref)
         )
+
+    def create_initial_bookmark(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str
+    ) -> JjInitialBookmarkOutcome:
+        """Create `requested_ref_name` on the stack's newest described revision, unless the stack has a bookmark already.
+
+        Snapshots first, so the agent's last edits are in the bookmarked change.
+        Leaves the stack alone while its work is undescribed, while two described
+        revisions are both newest, and when the name is malformed or taken locally,
+        on a remote or in git. Raises `JjWorkingCopyStaleError` when the
+        workspace is stale.
+        """
+        checkout = location.checkout_path
+        working_copy = snapshot_working_copy(self._jj, checkout)
+        projection = self._project_stack(checkout, working_copy.commit_id, target_ref, requested_ref_name)
+        if projection.bookmarks:
+            return JjInitialBookmarkOutcome.STACK_HAS_A_BOOKMARK
+        if len(projection.newest_described_commit_ids) != 1:
+            return JjInitialBookmarkOutcome.NO_SINGLE_NEWEST_DESCRIBED_REVISION
+        if self.validate_new_ref_name(location.repo_path, requested_ref_name).status is not RefNameStatus.AVAILABLE:
+            return JjInitialBookmarkOutcome.NAME_UNAVAILABLE
+        (newest_described_commit_id,) = projection.newest_described_commit_ids
+        logger.debug("Creating bookmark {} on {} in {}", requested_ref_name, newest_described_commit_id, checkout)
+        self._jj.run(
+            ["bookmark", "create", requested_ref_name, "-r", newest_described_commit_id],
+            checkout,
+            snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+        )
+        return JjInitialBookmarkOutcome.CREATED
 
     def _read_working_copy_commit_id(self, checkout: Path) -> str:
         """The working-copy commit as last snapshotted."""
