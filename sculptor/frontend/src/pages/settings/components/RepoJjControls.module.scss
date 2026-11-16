@@ -19,6 +19,23 @@
   display: inline-flex;
 }
 
+// Radix strips the state colours from every disabled switch, so a locked-on
+// switch would look off. It is disabled because it cannot be turned off, and
+// it must still read as on.
+.lockedOnSwitch[data-disabled] {
+  mix-blend-mode: normal;
+
+  &::before {
+    background-image: linear-gradient(to right, var(--accent-track) 40%, transparent 60%);
+    box-shadow: inset 0 0 0 1px var(--gray-a5);
+  }
+
+  // stylelint-disable-next-line selector-class-pattern -- Radix UI class name
+  :global(.rt-SwitchThumb) {
+    background-color: var(--white-a12);
+  }
+}
+
 // Lines that belong to the switch above them line up with its label.
 .indented {
   padding-left: calc(var(--space-6) + var(--space-1));

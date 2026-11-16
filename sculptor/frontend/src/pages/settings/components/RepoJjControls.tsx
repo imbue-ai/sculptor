@@ -93,6 +93,7 @@ export const RepoJjControls = ({
               size="1"
               checked={colocationState.kind === "ON_LOCKED"}
               disabled={!isColocationSwitchEnabled(colocationState)}
+              className={colocationState.kind === "ON_LOCKED" ? styles.lockedOnSwitch : undefined}
               onCheckedChange={() => setIsDialogOpen(true)}
               aria-label="Is this repository a colocated jj repository?"
               data-testid={ElementIds.REPO_JJ_COLOCATION_SWITCH}

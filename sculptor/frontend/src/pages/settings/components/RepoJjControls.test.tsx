@@ -274,6 +274,8 @@ describe("the colocation switch", () => {
 
     expect(getColocationSwitch()).toBeChecked();
     expect(getColocationSwitch()).toBeDisabled();
+    // Radix greys out every disabled switch; the locked one keeps its "on" look.
+    expect(getColocationSwitch().className).toMatch(/lockedOnSwitch/);
     await expectTooltipOnHover(getColocationSwitch(), LOCKED_TOOLTIP);
   });
 
