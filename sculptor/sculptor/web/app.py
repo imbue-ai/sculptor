@@ -179,6 +179,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.git_cli import find_jj_workspace_root
 from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
@@ -4532,6 +4533,24 @@ def get_active_projects(
     return services.project_service.get_active_projects()
 
 
+def _raise_if_inside_jj_workspace(project_path: Path) -> None:
+    """Refuse a directory inside a jj workspace, which has `.jj` and no `.git`.
+
+    A `git init` there would put a `.git` into the jj workspace, which switches
+    off the tripwire that keeps Sculptor's git calls out of jj workspaces.
+    """
+    jj_workspace_root = find_jj_workspace_root(project_path)
+    if jj_workspace_root is None:
+        return
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"Selected directory is inside the jj workspace at {jj_workspace_root}, which has no git repository. "
+            + "Sculptor can only add a jj repository that is colocated with git."
+        ),
+    )
+
+
 @router.post("/api/v1/projects/initialize")
 def initialize_project(
     request: Request,
@@ -4544,6 +4563,7 @@ def initialize_project(
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
     if not project_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Project path is not a directory: {project_path}")
+    _raise_if_inside_jj_workspace(project_path)
 
     if not (project_path / ".git").exists():
         if is_path_in_git_repo(project_path):
@@ -4896,6 +4916,7 @@ def initialize_git_repository(
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
     if not project_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Project path is not a directory: {project_path}")
+    _raise_if_inside_jj_workspace(project_path)
     if (project_path / ".git").exists():
         raise HTTPException(status_code=400, detail=f"Directory is already a git repository: {project_path}")
 
