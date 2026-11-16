@@ -132,7 +132,8 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
-from sculptor.services.jj_version import JJ_PINNED_VERSION
+from sculptor.services.jj_availability import JjUnavailableError
+from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.pi_login_service import PiLoginMode
 from sculptor.services.pi_login_service import broadcast_pi_models_refresh
 from sculptor.services.pi_login_service import pi_login_terminal_id
@@ -250,13 +251,7 @@ from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
 from sculptor.web.data_types import InstallExtensionRequest
 from sculptor.web.data_types import InstallExtensionResponse
-from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjIdentity
-from sculptor.web.data_types import JjNoIdentity
-from sculptor.web.data_types import JjNotInstalled
-from sculptor.web.data_types import JjNotRunnable
-from sculptor.web.data_types import JjReadiness
-from sculptor.web.data_types import JjUnsupportedVersion
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingConventionFile
@@ -694,9 +689,10 @@ def _validate_jj_workspace_creation_request(
     vcs = services.workspace_service.get_workspace_vcs(WorkspaceInitializationStrategy.JJ_WORKSPACE)
     try:
         facts = gather_jj_workspace_creation_facts(project, jj, services.dependency_management_service)
-        jj_unavailability = _describe_jj_unavailability(facts.jj_readiness)
-        if jj_unavailability is not None:
-            raise HTTPException(status_code=412, detail=jj_unavailability)
+        try:
+            require_jj_available(facts.jj_readiness)
+        except JjUnavailableError as e:
+            raise HTTPException(status_code=412, detail=str(e)) from e
         if not creates_jj_workspaces(facts):
             raise HTTPException(
                 status_code=400, detail=f"The repository at {project_path} does not create jj workspaces"
@@ -718,26 +714,6 @@ def _validate_jj_workspace_creation_request(
             )
     except VcsCommandError as e:
         raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
-
-
-def _describe_jj_unavailability(readiness: JjReadiness) -> str | None:
-    """Why jj cannot be used, composed from the readiness variant's data; None when it can."""
-    match readiness:
-        case JjAvailable():
-            return None
-        case JjNotInstalled():
-            return "jj is not installed: install it or set its path on the Jujutsu settings page"
-        case JjNotRunnable(error=error):
-            return f"jj cannot run: {error}" if error else "jj cannot run"
-        case JjUnsupportedVersion(path=path, version=version):
-            return (
-                f"jj {version or '(unknown version)'} at {path} is not supported:"
-                + f" Sculptor needs jj {JJ_PINNED_VERSION} or a newer compatible version"
-            )
-        case JjNoIdentity():
-            return "jj has no author identity: set its user.name and user.email on the Jujutsu settings page"
-        case _ as unreachable:
-            assert_never(unreachable)
 
 
 def _new_ref_noun(initialization_strategy: WorkspaceInitializationStrategy) -> str:
