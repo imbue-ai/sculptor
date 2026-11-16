@@ -62,6 +62,8 @@ class EnvironmentManager(ABC):
         project_path: Path,
         project_id: ProjectID,
         concurrency_group: ConcurrencyGroup,
+        vcs: WorkspaceVcs,
+        workspace_id: WorkspaceID,
         initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
         env_var_override: bool = False,
         sculptor_folder: Path | None = None,
@@ -74,6 +76,8 @@ class EnvironmentManager(ABC):
             project_path: Path to the project's repository.
             project_id: ID of the project.
             concurrency_group: Concurrency group for process management.
+            vcs: The workspace's version control, which verifies its checkout.
+            workspace_id: The workspace the environment belongs to; it names the checkout.
             initialization_strategy: Strategy for workspace initialization.
             env_var_override: Whether project env vars override os.environ on collision.
             sculptor_folder: Override for the sculptor folder path (uses get_workspaces_folder() if None).
@@ -82,7 +86,7 @@ class EnvironmentManager(ABC):
             The resumed Environment instance.
 
         Raises:
-            EnvironmentNotFoundError: if the environment doesn't exist.
+            EnvironmentNotFoundError: if the environment doesn't exist or `vcs` finds its checkout unusable.
             EnvironmentConfigurationChangedError: if environment config has changed.
         """
 

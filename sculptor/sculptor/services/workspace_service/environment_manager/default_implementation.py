@@ -16,6 +16,7 @@ from sculptor.services.workspace_service.environment_manager.api import Environm
 from sculptor.services.workspace_service.environment_manager.env_file_parser import atomic_copy_env_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import get_workspaces_folder
 
@@ -99,6 +100,8 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
         project_path: Path,
         project_id: ProjectID,
         concurrency_group: ConcurrencyGroup,
+        vcs: WorkspaceVcs,
+        workspace_id: WorkspaceID,
         initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
         env_var_override: bool = False,
         sculptor_folder: Path | None = None,
@@ -110,6 +113,8 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
             project_path: Path to the project's repository.
             project_id: ID of the project.
             concurrency_group: Concurrency group for process management.
+            vcs: The workspace's version control, which verifies its checkout.
+            workspace_id: The workspace the environment belongs to; it names the checkout.
             initialization_strategy: Strategy for workspace initialization.
             env_var_override: Whether project env vars override os.environ on collision.
             sculptor_folder: Override for the sculptor folder path (uses get_workspaces_folder() if None).
@@ -123,6 +128,11 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
             concurrency_group=concurrency_group,
             repo_host_path=project_path,
             initialization_strategy=initialization_strategy,
+        )
+        vcs.verify_checkout(
+            CheckoutLocation(
+                repo_path=project_path, checkout_path=env.get_working_directory(), checkout_name=str(workspace_id)
+            )
         )
         # For clone mode, re-copy .sculptor/.env from the source repo so that
         # edits made since the clone was created are picked up on resume.

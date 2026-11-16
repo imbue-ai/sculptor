@@ -21,6 +21,7 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.git import get_repo_base_path
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.interfaces.environments.base import Environment
+from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
@@ -54,6 +55,7 @@ from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.testing.git_snapshot import FullLocalGitRepo
 from sculptor.testing.git_snapshot import GitCommitSnapshot
 from sculptor.testing.git_snapshot import create_repo_from_snapshot
@@ -838,6 +840,69 @@ def test_environment_creation_names_the_checkout_after_the_workspace(
     assert [spec.checkout_name for spec in created_specs] == [str(workspace.object_id)]
 
 
+def _open_agent_environment_and_read_its_id(
+    test_service_collection: CompleteServiceCollection,
+    project: Project,
+    workspace_id: WorkspaceID,
+    concurrency_group: ConcurrencyGroup,
+) -> str | None:
+    """Open an agent environment in the workspace, then return the environment id the workspace records."""
+    with test_service_collection.workspace_service.agent_environment_context(
+        project=project,
+        workspace_id=workspace_id,
+        task_id=TaskID(),
+        concurrency_group=concurrency_group,
+        root_progress_handle=RootProgressHandle(),
+        shutdown_event=GLOBAL_SHUTDOWN_EVENT,
+    ):
+        pass
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        workspace = transaction.get_workspace(workspace_id)
+    assert workspace is not None
+    return workspace.environment_id
+
+
+def test_environment_is_recreated_when_the_vcs_finds_the_resumed_checkout_unusable(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_service = test_service_collection.workspace_service
+    assert isinstance(workspace_service, DefaultWorkspaceService)
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        project = _initialize_project_without_setup_command(test_service_collection, repo_path, transaction)
+        workspace = workspace_service.create_workspace(
+            project=project,
+            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="Unusable checkout",
+            transaction=transaction,
+        )
+    verified_locations: list[CheckoutLocation] = []
+
+    def _reject_checkout(self: GitWorkspaceVcs, location: CheckoutLocation) -> None:
+        verified_locations.append(location)
+        raise EnvironmentNotFoundError(f"No usable checkout at {location.checkout_path}")
+
+    with test_root_concurrency_group.make_concurrency_group("env_test") as concurrency_group:
+        first_environment_id = _open_agent_environment_and_read_its_id(
+            test_service_collection, project, workspace.object_id, concurrency_group
+        )
+        monkeypatch.setattr(GitWorkspaceVcs, "verify_checkout", _reject_checkout)
+        second_environment_id = _open_agent_environment_and_read_its_id(
+            test_service_collection, project, workspace.object_id, concurrency_group
+        )
+
+    assert first_environment_id is not None and second_environment_id is not None
+    assert second_environment_id != first_environment_id
+    assert verified_locations == [
+        CheckoutLocation(repo_path=repo_path, checkout_path=repo_path, checkout_name=str(workspace.object_id))
+    ]
+
+
 class _ResumeCountingEnvironmentManager(DefaultEnvironmentManager):
     _resume_count: int = PrivateAttr(default=0)
 
@@ -847,6 +912,8 @@ class _ResumeCountingEnvironmentManager(DefaultEnvironmentManager):
         project_path: Path,
         project_id: ProjectID,
         concurrency_group: ConcurrencyGroup,
+        vcs: WorkspaceVcs,
+        workspace_id: WorkspaceID,
         initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
         env_var_override: bool = False,
         sculptor_folder: Path | None = None,
@@ -857,6 +924,8 @@ class _ResumeCountingEnvironmentManager(DefaultEnvironmentManager):
             project_path,
             project_id,
             concurrency_group,
+            vcs,
+            workspace_id,
             initialization_strategy,
             env_var_override,
             sculptor_folder,

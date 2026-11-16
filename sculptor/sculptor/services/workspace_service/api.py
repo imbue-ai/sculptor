@@ -29,6 +29,7 @@ from sculptor.services.workspace_service.setup_command_runner import SetupStateP
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
 from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
 # The default workspace setup command when a project has not configured one.
 # Fetches the origin remote if present; succeeds silently if origin is missing
@@ -119,6 +120,10 @@ class WorkspaceService(Service, ABC):
         the scanning machinery. Returns None when the branch is unknown (the
         workspace hasn't been scanned yet, or the scanner isn't running).
         """
+
+    @abstractmethod
+    def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
+        """The version control for workspaces of the given kind."""
 
     # Workspace Operations
 

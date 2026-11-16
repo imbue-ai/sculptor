@@ -34,6 +34,7 @@ from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
@@ -44,6 +45,8 @@ from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.terminal_agent_registry import registry as registry_module
 from sculptor.services.user_config.user_config import get_privacy_settings_for_telemetry
 from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
@@ -1634,3 +1637,30 @@ def test_setup_rerun_conflicts_when_setup_command_is_cleared(
 
     assert response.status_code == 409
     assert response.json()["detail"] == {"error": "no setup command configured"}
+
+
+def test_setup_rerun_conflicts_when_the_vcs_finds_the_checkout_unusable(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        transaction.update_project_fields(test_project.object_id, workspace_setup_command="true")
+        transaction.update_workspace_fields(workspace.object_id, environment_id=str(tmp_path / "environment"))
+    verified_checkout_names: list[str] = []
+
+    def _reject_checkout(self: GitWorkspaceVcs, location: CheckoutLocation) -> None:
+        verified_checkout_names.append(location.checkout_name)
+        raise EnvironmentNotFoundError(f"No usable checkout at {location.checkout_path}")
+
+    monkeypatch.setattr(GitWorkspaceVcs, "verify_checkout", _reject_checkout)
+
+    response = client.post(f"/api/v1/workspaces/{workspace.object_id}/setup/rerun")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {"error": "environment not ready"}
+    assert verified_checkout_names == [str(workspace.object_id)]

@@ -115,6 +115,7 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 from sculptor.interfaces.environments.base import ARTIFACTS_DIRECTORY
 from sculptor.interfaces.environments.base import STATE_DIRECTORY
 from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
+from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TypeIDPrefixMismatchError
@@ -1037,13 +1038,18 @@ def rerun_workspace_setup(
         existing = workspace_service.setup_runner.get_state(workspace_id)
         if existing is not None and existing.status == "running":
             raise HTTPException(status_code=409, detail={"error": "setup already running"})
-    environment = workspace_service.environment_manager.resume_environment(
-        environment_id=environment_id,
-        project_path=project_path,
-        project_id=project_id,
-        concurrency_group=workspace_service.concurrency_group,
-        initialization_strategy=initialization_strategy,
-    )
+    try:
+        environment = workspace_service.environment_manager.resume_environment(
+            environment_id=environment_id,
+            project_path=project_path,
+            project_id=project_id,
+            concurrency_group=workspace_service.concurrency_group,
+            vcs=workspace_service.get_workspace_vcs(initialization_strategy),
+            workspace_id=WorkspaceID(workspace_id),
+            initialization_strategy=initialization_strategy,
+        )
+    except EnvironmentNotFoundError as e:
+        raise HTTPException(status_code=409, detail={"error": "environment not ready"}) from e
     state_dir = environment.to_host_path(environment.get_state_path())
     workspace_service.setup_runner.start(
         workspace_id=workspace_id,

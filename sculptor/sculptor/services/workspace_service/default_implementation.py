@@ -249,7 +249,7 @@ class DefaultWorkspaceService(WorkspaceService):
             git_cli=GitCli(workspace_concurrency_group, dependency_management_service.resolve_binary_path),
         )
 
-    def _get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
+    def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
         match initialization_strategy:
             case (
                 WorkspaceInitializationStrategy.IN_PLACE
@@ -304,7 +304,7 @@ class DefaultWorkspaceService(WorkspaceService):
 
         # Record the user's HEAD as the workspace's starting point.
         project_path = project.get_local_user_path()
-        vcs = self._get_workspace_vcs(initialization_strategy)
+        vcs = self.get_workspace_vcs(initialization_strategy)
         source_git_hash = vcs.resolve_base_commit_id(project_path, "HEAD")
 
         # Use the caller-provided target branch if given, otherwise resolve a
@@ -403,7 +403,7 @@ class DefaultWorkspaceService(WorkspaceService):
             environment_id = workspace.environment_id
             environment_manager = self.environment_manager
             requested_branch_name = workspace.requested_branch_name
-            vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+            vcs = self.get_workspace_vcs(workspace.initialization_strategy)
             try:
                 checkout_location: CheckoutLocation | None = self._get_checkout_location(workspace, transaction)
             except WorkspaceNotFoundError:
@@ -513,6 +513,8 @@ class DefaultWorkspaceService(WorkspaceService):
                     project_path=project_path,
                     project_id=project.object_id,
                     concurrency_group=concurrency_group,
+                    vcs=self.get_workspace_vcs(workspace.initialization_strategy),
+                    workspace_id=workspace.object_id,
                     initialization_strategy=workspace.initialization_strategy,
                     env_var_override=env_var_override,
                 )
@@ -540,7 +542,7 @@ class DefaultWorkspaceService(WorkspaceService):
                         project_path=project_path,
                         project_id=project.object_id,
                         concurrency_group=concurrency_group,
-                        vcs=self._get_workspace_vcs(workspace.initialization_strategy),
+                        vcs=self.get_workspace_vcs(workspace.initialization_strategy),
                         workspace_id=workspace.object_id,
                         initialization_strategy=workspace.initialization_strategy,
                         source_branch=workspace.source_branch,
@@ -775,7 +777,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 target_branch = workspace.target_branch if include_target_branch_diff else None
 
             # Generate the diff artifact (outside transaction — may be slow)
-            vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+            vcs = self.get_workspace_vcs(workspace.initialization_strategy)
             diff_artifact = vcs.compute_diff_artifact(location, target_branch, effective_context_lines)
 
             # Store the artifact to disk
@@ -899,7 +901,7 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         result = vcs.discard_file_changes(location, file_path)
         self.maybe_refresh_workspace_diff(workspace_id)
         return result
@@ -916,7 +918,7 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         revision_diff = vcs.get_revision_diff(location, commit_hash)
         return (revision_diff.diff, revision_diff.commit_id, revision_diff.parent_commit_id)
 
@@ -931,7 +933,7 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         history = vcs.get_revision_history(
             location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
         )
@@ -950,7 +952,7 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         try:
             return vcs.list_files(location)
         except CheckoutFilesUnavailableError as e:
@@ -970,5 +972,5 @@ class DefaultWorkspaceService(WorkspaceService):
             raise WorkspaceNotFoundError(workspace_id)
 
         location = self._get_checkout_location(workspace, transaction)
-        vcs = self._get_workspace_vcs(workspace.initialization_strategy)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
         return vcs.read_file_at_revision(location, file_path, git_ref)
