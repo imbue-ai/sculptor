@@ -14,7 +14,6 @@ import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 const COMMIT_BUTTON_STYLE: CSSProperties = { width: "100%" };
 
 type CommitButtonProps = {
-  /** The workspace whose current agent receives the commit prompt. */
   workspaceId: string;
   changesCount: number;
   /** Called after the commit message is sent. */

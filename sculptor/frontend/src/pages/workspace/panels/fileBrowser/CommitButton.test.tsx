@@ -11,8 +11,7 @@ import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts
 
 import { CommitButton } from "./CommitButton.tsx";
 
-// The commit prompt is sent over HTTP; stub only that call so the request's
-// target can be asserted. The rest of the generated client stays real.
+// The commit prompt is sent over HTTP; stub only that call so the request's target can be asserted.
 const { sendMessagesMock } = vi.hoisted(() => ({ sendMessagesMock: vi.fn() }));
 vi.mock("~/api", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -24,7 +23,6 @@ const WS_OTHER = "ws-other";
 
 type StoreType = ReturnType<typeof createStore>;
 
-// Only the fields the commit path reads: a loaded, chat-capable agent in a workspace.
 const seedChatAgent = (store: StoreType, inputs: { agentId: string; workspaceId: string }): void => {
   const agent = {
     id: inputs.agentId,
@@ -55,7 +53,6 @@ afterEach(() => {
 
 describe("CommitButton", () => {
   it("is enabled for its workspace's agent when no desktop shell has set the active workspace", () => {
-    // The mobile shell never runs the desktop bootstrap, so the active-workspace atom stays null.
     const store = createStore();
     seedChatAgent(store, { agentId: "agent-shown", workspaceId: WS });
 
@@ -65,7 +62,6 @@ describe("CommitButton", () => {
   });
 
   it("sends the commit prompt to its workspace's agent, not the active workspace's", async () => {
-    // A window narrowed from desktop width keeps the last desktop workspace in the atom.
     const store = createStore();
     seedChatAgent(store, { agentId: "agent-shown", workspaceId: WS });
     seedChatAgent(store, { agentId: "agent-other", workspaceId: WS_OTHER });
