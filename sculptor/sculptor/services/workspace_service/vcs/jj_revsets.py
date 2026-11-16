@@ -56,10 +56,7 @@ def root_file_fileset(path: str) -> JjFileset:
 
 
 def parse_bookmark_symbol(symbol: str) -> JjBookmarkSymbol:
-    """Read `name` as a local bookmark and `name@remote` as a remote one.
-
-    Raises `InvalidRevisionError` for an empty name or remote, or more than one `@`.
-    """
+    """Read `name` as a local bookmark and `name@remote` as a remote one; raises `InvalidRevisionError` otherwise."""
     name, separator, remote = symbol.partition("@")
     if not name or "@" in remote or (separator and not remote):
         raise InvalidRevisionError(f"Not a jj bookmark symbol: {symbol!r}")
@@ -76,7 +73,6 @@ def format_bookmark_symbol(symbol: JjBookmarkSymbol) -> str:
 def revset_for_base(symbol_or_commit_id: str) -> JjRevset:
     """The revset for a workspace base given as a bookmark symbol or a full commit id.
 
-    A commit id is used verbatim; a bookmark symbol becomes an `exact:` bookmark revset.
     Raises `InvalidRevisionError` for anything else.
     """
     if _FULL_COMMIT_ID_PATTERN.fullmatch(symbol_or_commit_id):

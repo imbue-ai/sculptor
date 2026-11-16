@@ -5,7 +5,7 @@ from sculptor.foundation.errors import ExpectedError
 
 
 class VcsCommandError(ExpectedError):
-    """A version-control command (git, gh or jj) could not be started, exited non-zero, or timed out."""
+    """A version-control command could not be started, exited non-zero, or timed out."""
 
     def __init__(
         self,

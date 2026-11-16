@@ -1,13 +1,11 @@
 """How the VCS seam runs jj.
 
-The binary comes from a resolver callable, as for `GitCli`: Sculptor's own calls
-pass the dependency service's `resolve_binary_path` and agent-side calls pass
-their execution environment's `get_tool_binary_path`, so jj is never looked up on
-PATH here. jj snapshots the working copy at the start of any command not given
-`--ignore-working-copy`, and Sculptor's background reads must never snapshot an
-agent's edits, so every call names a `JjSnapshotPolicy`. Every failure, including
-a timeout, is a `VcsCommandError`. Nothing is retried: jj merges concurrent
-operations itself.
+The binary comes from a resolver callable, as for `GitCli`, so this module never
+looks jj up on PATH itself. jj snapshots the working copy at the start of any
+command not given `--ignore-working-copy`, and Sculptor's background reads must
+never snapshot an agent's edits, so every call names a `JjSnapshotPolicy`. Every
+failure, including a timeout, is a `VcsCommandError`. Nothing is retried: jj
+merges concurrent operations itself.
 """
 
 import os

@@ -42,6 +42,4 @@ class JjWorkspaceEntry(FrozenModel):
     """A workspace the repository records, as `jj workspace list` reports it."""
 
     name: str
-    root: Path = Field(
-        description="Absolute; still listed after the directory is deleted, until the workspace is forgotten"
-    )
+    root: Path = Field(description="Absolute")

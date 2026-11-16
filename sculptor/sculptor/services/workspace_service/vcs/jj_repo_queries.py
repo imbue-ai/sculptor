@@ -1,4 +1,4 @@
-"""Repository-level jj operations: colocation, bookmarks, trunk, commits, remotes and workspaces.
+"""jj operations on a repository and its workspaces.
 
 Reads pass `IGNORE_WORKING_COPY`, so they take no working-copy lock, add no
 operation and never snapshot anyone's edits.
@@ -71,8 +71,7 @@ def resolve_trunk_symbol(jj: JjCli, repo_dir: Path) -> str | None:
     """The bookmark symbol for the repository's trunk, such as `main@origin`.
 
     The first remote bookmark on `trunk()`; when `trunk()` is the root commit
-    (no remote has a trunk), local `main`, then `master`. None otherwise,
-    including when a user's `trunk()` alias names no commit.
+    (no remote has a trunk), local `main`, then `master`. None otherwise.
     """
     result = jj.run(
         ["log", "--no-graph", "--limit", "1", "-r", "trunk()", "-T", _ROOT_AND_REMOTE_BOOKMARKS_TEMPLATE],
@@ -80,6 +79,7 @@ def resolve_trunk_symbol(jj: JjCli, repo_dir: Path) -> str | None:
         snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
     )
     lines = result.stdout.splitlines()
+    # A user's own `trunk()` alias can name no commit.
     if not lines:
         return None
     is_root_line, *bookmark_lines = lines
@@ -191,8 +191,7 @@ def forget_workspace(jj: JjCli, repo_path: Path, name: str) -> None:
 def set_workspace_config(jj: JjCli, workspace_root: Path, key: str, value: str) -> None:
     """Set `key` in the workspace's own jj config, read by every jj process in that workspace and no other.
 
-    Creates no operation. The file lives under the user's jj config directory,
-    and `jj workspace forget` leaves it behind.
+    Creates no operation. The file lives under the user's jj config directory.
     """
     jj.run(["config", "set", "--workspace", key, value], workspace_root, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY)
 
@@ -222,8 +221,11 @@ def _find_local_trunk_fallback(jj: JjCli, repo_dir: Path) -> str | None:
 
 
 def _parse_bookmark(row: Mapping[str, Any]) -> JjBookmark:
-    """A `json(self)` bookmark row: local rows hold `name` and `target`; remote rows add `remote`,
-    and `tracking_target` when a local bookmark tracks them."""
+    """The bookmark one `json(self)` row describes.
+
+    Local rows hold `name` and `target`; remote rows add `remote`, and
+    `tracking_target` when a local bookmark tracks them.
+    """
     return JjBookmark(
         name=row["name"],
         remote=row.get("remote"),
