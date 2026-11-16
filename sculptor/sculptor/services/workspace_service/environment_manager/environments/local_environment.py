@@ -43,6 +43,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     stop_terminals_for_environment,
 )
 from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
+from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import get_workspaces_folder
@@ -228,9 +229,9 @@ class LocalEnvironment(Environment):
                 checkout_name=str(workspace_id),
             )
         )
-        # A separate checkout gets only tracked files, so the gitignored `.sculptor/.env` is copied in explicitly.
+        # An isolated checkout gets only tracked files, so the gitignored `.sculptor/.env` is copied in explicitly.
         source_env_file = repo_host_path / ".sculptor" / ".env"
-        if location.checkout_path != repo_host_path and source_env_file.exists():
+        if is_isolated_checkout(initialization_strategy) and source_env_file.exists():
             atomic_copy_env_file(source_env_file, location.checkout_path / ".sculptor" / ".env")
 
         environment._sculptor_folder = sculptor_folder
