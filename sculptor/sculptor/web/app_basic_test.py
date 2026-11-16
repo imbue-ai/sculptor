@@ -46,6 +46,8 @@ from sculptor.services.terminal_agent_registry import registry as registry_modul
 from sculptor.services.user_config.user_config import get_privacy_settings_for_telemetry
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
+from sculptor.services.workspace_service.vcs.data_types import RefNameValidation
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
@@ -438,6 +440,70 @@ def test_validate_new_branch_name_reports_validity_and_collision(
     # An existing branch (the fixture repo's default) is legal but collides.
     existing = _validate_new_branch_name(client, test_project, "main")
     assert existing == {"isValid": True, "alreadyExists": True}
+
+
+# Names git accepts and has no branch for, so only the workspace VCS can reject them.
+_NAME_THE_VCS_CALLS_MALFORMED = "imbue/vcs-says-malformed"
+_NAME_THE_VCS_CALLS_TAKEN = "imbue/vcs-says-taken"
+
+
+@pytest.fixture
+def vcs_name_verdicts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, str]]:
+    """Make the git VCS reject the two names above; returns the (repository, name) pairs it was asked about."""
+    asked: list[tuple[Path, str]] = []
+    status_by_name = {
+        _NAME_THE_VCS_CALLS_MALFORMED: RefNameStatus.MALFORMED,
+        _NAME_THE_VCS_CALLS_TAKEN: RefNameStatus.ALREADY_EXISTS,
+    }
+
+    def _validate(self: GitWorkspaceVcs, repo_path: Path, ref_name: str) -> RefNameValidation:
+        asked.append((repo_path, ref_name))
+        return RefNameValidation(ref_name=ref_name, status=status_by_name.get(ref_name, RefNameStatus.AVAILABLE))
+
+    monkeypatch.setattr(GitWorkspaceVcs, "validate_new_ref_name", _validate)
+    return asked
+
+
+def test_validate_new_branch_name_reports_what_the_workspace_vcs_decides(
+    client: TestClient, test_project: Project, vcs_name_verdicts: list[tuple[Path, str]]
+) -> None:
+    assert _validate_new_branch_name(client, test_project, _NAME_THE_VCS_CALLS_MALFORMED) == {
+        "isValid": False,
+        "alreadyExists": False,
+    }
+    assert _validate_new_branch_name(client, test_project, _NAME_THE_VCS_CALLS_TAKEN) == {
+        "isValid": True,
+        "alreadyExists": True,
+    }
+    assert _validate_new_branch_name(client, test_project, "imbue/vcs-says-available") == {
+        "isValid": True,
+        "alreadyExists": False,
+    }
+    assert {repo_path for repo_path, _ in vcs_name_verdicts} == {test_project.get_local_user_path()}
+
+
+@pytest.mark.parametrize(
+    ("requested_branch_name", "expected_status", "expected_detail"),
+    [
+        pytest.param(_NAME_THE_VCS_CALLS_MALFORMED, 400, "not a valid git branch name", id="malformed"),
+        pytest.param(_NAME_THE_VCS_CALLS_TAKEN, 409, "already exists", id="already-exists"),
+    ],
+)
+def test_create_workspace_rejects_the_branch_names_the_workspace_vcs_rejects(
+    client: TestClient,
+    test_project: Project,
+    vcs_name_verdicts: list[tuple[Path, str]],
+    requested_branch_name: str,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    response = _post_create_workspace(
+        client, test_project, WorkspaceInitializationStrategy.WORKTREE, "main", requested_branch_name
+    )
+
+    assert response.status_code == expected_status, response.text
+    assert expected_detail in response.json()["detail"]
+    assert vcs_name_verdicts == [(test_project.get_local_user_path(), requested_branch_name)]
 
 
 def test_terminal_agent_does_not_carry_a_model(

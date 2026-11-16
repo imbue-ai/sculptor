@@ -177,6 +177,8 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
@@ -674,15 +676,21 @@ def _validate_workspace_creation_request(
 
     if not requested_branch_name:
         return
-    with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
-        if not repo.is_valid_branch_name(requested_branch_name):
+    vcs = services.workspace_service.get_workspace_vcs(initialization_strategy)
+    validation = vcs.validate_new_ref_name(project.get_local_user_path(), requested_branch_name)
+    match validation.status:
+        case RefNameStatus.AVAILABLE:
+            return
+        case RefNameStatus.MALFORMED:
             # Reject illegal ref names here so the user gets an actionable
-            # error at creation, rather than an opaque WorktreeError raised
-            # later when `git worktree add -b` runs during async environment
-            # setup (and is surfaced only in the agent panel).
+            # error at creation, rather than an opaque failure later when the
+            # checkout is created during async environment setup (and is
+            # surfaced only in the agent panel).
             raise HTTPException(status_code=400, detail=f"'{requested_branch_name}' is not a valid git branch name")
-        if repo.is_branch_ref(requested_branch_name):
+        case RefNameStatus.ALREADY_EXISTS:
             raise HTTPException(status_code=409, detail=f"Branch '{requested_branch_name}' already exists")
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 @router.post("/api/v1/projects/{project_id}/tasks")
@@ -3711,15 +3719,16 @@ def validate_new_branch_name(
     project_id: str,
     name: str,
     request: Request,
+    mode: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
     user_session: UserSession = Depends(get_user_session),
 ) -> NewBranchNameValidationResponse:
     """Validate a prospective new workspace branch name in the project's repo.
 
-    Reports whether `name` is a legal git ref (`is_valid`) and whether it
-    collides with an existing local branch (`already_exists`). Backs the Add
-    Workspace form's inline error; `create_workspace_v2` re-checks both as the
-    authoritative gate. When the name is illegal, the collision check is skipped
-    (git can't resolve an invalid ref anyway).
+    Reports whether `name` is a legal ref name (`is_valid`) and whether it
+    collides with an existing branch (`already_exists`), as the VCS of a `mode`
+    workspace decides. Backs the Add Workspace form's inline error;
+    `create_workspace_v2` re-checks both as the authoritative gate. An illegal
+    name is never reported as colliding.
     """
     validated_project_id = validate_project_id(project_id)
     services = get_services_from_request_or_websocket(request)
@@ -3737,13 +3746,21 @@ def validate_new_branch_name(
         if not project.is_path_accessible:
             return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
 
+    vcs = services.workspace_service.get_workspace_vcs(mode)
     try:
-        with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
-            is_valid = repo.is_valid_branch_name(trimmed)
-            already_exists = is_valid and repo.is_branch_ref(trimmed)
-            return NewBranchNameValidationResponse(is_valid=is_valid, already_exists=already_exists)
-    except GitRepoNotFoundError:
+        validation = vcs.validate_new_ref_name(project.get_local_user_path(), trimmed)
+    except VcsCommandError as e:
+        logger.debug("Cannot validate branch name {!r}: {}", trimmed, e)
         return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
+    match validation.status:
+        case RefNameStatus.AVAILABLE:
+            return NewBranchNameValidationResponse(is_valid=True, already_exists=False)
+        case RefNameStatus.MALFORMED:
+            return NewBranchNameValidationResponse(is_valid=False, already_exists=False)
+        case RefNameStatus.ALREADY_EXISTS:
+            return NewBranchNameValidationResponse(is_valid=True, already_exists=True)
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 @router.get("/api/v1/projects/{project_id}/repo_info")
