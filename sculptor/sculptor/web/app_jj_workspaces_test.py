@@ -293,3 +293,116 @@ def test_a_jj_workspace_target_changes_only_to_a_bookmark_the_repository_lists(
     assert refused.status_code == 400, refused.text
     assert "'origin/main' is not a bookmark" in _detail(refused)
     assert client.get(f"/api/v1/workspaces/{workspace_id}").json()["targetBranch"] == "main"
+
+
+def _get_ok(client: TestClient, url: str, **params: str) -> Any:
+    response = client.get(url, params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _post_ok(client: TestClient, url: str, body: dict[str, str]) -> Any:
+    response = client.post(url, json=body)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_an_agents_file_change_in_a_jj_workspace_reaches_every_data_route_and_can_be_discarded(
+    client: TestClient,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_project: Project,
+    test_services: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    workspace_id, checkout = _create_jj_workspace_with_checkout(
+        client, jj_project, test_services, test_root_concurrency_group
+    )
+    workspace_url = f"/api/v1/workspaces/{workspace_id}"
+    (checkout / "parser.py").write_text("parse = None\n")
+    (checkout / "README.md").write_text("# edited by the agent\n")
+
+    diff = _get_ok(client, f"{workspace_url}/diff", force_refresh="true", scope="vs-target-branch")["diff"]
+    files = [entry["path"] for entry in _get_ok(client, f"{workspace_url}/files")["files"]]
+    working_copy, *older_revisions = _get_ok(client, f"{workspace_url}/revisions")["revisions"]
+    commit_diff = _get_ok(client, f"{workspace_url}/commit-diff", commit_hash=working_copy["commitId"])
+    readme_at_base = _post_ok(
+        client, f"{workspace_url}/read-file-at-ref", {"path": "README.md", "gitRef": diff["uncommittedDiffBase"]}
+    )
+
+    assert "+parse = None" in diff["uncommittedDiff"]
+    assert "+parse = None" in diff["targetBranchDiff"]
+    assert diff["uncommittedDiffBase"] == _read_jj(jj_binary, jj_colocated_repo.path, "main@origin")
+    assert {"parser.py", "README.md"} <= set(files)
+    assert older_revisions == []
+    assert working_copy["isWorkingCopy"] is True
+    assert {file["path"] for file in working_copy["files"]} == {"parser.py", "README.md"}
+    assert "+parse = None" in commit_diff["diff"]
+    assert commit_diff["parentHash"] == diff["uncommittedDiffBase"]
+    assert readme_at_base["content"] == "# jj fixture repo\n"
+
+    discarded = _post_ok(client, f"{workspace_url}/discard-file", {"filePath": "parser.py"})
+    diff_after_discard = _get_ok(client, f"{workspace_url}/diff", force_refresh="true")["diff"]
+
+    assert discarded["result"]["success"] is True
+    assert not (checkout / "parser.py").exists()
+    assert "parser.py" not in diff_after_discard["uncommittedDiff"]
+    assert "README.md" in diff_after_discard["uncommittedDiff"]
+
+
+def _read_jj(jj_binary: JjBinary, repo_path: Path, revision: str) -> str:
+    return run_jj(
+        jj_binary, ("--ignore-working-copy", "log", "--no-graph", "-r", revision, "-T", "commit_id"), cwd=repo_path
+    ).strip()
+
+
+def test_the_jj_data_routes_refuse_a_git_revision_name(
+    client: TestClient,
+    jj_project: Project,
+    test_services: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    """A jj workspace has no `HEAD`, and its revisions are named by full commit id only."""
+    workspace_id, _ = _create_jj_workspace_with_checkout(
+        client, jj_project, test_services, test_root_concurrency_group
+    )
+    workspace_url = f"/api/v1/workspaces/{workspace_id}"
+
+    commit_diff = client.get(f"{workspace_url}/commit-diff", params={"commit_hash": "HEAD"})
+    file_at_ref = client.post(f"{workspace_url}/read-file-at-ref", json={"path": "README.md", "gitRef": "HEAD"})
+
+    assert commit_diff.status_code == 400, commit_diff.text
+    assert file_at_ref.status_code == 404, file_at_ref.text
+
+
+def test_turning_the_repository_switch_off_leaves_an_existing_jj_workspace_working(
+    client: TestClient,
+    jj_project: Project,
+    test_services: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    workspace_id, checkout = _create_jj_workspace_with_checkout(
+        client, jj_project, test_services, test_root_concurrency_group
+    )
+    with test_services.data_model_service.open_transaction(RequestID()) as transaction:
+        transaction.update_project_fields(jj_project.object_id, use_jj_for_new_workspaces=False)
+        project_with_switch_off = transaction.get_project(jj_project.object_id)
+    assert project_with_switch_off is not None
+
+    with test_root_concurrency_group.make_concurrency_group("agent_environment") as agent_concurrency_group:
+        with test_services.workspace_service.agent_environment_context(
+            project=project_with_switch_off,
+            workspace_id=workspace_id,
+            task_id=TaskID(),
+            concurrency_group=agent_concurrency_group,
+            root_progress_handle=RootProgressHandle(),
+            shutdown_event=GLOBAL_SHUTDOWN_EVENT,
+        ) as resumed_environment:
+            assert resumed_environment.get_working_directory() == checkout
+    (checkout / "parser.py").write_text("parse = None\n")
+    diff = _get_ok(client, f"/api/v1/workspaces/{workspace_id}/diff", force_refresh="true")["diff"]
+    new_workspace = _post_jj_workspace(client, project_with_switch_off, requested_branch_name="another-feature")
+
+    assert "+parse = None" in diff["uncommittedDiff"]
+    assert _get_ok(client, f"/api/v1/workspaces/{workspace_id}")["initializationStrategy"] == "JJ_WORKSPACE"
+    assert new_workspace.status_code == 400, new_workspace.text
