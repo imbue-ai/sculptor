@@ -33,6 +33,7 @@ from sculptor.interfaces.environments.errors import FileOrDirectoryCouldNotBeDel
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
 from sculptor.services.workspace_service.environment_manager.env_file_parser import atomic_copy_env_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
@@ -172,7 +173,8 @@ class LocalEnvironment(Environment):
                 mode_prompt = WORKTREE_MODE_PROMPT
             case WorkspaceInitializationStrategy.JJ_WORKSPACE:
                 mode_prompt = JJ_WORKSPACE_MODE_PROMPT.format(
-                    snapshot_max_new_file_size_mib=read_jj_snapshot_max_new_file_size_mib()
+                    snapshot_max_new_file_size_mib=read_jj_snapshot_max_new_file_size_mib(),
+                    minimum_jj_version=JJ_PINNED_VERSION,
                 )
             case _ as unreachable:
                 assert_never(unreachable)

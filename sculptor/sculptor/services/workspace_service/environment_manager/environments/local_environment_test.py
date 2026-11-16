@@ -20,6 +20,7 @@ from sculptor.foundation.secrets_utils import Secret
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
@@ -595,6 +596,7 @@ def test_the_jj_mode_prompt_states_the_standing_rules_and_the_configured_snapsho
         "larger than 25 MiB",
         "`jj workspace update-stale`",
         "`jj st`",
+        f"If `jj --version` reports a version below {JJ_PINNED_VERSION}",
     )
     assert [rule for rule in standing_rules if rule not in jj_prompt] == []
 
