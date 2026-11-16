@@ -4,6 +4,7 @@ The checkout of a workspace is created when its first agent starts, so tests tha
 need one open the workspace's environment through the workspace service.
 """
 
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import PrivateAttr
 
 from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Project
@@ -23,11 +25,15 @@ from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.environment_manager import (
     default_implementation as environment_manager_default_implementation,
 )
+from sculptor.services.workspace_service.environment_manager.default_implementation import DefaultEnvironmentManager
 from sculptor.services.workspace_service.environment_manager.environments import local_environment
+from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import run_jj
@@ -406,3 +412,66 @@ def test_turning_the_repository_switch_off_leaves_an_existing_jj_workspace_worki
     assert "+parse = None" in diff["uncommittedDiff"]
     assert _get_ok(client, f"/api/v1/workspaces/{workspace_id}")["initializationStrategy"] == "JJ_WORKSPACE"
     assert new_workspace.status_code == 400, new_workspace.text
+
+
+class _TeardownSignallingEnvironmentManager(DefaultEnvironmentManager):
+    """Signals once a deleted workspace's environment directory is gone; deletion finishes on a background thread."""
+
+    _teardown_done: threading.Event = PrivateAttr(default_factory=threading.Event)
+
+    def delete_environment(self, environment_id: str) -> None:
+        super().delete_environment(environment_id)
+        self._teardown_done.set()
+
+
+def _list_jj_workspace_names(jj_binary: JjBinary, repo_path: Path) -> list[str]:
+    return run_jj(jj_binary, ("workspace", "list", "-T", 'name ++ "\\n"'), cwd=repo_path).split()
+
+
+def _list_local_bookmark_names(jj_binary: JjBinary, repo_path: Path) -> list[str]:
+    return run_jj(
+        jj_binary, ("--ignore-working-copy", "bookmark", "list", "-T", 'name ++ "\\n"'), cwd=repo_path
+    ).split()
+
+
+@pytest.mark.parametrize(
+    ("deletion_policy", "is_bookmark_kept"),
+    [pytest.param("never", True, id="never"), pytest.param("always", False, id="always")],
+)
+def test_deleting_a_jj_workspace_forgets_it_and_applies_the_deletion_policy_to_its_bookmark(
+    client: TestClient,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_project: Project,
+    test_services: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    deletion_policy: BranchDeletionPolicy,
+    is_bookmark_kept: bool,
+) -> None:
+    workspace_id, checkout = _create_jj_workspace_with_checkout(
+        client, jj_project, test_services, test_root_concurrency_group
+    )
+    (checkout / "parser.py").write_text("parse = None\n")
+    run_jj(jj_binary, ("describe", "-m", "add the parser"), cwd=checkout)
+    run_jj(jj_binary, ("bookmark", "create", "feature", "-r", "@"), cwd=checkout)
+    workspace_config_directory = Path(
+        run_jj(jj_binary, ("config", "path", "--workspace"), cwd=checkout).strip()
+    ).parent
+    set_user_config_instance(
+        get_user_config_instance().model_copy(update={"workspace_branch_deletion_policy": deletion_policy})
+    )
+    workspace_service = test_services.workspace_service
+    assert isinstance(workspace_service, DefaultWorkspaceService)
+    existing_manager = workspace_service.environment_manager
+    assert isinstance(existing_manager, DefaultEnvironmentManager)
+    signalling_manager = _TeardownSignallingEnvironmentManager(data_model_service=existing_manager.data_model_service)
+    workspace_service.environment_manager = signalling_manager
+
+    response = client.delete(f"/api/v1/workspaces/{workspace_id}")
+
+    assert response.status_code == 200, response.text
+    assert signalling_manager._teardown_done.wait(timeout=30.0), "environment teardown never ran"
+    assert not checkout.exists()
+    assert str(workspace_id) not in _list_jj_workspace_names(jj_binary, jj_colocated_repo.path)
+    assert not workspace_config_directory.exists()
+    assert ("feature" in _list_local_bookmark_names(jj_binary, jj_colocated_repo.path)) == is_bookmark_kept
