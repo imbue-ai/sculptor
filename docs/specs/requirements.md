@@ -228,7 +228,8 @@ packaging Sculptor):
   user-supplied binary (`SPEC.md` §7.1, §7.10).
 - **REQ-COMPAT-021 [Unspecified].** **Git** is required and is **runtime-detected with no
   minimum-version check** (searched; none found). The minimum supported git version is undefined
-  (worktree support is the relevant capability). → OPEN-6 (§7).
+  (worktree support is the relevant capability). → OPEN-6 (§7). The git that jj runs for a jj
+  workspace is the one exception, with a floor of its own (REQ-COMPAT-024).
 - **REQ-COMPAT-022 (SHOULD).** The **Pi** harness pins **1.5.2**; platforms
   darwin-arm64, darwin-x64, linux-x64, with per-platform sha256 checksums
   (`sculptor/sculptor/services/managed_tools.py`). A version mismatch fails clearly (REQ-INT-022).
@@ -245,8 +246,12 @@ packaging Sculptor):
   explicit user action**, never at startup (`installs_on_startup_when_missing = False`); once a managed
   copy exists, startup replaces it when it is broken or out of range (`_auto_install_if_needed`,
   `sculptor/sculptor/services/dependency_management_service.py`). jj counts as usable
-  only when it is installed, runs, is in that range, and has an **author identity** (`user.name` and
-  `user.email`); the readiness check reports the first of those that fails, in that order
+  only when it is installed, runs, is in that range, runs a git of at least **2.42.0** — the oldest the
+  pinned jj accepts, from its `git.executable-path` or else `PATH` (`JJ_MINIMUM_GIT_VERSION`,
+  `sculptor/sculptor/services/jj_version.py`) — and has an **author identity** (`user.name` and
+  `user.email`); and, when it is otherwise usable, any different jj the user's login shell runs must
+  also be in that range, since it shares the colocated repository. The readiness check reports the
+  first of those that fails, in that order
   (`_jj_readiness_from_check`, `sculptor/sculptor/services/dependency_management_service.py`), and
   `sculptor/sculptor/services/jj_availability.py` words it for the user (`SPEC.md` §7.14).
 

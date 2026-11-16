@@ -30,9 +30,9 @@ Under **Project**:
 
 - **Repositories** — add or remove repos, and set each repo's workspace setup
   command, branch-naming pattern, and whether it uses jj.
-- **Git** — the pull-request creation prompt, PR status polling, default
-  branch-naming pattern, and the branch-deletion policy for removed
-  workspaces.
+- **Git** — the pull-request creation prompt, PR status polling, the default
+  naming pattern for new branches and jj bookmarks, and the branch and bookmark
+  deletion policy for removed workspaces.
 - **Jujutsu** — the optional jj binary and its author identity, the largest new
   file jj records, the prompts sent from jj workspaces, and the repositories
   that use jj. See [Jujutsu (jj)](jujutsu.md).

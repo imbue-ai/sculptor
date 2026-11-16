@@ -56,9 +56,14 @@ page also checks each time you open it.
 - **Author identity**: the name and email jj records on your changes. If jj has
   none, the row shows a form, filled in from your git identity where it can be.
   **Save identity** writes them to your jj user config.
+- **jj in your terminal**: shown when your shell profile puts a different jj
+  first on `PATH`. Workspace terminals then run that jj, while agents run
+  Sculptor's.
 
-Sculptor can use jj only when it is installed, runs, is a supported version, and
-has an author identity.
+Sculptor can use jj only when it is installed, runs, is a supported version,
+finds a git it accepts, and has an author identity, and when any other jj your
+login shell runs is a supported version too. [When jj becomes
+unavailable](#when-jj-becomes-unavailable) lists what to do about each.
 
 ---
 
@@ -119,7 +124,8 @@ workspaces under **Settings > Experimental**, that label is a link to the
 repository's settings, which is where the choice is made.
 
 - **Bookmark name (required)** is the bookmark the workspace will create. It is
-  filled in from your naming pattern, the same way a branch name is.
+  filled in from the same naming pattern as a branch name (**Settings > Git**,
+  or the repository's own pattern).
 - **source** is the bookmark to start from: a local one such as `main`, or a
   remote one such as `main@origin`. Until you pick one it reads **same as
   target**, and the workspace starts from its target.
@@ -196,6 +202,9 @@ there is no bookmark yet, the agent is asked to create it first. Agents are told
 never to push without your permission. Pull requests need a GitHub `origin`, as
 in any workspace.
 
+With no target bookmark, **Create PR** is disabled, and its tooltip asks you to
+pick a target bookmark from the target selector.
+
 Sculptor finds the pull request by the workspace's bookmarks and shows its status
 in the top bar, as for a branch.
 
@@ -249,10 +258,16 @@ and tell you what happened.
 ## Large new files
 
 jj leaves a new file untracked when it is bigger than its size limit, so the
-file never appears in the workspace's changes. jj's own limit is 1 MiB, which
-leaves out updated lockfiles, so Sculptor sets 10 MiB in jj workspaces.
-Agents are told to mention such a file to you rather than change jj's
-configuration.
+file is in no diff, commit or push. jj's own limit is 1 MiB, which leaves out
+updated lockfiles, so Sculptor sets 10 MiB in jj workspaces. Agents are told to
+mention such a file to you rather than change jj's configuration.
+
+The Changes tab of a jj workspace lists such files in a banner, **jj left N new
+files out**, in both the **Working copy** and **All** scopes. The banner gives
+each file's path with jj's reason, says to raise the limit or delete the files,
+and links to **Settings > Jujutsu**. It appears when Sculptor next recomputes
+the workspace's diff, which is after an agent's turn. It appears nowhere else:
+not in the Revisions tab, the file tree, or the diff view.
 
 Change the limit under **Settings > Jujutsu > Maximum new file size**, from 1 to
 1024 MiB. An existing jj workspace picks up the new value when Sculptor next
@@ -262,16 +277,45 @@ resumes it, for example after a restart.
 
 ## When jj becomes unavailable
 
-jj can stop being usable: uninstalled, moved, too old, or without an author
-identity. A repository that uses jj then creates no jj workspaces, and Sculptor
-does not fall back to a worktree. The create form says "This repository
-creates jj workspaces, and jj is unavailable." with an **Open Jujutsu settings**
-link.
+A repository that uses jj creates no jj workspaces while Sculptor can't use jj,
+and Sculptor does not fall back to a worktree. The create form says "This
+repository creates jj workspaces, and jj is unavailable." with an **Open
+Jujutsu settings** link.
+
+Sculptor says why in the same words wherever it refuses: the repository's jj
+switches, the colocation dialog, and an agent that can't start. **Settings >
+Jujutsu** shows the same problem as its callout. The reasons, and what to do:
+
+- **"jj is not installed: install it or set its path on the Jujutsu settings
+  page".** Click **Install jj**, or switch **Binary Source** to **Custom** and
+  give the path to your own jj.
+- **"jj cannot run: …"**, with jj's error. Fix that error, then click
+  **Re-check**.
+- **"jj … at … is not supported: Sculptor needs jj 0.47.1 or a newer
+  compatible version".** Install the managed copy, or point Sculptor at a newer
+  jj.
+- **"jj runs git … at … to fetch and push, but jj needs git 2.42.0 or newer:
+  install a newer git first on PATH, or set jj's git.executable-path to one"**,
+  or, with no git at all, **"jj finds no git to fetch and push with: install git
+  2.42.0 or newer, or set jj's git.executable-path to one".** jj runs git to
+  fetch and push: the `git.executable-path` in your jj config, or else the first
+  `git` on `PATH`. Install a newer git there, or point `git.executable-path` at
+  one.
+- **"your login shell runs jj … at …, but Sculptor needs jj 0.47.1 or a newer
+  compatible version, because the repository is shared with the jj you run
+  yourself: upgrade or remove that jj, or stop your shell profile putting its
+  directory first on PATH".** Your colocated repository is also read by the jj
+  in your own terminal, so that jj must be a supported version too. Upgrade or
+  uninstall it, or change your shell profile so it no longer comes first on
+  `PATH`.
+- **"jj has no author identity: set its user.name and user.email on the
+  Jujutsu settings page".** Fill in **Author identity** and click **Save
+  identity**.
 
 Existing jj workspaces keep their files, but no agent starts in them, and the
 setup command doesn't run, until jj is usable again. An agent that can't start
-shows **jj Not Available** with the reason and a **Go to Settings** link. Fix the
-problem on **Settings > Jujutsu**, then click **Re-check**.
+shows **jj Not Available** with the reason and a **Go to Settings** link. After
+fixing the problem, click **Re-check** on **Settings > Jujutsu**.
 
 ---
 
@@ -287,8 +331,8 @@ Repositories**, as for any repository.
 ## Deleting a jj workspace
 
 Deleting a jj workspace deletes its directory and tells jj to forget the
-workspace. Its bookmarks follow your branch-deletion policy under **Settings >
-Git**:
+workspace. Its bookmarks follow **Branch and bookmark deletion when a workspace
+is removed** under **Settings > Git**:
 
 - **Never** keeps them.
 - **Delete if safe** forgets the ones merged into the target, and the ones the

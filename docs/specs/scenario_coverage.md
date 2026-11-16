@@ -41,14 +41,14 @@ Integration tests considered:
 | WS | 40 | 22 | 24 | 86 |
 | CHAT | 21 | 16 | 9 | 46 |
 | MSG | 15 | 12 | 10 | 37 |
-| PANEL | 24 | 23 | 15 | 62 |
+| PANEL | 24 | 24 | 15 | 63 |
 | CMDP | 4 | 9 | 18 | 31 |
 | SET | 13 | 25 | 14 | 52 |
 | DEV | 3 | 1 | 0 | 4 |
 | MENT | 5 | 2 | 3 | 10 |
 | SKILL | 2 | 1 | 0 | 3 |
 | ACT | 2 | 3 | 1 | 6 |
-| **Total** | **181** | **165** | **148** | **494** |
+| **Total** | **181** | **166** | **148** | **495** |
 
 **Under the integration-only standard, 37% of scenarios are completely covered, 33% partially, and
 30% not at all.** (Counts are derived directly from the two sections below.)
@@ -239,7 +239,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | WS-082 | Missing | — | Open a jj workspace's target selector; assert `main` and `main@origin` are listed and the workspace's own bookmark is not; pick one and assert the banner. |
 | WS-083 | Missing | — | Run `jj op restore` in the main repository to make a workspace stale; assert the banner; click "Update working copy" and assert the banner goes away. |
 | WS-084 | Missing | — | Make jj unusable, then start an agent in a jj workspace; assert "jj Not Available", the reason and "Go to Settings"; fix jj and assert "jj available". |
-| WS-085 | Missing | — | In a jj workspace with a GitHub origin, click "Create PR"; assert the sent message names the bookmark and the `--base` branch. |
+| WS-085 | Missing | — | In a jj workspace with a GitHub origin, click "Create PR"; assert the sent message names the bookmark and the `--base` branch; with no target, assert the disabled button's "target bookmark" tooltip. |
 | WS-086 | Missing | — | Right-click Create PR in a jj workspace with and without a jj PR-creation prompt; assert "Edit jj prompt..." opens the Jujutsu section, and the fallback notice and its link otherwise. |
 
 ### CHAT
@@ -340,6 +340,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | PANEL-058 | Partial | test_jj_revisions_panel.py::test_jj_workspace_lists_revisions_and_discards_the_working_copy (tab reads "Revisions"; two revisions, "(no description set)", "working copy", the description, the fork-point footer) | Assert the change id, stats, bookmark badges and the empty/conflict/divergent chips, and the loading and empty states. |
 | PANEL-060 | Partial | test_jj_revisions_panel.py::test_jj_workspace_lists_revisions_and_discards_the_working_copy ("Working copy" label; lists only the working copy's file) | Switch to "All" and assert it adds the described revision's file. |
 | PANEL-061 | Partial | test_jj_revisions_panel.py::test_jj_workspace_lists_revisions_and_discards_the_working_copy (dialog text, Discard removes the row) | Make the restore fail; assert the dialog stays open with "Could not discard the changes: …". |
+| PANEL-063 | Partial | test_jj_revisions_panel.py::test_changes_panel_lists_new_files_jj_left_out (both scopes: the tree omits the file; the banner lists it with its size and mentions the Jujutsu settings) | Assert the heading and explanation text, and that "Open Jujutsu settings" opens the Jujutsu section. |
 | PANEL-062 | Missing | — | In a jj workspace, click Commit and assert the jj instructions in the sent message; right-click with and without a jj commit prompt and assert "Edit jj prompt..." and the fallback notice. |
 
 ### CMDP
@@ -392,7 +393,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-021 | Partial | test_workspace_setup_command.py::test_setup_command_input_visible_in_settings; ::test_setup_command_saves_on_blur; ::test_setup_edit_button_deep_links_to_focused_textarea; test_regression_setup_command_backfill.py | Cover the branch-naming pattern field and the setup-command "Using default"/"Reset to default" affordances. |
 | SET-022 | Partial | test_delete_last_repo.py::test_deleting_last_repo_shows_onboarding_add_repo_step; test_regression_settings_delete_repo_stays_on_page.py::test_deleting_repo_stays_on_settings_page | Assert the confirmation dialog showing the agent count and the success/error toast on remove. |
 | SET-023 | Missing | — (no Git-settings UI test) | Edit PR-creation prompt (+reset), toggle PR polling (dependent fields disable), poll-interval 10–300s validation, closed-workspace multiplier 1–120× validation — each with save toast. |
-| SET-024 | Missing | — | Edit default branch-naming pattern (toast); set branch-deletion policy Never / Delete-if-safe / Always (toast). |
+| SET-024 | Missing | — | Edit the default naming pattern (toast); set the branch and bookmark deletion policy Never / Delete-if-safe / Always (toast) and assert its description. |
 | SET-025 | Missing | — (test_ci_babysitter.py configures via API, not the Settings UI) | Toggle babysitter, retry-cap 1–10 validation, edit pipeline-failed & merge-conflict prompts (+reset), dependent fields disable when off, save toast. |
 | SET-026 | Missing | — | Split-ratio 20–80%, tab-close behavior, line-wrapping, default diff view, commit prompt (+reset) — each with save toast. |
 | SET-027 | Partial | test_settings_integration.py::test_env_vars_section_shows_setup_instructions; ::test_env_vars_override_toggle_saves_setting; ::test_env_vars_loaded_names_shows_no_vars_without_env_file; test_project_env_vars.py::test_env_var_names_shown_in_settings | Cover the refresh button and the global-vs-repo-specific grouping of the loaded list. |
@@ -413,8 +414,8 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-044 | Partial | test_repo_jj_controls.py::test_initializing_a_colocation_shows_loading_then_locks_on (clean repository: dialog opens, Initialize enabled) | Open the dialog on repositories with a submodule, Git LFS, a stray `.jj`, a stopped rebase, git hooks and uncommitted changes; assert each callout and that a blocker disables Initialize. |
 | SET-045 | Missing | — | Make `jj git init --colocate` fail; assert the switch returns to off with jj's error and a Retry button; and that a refused request shows an error toast with its reason. |
 | SET-046 | Partial | test_repo_jj_controls.py::test_initializing_a_colocation_shows_loading_then_locks_on (disabled before colocation, toggled off drops the badge); ::test_a_repository_colocated_before_startup_shows_locked_on (toggled on shows the badge) | Assert the "Initialize the jujutsu colocation first" tooltip, the hint text, and the error toast on a failed save. |
-| SET-048 | Partial | test_jj_managed_install.py::test_jj_settings_report_a_managed_jj_with_an_identity_as_available; ::test_jj_settings_report_an_old_jj_as_unsupported; ::test_jj_settings_report_not_installed_and_surface_an_install_failure; ::test_jj_identity_form_fixes_a_missing_identity | Assert "Checking jj…", the "jj is installed but does not run." callout with its error, and that the section's Re-check picks up a change made outside Sculptor. |
-| SET-049 | Partial | test_jj_managed_install.py::test_jj_settings_report_a_managed_jj_with_an_identity_as_available; ::test_jj_settings_report_an_old_jj_as_unsupported; ::test_jj_settings_report_not_installed_and_surface_an_install_failure | Switch to Custom, enter a path and Apply; assert the "v{version} — External binary" status, Active path, and the "Installing..." progress state. |
+| SET-048 | Partial | test_jj_managed_install.py::test_jj_settings_report_a_managed_jj_with_an_identity_as_available; ::test_jj_settings_report_an_old_jj_as_unsupported; ::test_jj_settings_report_not_installed_and_surface_an_install_failure; ::test_jj_identity_form_fixes_a_missing_identity | Assert "Checking jj…", the "jj is installed but does not run." callout with its error, the git-too-old and login-shell-jj callouts, and that the section's Re-check picks up a change made outside Sculptor. |
+| SET-049 | Partial | test_jj_managed_install.py::test_jj_settings_report_a_managed_jj_with_an_identity_as_available; ::test_jj_settings_report_an_old_jj_as_unsupported; ::test_jj_settings_report_not_installed_and_surface_an_install_failure | Switch to Custom, enter a path and Apply; assert the "v{version} — External binary" status, Active path, the "Installing..." progress state, and the "jj in your terminal" row. |
 | SET-050 | Partial | test_jj_managed_install.py::test_jj_identity_form_fixes_a_missing_identity; ::test_jj_settings_report_a_managed_jj_with_an_identity_as_available | Assert the form is prefilled from the global git identity, a failed save shows its error, and the "Read once jj is installed and runs." text. |
 | SET-051 | Missing | — | Set Maximum new file size to 20 (toast) and to 0 and 2000 (each reverts). |
 | SET-052 | Missing | — | On each jj prompt row: assert "Uses the git prompt:", click "Use suggested wording", edit and blur (toast), then "Use the git prompt". |

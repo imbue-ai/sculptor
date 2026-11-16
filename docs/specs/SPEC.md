@@ -689,8 +689,9 @@ each one's **setup command**, **branch-naming pattern**, and its two **jj switch
 colocated jj repository, and whether its new workspaces use jj — with a "jj" badge on a repository
 whose new workspaces are jj workspaces (→ §7.14). Git holds the cross-repo defaults: the pull-request
 creation prompt, PR-status polling and its interval (plus a multiplier that throttles polling for
-closed workspaces), the global
-branch-naming pattern, and the branch-deletion policy. **Jujutsu** manages the optional jj binary
+closed workspaces), the global naming pattern for a new workspace's branch or jj bookmark, and the
+**Branch and bookmark deletion when a workspace is removed** policy, which covers a worktree
+workspace's branch and a jj workspace's bookmarks. **Jujutsu** manages the optional jj binary
 (managed or custom path, its status, the minimum and detected versions), jj's author identity, the
 largest new file jj snapshots, the jj variants of the commit, PR-creation and CI-babysitter prompts,
 and the list of repositories that use jj (→ §7.14). CI configures the **CI babysitter** that
@@ -836,12 +837,17 @@ workspaces created after that.
 
 **Setting up jj.** The **Jujutsu** settings section (→ §7.10) opens on a callout that says whether jj is
 usable — "jj {version} is available, managed by Sculptor." — or names what stops it and how to fix it:
-jj is not installed, does not run, is an unsupported version, or has **no author identity**. jj is usable
-only when none of those holds. Sculptor accepts the pinned jj release or any later 0.x release; it can
-download and manage a pinned copy — first only when you click **Install jj**, then replacing it at
-startup if it is broken or out of range — or use a jj on your `PATH` or at a custom path. When jj has no author identity, the section offers a form, prefilled from your global git
-identity, that writes `user.name` and `user.email` to your jj user config. A **Re-check** button, and
-opening the section, check again for changes made outside Sculptor.
+jj is not installed, does not run, is an unsupported version, runs a git older than jj accepts (or finds
+none), or has **no author identity**; or the user's own login shell runs a different jj outside the
+supported versions — which blocks jj because that jj shares the colocated repository. jj is usable only
+when none of those holds, and every surface that refuses for it gives the same reason sentence.
+Sculptor accepts the pinned jj release or any later 0.x release; it can download and manage a pinned
+copy — first only when you click **Install jj**, then replacing it at startup if it is broken or out of
+range — or use a jj on your `PATH` or at a custom path. When the login shell runs a different jj that is
+supported, the section lists it as **jj in your terminal**, since workspace terminals run it while
+agents run Sculptor's. When jj has no author identity, the section offers a form, prefilled from your
+global git identity, that writes `user.name` and `user.email` to your jj user config. A **Re-check**
+button, and opening the section, check again for changes made outside Sculptor.
 
 **Turning jj on for a repository.** Each repository's configuration in the **Repositories** settings
 section has a Jujutsu group with two switches, both disabled — with the tooltip "Ensure that jujutsu VCS
@@ -903,7 +909,8 @@ since the fork point. **Discard changes** restores the file from the parent and 
 discarded content stays recoverable from the jj operation log. **Commit** and **Create PR** (→ §7.6)
 send the jj commit and jj PR-creation prompts when set, else the git prompts, and Sculptor adds that the
 workspace has no git, the bookmark to set or push, and the branch the pull request opens into (`main`
-for a target of `main@origin`); their right-click menu's **Edit jj prompt...** opens the prompt in the
+for a target of `main@origin`); with no target bookmark Create PR is disabled, its tooltip saying
+Sculptor couldn't find a target bookmark; their right-click menu's **Edit jj prompt...** opens the prompt in the
 Jujutsu settings section, and before a jj prompt is set **Edit prompt...** edits the git prompt with a
 link to set a jj one. The CI babysitter likewise sends its jj prompts when set, else the git ones, adding its own
 jj instructions that name the pull request's bookmark to move and push. Sculptor finds a jj workspace's pull request by its bookmarks.
@@ -913,10 +920,12 @@ working-copy revision, jj stops recording that workspace's file changes. The wor
 banner explaining this with an **Update working copy** button; Sculptor never updates a stale working
 copy by itself, and an agent that hits one is told to update it, check the result, and tell you.
 
-**Large new files.** jj leaves a new file larger than its snapshot limit untracked, so it never appears
-in the changes. Sculptor sets that limit to 10 MiB in jj workspaces, configurable as **Maximum new file
+**Large new files.** jj leaves a new file larger than its snapshot limit untracked, so it is in no diff,
+commit or push. Sculptor sets that limit to 10 MiB in jj workspaces, configurable as **Maximum new file
 size** in the Jujutsu section; an existing workspace picks up a changed value when Sculptor next resumes
-it.
+it. The Changes panel of a jj workspace lists such files, in both scopes, in a "jj left N new file(s)
+out" banner with each path, jj's reason, and an "Open Jujutsu settings" link; the banner updates when the
+workspace's diff is next recomputed, after an agent's turn, and appears in no other view.
 
 **When jj becomes unusable.** Existing jj workspaces keep their files, but no agent starts in them and
 the setup command does not run until jj is usable again; an agent that cannot start shows **jj Not Available**
@@ -927,9 +936,9 @@ a jj workspace reaches the remote at once, but the pushed bookmark appears among
 git branches only after you next run a jj command there.
 
 **Deleting a jj workspace** removes its directory and tells jj to forget the workspace. Its own
-bookmarks — those on its revisions, never the target's or another workspace's — follow the
-branch-deletion policy in the Git section (Never keeps them, Delete if safe forgets the merged or
-already-pushed ones, Always forgets them all). Forgetting leaves the remote branch and the revisions
+bookmarks — those on its revisions, never one named like the target or on another workspace's stack —
+follow the Git section's branch and bookmark deletion policy (Never keeps them, Delete if safe forgets
+the merged or already-pushed ones, Always forgets them all). Forgetting leaves the remote branch and the revisions
 in place. A folder inside a jj workspace given to Add Repository (or to `sculptor <path>`) adds the
 colocated repository the workspace belongs to.
 

@@ -1111,7 +1111,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **WS-085 — Create PR from a jj workspace**
   - Given: a jj workspace with a GitHub origin and a target bookmark.
   - When: the user clicks "Create PR".
-  - Then: the jj PR-creation prompt (or, while none is set, the git one) is sent to the agent with Sculptor's jj instructions: push the workspace's bookmark with `jj git push -b {bookmark}` and open the pull request into the branch the target tracks (e.g. `main` for `main@origin`), creating the bookmark first when it does not exist yet.
+  - Then: the jj PR-creation prompt (or, while none is set, the git one) is sent to the agent with Sculptor's jj instructions: push the workspace's bookmark with `jj git push -b {bookmark}` and open the pull request into the branch the target tracks (e.g. `main` for `main@origin`), creating the bookmark first when it does not exist yet. With no target bookmark the button is disabled, and hovering it shows "Sculptor couldn't find a target bookmark for this workspace. Pick one from the target selector to create a PR.".
 
 - **WS-086 — Edit the PR prompt from a jj workspace**
   - Given: the Create PR button of a jj workspace.
@@ -1906,6 +1906,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks its "Discard changes" control, then "Discard".
   - Then: the "Discard changes" dialog adds "The discarded content stays recoverable from the jj operation log."; on Discard the file leaves the list; a failure keeps the dialog open with "Could not discard the changes: {reason}" in red.
 
+- **PANEL-063 — New files jj left out**
+  - Given: an agent's turn in a jj workspace added a new file larger than the jj snapshot limit.
+  - When: the user opens the Changes tab, in either scope.
+  - Then: the changed-file list omits that file, and an amber banner above it reads "jj left {N} new file(s) out" and "jj does not record a new file over its size limit, so these are in no diff, commit or push. Raise the limit on the Jujutsu settings page, or delete the files.", lists each such file's path with jj's reason (e.g. its size in bytes), and links "Open Jujutsu settings" to the Jujutsu settings section.
+
 - **PANEL-062 — Commit in a jj workspace**
   - Given: a jj workspace with changes.
   - When: the user clicks "Commit N changes", or right-clicks it.
@@ -2465,20 +2470,20 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **SET-024 — Global defaults**
   - Given: the Git section.
-  - When: the user edits the default branch-naming pattern or branch-deletion policy (Never / Delete if safe / Always).
-  - Then: each saves with a toast.
+  - When: the user edits the default naming pattern (which names a new workspace's branch or jj bookmark) or the "Branch and bookmark deletion when a workspace is removed" policy (Never / Delete if safe / Always).
+  - Then: each saves with a toast; the policy's description says it applies to a worktree workspace's branch and a jj workspace's bookmarks.
 
 ## Jujutsu
 
 - **SET-048 — jj availability & Re-check**
   - Given: the Jujutsu section.
   - When: the section opens, or the user clicks "Re-check".
-  - Then: "Checking jj…" shows until the status is known; then a callout says either "jj {version} is available, managed by Sculptor." (or "…, from {path}.") in green, or what stops jj in red — "jj is not installed.", "jj is installed but does not run." (with the error), "This jj version is not supported." (with "{path} reports jj {version}" and "Sculptor needs jj {minimum} or a newer compatible version. …") — or, in orange, "jj has no author identity.", each with the step that fixes it.
+  - Then: "Checking jj…" shows until the status is known; then a callout says either "jj {version} is available, managed by Sculptor." (or "…, from {path}.") in green, or what stops jj in red — "jj is not installed.", "jj is installed but does not run." (with the error), "This jj version is not supported." (with "{path} reports jj {version}" and "Sculptor needs jj {minimum} or a newer compatible version. …"), "jj cannot fetch or push with the git it finds." (with "{path} reports git {version}" or "jj finds no git", and "jj needs git {git minimum} or newer. …"), "Your login shell runs a jj that Sculptor does not support." (with "{path} reports jj {version}" and "Sculptor needs jj {minimum} or a newer compatible version, because your repositories are shared with the jj you run yourself. …") — or, in orange, "jj has no author identity.", each with the step that fixes it.
 
 - **SET-049 — jj source mode, install, path & versions**
   - Given: the Jujutsu section.
   - When: the user switches Binary Source between Managed and Custom, clicks "Install jj", or enters a Binary path and clicks "Apply".
-  - Then: Status shows "v{version} — Managed", "v{version} — External binary", "v{version} — Needs {minimum} or a newer compatible version", "No path configured", "Does not run", or "Not installed"; Managed shows "Install jj", then "Installing..." with a progress bar, then "Up to date", or the install error with "Retry"; Minimum version, Detected version and Active path are listed.
+  - Then: Status shows "v{version} — Managed", "v{version} — External binary", "v{version} — Needs {minimum} or a newer compatible version", "No path configured", "Does not run", or "Not installed"; Managed shows "Install jj", then "Installing..." with a progress bar, then "Up to date", or the install error with "Retry"; Minimum version, Detected version and Active path are listed; when the login shell runs a different, supported jj, a "jj in your terminal" row shows its path and version.
 
 - **SET-050 — jj author identity**
   - Given: the Jujutsu section.
@@ -2746,7 +2751,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   entity mentions, rich markdown rendering, clone/in-place workspaces, Review-all,
   Pi agent, image upload, CI babysitter, and the dev/devtools panels. Tests should set
   the relevant flag (or assert the gated UI is absent when off).
-- The jj scenarios (ADDWS-026…029, WS-080…086, PANEL-058…062, SET-042…053, and the jj
+- The jj scenarios (ADDWS-026…029, WS-080…086, PANEL-058…063, SET-042…053, and the jj
   parts of ADDWS-023, WS-036 and CHAT-002) mostly need a usable jj — the pinned release,
   with an author identity — and a repository colocated with jj that has "Use jj for new
   workspaces created in this repository" on. SET-042, ADDWS-028 and WS-084 instead need jj
