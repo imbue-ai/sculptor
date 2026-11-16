@@ -588,13 +588,14 @@ class GitWorkspaceVcs(WorkspaceVcs):
             return GitOperationResult(success=False, stdout="", stderr="", error_message=validation_error)
 
         if self._is_file_tracked(checkout, file_path):
-            options, operands = ["checkout"], ["HEAD"]
+            # HEAD is a constant, so it goes with the options: passing it as an
+            # operand adds `--end-of-options`, which `git checkout` rejects
+            # before git 2.43.1.
+            options = ["checkout", "HEAD"]
         else:
-            options, operands = ["clean", "-f"], []
+            options = ["clean", "-f"]
         try:
-            result = self._git.run_git(
-                options, checkout, is_read_only=False, operands=operands, paths=[file_path], is_checked=False
-            )
+            result = self._git.run_git(options, checkout, is_read_only=False, paths=[file_path], is_checked=False)
         except VcsCommandError as e:
             return GitOperationResult(success=False, stdout=e.stdout, stderr=e.stderr, error_message=str(e))
         is_success = result.returncode == 0

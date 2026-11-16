@@ -1,12 +1,17 @@
 import base64
+import shlex
+import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
+from sculptor.config.user_config import DependencyPaths
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
@@ -45,6 +50,23 @@ def _branch_exists(repo: Path, branch: str) -> bool:
 
 def _in_place(repo: Path) -> CheckoutLocation:
     return CheckoutLocation(repo_path=repo, checkout_path=repo)
+
+
+def _record_git_arguments(directory: Path) -> Path:
+    """Route the seam's git through a wrapper that appends each call's arguments to the returned log."""
+    real_git = shutil.which("git")
+    assert real_git is not None
+    argument_log = directory / "git-arguments.log"
+    argument_log.touch()
+    wrapper = directory / "recording-git"
+    wrapper.write_text(
+        f'#!/bin/bash\necho "$*" >> {shlex.quote(str(argument_log))}\nexec {shlex.quote(real_git)} "$@"\n'
+    )
+    wrapper.chmod(0o755)
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(git=str(wrapper))})
+    )
+    return argument_log
 
 
 @pytest.fixture
@@ -562,6 +584,20 @@ def test_discard_file_changes_restores_a_tracked_file(in_place_vcs: GitWorkspace
 
     assert result.success
     assert (git_repo / "file.txt").read_text() == "content\n"
+
+
+def test_discard_file_changes_restores_with_a_command_git_before_2_43_1_accepts(
+    in_place_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path
+) -> None:
+    # `git checkout` rejects `--end-of-options` before git 2.43.1 ("only one
+    # reference expected, 2 given"), and Apple's and Ubuntu's stock gits are older.
+    argument_log = _record_git_arguments(tmp_path)
+    (git_repo / "file.txt").write_text("changed\n")
+
+    result = in_place_vcs.discard_file_changes(_in_place(git_repo), "file.txt")
+
+    assert result.success
+    assert "checkout HEAD -- file.txt" in argument_log.read_text().splitlines()
 
 
 def test_discard_file_changes_deletes_an_untracked_file(in_place_vcs: GitWorkspaceVcs, git_repo: Path) -> None:
