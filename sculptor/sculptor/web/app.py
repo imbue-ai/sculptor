@@ -677,7 +677,11 @@ def _validate_workspace_creation_request(
     if not requested_branch_name:
         return
     vcs = services.workspace_service.get_workspace_vcs(initialization_strategy)
-    validation = vcs.validate_new_ref_name(project.get_local_user_path(), requested_branch_name)
+    project_path = project.get_local_user_path()
+    try:
+        validation = vcs.validate_new_ref_name(project_path, requested_branch_name)
+    except VcsCommandError as e:
+        raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
     match validation.status:
         case RefNameStatus.AVAILABLE:
             return

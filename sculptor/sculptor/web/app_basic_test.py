@@ -365,6 +365,23 @@ def test_create_workspace_applies_the_branch_name_rules(
         assert expected_detail in response.json()["detail"]
 
 
+def test_create_workspace_conflicts_when_the_repository_cannot_be_read(
+    client: TestClient, test_project: Project, tmp_path: Path
+) -> None:
+    project_path = test_project.get_local_user_path()
+    moved_path = tmp_path / "moved-project-repo"
+    project_path.rename(moved_path)
+    try:
+        response = _post_create_workspace(
+            client, test_project, WorkspaceInitializationStrategy.WORKTREE, "main", "imbue/new-branch"
+        )
+    finally:
+        moved_path.rename(project_path)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == f"The repository at {project_path} could not be read"
+
+
 def test_start_task_returns_404_for_a_missing_project(client: TestClient) -> None:
     response = client.post(
         f"/api/v1/projects/{ProjectID()}/tasks",
