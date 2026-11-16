@@ -1,15 +1,17 @@
 import { Box, Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
+import { useAtomValue } from "jotai";
 import { AlertTriangle, Terminal } from "lucide-react";
 import type { FocusEvent, ReactElement } from "react";
 import { useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useOnMountIf } from "~/common/hooks/useOnMountIf";
+import { projectJjStateAtomFamily } from "~/common/state/atoms/projectJjState.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import { useDefaultSetupCommand } from "~/common/state/hooks/useDefaultSetupCommand.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useNamingPatternMutation, useWorkspaceSetupCommandMutation } from "~/common/state/mutations/projects.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
-import { DEFAULT_WORKSPACE_SETUP_COMMAND } from "~/common/utils/setupDefaults";
 
 import styles from "./RepoRow.module.scss";
 
@@ -55,8 +57,13 @@ export const RepoRow = ({
   setToast,
 }: RepoRowProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
+  const doesCreateJjWorkspaces = useAtomValue(projectJjStateAtomFamily(projectId))?.createsJjWorkspaces ?? false;
+  // The kind of workspace this repository creates decides which default it runs.
+  const defaultSetupCommand = useDefaultSetupCommand(doesCreateJjWorkspaces ? "JJ_WORKSPACE" : "WORKTREE") ?? undefined;
   const isTrackingDefault = workspaceSetupCommand === null;
-  const displayValue = workspaceSetupCommand ?? DEFAULT_WORKSPACE_SETUP_COMMAND;
+  // While the row tracks a default the backend has not yet named, there is nothing to show or edit.
+  const isSetupCommandKnown = !isTrackingDefault || defaultSetupCommand !== undefined;
+  const displayValue = workspaceSetupCommand ?? defaultSetupCommand ?? "";
   const [isExpanded, setIsExpanded] = useState<boolean>(() => shouldAutoFocusSetupCommand);
   const setupCommandTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const { mutate: saveSetupCommand } = useWorkspaceSetupCommandMutation({
@@ -82,7 +89,7 @@ export const RepoRow = ({
     const trimmed = e.target.value.trim();
     if (isTrackingDefault) {
       // Unchanged default text → remain tracking default. Otherwise freeze the edit.
-      if (trimmed !== DEFAULT_WORKSPACE_SETUP_COMMAND) {
+      if (trimmed !== defaultSetupCommand) {
         handleSetupCommandSave(trimmed, e.target);
       }
     } else if (trimmed !== workspaceSetupCommand) {
@@ -169,7 +176,8 @@ export const RepoRow = ({
               }`}
               defaultValue={displayValue}
               onBlur={handleSetupCommandBlur}
-              placeholder="Leave blank to run nothing"
+              disabled={!isSetupCommandKnown}
+              placeholder={isSetupCommandKnown ? "Leave blank to run nothing" : "Loading the default setup command…"}
               rows={3}
               spellCheck={false}
               data-testid={ElementIds.SETTINGS_WORKSPACE_SETUP_COMMAND_INPUT}

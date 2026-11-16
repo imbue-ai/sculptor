@@ -1,6 +1,6 @@
 import { Theme } from "@radix-ui/themes";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, type RenderResult, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, type RenderResult, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
 import type { Mock } from "vitest";
@@ -8,16 +8,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "~/api";
 import { ElementIds } from "~/api";
+import { updateProjectJjStatesAtom } from "~/common/state/atoms/projectJjState.ts";
 import { projectAtomFamily, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { ToastType } from "~/common/state/atoms/toasts.ts";
 import { queryClient } from "~/common/state/queryClient.ts";
 
 import { ReposSection } from "./ReposSection.tsx";
 
+const GIT_DEFAULT_SETUP_COMMAND = "git fetch origin 2>/dev/null || true";
+const JJ_DEFAULT_SETUP_COMMAND = "jj git fetch --remote origin 2>/dev/null || true";
+
 const apiHarness = vi.hoisted(() => ({
   updateWorkspaceSetupCommand: vi.fn(),
   updateNamingPattern: vi.fn(),
   deleteProject: vi.fn(),
+  getWorkspaceSetupCommandDefaults: vi.fn(),
 }));
 
 vi.mock("~/api", async (importOriginal) => {
@@ -27,6 +32,7 @@ vi.mock("~/api", async (importOriginal) => {
     updateWorkspaceSetupCommand: apiHarness.updateWorkspaceSetupCommand,
     updateNamingPattern: apiHarness.updateNamingPattern,
     deleteProject: apiHarness.deleteProject,
+    getWorkspaceSetupCommandDefaults: apiHarness.getWorkspaceSetupCommandDefaults,
   };
 });
 
@@ -112,14 +118,79 @@ const FIELDS = [
 
 const REJECTION = { type: ToastType.ERROR, title: "rejected" };
 
+const setCreatesJjWorkspaces = (createsJjWorkspaces: boolean): void => {
+  store.set(updateProjectJjStatesAtom, {
+    [PROJECT.objectId]: {
+      projectId: PROJECT.objectId,
+      colocation: createsJjWorkspaces ? "COLOCATED" : "ABSENT",
+      colocationError: null,
+      createsJjWorkspaces,
+    },
+  });
+};
+
 beforeEach(() => {
   store = createStore();
   store.set(updateProjectsAtom, [PROJECT]);
+  apiHarness.getWorkspaceSetupCommandDefaults.mockResolvedValue({
+    data: {
+      defaultSetupCommandByInitializationStrategy: {
+        IN_PLACE: null,
+        CLONE: GIT_DEFAULT_SETUP_COMMAND,
+        WORKTREE: GIT_DEFAULT_SETUP_COMMAND,
+        JJ_WORKSPACE: JJ_DEFAULT_SETUP_COMMAND,
+      },
+    },
+  });
 });
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
   vi.clearAllMocks();
+});
+
+describe("a repository that creates jj workspaces", () => {
+  it("shows the jj default setup command while it tracks the default", async () => {
+    store.set(updateProjectsAtom, [{ ...PROJECT, workspaceSetupCommand: null }]);
+    setCreatesJjWorkspaces(true);
+    renderSection();
+
+    await waitFor(() => expect(getSetupCommandInput().value).toBe(JJ_DEFAULT_SETUP_COMMAND));
+    expect(apiHarness.getWorkspaceSetupCommandDefaults).toHaveBeenCalledWith({ meta: { skipWsAck: true } });
+  });
+
+  it("keeps tracking the jj default when its text is left unchanged", async () => {
+    store.set(updateProjectsAtom, [{ ...PROJECT, workspaceSetupCommand: null }]);
+    setCreatesJjWorkspaces(true);
+    renderSection();
+    await waitFor(() => expect(getSetupCommandInput().value).toBe(JJ_DEFAULT_SETUP_COMMAND));
+
+    fireEvent.blur(getSetupCommandInput());
+
+    expect(apiHarness.updateWorkspaceSetupCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe("a repository that creates git workspaces", () => {
+  it("shows the git default setup command while it tracks the default", async () => {
+    store.set(updateProjectsAtom, [{ ...PROJECT, workspaceSetupCommand: null }]);
+    setCreatesJjWorkspaces(false);
+    renderSection();
+
+    await waitFor(() => expect(getSetupCommandInput().value).toBe(GIT_DEFAULT_SETUP_COMMAND));
+  });
+});
+
+describe("the expanded repository row", () => {
+  it("does not offer the setup command for editing until the default is known", () => {
+    apiHarness.getWorkspaceSetupCommandDefaults.mockReturnValue(new Promise(() => {}));
+    store.set(updateProjectsAtom, [{ ...PROJECT, workspaceSetupCommand: null }]);
+    renderSection();
+
+    expect(getSetupCommandInput()).toBeDisabled();
+    expect(getSetupCommandInput().value).toBe("");
+  });
 });
 
 describe.each(FIELDS)("a failed $name save", ({ save, getInput, savedValue }) => {
