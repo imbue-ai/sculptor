@@ -532,6 +532,7 @@ class WorkspaceService(Service, ABC):
         Raises:
             WorkspaceNotFoundError: If the workspace does not exist or has no checkout yet.
             WorkspaceWorkingCopyUpdateUnavailableError: If the workspace is a git workspace.
+            JjUnavailableError: If jj cannot be used right now; its message says why.
             VcsCommandError: If jj cannot update the working copy.
         """
 

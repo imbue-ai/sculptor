@@ -19,6 +19,9 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.jj_availability import describe_jj_unavailability
+from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.testing.jj_repos import JjBinary
@@ -205,3 +208,17 @@ def test_updating_the_working_copy_of_an_unknown_workspace_is_not_found(client: 
     response = client.post(f"/api/v1/workspaces/{WorkspaceID()}/jj/update-stale")
 
     assert response.status_code == 404, response.text
+
+
+def test_updating_the_working_copy_while_jj_is_unavailable_says_why_it_is_unavailable(
+    client: TestClient, test_services: CompleteServiceCollection, jj_workspace_row: Workspace, tmp_path: Path
+) -> None:
+    config = get_user_config_instance()
+    missing_jj = config.dependency_paths.model_copy(update={"jj": str(tmp_path / "missing" / "jj")})
+    set_user_config_instance(config.model_copy(update={"dependency_paths": missing_jj}))
+
+    response = client.post(f"/api/v1/workspaces/{jj_workspace_row.object_id}/jj/update-stale")
+
+    assert response.status_code == 412, response.text
+    readiness = test_services.dependency_management_service.get_jj_readiness()
+    assert response.json()["detail"] == describe_jj_unavailability(readiness)

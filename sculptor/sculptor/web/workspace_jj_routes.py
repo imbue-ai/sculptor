@@ -4,6 +4,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 
+from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceRevisionHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceWorkingCopyUpdateUnavailableError
@@ -86,7 +87,7 @@ def update_stale_working_copy(
 ) -> None:
     """Bring a jj workspace's stale working copy up to date with its repository, on the user's request.
 
-    Answers 409 for a git workspace, and when jj cannot update the working copy.
+    Answers 412 while jj is unavailable, and 409 for a git workspace and when jj cannot update the working copy.
     """
     validated_workspace_id = validate_workspace_id(workspace_id)
     services = get_services_from_request_or_websocket(request)
@@ -99,5 +100,7 @@ def update_stale_working_copy(
             services.workspace_service.update_stale_working_copy(validated_workspace_id, transaction)
         except WorkspaceNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
+        except JjUnavailableError as e:
+            raise HTTPException(status_code=412, detail=str(e)) from e
         except (WorkspaceWorkingCopyUpdateUnavailableError, VcsCommandError) as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
