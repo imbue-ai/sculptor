@@ -43,6 +43,7 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
@@ -518,6 +519,23 @@ class DefaultWorkspaceService(WorkspaceService):
         with lock:
             yield
 
+    def _require_vcs_available(self, initialization_strategy: WorkspaceInitializationStrategy) -> None:
+        """Raise `JjUnavailableError` before a jj workspace's environment runs any jj, so the agent says why it stopped.
+
+        Nothing about the workspace is touched, so its next start works once jj is fixed.
+        """
+        match initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                return
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                require_jj_available(self.dependency_management_service.get_jj_readiness())
+            case _ as unreachable:
+                assert_never(unreachable)
+
     def _create_or_resume_environment(
         self,
         project: Project,
@@ -540,6 +558,7 @@ class DefaultWorkspaceService(WorkspaceService):
 
             if workspace is None:
                 raise WorkspaceNotFoundError(workspace_id)
+            self._require_vcs_available(workspace.initialization_strategy)
 
             environment_id_to_resume = workspace.environment_id
             environment: Environment | None = None

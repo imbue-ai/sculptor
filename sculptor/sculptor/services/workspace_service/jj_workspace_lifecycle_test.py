@@ -1,6 +1,7 @@
 """A jj workspace's lifecycle through the workspace service, against a real colocated repository and the real jj."""
 
 import shutil
+from collections.abc import Callable
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from sculptor.config.user_config import UserConfig
 from sculptor.database.models import Project
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
@@ -20,12 +22,15 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager import (
     default_implementation as environment_manager_default_implementation,
 )
 from sculptor.services.workspace_service.environment_manager.environments import local_environment
+from sculptor.testing.jj_repos import JJ_TEST_USER_EMAIL
+from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import run_jj
@@ -225,3 +230,132 @@ def test_the_orphan_sweep_passes_over_a_project_without_a_local_repository(
         )
 
     test_service_collection.workspace_service.forget_orphaned_jj_workspaces()
+
+
+def _resolve_jj_to(jj_value: str) -> None:
+    set_user_config_instance(
+        get_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj=jj_value)})
+    )
+
+
+def _uninstall_jj(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A custom jj binary source with no path, so no jj resolves."""
+    _resolve_jj_to("CUSTOM")
+
+
+def _point_jj_at_a_broken_binary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    broken_jj = tmp_path / "broken-jj"
+    broken_jj.write_text("#!/bin/sh\necho 'jj: cannot load its libraries' >&2\nexit 1\n")
+    broken_jj.chmod(0o755)
+    _resolve_jj_to(str(broken_jj))
+
+
+def _clear_jj_identity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The test identity comes only from the environment; the jj config file is empty."""
+    monkeypatch.delenv("JJ_USER")
+    monkeypatch.delenv("JJ_EMAIL")
+
+
+def _fix_jj(jj_binary: JjBinary, monkeypatch: pytest.MonkeyPatch) -> None:
+    _resolve_jj_to(str(jj_binary.path))
+    monkeypatch.setenv("JJ_USER", JJ_TEST_USER_NAME)
+    monkeypatch.setenv("JJ_EMAIL", JJ_TEST_USER_EMAIL)
+
+
+def _read_latest_operation_id(jj_binary: JjBinary, repo_path: Path) -> str:
+    return run_jj(
+        jj_binary, ("--ignore-working-copy", "op", "log", "--no-graph", "--limit", "1", "-T", "id"), cwd=repo_path
+    )
+
+
+def _start_agent_while_jj_is_unavailable(
+    test_service_collection: CompleteServiceCollection,
+    project: Project,
+    workspace: Workspace,
+    concurrency_group: ConcurrencyGroup,
+) -> JjUnavailableError:
+    """The error an agent start fails with, unwrapped from its concurrency group as the agent runner unwraps it."""
+    with pytest.raises(ConcurrencyExceptionGroup) as raised:
+        _start_first_agent(test_service_collection, project, workspace, concurrency_group)
+    (error,) = raised.value.exceptions
+    assert isinstance(error, JjUnavailableError)
+    return error
+
+
+def _read_environment_id(test_service_collection: CompleteServiceCollection, workspace: Workspace) -> str | None:
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        stored_workspace = transaction.get_workspace(workspace.object_id)
+    assert stored_workspace is not None
+    return stored_workspace.environment_id
+
+
+@pytest.mark.parametrize(
+    ("make_jj_unavailable", "expected_reason"),
+    [
+        pytest.param(_uninstall_jj, "jj is not installed", id="uninstalled"),
+        pytest.param(_point_jj_at_a_broken_binary, "jj cannot run: jj: cannot load its libraries", id="broken-path"),
+        pytest.param(_clear_jj_identity, "jj has no author identity", id="no-identity"),
+    ],
+)
+def test_resuming_a_jj_workspace_while_jj_is_unavailable_says_why_and_changes_nothing_until_jj_is_fixed(
+    make_jj_unavailable: Callable[[pytest.MonkeyPatch, Path], None],
+    expected_reason: str,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_project: Project,
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
+    checkout = _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+    (checkout / "parser.py").write_text("parse = None\n")
+    run_jj(jj_binary, ("describe", "-m", "add the parser"), cwd=checkout)
+    run_jj(jj_binary, ("bookmark", "create", "feature", "-r", "@"), cwd=checkout)
+    operation_before = _read_latest_operation_id(jj_binary, jj_colocated_repo.path)
+    environment_id_before = _read_environment_id(test_service_collection, workspace)
+    make_jj_unavailable(monkeypatch, tmp_path)
+
+    error = _start_agent_while_jj_is_unavailable(
+        test_service_collection, jj_project, workspace, test_root_concurrency_group
+    )
+
+    assert str(error).startswith(expected_reason)
+    assert (checkout / "parser.py").read_text() == "parse = None\n"
+    assert _read_latest_operation_id(jj_binary, jj_colocated_repo.path) == operation_before
+    assert _read_environment_id(test_service_collection, workspace) == environment_id_before
+
+    _fix_jj(jj_binary, monkeypatch)
+    resumed_checkout = _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+
+    assert resumed_checkout == checkout
+    assert "feature" in run_jj(jj_binary, ("bookmark", "list", "-T", 'name ++ "\\n"'), cwd=checkout).split()
+
+
+def test_a_first_agent_start_while_jj_is_unavailable_creates_nothing_until_jj_is_fixed(
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_project: Project,
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
+    _uninstall_jj(monkeypatch, tmp_path)
+
+    error = _start_agent_while_jj_is_unavailable(
+        test_service_collection, jj_project, workspace, test_root_concurrency_group
+    )
+
+    assert str(error).startswith("jj is not installed")
+    assert _read_environment_id(test_service_collection, workspace) is None
+    assert list((tmp_path / "workspaces").iterdir()) == []
+    workspace_names = run_jj(jj_binary, ("workspace", "list", "-T", 'name ++ "\\n"'), cwd=jj_colocated_repo.path)
+    assert workspace_names.split() == ["default"]
+
+    _fix_jj(jj_binary, monkeypatch)
+    checkout = _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+
+    assert (checkout / ".jj" / "repo").is_file()
