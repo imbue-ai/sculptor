@@ -29,10 +29,13 @@ Under **Interface**:
 Under **Project**:
 
 - **Repositories** — add or remove repos, and set each repo's workspace setup
-  command and branch-naming pattern.
+  command, branch-naming pattern, and whether it uses jj.
 - **Git** — the pull-request creation prompt, PR status polling, default
   branch-naming pattern, and the branch-deletion policy for removed
   workspaces.
+- **Jujutsu** — the optional jj binary and its author identity, the largest new
+  file jj records, the prompts sent from jj workspaces, and the repositories
+  that use jj. See [Jujutsu (jj)](jujutsu.md).
 - **CI** — the [CI Babysitter](ci_babysitter.md): when enabled, Sculptor
   watches open PRs and asks an agent to fix CI failures and merge conflicts,
   with a configurable agent, retry cap, and prompts.

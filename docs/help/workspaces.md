@@ -45,6 +45,9 @@ The default mode is **worktree** (above). Two other modes are available under
 - **In-place** — the agent works directly in your original repository, with no
   separate copy.
 
+A repository you have set up for jj creates **jj workspaces** instead of
+worktrees. See [Jujutsu (jj)](jujutsu.md).
+
 ---
 
 ## Branches
