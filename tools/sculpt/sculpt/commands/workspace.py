@@ -27,6 +27,7 @@ from sculpt.commands.data_types import WorkspaceListProjectItem
 from sculpt.commands.data_types import WorkspaceRenameOutput
 from sculpt.commands.data_types import WorkspaceShowOutput
 from sculpt.formatting import cli_error
+from sculpt.formatting import extract_error_detail
 from sculpt.formatting import format_datetime
 from sculpt.formatting import format_table
 from sculpt.formatting import handle_connection_error
@@ -68,11 +69,15 @@ def create(
         "--strategy",
         help=f"Initialization strategy ({', '.join(STRATEGY_MAPPING)})",
     ),
-    branch: str | None = typer.Option(None, "--branch", help="Source branch"),
+    branch: str | None = typer.Option(
+        None,
+        "--branch",
+        help="Source branch; for jj, a bookmark such as main@origin or a full commit id (default: the target)",
+    ),
     branch_name: str | None = typer.Option(
         None,
         "--branch-name",
-        help="New branch name (required for worktree; auto-generated if omitted)",
+        help="New branch name, or bookmark name for jj (required for worktree and jj; auto-generated if omitted)",
     ),
     target_branch: str | None = typer.Option(
         None,
@@ -109,15 +114,21 @@ def create(
     )
 
     try:
-        result = create_workspace_v2.sync(client=client, body=request)  # type: ignore[arg-type]
+        response = create_workspace_v2.sync_detailed(client=client, body=request)  # type: ignore[arg-type]
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
-    if result is None:
-        cli_error("Failed to create workspace", detail="No response from server", json_output=json_output)
-
+    result = response.parsed
     if isinstance(result, HTTPValidationError):
         cli_error("Validation error", detail=str(result), json_output=json_output)
+
+    if result is None:
+        detail = extract_error_detail(response.content)
+        cli_error(
+            "Failed to create workspace",
+            detail=detail or f"Unexpected response from server (status {response.status_code})",
+            json_output=json_output,
+        )
 
     if json_output:
         output = WorkspaceCreateOutput(

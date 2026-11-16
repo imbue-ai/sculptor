@@ -259,6 +259,24 @@ class TestWorkspaceCreate:
         assert request_body["requestedBranchName"] == "dev/fix-thing"
 
     @respx.mock
+    def test_create_surfaces_why_the_server_refused_a_jj_workspace(self, runner: CliRunner) -> None:
+        """The server answers 412 when jj is unavailable; the CLI shows its reason rather than claiming no response."""
+        _mock_session()
+        _mock_initialize_project()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(412, json={"detail": "jj is not installed: install it on the Jujutsu settings page"})
+        )
+
+        result = runner.invoke(
+            app, ["workspace", "create", "--repo", "/tmp/test", "--strategy", "jj", "--branch-name", "feature"]
+        )
+
+        assert result.exit_code == 1
+        output = result.output + (result.stderr or "")
+        assert "jj is not installed" in output
+        assert "No response from server" not in output
+
+    @respx.mock
     def test_create_passes_target_branch(self, runner: CliRunner) -> None:
         """--target-branch is forwarded in the create request body."""
         _mock_session()

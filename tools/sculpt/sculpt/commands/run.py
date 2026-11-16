@@ -46,11 +46,15 @@ def run_cmd(
         "--strategy",
         help=f"Initialization strategy ({', '.join(STRATEGY_MAPPING)})",
     ),
-    branch: str | None = typer.Option(None, "--branch", help="Source branch"),
+    branch: str | None = typer.Option(
+        None,
+        "--branch",
+        help="Source branch; for jj, a bookmark such as main@origin or a full commit id (default: the target)",
+    ),
     branch_name: str | None = typer.Option(
         None,
         "--branch-name",
-        help="New branch name (required for worktree; auto-generated if omitted)",
+        help="New branch name, or bookmark name for jj (required for worktree and jj; auto-generated if omitted)",
     ),
     target_branch: str | None = typer.Option(
         None,
