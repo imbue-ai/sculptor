@@ -1525,6 +1525,23 @@ def test_update_project_fields_writes_only_named_columns(
         assert after.workspace_setup_command == "SEED_SETUP"
 
 
+def test_update_project_fields_turns_on_jj_for_new_workspaces(
+    test_db_service_with_user_organization_and_project: tuple[
+        SQLDataModelService, UserReference, OrganizationReference, Project
+    ],
+) -> None:
+    service, _, _, project = test_db_service_with_user_organization_and_project
+    assert project.use_jj_for_new_workspaces is False
+
+    with service.open_transaction(RequestID()) as transaction:
+        transaction.update_project_fields(project.object_id, use_jj_for_new_workspaces=True)
+
+    with service.open_transaction(RequestID()) as transaction:
+        after = transaction.get_project(project.object_id)
+        assert after is not None
+        assert after.use_jj_for_new_workspaces is True
+
+
 def test_update_project_fields_returns_none_for_missing_row(
     test_db_service_with_user_organization_and_project: tuple[
         SQLDataModelService, UserReference, OrganizationReference, Project

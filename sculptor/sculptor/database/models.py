@@ -68,6 +68,8 @@ class Project(DatabaseModel):
     workspace_setup_command: str | None = None
     # Per-project override of UserConfig.default_workspace_branch_naming_pattern.
     naming_pattern: str | None = None
+    # Whether new workspaces are jj workspaces; they are only when the repository is also colocated and jj is available.
+    use_jj_for_new_workspaces: bool = False
 
     def get_local_user_path(self) -> Path:
         """
