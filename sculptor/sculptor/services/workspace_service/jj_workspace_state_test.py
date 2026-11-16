@@ -173,13 +173,13 @@ def test_the_jj_poller_rests_quietly_while_the_published_jj_readiness_has_a_bloc
     poller = unstarted_workspace_service._jj_workspace_poller
     dependency_management_service = test_service_collection.dependency_management_service
     _point_jj_at(tmp_path / "missing" / "jj")
-    dependency_management_service.get_status()
+    dependency_management_service.refresh_status()
 
     with record_logged_error_levels() as levels:
         poller._scan_once()
     state_while_unavailable = unstarted_workspace_service.get_cached_jj_state(jj_workspace_row.object_id)
     _point_jj_at(jj_binary.path)
-    dependency_management_service.get_status()
+    dependency_management_service.refresh_status()
 
     assert (state_while_unavailable, levels) == (None, [])
     assert _scan_for_state(unstarted_workspace_service, jj_workspace_row.object_id).is_working_copy_empty

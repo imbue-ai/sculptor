@@ -3355,12 +3355,9 @@ def skip_account_setup(
 def get_dependencies_status(
     request: Request, user_session: UserSession = Depends(get_user_session)
 ) -> DependenciesStatus:
-    """Check if required dependencies are installed."""
+    """Check every dependency now, as a re-check does, and return the status that every open window is also sent."""
     services = get_services_from_request_or_websocket(request)
-    service = services.dependency_management_service
-    ds = service.get_status()
-
-    return ds
+    return services.dependency_management_service.refresh_status()
 
 
 @router.post("/api/v1/dependencies/install")
@@ -3515,7 +3512,7 @@ def update_user_config(
     old_dep = old_user_config.dependency_paths if old_user_config else None
     if new_user_config.dependency_paths != old_dep:
         services = get_services_from_request_or_websocket(request)
-        services.dependency_management_service.get_status()
+        services.dependency_management_service.refresh_status()
 
     return new_user_config
 

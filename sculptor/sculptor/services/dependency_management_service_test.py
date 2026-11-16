@@ -106,7 +106,7 @@ def _wait_for_install_complete(
     """Wait for *tool*'s background install thread to finish, including its trailing notify.
 
     Joining the thread — rather than polling ``_installing`` — ensures the thread's
-    final ``_notify_observers()`` has returned before the caller leaves the
+    final ``refresh_status()`` has returned before the caller leaves the
     ConcurrencyGroup block; polling the flag returns mid-finalization and races the
     group's teardown (FOLLOWUPS-10).
     """
@@ -1471,7 +1471,7 @@ class TestProgressNotifierThread:
         notify_mock = MagicMock(side_effect=itertools.chain([RuntimeError("boom")], itertools.repeat(None)))
         with (
             patch.object(DependencyManagementService, "_PROGRESS_NOTIFY_INTERVAL_SECONDS", 0.01),
-            patch.object(DependencyManagementService, "_notify_observers", notify_mock),
+            patch.object(DependencyManagementService, "refresh_status", notify_mock),
         ):
             with service._progress_lock:
                 service._installing[Dependency.CLAUDE] = True
