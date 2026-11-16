@@ -39,6 +39,7 @@ from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
@@ -343,6 +344,7 @@ class _WorkspacePollState:
         "is_deleted",
         "first_failure",
         "poll_generation",
+        "is_jj_workspace_logged",
     )
 
     def __init__(
@@ -361,6 +363,8 @@ class _WorkspacePollState:
         self.is_deleted = False
         self.first_failure: tuple[datetime.datetime, Exception] | None = None
         self.poll_generation: int = 0
+        # Whether git running in this workspace's jj checkout has been logged.
+        self.is_jj_workspace_logged = False
 
 
 # ---------------------------------------------------------------------------
@@ -789,13 +793,17 @@ class PrPollingService(Service):
         """Resolve a workspace for the round, emitting its status when it short-circuits.
 
         Returns a candidate only for a GitHub workspace off its target branch (the
-        population the search can match). A ``VcsCommandError`` while reading one
-        workspace skips that workspace for this round instead of failing the round.
+        population the search can match). A ``VcsCommandError`` or the jj tripwire
+        while reading one workspace skips that workspace for this round instead of
+        failing the round.
         """
         try:
             lookup = self._resolve_pull_request_lookup(workspace_id, state)
         except VcsCommandError as e:
             logger.debug("PR search round: skipping workspace {}: {}", workspace_id, e)
+            return None
+        except GitCommandInJjWorkspaceError as e:
+            self._log_jj_workspace_once(state, e)
             return None
         if isinstance(lookup, PrStatusInfo):
             self._emit_status(workspace_id, lookup)
@@ -1037,6 +1045,9 @@ class PrPollingService(Service):
             status = self._fetch_status(workspace_id, state)
             state.first_failure = None
             return status
+        except GitCommandInJjWorkspaceError as e:
+            self._log_jj_workspace_once(state, e)
+            return None
         except Exception as e:
             if state.first_failure is None:
                 state.first_failure = (datetime.datetime.now(), e)
@@ -1052,6 +1063,17 @@ class PrPollingService(Service):
                 original_time.isoformat(),
             )
             return None
+
+    def _log_jj_workspace_once(self, state: _WorkspacePollState, error: GitCommandInJjWorkspaceError) -> None:
+        """Report that PR polling ran git in a jj workspace, once per workspace, at a priority that is seen."""
+        if state.is_jj_workspace_logged:
+            return
+        state.is_jj_workspace_logged = True
+        log_exception(
+            error,
+            f"PR polling skips workspace {state.workspace_id}: it ran git in a jj workspace",
+            priority=ExceptionPriority.MEDIUM_PRIORITY,
+        )
 
     def _respect_throttle(self) -> _CooldownDeferred | None:
         """Apply the global throttle before an API-backed poll.
