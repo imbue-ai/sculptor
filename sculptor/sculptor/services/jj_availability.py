@@ -42,9 +42,10 @@ def describe_jj_unavailability(readiness: JjReadiness) -> str | None:
             return "jj has no author identity: set its user.name and user.email on the Jujutsu settings page"
         case JjShadowed(path=path, version=version):
             return (
-                f"your login shell runs jj {version or '(unknown version)'} at {path} instead of Sculptor's jj,"
-                + f" and Sculptor needs jj {JJ_PINNED_VERSION} or a newer compatible version: upgrade or remove"
-                + " that jj, or stop your shell profile putting its directory first on PATH"
+                f"your login shell runs jj {version or '(unknown version)'} at {path}, but Sculptor needs"
+                + f" jj {JJ_PINNED_VERSION} or a newer compatible version, because the repository is shared"
+                + " with the jj you run yourself: upgrade or remove that jj, or stop your shell profile putting its"
+                + " directory first on PATH"
             )
         case _ as unreachable:
             assert_never(unreachable)

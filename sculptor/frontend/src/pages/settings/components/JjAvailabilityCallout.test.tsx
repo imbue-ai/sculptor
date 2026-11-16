@@ -83,6 +83,7 @@ describe("JjAvailabilityCallout", () => {
     );
     expect(availabilityText()).toContain("/home/dev/.cargo/bin/jj reports jj 0.28.2");
     expect(availabilityText()).toContain("Sculptor needs jj 0.46.0 or a newer compatible version");
+    expect(availabilityText()).toContain("shared with the jj you run yourself");
     expect(availabilityText()).toContain("first on PATH");
   });
 

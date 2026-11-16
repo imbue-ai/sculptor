@@ -60,9 +60,10 @@ _IDENTITY = JjIdentity(name="Jordan Bookmarker", email="jordan@example.com")
         ),
         pytest.param(
             JjShadowed(blocker=JjBlocker.SHADOWED, path="/home/dev/.cargo/bin/jj", version="0.28.2"),
-            "your login shell runs jj 0.28.2 at /home/dev/.cargo/bin/jj instead of Sculptor's jj, and Sculptor needs"
-            + f" jj {JJ_PINNED_VERSION} or a newer compatible version: upgrade or remove that jj, or stop your shell"
-            + " profile putting its directory first on PATH",
+            "your login shell runs jj 0.28.2 at /home/dev/.cargo/bin/jj, but Sculptor needs"
+            + f" jj {JJ_PINNED_VERSION} or a newer compatible version, because the repository is shared"
+            + " with the jj you run yourself: upgrade or remove that jj, or stop your shell profile putting its"
+            + " directory first on PATH",
             id="shadowed",
         ),
     ],

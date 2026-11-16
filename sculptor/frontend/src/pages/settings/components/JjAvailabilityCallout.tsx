@@ -31,9 +31,9 @@ const BLOCKER_COPY = {
     action: () => "Set the name and email jj records on your changes under Author identity below.",
   },
   SHADOWED: {
-    title: "Your login shell runs a different jj, which Sculptor does not support.",
+    title: "Your login shell runs a jj that Sculptor does not support.",
     action: (minimumVersion) =>
-      `Your shell profile puts this jj ahead of Sculptor's, so terminals in jj workspaces would run it. Sculptor needs jj ${minimumVersion} or a newer compatible version: upgrade or remove this jj, or stop your profile putting its directory first on PATH, then Re-check.`,
+      `Sculptor needs jj ${minimumVersion} or a newer compatible version, because your repositories are shared with the jj you run yourself. Upgrade or remove this jj, or stop your shell profile putting its directory first on PATH, then Re-check.`,
   },
 } as const satisfies Record<JjBlocker, BlockerCopy>;
 
