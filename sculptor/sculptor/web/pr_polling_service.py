@@ -1065,15 +1065,11 @@ class PrPollingService(Service):
             return None
 
     def _log_jj_workspace_once(self, state: _WorkspacePollState, error: GitCommandInJjWorkspaceError) -> None:
-        """Report that PR polling ran git in a jj workspace, once per workspace, at a priority that is seen."""
+        """Report at ERROR, once per workspace, that PR polling ran git in a jj workspace, which is a dispatch bug."""
         if state.is_jj_workspace_logged:
             return
         state.is_jj_workspace_logged = True
-        log_exception(
-            error,
-            f"PR polling skips workspace {state.workspace_id}: it ran git in a jj workspace",
-            priority=ExceptionPriority.MEDIUM_PRIORITY,
-        )
+        log_exception(error, f"PR polling skips workspace {state.workspace_id}: it ran git in a jj workspace")
 
     def _respect_throttle(self) -> _CooldownDeferred | None:
         """Apply the global throttle before an API-backed poll.

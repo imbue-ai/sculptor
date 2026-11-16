@@ -19,6 +19,8 @@ from loguru import logger
 from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
@@ -85,7 +87,7 @@ def _build_poller(
     working_dirs: dict[WorkspaceID, Path],
     cg: ConcurrencyGroup,
     git_cli: GitCli,
-    refresh_calls: list[WorkspaceID] | None = None,
+    refresh_diff_on_branch_change: Callable[[WorkspaceID], None] = lambda _workspace_id: None,
     resolve_working_dir: Callable[[Workspace], Path | None] | None = None,
 ) -> WorkspaceBranchPoller:
     return WorkspaceBranchPoller(
@@ -93,7 +95,7 @@ def _build_poller(
         data_model_service=_FakeDataModelService(workspaces),  # type: ignore[arg-type]
         vcs_runners=VcsRunners(git=git_cli),
         resolve_working_dir=resolve_working_dir or (lambda workspace: working_dirs.get(workspace.object_id)),
-        refresh_diff_on_branch_change=(refresh_calls.append if refresh_calls is not None else (lambda _id: None)),
+        refresh_diff_on_branch_change=refresh_diff_on_branch_change,
     )
 
 
@@ -235,7 +237,11 @@ def test_branch_change_emits_and_refreshes_diff(
     workspace = _FakeWorkspace(WorkspaceID(), ProjectID())
     refresh_calls: list[WorkspaceID] = []
     poller = _build_poller(
-        [workspace], {workspace.object_id: worktree}, test_root_concurrency_group, git_cli, refresh_calls=refresh_calls
+        [workspace],
+        {workspace.object_id: worktree},
+        test_root_concurrency_group,
+        git_cli,
+        refresh_diff_on_branch_change=refresh_calls.append,
     )
     queue: Queue[StreamingUpdateSourceTypes] = Queue()
     poller.add_observer(queue)
@@ -427,3 +433,72 @@ def test_a_workspace_that_cannot_be_scanned_does_not_stop_the_others(
 
     branch_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceBranchInfo)]
     assert [(info.workspace_id, info.current_branch) for info in branch_infos] == [(healthy.object_id, "wsbranch")]
+
+
+# What the branch scan logs, once per workspace or repository, when it runs git in a jj workspace.
+_JJ_WORKSPACE_LOG = "Branch scan ran git in a jj workspace"
+
+
+def test_git_run_in_a_jj_workspace_while_scanning_one_workspace_is_logged_at_error_and_skips_only_it(
+    base_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli
+) -> None:
+    jj_workspace = tmp_path / "jj-workspace"
+    (jj_workspace / ".jj").mkdir(parents=True)
+    misdispatched_checkout = tmp_path / "misdispatched"
+    healthy_checkout = tmp_path / "healthy"
+    _add_worktree(base_repo, misdispatched_checkout, "misdispatched-branch")
+    _add_worktree(base_repo, healthy_checkout, "healthy-branch")
+    misdispatched = _FakeWorkspace(WorkspaceID(), ProjectID())
+    healthy = _FakeWorkspace(WorkspaceID(), ProjectID())
+
+    def refresh_diff(workspace_id: WorkspaceID) -> None:
+        if workspace_id == misdispatched.object_id:
+            git_cli.run_git(["status"], jj_workspace, is_read_only=True)
+
+    poller = _build_poller(
+        [misdispatched, healthy],
+        {misdispatched.object_id: misdispatched_checkout, healthy.object_id: healthy_checkout},
+        test_root_concurrency_group,
+        git_cli,
+        refresh_diff_on_branch_change=refresh_diff,
+    )
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    poller.add_observer(queue)
+    poller._scan_once()
+    _drain(queue)
+    LocalGitRepo(misdispatched_checkout).run_git(["checkout", "-b", "misdispatched-renamed"])
+    LocalGitRepo(healthy_checkout).run_git(["checkout", "-b", "healthy-renamed"])
+
+    with expect_exact_logged_errors([_JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            poller._scan_once()
+
+    assert levels == ["ERROR"]
+    branch_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceBranchInfo)]
+    assert [(info.workspace_id, info.current_branch) for info in branch_infos] == [
+        (healthy.object_id, "healthy-renamed")
+    ]
+
+
+def test_git_run_in_a_jj_workspace_by_the_target_scan_is_logged_once_at_error(
+    base_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli
+) -> None:
+    # A worktree of the git store a jj repository keeps inside its workspace: the
+    # target scan reads candidates in the store's parent, which is in the jj workspace.
+    git_store = tmp_path / "jj-workspace" / ".jj" / "repo" / "store" / "git"
+    LocalGitRepo(tmp_path).run_git(["clone", "--bare", str(base_repo), str(git_store)])
+    worktree = tmp_path / "ws"
+    LocalGitRepo(tmp_path).run_git(["--git-dir", str(git_store), "worktree", "add", "-b", "wsbranch", str(worktree)])
+    workspace = _FakeWorkspace(WorkspaceID(), ProjectID())
+    poller = _build_poller([workspace], {workspace.object_id: worktree}, test_root_concurrency_group, git_cli)
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    poller.add_observer(queue)
+
+    with expect_exact_logged_errors([_JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            poller._scan_once()
+            poller._scan_once()
+
+    assert levels == ["ERROR"]
+    branch_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceBranchInfo)]
+    assert [info.current_branch for info in branch_infos] == ["wsbranch"]

@@ -55,6 +55,7 @@ from sculptor.services.git_repo_service.git_ref_scanning import StatSignature
 from sculptor.services.git_repo_service.git_ref_scanning import remote_refs_signature
 from sculptor.services.git_repo_service.git_ref_scanning import resolve_git_dirs
 from sculptor.services.git_repo_service.git_ref_scanning import stat_signature
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
 from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
@@ -213,6 +214,9 @@ class WorkspaceBranchPoller:
                 # Branch first: the target projection excludes the workspace's own
                 # (current) branch, so the branch cache must be current.
                 common_dir = self._scan_branch(workspace, working_dir, force_recompute)
+            except GitCommandInJjWorkspaceError as e:
+                self._log_jj_workspace_once(workspace.object_id, e)
+                continue
             except Exception as e:
                 self._log_scan_failure_once(workspace.object_id, e)
                 continue
@@ -227,6 +231,9 @@ class WorkspaceBranchPoller:
                 self._scan_target_candidates(
                     common_dir, members[0], working_dir_by_common_dir[common_dir], force_recompute
                 )
+            except GitCommandInJjWorkspaceError as e:
+                self._log_jj_workspace_once(common_dir, e)
+                continue
             except Exception as e:
                 self._log_scan_failure_once(common_dir, e)
                 continue
@@ -259,14 +266,29 @@ class WorkspaceBranchPoller:
             case _ as unreachable:
                 assert_never(unreachable)
 
+    def _log_jj_workspace_once(self, key: WorkspaceID | Path, error: GitCommandInJjWorkspaceError) -> None:
+        """Log at ERROR, when it starts, that scanning a workspace or repository ran git in a jj workspace.
+
+        That is a dispatch bug rather than a git failure, so it is logged where tests fail on it.
+        """
+        if not self._mark_scan_failed(key):
+            return
+        log_exception(error, f"Branch scan ran git in a jj workspace; skipping {key}")
+
     def _log_scan_failure_once(self, key: WorkspaceID | Path, error: Exception) -> None:
         """Log that a workspace or repository cannot be scanned when that starts, not on every cycle it lasts."""
-        if key in self._failed_scan_keys:
+        if not self._mark_scan_failed(key):
             return
-        self._failed_scan_keys.add(key)
         log_exception(
             error, f"Branch scan is skipping {key} until it can be scanned", priority=ExceptionPriority.LOW_PRIORITY
         )
+
+    def _mark_scan_failed(self, key: WorkspaceID | Path) -> bool:
+        """Record that `key` failed to scan; whether it had scanned cleanly before this failure."""
+        if key in self._failed_scan_keys:
+            return False
+        self._failed_scan_keys.add(key)
+        return True
 
     def _flag_non_git_checkout(self, workspace_id: WorkspaceID, working_dir: Path) -> None:
         """Publish that the workspace's branch cannot be read, logging only when it first happens."""

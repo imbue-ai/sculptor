@@ -7,17 +7,16 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
-from typing import Generator
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
-from loguru import logger
 
 from sculptor.config.user_config import UserConfig
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.ids import WorkspaceID
@@ -316,18 +315,8 @@ def test_fallback_raises_for_a_jj_checkout_instead_of_reporting_no_pr(
         svc._fetch_status(workspace_id, state)
 
 
-@pytest.fixture
-def medium_priority_log_count() -> Generator[list[int], None, None]:
-    """How many records the PR poller has logged at MEDIUM_PRIORITY, as a one-element list."""
-    count = [0]
-
-    def _count(message: Any) -> None:
-        if message.record["level"].name == ExceptionPriority.MEDIUM_PRIORITY.value:
-            count[0] += 1
-
-    handler_id = logger.add(_count, level=0)
-    yield count
-    logger.remove(handler_id)
+# What PR polling logs, once per workspace, when it runs git in a jj workspace.
+_JJ_WORKSPACE_LOG = "it ran git in a jj workspace"
 
 
 def _make_jj_checkout(path: Path) -> Path:
@@ -346,28 +335,33 @@ def test_round_skips_a_jj_checkout_and_still_resolves_the_other_workspaces(
     jj_workspace_id, _ = _register_checkout(svc, repo, _make_jj_checkout(tmp_path / "jj-checkout"))
     git_workspace_id, _ = _register_checkout(svc, repo, on_target_checkout)
 
-    svc._run_round(_make_user_config())
+    with expect_exact_logged_errors([_JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
 
+    assert levels == ["ERROR"]
     assert svc._cache[git_workspace_id] == PrStatusInfo(workspace_id=git_workspace_id, pr_state="none")
     assert jj_workspace_id not in svc._cache
 
 
 @pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
-def test_jj_checkout_is_logged_once_at_medium_priority_across_rounds_and_fallback_polls(
-    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path, medium_priority_log_count: list[int]
+def test_jj_checkout_is_logged_once_at_error_across_rounds_and_fallback_polls(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
 ) -> None:
     repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
     svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
     workspace_id, state = _register_checkout(svc, repo, _make_jj_checkout(tmp_path / "jj-checkout"))
 
-    svc._run_round(_make_user_config())
-    svc._run_round(_make_user_config())
-    first_poll = svc._execute_poll(workspace_id, state)
-    second_poll = svc._execute_poll(workspace_id, state)
+    with expect_exact_logged_errors([_JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+            svc._run_round(_make_user_config())
+            first_poll = svc._execute_poll(workspace_id, state)
+            second_poll = svc._execute_poll(workspace_id, state)
 
     assert first_poll is None
     assert second_poll is None
-    assert medium_priority_log_count == [1]
+    assert levels == ["ERROR"]
 
 
 # ---------------------------------------------------------------------------
