@@ -11,9 +11,7 @@ Operands (refs, revisions, destinations) go after `--end-of-options` and paths
 after `--`, so a value starting with `-` is never parsed as an option.
 """
 
-import os
 from pathlib import Path
-from typing import Callable
 from typing import Mapping
 from typing import Sequence
 
@@ -24,7 +22,6 @@ from tenacity import wait_exponential
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.retry_utils import log_before_sleep
-from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
@@ -33,22 +30,11 @@ from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundErro
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandTimeoutError
-
-DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS = 30.0
-
-# Both `DependencyManagementService.resolve_binary_path` and
-# `AgentExecutionEnvironment.get_tool_binary_path` have this shape.
-BinaryResolver = Callable[[Dependency], str | None]
-
-# Variables laid over the process environment for every command, read again as
-# each command starts so that edits to their source reach later commands.
-# Values may stay wrapped in `Secret` until then.
-EnvOverridesReader = Callable[[], Mapping[str, str | Secret]]
-
-
-def _no_env_overrides() -> Mapping[str, str | Secret]:
-    return {}
-
+from sculptor.services.workspace_service.vcs.runner_support import BinaryResolver
+from sculptor.services.workspace_service.vcs.runner_support import DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
+from sculptor.services.workspace_service.vcs.runner_support import EnvOverridesReader
+from sculptor.services.workspace_service.vcs.runner_support import build_command_env
+from sculptor.services.workspace_service.vcs.runner_support import read_no_env_overrides
 
 _retry_read_only_command = retry(
     retry=retry_if_exception_type(VcsCommandExitError),
@@ -87,7 +73,7 @@ class GitCli:
         self,
         concurrency_group: ConcurrencyGroup,
         resolve_binary: BinaryResolver,
-        read_env_overrides: EnvOverridesReader = _no_env_overrides,
+        read_env_overrides: EnvOverridesReader = read_no_env_overrides,
     ) -> None:
         self._concurrency_group = concurrency_group
         self._resolve_binary_path = resolve_binary
@@ -161,20 +147,10 @@ class GitCli:
         timeout: float | None,
         extra_env: Mapping[str, str] | None,
     ) -> VcsCommandResult:
-        env = self._build_env(extra_env)
+        env = build_command_env(self._read_env_overrides, extra_env)
         if is_read_only:
             return _retry_read_only_command(self._run_once)(command, cwd, is_checked, timeout, env)
         return self._run_once(command, cwd, is_checked, timeout, env)
-
-    def _build_env(self, extra_env: Mapping[str, str] | None) -> Mapping[str, str] | None:
-        """The env overrides, then `extra_env`, over the process environment; None when neither adds anything."""
-        overrides = {**self._read_env_overrides(), **(extra_env or {})}
-        if not overrides:
-            return None
-        unwrapped_overrides = {
-            name: value.unwrap() if isinstance(value, Secret) else value for name, value in overrides.items()
-        }
-        return {**os.environ, **unwrapped_overrides}
 
     def _run_once(
         self,

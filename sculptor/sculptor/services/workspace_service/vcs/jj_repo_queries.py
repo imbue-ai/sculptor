@@ -11,7 +11,6 @@ from typing import Any
 from typing import Mapping
 from typing import Sequence
 
-from sculptor.services.workspace_service.vcs.git_cli import DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
 from sculptor.services.workspace_service.vcs.jj_cli import parse_refused_snapshot_files
@@ -24,6 +23,7 @@ from sculptor.services.workspace_service.vcs.jj_revsets import any_remote_bookma
 from sculptor.services.workspace_service.vcs.jj_revsets import exact_string_pattern
 from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import local_bookmark_revset
+from sculptor.services.workspace_service.vcs.runner_support import DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
 
 COLOCATION_INIT_TIMEOUT_SECONDS = 600.0
 
