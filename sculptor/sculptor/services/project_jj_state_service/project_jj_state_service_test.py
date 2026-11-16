@@ -13,23 +13,90 @@ from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
 from sculptor.database.models import Project
 from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.project_jj_state_service.project_jj_state_service import ColocationAlreadyRunningError
 from sculptor.services.project_jj_state_service.project_jj_state_service import ColocationBlockedError
 from sculptor.services.project_jj_state_service.project_jj_state_service import JjUnavailableForRepositoryError
+from sculptor.services.project_jj_state_service.project_jj_state_service import derive_project_jj_state
+from sculptor.services.project_jj_state_service.project_jj_state_service import is_colocation_gone
 from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.services.workspace_service.jj_workspace_creation import JjWorkspaceCreationFacts
+from sculptor.testing.jj_repos import JJ_TEST_USER_EMAIL
+from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import run_jj
 from sculptor.web.auth import authenticate_anonymous
+from sculptor.web.data_types import JjAvailable
+from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjColocationBlocker
 from sculptor.web.data_types import JjColocationState
+from sculptor.web.data_types import JjIdentity
+from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import ProjectJjState
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 
 _STATE_TIMEOUT_SECONDS = 30.0
+_JJ_AVAILABLE = JjAvailable(blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL))
+_JJ_NOT_INSTALLED = JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
+
+
+def _facts(
+    *, use_jj_for_new_workspaces: bool, is_colocated: bool, jj_readiness: JjReadiness = _JJ_AVAILABLE
+) -> JjWorkspaceCreationFacts:
+    return JjWorkspaceCreationFacts(
+        use_jj_for_new_workspaces=use_jj_for_new_workspaces, is_colocated=is_colocated, jj_readiness=jj_readiness
+    )
+
+
+def test_a_colocation_on_disk_outranks_an_earlier_failure_to_colocate() -> None:
+    project_id = ProjectID()
+
+    state = derive_project_jj_state(
+        project_id, _facts(use_jj_for_new_workspaces=True, is_colocated=True), "Error: disk full"
+    )
+
+    assert state == ProjectJjState(
+        project_id=project_id,
+        colocation=JjColocationState.COLOCATED,
+        colocation_error=None,
+        creates_jj_workspaces=True,
+    )
+
+
+def test_a_failed_colocation_keeps_its_error_while_the_repository_is_not_colocated() -> None:
+    project_id = ProjectID()
+
+    state = derive_project_jj_state(
+        project_id, _facts(use_jj_for_new_workspaces=False, is_colocated=False), "Error: disk full"
+    )
+
+    assert state == ProjectJjState(
+        project_id=project_id,
+        colocation=JjColocationState.FAILED,
+        colocation_error="Error: disk full",
+        creates_jj_workspaces=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("facts", "is_gone"),
+    [
+        (_facts(use_jj_for_new_workspaces=True, is_colocated=False), True),
+        (_facts(use_jj_for_new_workspaces=True, is_colocated=True), False),
+        (_facts(use_jj_for_new_workspaces=False, is_colocated=False), False),
+        (_facts(use_jj_for_new_workspaces=True, is_colocated=False, jj_readiness=_JJ_NOT_INSTALLED), False),
+    ],
+    ids=["flag_on_and_not_colocated", "colocated", "flag_off", "jj_unavailable"],
+)
+def test_a_colocation_is_gone_only_when_the_flag_is_on_and_jj_reads_no_colocation(
+    facts: JjWorkspaceCreationFacts, is_gone: bool
+) -> None:
+    assert is_colocation_gone(facts) is is_gone
 
 
 @pytest.fixture
