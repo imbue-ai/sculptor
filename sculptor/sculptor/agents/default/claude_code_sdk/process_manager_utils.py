@@ -15,6 +15,7 @@ from loguru import logger
 from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.constants import FAST_MODE_MODELS
+from sculptor.agents.default.constants import JJ_REQUESTED_BOOKMARK_PROMPT
 from sculptor.agents.default.constants import JJ_SKILL_NAME
 from sculptor.config.user_config import NightMode
 from sculptor.config.user_config import is_night_mode_active
@@ -306,7 +307,7 @@ This is a jj (Jujutsu) workspace. Before you do anything else, invoke the `{JJ_S
 
 def _build_jj_bookmark_reminder(requested_bookmark: str) -> str:
     return f"""<system-reminder>
-Sculptor names this workspace's work with the jj bookmark `{requested_bookmark}`. Until a bookmark is on your stack, Sculptor creates `{requested_bookmark}` on your newest described change each time one of your turns ends, if the name is free. So describe your work with `jj describe -m` or `jj commit -m`, and do not create a bookmark under another name. Keep the bookmark on your newest described change as you go, for example `jj bookmark set {requested_bookmark} -r @-`.
+{JJ_REQUESTED_BOOKMARK_PROMPT.format(requested_bookmark=requested_bookmark)}
 </system-reminder>
 
 """

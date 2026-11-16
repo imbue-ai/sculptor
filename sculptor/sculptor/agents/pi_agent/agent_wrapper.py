@@ -61,6 +61,8 @@ from pydantic import ValidationError
 
 from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
+from sculptor.agents.default.constants import JJ_REQUESTED_BOOKMARK_PROMPT
+from sculptor.agents.default.constants import JJ_SKILL_NAME
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
@@ -127,6 +129,7 @@ from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
 from sculptor.agents.pi_agent.tool_rendering import map_pi_tool_call
 from sculptor.common.plugin import get_plugin_dirs
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.common import generate_id
 from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.secrets_utils import Secret
@@ -170,6 +173,7 @@ from sculptor.primitives.ids import ToolUseID
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.dependency_management_service import parse_pi_version
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFactsProvider
 from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
 from sculptor.services.workspace_service.vcs.turn_diff_tracker import make_turn_diff_tracker
 from sculptor.state.chat_state import AskUserQuestionData
@@ -209,6 +213,18 @@ FILE_CHANGE_TOOL_NAMES: frozenset[str] = frozenset({"edit", "write", "bash"})
 # persisted in PI_SESSION_ID_STATE_FILE so a restart reuses it.
 PI_SESSION_DIR_NAME: str = "pi_session"
 PI_SESSION_ID_STATE_FILE: str = "pi_session_id"
+
+# The pi session in which Sculptor last invoked the jj skill. A `/clear` starts a
+# new session, so the next prompt invokes the skill again; a restart resumes the
+# same session, so it does not.
+PI_JJ_SKILL_SESSION_STATE_FILE: str = "pi_jj_skill_session_id"
+# How pi invokes a skill. pi expands one skill per prompt, and only at its start.
+_PI_SKILL_INVOCATION_PREFIX: str = "/skill:"
+# Appended to the system prompt in a jj workspace. pi loads a skill by reading its SKILL.md.
+_PI_JJ_SKILL_REQUIRED_PROMPT: str = (
+    f"The `{JJ_SKILL_NAME.rsplit(':', 1)[-1]}` skill is required for version control in this workspace."
+    + " If its instructions are not in your context, read its SKILL.md before you run any version-control command."
+)
 
 # Control messages that legitimately reach the end of `_push_message` without pi
 # handling them: the base class handles these after the False return (see
@@ -484,6 +500,7 @@ class PiAgent(DefaultAgentWrapper):
     # first turn and the switcher does not flicker back to pi's own default. None when
     # the switcher has no persisted selection yet (pi's default is used).
     preselected_model: ModelOption | None = None
+    jj_bookmark_facts_provider: JjBookmarkFactsProvider | None = None
     # Carries chat turns, between-turns control messages (context reset, model
     # switch), AND Sculptor-initiated reaction wakes through one FIFO so each
     # runs strictly after any in-flight turn — the sole-reader window where the
@@ -811,9 +828,33 @@ class PiAgent(DefaultAgentWrapper):
         env_prompt = self.environment.get_system_prompt()
         if env_prompt:
             parts.append(env_prompt.strip())
+        if self._is_jj_workspace():
+            parts.append(_PI_JJ_SKILL_REQUIRED_PROMPT)
+            requested_bookmark = self._read_requested_bookmark()
+            if requested_bookmark is not None:
+                parts.append(JJ_REQUESTED_BOOKMARK_PROMPT.format(requested_bookmark=requested_bookmark))
         if self.system_prompt:
             parts.append(f"<User instructions>\n{self.system_prompt.strip()}\n</User instructions>")
         return "\n\n".join(parts)
+
+    def _is_jj_workspace(self) -> bool:
+        match self.environment.get_initialization_strategy():
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                return False
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                return True
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def _read_requested_bookmark(self) -> str | None:
+        provider = self.jj_bookmark_facts_provider
+        if provider is None:
+            return None
+        return provider.get_jj_bookmark_facts().requested_bookmark
 
     def _discover_skill_names(self) -> frozenset[str]:
         """The workspace's discovered skill names, matching the slash picker.
@@ -1563,11 +1604,26 @@ class PiAgent(DefaultAgentWrapper):
 
     def _build_prompt_text(self, message: ChatInputUserMessage) -> str:
         """The user text with the skill-invocation rewrite, plus the plan-mode
-        preamble while in plan mode."""
-        text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
-        if self._is_in_plan_mode:
-            return f"{_PLAN_MODE_PROMPT_PREFIX}{text}"
-        return text
+        preamble while in plan mode, behind the jj skill's invocation on a jj
+        workspace's first turn of a session."""
+        user_text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
+        text = f"{_PLAN_MODE_PROMPT_PREFIX}{user_text}" if self._is_in_plan_mode else user_text
+        # A skill the user invoked keeps its place at the start of the prompt; the jj
+        # skill is invoked on the next turn instead.
+        if user_text.startswith(_PI_SKILL_INVOCATION_PREFIX) or not self._claim_jj_skill_invocation():
+            return text
+        return _rewrite_skill_invocation(f"/{JJ_SKILL_NAME} {text}", self._discovered_skill_names)
+
+    def _claim_jj_skill_invocation(self) -> bool:
+        """Whether this turn invokes the jj skill: a jj workspace's first turn of the session; recorded once true."""
+        if not self._is_jj_workspace() or JJ_SKILL_NAME not in self._discovered_skill_names:
+            return False
+        if get_state_file_contents(self.environment, PI_JJ_SKILL_SESSION_STATE_FILE) == self._session_id:
+            return False
+        self.environment.write_file(
+            str(self.environment.get_state_path() / PI_JJ_SKILL_SESSION_STATE_FILE), self._session_id
+        )
+        return True
 
     def _read_attachment_bytes(self, path: str) -> bytes:
         """Read a saved attachment's bytes from the environment copy."""

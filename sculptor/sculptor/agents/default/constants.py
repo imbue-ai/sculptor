@@ -152,3 +152,8 @@ JJ_SKILL_NAME: Final[str] = "sculptor-jj:jujutsu"
 CLAUDE_JJ_SKILL_REQUIRED_PROMPT: Final[str] = f"""
 The `{JJ_SKILL_NAME}` skill is required for version control in this workspace. If its instructions are not in your context, invoke it with the Skill tool (skill="{JJ_SKILL_NAME}") before you run any version-control command.
 """
+
+# Formatted with `requested_bookmark`: which bookmark Sculptor creates for a jj workspace's work, and when.
+JJ_REQUESTED_BOOKMARK_PROMPT: Final[str] = (
+    """Sculptor names this workspace's work with the jj bookmark `{requested_bookmark}`. Until a bookmark is on your stack, Sculptor creates `{requested_bookmark}` on your newest described change each time one of your turns ends, if the name is free. So describe your work with `jj describe -m` or `jj commit -m`, and do not create a bookmark under another name. Keep the bookmark on your newest described change as you go, for example `jj bookmark set {requested_bookmark} -r @-`."""
+)

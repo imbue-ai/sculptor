@@ -21,6 +21,7 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFacts
 
 
 def test_get_harness_for_config_resolves_claude() -> None:
@@ -35,7 +36,14 @@ def test_get_harness_for_config_resolves_pi() -> None:
     assert get_harness_for_config(PiAgentConfig()) is PI_HARNESS
 
 
+class _NoJjBookmarkFacts:
+    def get_jj_bookmark_facts(self) -> JjBookmarkFacts:
+        return JjBookmarkFacts(requested_bookmark=None, stack=None)
+
+
 def test_create_agent_for_run_constructs_pi_agent_with_pi_harness() -> None:
+    workspace_service = MagicMock(spec=WorkspaceService)
+    workspace_service.make_jj_bookmark_facts_provider.return_value = _NoJjBookmarkFacts()
     project = Project(
         object_id=ProjectID(),
         organization_reference=OrganizationReference("org-1"),
@@ -47,7 +55,7 @@ def test_create_agent_for_run_constructs_pi_agent_with_pi_harness() -> None:
         environment=MagicMock(spec=AgentExecutionEnvironment),
         project=project,
         task_id=TaskID(),
-        workspace_service=MagicMock(spec=WorkspaceService),
+        workspace_service=workspace_service,
     )
     agent = create_agent_for_run(context)
     assert isinstance(agent, PiAgent)

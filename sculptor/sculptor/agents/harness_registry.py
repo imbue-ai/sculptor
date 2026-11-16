@@ -103,6 +103,11 @@ def create_agent_for_run(context: AgentRunContext) -> Agent:
                 on_diff_needed=context.on_diff_needed,
                 harness=PI_HARNESS,
                 preselected_model=context.task_state.current_model,
+                jj_bookmark_facts_provider=(
+                    None
+                    if context.task_state.workspace_id is None
+                    else context.workspace_service.make_jj_bookmark_facts_provider(context.task_state.workspace_id)
+                ),
             )
         # Terminal configs (TerminalAgentConfig / RegisteredTerminalAgentConfig)
         # never reach this function: they are dispatched to
