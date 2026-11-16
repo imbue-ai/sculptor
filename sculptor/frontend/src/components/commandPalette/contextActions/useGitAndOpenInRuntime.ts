@@ -57,13 +57,13 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
       // be the workspace on screen: the sidebar menu acts on whichever row
       // was right-clicked.
       commitChanges: (ws): void => {
-        const message = buildCommitMessage({ prompt: store.get(commitPromptAtom) });
+        const message = buildCommitMessage({ prompt: store.get(commitPromptAtom), workspace: { vcs: "git" } });
         void store.set(commitActionAtomFamily(ws.objectId), message);
       },
       createMergeRequest: (ws): void => {
         const message = buildCreatePrMessage({
           prompt: store.get(prCreationPromptAtom),
-          targetBranch: ws.targetBranch ?? null,
+          workspace: { vcs: "git", targetBranch: ws.targetBranch ?? null },
         });
         void store.set(createPrActionAtomFamily(ws.objectId), message);
       },

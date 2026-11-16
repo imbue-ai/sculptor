@@ -33,7 +33,7 @@ export const CommitButton = ({ workspaceId, changesCount, onCommit }: CommitButt
   const isDisabled = changesCount === 0 || !canPromptAgent;
 
   const handleClick = (): void => {
-    void sendCommitMessage(buildCommitMessage({ prompt: commitPrompt }));
+    void sendCommitMessage(buildCommitMessage({ prompt: commitPrompt, workspace: { vcs: "git" } }));
     onCommit?.();
   };
 

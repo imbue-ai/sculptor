@@ -136,7 +136,9 @@ const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs)
       // The branch name is user-entered text (it can encode feature/ticket/
       // customer names), so it is deliberately not recorded.
     });
-    void sendCreatePrMessage(buildCreatePrMessage({ prompt: prCreationPrompt, targetBranch }));
+    void sendCreatePrMessage(
+      buildCreatePrMessage({ prompt: prCreationPrompt, workspace: { vcs: "git", targetBranch } }),
+    );
   };
 
   return { isDisabled: !canPromptAgent, handleCreate };
