@@ -10,12 +10,14 @@ import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Queue
+from typing import Callable
 from typing import Generator
 
 import pytest
 from loguru import logger
 
 from sculptor.config.user_config import DependencyPaths
+from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import ProjectID
@@ -24,6 +26,7 @@ from sculptor.services.dependency_management_service import DependencyManagement
 from sculptor.services.git_repo_service.default_implementation import LocalWritableGitRepo
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.branch_poller import WorkspaceBranchPoller
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
@@ -83,12 +86,13 @@ def _build_poller(
     cg: ConcurrencyGroup,
     git_cli: GitCli,
     refresh_calls: list[WorkspaceID] | None = None,
+    resolve_working_dir: Callable[[Workspace], Path | None] | None = None,
 ) -> WorkspaceBranchPoller:
     return WorkspaceBranchPoller(
         concurrency_group=cg,
         data_model_service=_FakeDataModelService(workspaces),  # type: ignore[arg-type]
         vcs_runners=VcsRunners(git=git_cli),
-        resolve_working_dir=lambda workspace: working_dirs.get(workspace.object_id),
+        resolve_working_dir=resolve_working_dir or (lambda workspace: working_dirs.get(workspace.object_id)),
         refresh_diff_on_branch_change=(refresh_calls.append if refresh_calls is not None else (lambda _id: None)),
     )
 
@@ -398,3 +402,28 @@ def test_flagged_checkout_publishes_its_branch_once_it_has_git(
 
     branch_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceBranchInfo)]
     assert [(info.current_branch, info.checkout_problem) for info in branch_infos] == [("wsbranch", None)]
+
+
+def test_a_workspace_that_cannot_be_scanned_does_not_stop_the_others(
+    base_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli
+) -> None:
+    worktree = tmp_path / "ws"
+    _add_worktree(base_repo, worktree, "wsbranch")
+    orphaned = _FakeWorkspace(WorkspaceID(), ProjectID())
+    healthy = _FakeWorkspace(WorkspaceID(), ProjectID())
+
+    def resolve_working_dir(workspace: Workspace) -> Path | None:
+        if workspace.object_id == orphaned.object_id:
+            raise WorkspaceNotFoundError(workspace.object_id)
+        return worktree
+
+    poller = _build_poller(
+        [orphaned, healthy], {}, test_root_concurrency_group, git_cli, resolve_working_dir=resolve_working_dir
+    )
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    poller.add_observer(queue)
+
+    poller._scan_once()
+
+    branch_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceBranchInfo)]
+    assert [(info.workspace_id, info.current_branch) for info in branch_infos] == [(healthy.object_id, "wsbranch")]

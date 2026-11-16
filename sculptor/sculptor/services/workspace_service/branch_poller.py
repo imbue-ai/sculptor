@@ -37,11 +37,15 @@ import threading
 from pathlib import Path
 from queue import Queue
 from typing import Callable
+from typing import assert_never
 
 from loguru import logger
 
 from sculptor.database.models import Workspace
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.errors import ExpectedError
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
@@ -112,6 +116,9 @@ class WorkspaceBranchPoller:
         # projection in ``_target_info_by_workspace``).
         self._remote_signature_by_common_dir: dict[Path, RemoteRefsSignature] = {}
         self._target_candidates_by_common_dir: dict[Path, tuple[str, ...]] = {}
+        # Workspaces and repositories whose last scan failed, so a lasting failure is logged once.
+        # Scan-thread-only, so it needs no lock.
+        self._failed_scan_keys: set[WorkspaceID | Path] = set()
 
         self._cycle = 0
 
@@ -198,25 +205,32 @@ class WorkspaceBranchPoller:
         for workspace in workspaces:
             if workspace.is_deleted:
                 continue
-            working_dir = self._resolve_working_dir(workspace)
-            if working_dir is None:
+            try:
+                working_dir = self._resolve_working_dir(workspace)
+                if working_dir is None:
+                    continue
+                live_workspace_ids.add(workspace.object_id)
+                # Branch first: the target projection excludes the workspace's own
+                # (current) branch, so the branch cache must be current.
+                common_dir = self._scan_branch(workspace, working_dir, force_recompute)
+            except Exception as e:
+                self._log_scan_failure_once(workspace.object_id, e)
                 continue
-            live_workspace_ids.add(workspace.object_id)
-            git_dirs = resolve_git_dirs(working_dir)
-            if git_dirs is None:
-                self._flag_non_git_checkout(workspace.object_id, working_dir)
+            self._failed_scan_keys.discard(workspace.object_id)
+            if common_dir is None:
                 continue
-            git_dir, common_dir = git_dirs
-            # Branch first: the target projection excludes the workspace's own
-            # (current) branch, so the branch cache must be current.
-            self._update_branch(workspace, working_dir, git_dir, force_recompute)
             members_by_common_dir.setdefault(common_dir, []).append(workspace)
             working_dir_by_common_dir.setdefault(common_dir, working_dir)
 
         for common_dir, members in members_by_common_dir.items():
-            self._scan_target_candidates(
-                common_dir, members[0], working_dir_by_common_dir[common_dir], force_recompute
-            )
+            try:
+                self._scan_target_candidates(
+                    common_dir, members[0], working_dir_by_common_dir[common_dir], force_recompute
+                )
+            except Exception as e:
+                self._log_scan_failure_once(common_dir, e)
+                continue
+            self._failed_scan_keys.discard(common_dir)
             for workspace in members:
                 self._update_target_branches(workspace, common_dir)
 
@@ -224,6 +238,35 @@ class WorkspaceBranchPoller:
             workspace.object_id for members in members_by_common_dir.values() for workspace in members
         }
         self._prune(live_workspace_ids, git_workspace_ids, set(members_by_common_dir))
+        undeleted_workspace_ids = {workspace.object_id for workspace in workspaces if not workspace.is_deleted}
+        self._failed_scan_keys &= undeleted_workspace_ids | set(members_by_common_dir)
+
+    def _scan_branch(self, workspace: Workspace, working_dir: Path, force_recompute: bool) -> Path | None:
+        """Read and publish the workspace's branch; return its repository's common git dir, or None if it has none."""
+        match workspace.initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                git_dirs = resolve_git_dirs(working_dir)
+                if git_dirs is None:
+                    self._flag_non_git_checkout(workspace.object_id, working_dir)
+                    return None
+                git_dir, common_dir = git_dirs
+                self._update_branch(workspace, working_dir, git_dir, force_recompute)
+                return common_dir
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def _log_scan_failure_once(self, key: WorkspaceID | Path, error: Exception) -> None:
+        """Log that a workspace or repository cannot be scanned when that starts, not on every cycle it lasts."""
+        if key in self._failed_scan_keys:
+            return
+        self._failed_scan_keys.add(key)
+        log_exception(
+            error, f"Branch scan is skipping {key} until it can be scanned", priority=ExceptionPriority.LOW_PRIORITY
+        )
 
     def _flag_non_git_checkout(self, workspace_id: WorkspaceID, working_dir: Path) -> None:
         """Publish that the workspace's branch cannot be read, logging only when it first happens."""
