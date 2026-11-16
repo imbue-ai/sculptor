@@ -402,39 +402,6 @@ def test_the_jj_data_routes_refuse_a_git_revision_name(
     assert file_at_ref.status_code == 404, file_at_ref.text
 
 
-def test_turning_the_repository_switch_off_leaves_an_existing_jj_workspace_working(
-    client: TestClient,
-    jj_project: Project,
-    test_services: CompleteServiceCollection,
-    test_root_concurrency_group: ConcurrencyGroup,
-) -> None:
-    workspace_id, checkout = _create_jj_workspace_with_checkout(
-        client, jj_project, test_services, test_root_concurrency_group
-    )
-    with test_services.data_model_service.open_transaction(RequestID()) as transaction:
-        transaction.update_project_fields(jj_project.object_id, use_jj_for_new_workspaces=False)
-        project_with_switch_off = transaction.get_project(jj_project.object_id)
-    assert project_with_switch_off is not None
-
-    with test_root_concurrency_group.make_concurrency_group("agent_environment") as agent_concurrency_group:
-        with test_services.workspace_service.agent_environment_context(
-            project=project_with_switch_off,
-            workspace_id=workspace_id,
-            task_id=TaskID(),
-            concurrency_group=agent_concurrency_group,
-            root_progress_handle=RootProgressHandle(),
-            shutdown_event=GLOBAL_SHUTDOWN_EVENT,
-        ) as resumed_environment:
-            assert resumed_environment.get_working_directory() == checkout
-    (checkout / "parser.py").write_text("parse = None\n")
-    diff = _get_ok(client, f"/api/v1/workspaces/{workspace_id}/diff", force_refresh="true")["diff"]
-    new_workspace = _post_jj_workspace(client, project_with_switch_off, requested_branch_name="another-feature")
-
-    assert "+parse = None" in diff["uncommittedDiff"]
-    assert _get_ok(client, f"/api/v1/workspaces/{workspace_id}")["initializationStrategy"] == "JJ_WORKSPACE"
-    assert new_workspace.status_code == 400, new_workspace.text
-
-
 class _TeardownSignallingEnvironmentManager(DefaultEnvironmentManager):
     """Signals once a deleted workspace's environment directory is gone; deletion finishes on a background thread."""
 
@@ -453,6 +420,16 @@ def _list_local_bookmark_names(jj_binary: JjBinary, repo_path: Path) -> list[str
     return run_jj(
         jj_binary, ("--ignore-working-copy", "bookmark", "list", "-T", 'name ++ "\\n"'), cwd=repo_path
     ).split()
+
+
+def _signal_environment_teardowns(test_services: CompleteServiceCollection) -> _TeardownSignallingEnvironmentManager:
+    workspace_service = test_services.workspace_service
+    assert isinstance(workspace_service, DefaultWorkspaceService)
+    existing_manager = workspace_service.environment_manager
+    assert isinstance(existing_manager, DefaultEnvironmentManager)
+    signalling_manager = _TeardownSignallingEnvironmentManager(data_model_service=existing_manager.data_model_service)
+    workspace_service.environment_manager = signalling_manager
+    return signalling_manager
 
 
 @pytest.mark.parametrize(
@@ -481,12 +458,7 @@ def test_deleting_a_jj_workspace_forgets_it_and_applies_the_deletion_policy_to_i
     set_user_config_instance(
         get_user_config_instance().model_copy(update={"workspace_branch_deletion_policy": deletion_policy})
     )
-    workspace_service = test_services.workspace_service
-    assert isinstance(workspace_service, DefaultWorkspaceService)
-    existing_manager = workspace_service.environment_manager
-    assert isinstance(existing_manager, DefaultEnvironmentManager)
-    signalling_manager = _TeardownSignallingEnvironmentManager(data_model_service=existing_manager.data_model_service)
-    workspace_service.environment_manager = signalling_manager
+    signalling_manager = _signal_environment_teardowns(test_services)
 
     response = client.delete(f"/api/v1/workspaces/{workspace_id}")
 
@@ -496,6 +468,69 @@ def test_deleting_a_jj_workspace_forgets_it_and_applies_the_deletion_policy_to_i
     assert str(workspace_id) not in _list_jj_workspace_names(jj_binary, jj_colocated_repo.path)
     assert not workspace_config_directory.exists()
     assert ("feature" in _list_local_bookmark_names(jj_binary, jj_colocated_repo.path)) == is_bookmark_kept
+
+
+def test_turning_the_repository_switch_off_keeps_its_jj_workspaces_working_and_makes_new_workspaces_git(
+    client: TestClient,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_project: Project,
+    test_services: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    """A workspace's kind is fixed at creation, so the switch decides only what new workspaces are."""
+    workspace_id, checkout = _create_jj_workspace_with_checkout(
+        client, jj_project, test_services, test_root_concurrency_group
+    )
+    with test_services.data_model_service.open_transaction(RequestID()) as transaction:
+        project_with_switch_off = transaction.update_project_fields(
+            jj_project.object_id, use_jj_for_new_workspaces=False
+        )
+    assert project_with_switch_off is not None
+
+    with test_root_concurrency_group.make_concurrency_group("agent_environment") as agent_concurrency_group:
+        with test_services.workspace_service.agent_environment_context(
+            project=project_with_switch_off,
+            workspace_id=workspace_id,
+            task_id=TaskID(),
+            concurrency_group=agent_concurrency_group,
+            root_progress_handle=RootProgressHandle(),
+            shutdown_event=GLOBAL_SHUTDOWN_EVENT,
+        ) as resumed_environment:
+            assert resumed_environment.get_working_directory() == checkout
+    (checkout / "parser.py").write_text("parse = None\n")
+    diff = _get_ok(client, f"/api/v1/workspaces/{workspace_id}/diff", force_refresh="true")["diff"]
+
+    assert "+parse = None" in diff["uncommittedDiff"]
+    assert _get_ok(client, f"/api/v1/workspaces/{workspace_id}")["initializationStrategy"] == "JJ_WORKSPACE"
+
+    signalling_manager = _signal_environment_teardowns(test_services)
+    deleted = client.delete(f"/api/v1/workspaces/{workspace_id}")
+
+    assert deleted.status_code == 200, deleted.text
+    assert signalling_manager._teardown_done.wait(timeout=30.0), "environment teardown never ran"
+    assert not checkout.exists()
+    assert _list_jj_workspace_names(jj_binary, jj_colocated_repo.path) == ["default"]
+
+    new_jj_workspace = _post_jj_workspace(client, project_with_switch_off, requested_branch_name="another-feature")
+    new_git_workspace = client.post(
+        "/api/v1/workspaces",
+        json=model_dump(
+            CreateWorkspaceRequestV2(
+                project_id=str(jj_project.object_id),
+                initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+                source_branch=jj_colocated_repo.default_bookmark,
+                requested_branch_name="another-feature",
+            ),
+            is_camel_case=True,
+        ),
+    )
+
+    assert new_jj_workspace.status_code == 400, new_jj_workspace.text
+    assert "does not create jj workspaces" in _detail(new_jj_workspace)
+    assert new_git_workspace.status_code == 200, new_git_workspace.text
+    assert new_git_workspace.json()["initializationStrategy"] == "WORKTREE"
+    assert _list_workspace_strategies(test_services) == [WorkspaceInitializationStrategy.WORKTREE]
 
 
 @pytest.fixture
