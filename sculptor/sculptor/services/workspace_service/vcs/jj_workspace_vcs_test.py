@@ -745,6 +745,30 @@ def test_get_revision_history_lists_the_revisions_since_the_fork_point_newest_fi
     assert (first.is_empty, first.has_conflict, first.is_divergent) == (False, False, False)
 
 
+def test_get_revision_history_gives_each_change_id_its_shortest_unique_prefix(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+
+    history = jj_vcs.get_revision_history(checkout, target_ref=_BASE, base_commit_id=None)
+
+    assert len(history.revisions) == 2
+    for revision in history.revisions:
+        expected_prefix = _jj(
+            jj_binary,
+            checkout.checkout_path,
+            "--ignore-working-copy",
+            "log",
+            "--no-graph",
+            "-r",
+            revision.commit_id,
+            "-T",
+            "change_id.shortest().prefix()",
+        )
+        assert revision.change_id_prefix == expected_prefix
+        assert revision.change_id.startswith(revision.change_id_prefix)
+
+
 def test_get_revision_history_reports_a_rename_with_its_old_path(
     jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
 ) -> None:

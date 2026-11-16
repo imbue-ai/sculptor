@@ -111,6 +111,7 @@ class JjRevisionRecord(FrozenModel):
     """One revision in a jj workspace's history."""
 
     change_id: str
+    change_id_prefix: str = Field(description="The shortest prefix that identifies the change uniquely")
     commit_id: str
     description: str = Field(description="The whole description, without jj's trailing newline")
     author_name: str
