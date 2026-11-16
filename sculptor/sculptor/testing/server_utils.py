@@ -16,7 +16,7 @@ from loguru import logger
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Page
 
-from sculptor.foundation.git import get_git_repo_root
+from sculptor.foundation.git import get_repo_root
 from sculptor.testing.frontend_utils import configure_page
 from sculptor.testing.playwright_utils import navigate_to_frontend
 from sculptor.testing.subprocess_utils import Forwarder
@@ -169,7 +169,7 @@ class SculptorFactory:
 
 def get_v1_frontend_path() -> Path:
     """Returns the path to the frontend directory in v1"""
-    return get_git_repo_root() / "sculptor" / "frontend"
+    return get_repo_root() / "sculptor" / "frontend"
 
 
 def get_testing_environment(

@@ -4,12 +4,12 @@ from unittest.mock import patch
 
 from loguru import logger
 
+from sculptor.foundation.git import find_repo_root
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
-from sculptor.utils.build import _get_repo_root
 from sculptor.utils.build import get_internal_folder
 from sculptor.utils.build import get_jj_bin_dir
 from sculptor.utils.build import get_sculpt_bin_dir
@@ -146,7 +146,7 @@ def test_repo_root_is_the_nearest_git_checkout_above_the_source(tmp_path: Path) 
     source_directory.mkdir(parents=True)
     run_blocking(["git", "init", "-q"], cwd=checkout)
 
-    assert _get_repo_root(source_directory) == checkout
+    assert find_repo_root(source_directory) == checkout
 
 
 def test_repo_root_is_a_jj_workspace_nested_in_another_checkout_not_the_checkout_around_it(
@@ -165,4 +165,4 @@ def test_repo_root_is_a_jj_workspace_nested_in_another_checkout_not_the_checkout
     source_directory = jj_workspace / "sculptor" / "sculptor" / "utils"
     source_directory.mkdir(parents=True)
 
-    assert _get_repo_root(source_directory) == jj_workspace
+    assert find_repo_root(source_directory) == jj_workspace

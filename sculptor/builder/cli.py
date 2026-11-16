@@ -662,7 +662,7 @@ def commit_new_version(branch_name: str | None, new_version: str, dry_run: bool 
         _run_out(["git", "checkout", "-b", branch_name])
 
     write_project_version(new_version)
-    repo_root_path = sculptor.foundation.git.get_git_repo_root()
+    repo_root_path = sculptor.foundation.git.get_repo_root()
 
     _run_out(["uv", "lock"])
 
