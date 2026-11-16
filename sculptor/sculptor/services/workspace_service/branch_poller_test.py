@@ -102,7 +102,6 @@ def _build_poller(
         concurrency_group=cg,
         data_model_service=_FakeDataModelService(workspaces),  # type: ignore[arg-type]
         vcs_runners=VcsRunners(git=git_cli, jj=JjCli(cg, lambda tool: None)),
-        read_ready_jj_binary=lambda: None,
         resolve_working_dir=resolve_working_dir or (lambda workspace: working_dirs.get(workspace.object_id)),
         refresh_diff_on_branch_change=refresh_diff_on_branch_change,
     )

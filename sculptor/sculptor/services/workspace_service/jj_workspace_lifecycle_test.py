@@ -32,6 +32,8 @@ from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import run_jj
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.utils.build import get_internal_folder
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
 
 
@@ -347,3 +349,50 @@ def test_a_first_agent_start_while_jj_is_unavailable_creates_nothing_until_jj_is
     checkout = _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
 
     assert (checkout / ".jj" / "repo").is_file()
+
+
+def _point_jj_bin_at(jj_binary: Path) -> Path:
+    """Leave a `jj` link in jj-bin, as an earlier launch would have, and return the link."""
+    jj_link = get_internal_folder() / "jj-bin" / "jj"
+    jj_link.parent.mkdir(parents=True, exist_ok=True)
+    jj_link.unlink(missing_ok=True)
+    jj_link.symlink_to(jj_binary)
+    return jj_link
+
+
+def test_starting_an_agent_in_a_jj_workspace_points_jj_bin_at_the_jj_readiness_accepted(
+    isolated_sculptor_folder: Path,  # noqa: F811
+    jj_binary: JjBinary,
+    jj_project: Project,
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    jj_link = _point_jj_bin_at(tmp_path / "jj-from-an-earlier-launch")
+    workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
+
+    _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+
+    assert jj_link.readlink() == jj_binary.path
+
+
+def test_an_agent_start_while_jj_is_unavailable_stops_at_the_gate_and_leaves_jj_bin_as_it_was(
+    isolated_sculptor_folder: Path,  # noqa: F811
+    jj_binary: JjBinary,
+    jj_project: Project,
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
+    _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+    jj_link = get_internal_folder() / "jj-bin" / "jj"
+    _point_jj_at_a_broken_binary(monkeypatch, tmp_path)
+
+    error = _start_agent_while_jj_is_unavailable(
+        test_service_collection, jj_project, workspace, test_root_concurrency_group
+    )
+
+    assert str(error).startswith("jj cannot run")
+    assert jj_link.readlink() == jj_binary.path

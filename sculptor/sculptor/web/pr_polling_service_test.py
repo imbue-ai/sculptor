@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
+from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
@@ -21,6 +22,8 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
@@ -30,6 +33,8 @@ from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import make_github_looking_origin
 from sculptor.testing.jj_repos import run_jj
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.utils.build import get_internal_folder
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceJjStateInfo
@@ -180,7 +185,6 @@ def _make_service_with_git(
     svc = _make_service()
     jj = JjCli(concurrency_group, lambda tool: None if jj_binary_path is None else str(jj_binary_path))
     svc._runners = VcsRunners(git=git_cli, jj=jj)
-    svc._read_ready_jj_binary = lambda: jj_binary_path
     object.__setattr__(svc, "concurrency_group", concurrency_group)
     return svc
 
@@ -539,6 +543,59 @@ def test_a_jj_workspace_is_looked_up_through_jj_and_runs_no_git_in_its_checkout(
     assert Path((tmp_path / "gh-cwd").read_text().strip()) == checkout.resolve()
     gh_arguments = (tmp_path / "gh-args").read_text().splitlines()
     assert {"owner=sculptor-tests", "name=jj-fixture", "branch=feat-1"} <= set(gh_arguments)
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_polling_a_jj_workspace_runs_no_jj_readiness_probe_and_leaves_jj_bin_as_it_was(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    isolated_sculptor_folder: Path,  # noqa: F811
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    run_jj(
+        jj_binary,
+        ("workspace", "add", "--no-colocate", "--name", "ws", "-r", jj_colocated_repo.default_bookmark, str(checkout)),
+        cwd=jj_colocated_repo.path,
+    )
+    (checkout / "feature.txt").write_text("feature\n")
+    run_jj(jj_binary, ("commit", "-m", "add the feature"), cwd=checkout)
+    run_jj(jj_binary, ("bookmark", "create", "-r", "@-", "feat-1"), cwd=checkout)
+    jj_invocations = tmp_path / "jj-invocations.log"
+    logging_jj = _write_script(
+        tmp_path / "logging-jj", f'echo "$*" >> "{jj_invocations}"\nexec "{jj_binary.path}" "$@"'
+    )
+    gh = _make_fake_gh(tmp_path, [_open_search_node(7, base=jj_colocated_repo.default_bookmark)])
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh), logging_jj
+    )
+    workspace_id, state = _register_checkout(
+        svc,
+        jj_colocated_repo.path,
+        checkout,
+        target_branch=f"{jj_colocated_repo.default_bookmark}@origin",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+    jj_link = get_internal_folder() / "jj-bin" / "jj"
+    jj_link.parent.mkdir(parents=True)
+    jj_link.symlink_to(jj_binary.path)
+    refused_jj = _write_script(tmp_path / "old-jj", 'echo "jj 0.28.2-0123456789abcdef"')
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj=str(refused_jj))})
+    )
+    try:
+        status = svc._fetch_status(workspace_id, state)
+    finally:
+        set_user_config_instance(None)
+
+    assert isinstance(status, PrStatusInfo) and status.pr_state == "open"
+    assert jj_link.readlink() == jj_binary.path
+    jj_arguments = jj_invocations.read_text().splitlines()
+    assert [
+        arguments for arguments in jj_arguments if arguments == "--version" or "config list user" in arguments
+    ] == []
 
 
 _JJ_FIXTURE_REPOSITORY = "sculptor-tests/jj-fixture"

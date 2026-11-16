@@ -13,6 +13,7 @@ from sculptor.utils.build import _get_repo_root
 from sculptor.utils.build import get_internal_folder
 from sculptor.utils.build import get_jj_bin_dir
 from sculptor.utils.build import get_sculpt_bin_dir
+from sculptor.utils.build import link_jj_bin
 
 
 def _make_executable(path: Path) -> Path:
@@ -105,42 +106,38 @@ def test_get_sculpt_bin_dir_creates_symlink_when_target_present(tmp_path: Path) 
     assert os.readlink(sculpt_link) == str(target)
 
 
-def test_jj_bin_dir_holds_only_a_jj_link_to_the_resolved_binary(
+def test_the_jj_bin_dir_is_named_under_the_internal_folder_without_being_created(
+    isolated_sculptor_folder: Path,  # noqa: F811
+) -> None:
+    jj_bin_dir = get_jj_bin_dir()
+
+    assert jj_bin_dir == get_internal_folder() / "jj-bin"
+    assert not jj_bin_dir.exists()
+
+
+def test_linking_jj_bin_leaves_only_a_jj_link_to_the_binary(
     isolated_sculptor_folder: Path,  # noqa: F811
     tmp_path: Path,
 ) -> None:
     jj_binary = _make_executable(tmp_path / "managed" / "jj")
 
-    jj_bin_dir = get_jj_bin_dir(jj_binary)
+    link_jj_bin(jj_binary)
 
-    assert jj_bin_dir == get_internal_folder() / "jj-bin"
-    assert [entry.name for entry in jj_bin_dir.iterdir()] == ["jj"]
-    assert (jj_bin_dir / "jj").readlink() == jj_binary
+    assert [entry.name for entry in get_jj_bin_dir().iterdir()] == ["jj"]
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary
 
 
-def test_jj_bin_dir_relinks_jj_when_the_resolved_binary_changes(
+def test_linking_jj_bin_to_another_binary_replaces_the_link(
     isolated_sculptor_folder: Path,  # noqa: F811
     tmp_path: Path,
 ) -> None:
-    get_jj_bin_dir(_make_executable(tmp_path / "old" / "jj"))
+    link_jj_bin(_make_executable(tmp_path / "old" / "jj"))
     new_binary = _make_executable(tmp_path / "new" / "jj")
 
-    jj_bin_dir = get_jj_bin_dir(new_binary)
+    link_jj_bin(new_binary)
 
-    assert [entry.name for entry in jj_bin_dir.iterdir()] == ["jj"]
-    assert (jj_bin_dir / "jj").readlink() == new_binary
-
-
-def test_jj_bin_dir_drops_the_jj_link_when_jj_is_unresolvable(
-    isolated_sculptor_folder: Path,  # noqa: F811
-    tmp_path: Path,
-) -> None:
-    get_jj_bin_dir(_make_executable(tmp_path / "managed" / "jj"))
-
-    jj_bin_dir = get_jj_bin_dir(None)
-
-    assert jj_bin_dir.is_dir()
-    assert list(jj_bin_dir.iterdir()) == []
+    assert [entry.name for entry in get_jj_bin_dir().iterdir()] == ["jj"]
+    assert (get_jj_bin_dir() / "jj").readlink() == new_binary
 
 
 def test_repo_root_is_the_nearest_git_checkout_above_the_source(tmp_path: Path) -> None:

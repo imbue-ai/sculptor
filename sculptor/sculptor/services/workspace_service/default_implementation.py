@@ -44,7 +44,7 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
-from sculptor.services.jj_availability import find_ready_jj_binary
+from sculptor.services.jj_availability import prepare_jj_for_launch
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
@@ -161,7 +161,6 @@ class DefaultWorkspaceService(WorkspaceService):
                     concurrency_group=self.concurrency_group,
                     data_model_service=self.data_model_service,
                     vcs_runners=self.vcs_runners,
-                    read_ready_jj_binary=partial(find_ready_jj_binary, self.dependency_management_service),
                     resolve_working_dir=self.get_workspace_working_directory,
                     refresh_diff_on_branch_change=self.maybe_refresh_workspace_diff,
                 )
@@ -317,7 +316,6 @@ class DefaultWorkspaceService(WorkspaceService):
             self.vcs_runners,
             self.concurrency_group,
             read_jj_snapshot_max_new_file_size_mib,
-            partial(find_ready_jj_binary, self.dependency_management_service),
         )
 
     def forget_orphaned_jj_workspaces(self) -> None:
@@ -581,8 +579,14 @@ class DefaultWorkspaceService(WorkspaceService):
         with lock:
             yield
 
-    def _require_vcs_available(self, initialization_strategy: WorkspaceInitializationStrategy) -> None:
-        """Raise `JjUnavailableError` before a jj workspace's environment runs jj, so the agent says why it stopped."""
+    def _prepare_vcs_for_launch(self, initialization_strategy: WorkspaceInitializationStrategy) -> None:
+        """Before a process launches in a jj workspace, refuse an unusable jj, or else point jj-bin at the jj readiness accepted.
+
+        Raising `JjUnavailableError` leaves the workspace and jj-bin as they were, so the
+        agent says why it stopped and its next start works once jj is fixed. Call it
+        only right before a launch, never from a poller or a read, so nothing else can
+        change which jj a running agent finds.
+        """
         match initialization_strategy:
             case (
                 WorkspaceInitializationStrategy.IN_PLACE
@@ -591,7 +595,7 @@ class DefaultWorkspaceService(WorkspaceService):
             ):
                 return
             case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-                require_jj_available(self.dependency_management_service.get_jj_readiness())
+                prepare_jj_for_launch(self.dependency_management_service)
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -602,7 +606,7 @@ class DefaultWorkspaceService(WorkspaceService):
         for a jj workspace while jj cannot be used, and `EnvironmentNotFoundError`
         when the workspace has no environment to resume.
         """
-        self._require_vcs_available(workspace.initialization_strategy)
+        self._prepare_vcs_for_launch(workspace.initialization_strategy)
         if workspace.environment_id is None:
             raise EnvironmentNotFoundError()
         return self.environment_manager.resume_environment(
@@ -637,7 +641,7 @@ class DefaultWorkspaceService(WorkspaceService):
 
             if workspace is None:
                 raise WorkspaceNotFoundError(workspace_id)
-            self._require_vcs_available(workspace.initialization_strategy)
+            self._prepare_vcs_for_launch(workspace.initialization_strategy)
 
             environment_id_to_resume = workspace.environment_id
             environment: Environment | None = None

@@ -38,6 +38,7 @@ from sculptor.testing.jj_repos import make_workspace_stale
 from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
 from sculptor.utils.build import get_internal_folder
+from sculptor.utils.build import link_jj_bin
 
 _SNAPSHOT_LIMIT_MIB = 10
 _MEBIBYTE = 1024 * 1024
@@ -117,24 +118,9 @@ def snapshot_limit() -> _SnapshotLimit:
     return _SnapshotLimit(_SNAPSHOT_LIMIT_MIB)
 
 
-class _ReadyJj:
-    """A settable stand-in for the jj that readiness accepts, or None when it would refuse it."""
-
-    def __init__(self, binary: Path | None) -> None:
-        self.binary = binary
-
-    def read(self) -> Path | None:
-        return self.binary
-
-
 @pytest.fixture
-def ready_jj(jj_binary: JjBinary) -> _ReadyJj:
-    return _ReadyJj(jj_binary.path)
-
-
-@pytest.fixture
-def jj_vcs(jj_cli: JjCli, git_cli: GitCli, snapshot_limit: _SnapshotLimit, ready_jj: _ReadyJj) -> JjWorkspaceVcs:
-    return JjWorkspaceVcs(jj_cli, git_cli, snapshot_limit.read, ready_jj.read)
+def jj_vcs(jj_cli: JjCli, git_cli: GitCli, snapshot_limit: _SnapshotLimit) -> JjWorkspaceVcs:
+    return JjWorkspaceVcs(jj_cli, git_cli, snapshot_limit.read)
 
 
 @pytest.fixture
@@ -1019,7 +1005,7 @@ def test_agent_environment_sets_no_gh_repo_for_an_origin_off_github(
     assert "GH_REPO" not in jj_vcs.agent_environment(checkout).environment_variables
 
 
-def test_a_process_on_the_agent_environment_path_finds_the_resolved_jj_when_none_is_on_path(
+def test_a_process_on_the_agent_environment_path_finds_the_linked_jj_when_none_is_on_path(
     jj_vcs: JjWorkspaceVcs,
     checkout: CheckoutLocation,
     jj_binary: JjBinary,
@@ -1027,6 +1013,7 @@ def test_a_process_on_the_agent_environment_path_finds_the_resolved_jj_when_none
 ) -> None:
     path_without_jj = os.pathsep.join(["/usr/bin", "/bin"])
     assert shutil.which("jj", path=path_without_jj) is None
+    link_jj_bin(jj_binary.path)
     environment = jj_vcs.agent_environment(checkout)
     agent_path = os.pathsep.join([*(str(prefix) for prefix in environment.path_prefixes), path_without_jj])
 
@@ -1044,21 +1031,15 @@ def test_a_process_on_the_agent_environment_path_finds_the_resolved_jj_when_none
     assert version.stdout.startswith(f"jj {jj_binary.version}")
 
 
-def test_agent_environment_takes_jj_off_path_once_sculptor_would_refuse_it(
+def test_describing_the_agent_environment_creates_and_changes_no_file(
     jj_vcs: JjWorkspaceVcs,
     checkout: CheckoutLocation,
-    jj_binary: JjBinary,
-    ready_jj: _ReadyJj,
     isolated_sculptor_folder: Path,  # noqa: F811
 ) -> None:
-    jj_bin_dir = jj_vcs.agent_environment(checkout).path_prefixes[0]
-    assert (jj_bin_dir / "jj").readlink() == jj_binary.path
-
-    ready_jj.binary = None
     environment = jj_vcs.agent_environment(checkout)
 
-    assert environment.path_prefixes == (jj_bin_dir,)
-    assert list(jj_bin_dir.iterdir()) == []
+    assert environment.path_prefixes == (get_internal_folder() / "jj-bin",)
+    assert not environment.path_prefixes[0].exists()
 
 
 def test_the_chat_agent_variables_make_a_jj_command_that_opens_an_editor_fail_at_once(

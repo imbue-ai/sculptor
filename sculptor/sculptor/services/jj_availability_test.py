@@ -10,12 +10,15 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.jj_availability import describe_jj_unavailability
-from sculptor.services.jj_availability import find_ready_jj_binary
+from sculptor.services.jj_availability import prepare_jj_for_launch
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjIsolatedEnv
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.utils.build import get_jj_bin_dir
+from sculptor.utils.build import link_jj_bin
 from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjIdentity
@@ -91,20 +94,32 @@ def _resolve_jj_to(jj_path: Path) -> None:
     )
 
 
-def test_the_ready_jj_binary_is_the_resolved_jj_when_it_passes_readiness(
-    dependency_management_service: DependencyManagementService, jj_binary: JjBinary
+def test_preparing_a_launch_points_jj_bin_at_the_resolved_jj_when_it_passes_readiness(
+    dependency_management_service: DependencyManagementService,
+    jj_binary: JjBinary,
+    isolated_sculptor_folder: Path,  # noqa: F811
 ) -> None:
     _resolve_jj_to(jj_binary.path)
 
-    assert find_ready_jj_binary(dependency_management_service) == jj_binary.path
+    prepare_jj_for_launch(dependency_management_service)
+
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path
 
 
-def test_no_jj_binary_is_ready_when_the_resolved_jj_is_a_version_sculptor_refuses(
-    dependency_management_service: DependencyManagementService, tmp_path: Path
+def test_preparing_a_launch_refuses_a_jj_version_sculptor_does_not_support_and_leaves_jj_bin_as_it_was(
+    dependency_management_service: DependencyManagementService,
+    jj_binary: JjBinary,
+    isolated_sculptor_folder: Path,  # noqa: F811
+    tmp_path: Path,
 ) -> None:
+    link_jj_bin(jj_binary.path)
     old_jj = tmp_path / "jj"
     old_jj.write_text(f'#!/bin/sh\necho "jj 0.28.2-{uuid4().hex}"\n')
     old_jj.chmod(0o755)
     _resolve_jj_to(old_jj)
 
-    assert find_ready_jj_binary(dependency_management_service) is None
+    with pytest.raises(JjUnavailableError) as raised:
+        prepare_jj_for_launch(dependency_management_service)
+
+    assert str(raised.value).startswith(f"jj 0.28.2 at {old_jj} is not supported")
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path

@@ -1,8 +1,9 @@
 """A pytest fixture for tests of processes Sculptor launches in a jj workspace.
 
 The backend has no jj on its PATH and resolves jj only through a managed copy
-staged in the test's own Sculptor folder, so a process that finds jj found it
-through what Sculptor put on its PATH. HOME is a fresh directory, so a login
+staged in the test's own Sculptor folder, which jj-bin links to as the launch
+gate links it, so a process that finds jj found it through what Sculptor put on
+its PATH. HOME is a fresh directory, so a login
 shell reads no developer profile that puts another jj on PATH. The workspace's
 environment directory sits inside a git repository, as workspaces do when
 Sculptor runs from source.
@@ -29,6 +30,8 @@ from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.jj_availability import prepare_jj_for_launch
 from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
@@ -90,6 +93,7 @@ def jj_environment_nested_in_git_repository(
         )
     )
     try:
+        prepare_jj_for_launch(DependencyManagementService(concurrency_group=test_root_concurrency_group))
         vcs = make_test_jj_workspace_vcs(test_root_concurrency_group)
         workspace_id = WorkspaceID()
         environment = LocalEnvironment.create(

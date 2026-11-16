@@ -1,12 +1,10 @@
 from contextlib import contextmanager
-from functools import partial
 from typing import Generator
 
 from sculptor.config.settings import SculptorSettings
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.btw_service.api import BtwService
 from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoordinator
-from sculptor.services.jj_availability import find_ready_jj_binary
 from sculptor.services.pi_login_service import PiLoginService
 from sculptor.services.project_jj_state_service.project_jj_state_service import ProjectJjStateService
 from sculptor.services.task_service.data_types import TaskServiceCollection
@@ -55,7 +53,6 @@ def get_services(
         vcs_runners=build_vcs_runners(
             pr_polling_concurrency_group, services.dependency_management_service.resolve_binary_path
         ),
-        read_ready_jj_binary=partial(find_ready_jj_binary, services.dependency_management_service),
     )
     btw_service = BtwService(concurrency_group=concurrency_group.make_concurrency_group("btw_service"))
     pi_login_service = PiLoginService(

@@ -1,4 +1,5 @@
-"""Why jj cannot be used right now, worded for the user from its readiness, and the error that carries it."""
+"""Why jj cannot be used right now, worded for the user from its readiness, the error that carries it, and the
+step that lets a process launch in a jj workspace."""
 
 from pathlib import Path
 from typing import assert_never
@@ -7,12 +8,15 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 from sculptor.interfaces.environments.errors import EnvironmentFailure
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.jj_version import JJ_PINNED_VERSION
+from sculptor.utils.build import link_jj_bin
 from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjNoIdentity
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import JjUnsupportedVersion
+
+_NOT_INSTALLED_REASON = "jj is not installed: install it or set its path on the Jujutsu settings page"
 
 
 class JjUnavailableError(EnvironmentFailure):
@@ -25,7 +29,7 @@ def describe_jj_unavailability(readiness: JjReadiness) -> str | None:
         case JjAvailable():
             return None
         case JjNotInstalled():
-            return "jj is not installed: install it or set its path on the Jujutsu settings page"
+            return _NOT_INSTALLED_REASON
         case JjNotRunnable(error=error):
             return f"jj cannot run: {error}" if error else "jj cannot run"
         case JjUnsupportedVersion(path=path, version=version):
@@ -46,9 +50,14 @@ def require_jj_available(readiness: JjReadiness) -> None:
         raise JjUnavailableError(reason)
 
 
-def find_ready_jj_binary(dependency_management_service: DependencyManagementService) -> Path | None:
-    """The jj binary Sculptor resolves, when it passes every readiness check; None when Sculptor would refuse it."""
-    if describe_jj_unavailability(dependency_management_service.get_jj_readiness()) is not None:
-        return None
+def prepare_jj_for_launch(dependency_management_service: DependencyManagementService) -> None:
+    """Refuse to launch a process in a jj workspace while jj is unusable; otherwise point jj-bin at the jj readiness accepted.
+
+    Raises `JjUnavailableError` and leaves jj-bin as it was when the resolved jj
+    fails readiness, so this must run, and only run, right before such a launch.
+    """
+    require_jj_available(dependency_management_service.get_jj_readiness())
     binary = dependency_management_service.resolve_binary_path(Dependency.JJ)
-    return None if binary is None else Path(binary)
+    if binary is None:
+        raise JjUnavailableError(_NOT_INSTALLED_REASON)
+    link_jj_bin(Path(binary))
