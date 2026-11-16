@@ -82,6 +82,7 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.event_utils import MutableEvent
 from sculptor.foundation.git import is_path_in_git_repo
@@ -131,6 +132,7 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.pi_login_service import PiLoginMode
 from sculptor.services.pi_login_service import broadcast_pi_models_refresh
 from sculptor.services.pi_login_service import pi_login_terminal_id
@@ -179,10 +181,13 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.jj_workspace_creation import creates_jj_workspaces
+from sculptor.services.workspace_service.jj_workspace_creation import gather_jj_workspace_creation_facts
 from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
@@ -244,7 +249,13 @@ from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
 from sculptor.web.data_types import InstallExtensionRequest
 from sculptor.web.data_types import InstallExtensionResponse
+from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjIdentity
+from sculptor.web.data_types import JjNoIdentity
+from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.data_types import JjNotRunnable
+from sculptor.web.data_types import JjReadiness
+from sculptor.web.data_types import JjUnsupportedVersion
 from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingConventionFile
@@ -606,9 +617,11 @@ def _validate_prompt_model_selection(
 
 def _validate_workspace_creation_request(
     services: CompleteServiceCollection,
+    concurrency_group: ConcurrencyGroup,
     project: Project,
     initialization_strategy: WorkspaceInitializationStrategy,
     source_branch: str | None,
+    target_branch: str | None,
     requested_branch_name: str | None,
 ) -> None:
     """Raise an HTTPException when a request to create a workspace breaks its mode's rules.
@@ -633,8 +646,9 @@ def _validate_workspace_creation_request(
             if source_branch is None:
                 raise HTTPException(status_code=400, detail="source_branch is required for WORKTREE workspaces")
         case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-            # TODO(SCU-1878): accept jj workspaces in repositories that create them.
-            raise HTTPException(status_code=400, detail="jj workspaces cannot be created yet")
+            _validate_jj_workspace_creation_request(
+                services, concurrency_group, project, source_branch, target_branch, requested_branch_name
+            )
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -646,6 +660,7 @@ def _validate_workspace_creation_request(
         validation = vcs.validate_new_ref_name(project_path, requested_branch_name)
     except VcsCommandError as e:
         raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
+    ref_noun = _new_ref_noun(initialization_strategy)
     match validation.status:
         case RefNameStatus.AVAILABLE:
             return
@@ -654,9 +669,87 @@ def _validate_workspace_creation_request(
             # error at creation, rather than an opaque failure later when the
             # checkout is created during async environment setup (and is
             # surfaced only in the agent panel).
-            raise HTTPException(status_code=400, detail=f"'{requested_branch_name}' is not a valid git branch name")
+            raise HTTPException(status_code=400, detail=f"'{requested_branch_name}' is not a valid {ref_noun} name")
         case RefNameStatus.ALREADY_EXISTS:
-            raise HTTPException(status_code=409, detail=f"Branch '{requested_branch_name}' already exists")
+            raise HTTPException(status_code=409, detail=f"A {ref_noun} named '{requested_branch_name}' already exists")
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _validate_jj_workspace_creation_request(
+    services: CompleteServiceCollection,
+    concurrency_group: ConcurrencyGroup,
+    project: Project,
+    source_branch: str | None,
+    target_branch: str | None,
+    requested_branch_name: str | None,
+) -> None:
+    """A jj workspace needs jj, a repository that creates jj workspaces, a bookmark name, and a base jj can resolve.
+
+    The base is the source branch, else the target, else the repository's default target, as `create_workspace` picks it.
+    """
+    project_path = project.get_local_user_path()
+    jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
+    vcs = services.workspace_service.get_workspace_vcs(WorkspaceInitializationStrategy.JJ_WORKSPACE)
+    try:
+        facts = gather_jj_workspace_creation_facts(project, jj, services.dependency_management_service)
+        jj_unavailability = _describe_jj_unavailability(facts.jj_readiness)
+        if jj_unavailability is not None:
+            raise HTTPException(status_code=412, detail=jj_unavailability)
+        if not creates_jj_workspaces(facts):
+            raise HTTPException(
+                status_code=400, detail=f"The repository at {project_path} does not create jj workspaces"
+            )
+        if requested_branch_name is None or not requested_branch_name.strip():
+            raise HTTPException(
+                status_code=400, detail="requested_branch_name is required for JJ_WORKSPACE workspaces"
+            )
+        base_ref = source_branch or target_branch or vcs.resolve_default_target(project_path)
+        if base_ref is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The repository at {project_path} has no trunk bookmark to start from; name a source_branch",
+            )
+        if vcs.resolve_base_commit_id(project_path, base_ref) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{base_ref}' names no bookmark or commit; name a bookmark such as main@origin, or a full commit id",
+            )
+    except VcsCommandError as e:
+        raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
+
+
+def _describe_jj_unavailability(readiness: JjReadiness) -> str | None:
+    """Why jj cannot be used, composed from the readiness variant's data; None when it can."""
+    match readiness:
+        case JjAvailable():
+            return None
+        case JjNotInstalled():
+            return "jj is not installed: install it or set its path on the Jujutsu settings page"
+        case JjNotRunnable(error=error):
+            return f"jj cannot run: {error}" if error else "jj cannot run"
+        case JjUnsupportedVersion(path=path, version=version):
+            return (
+                f"jj {version or '(unknown version)'} at {path} is not supported:"
+                + f" Sculptor needs jj {JJ_PINNED_VERSION} or a newer compatible version"
+            )
+        case JjNoIdentity():
+            return "jj has no author identity: set its user.name and user.email on the Jujutsu settings page"
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _new_ref_noun(initialization_strategy: WorkspaceInitializationStrategy) -> str:
+    """What creation errors call the ref a new workspace of this kind creates."""
+    match initialization_strategy:
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            return "git branch"
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            return "bookmark"
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -864,9 +957,11 @@ def create_workspace_v2(
 
         _validate_workspace_creation_request(
             services,
+            get_root_concurrency_group(request),
             project,
             workspace_request.initialization_strategy,
             workspace_request.source_branch,
+            workspace_request.target_branch,
             workspace_request.requested_branch_name,
         )
         workspace = services.workspace_service.create_workspace(

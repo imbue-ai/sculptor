@@ -339,7 +339,7 @@ _ILLEGAL_BRANCH_NAME = (
             "main",
             "main",
             409,
-            "Branch 'main' already exists",
+            "A git branch named 'main' already exists",
             id="worktree-with-existing-branch-name",
         ),
         pytest.param(WorkspaceInitializationStrategy.WORKTREE, "main", "imbue/new-branch", 200, None, id="worktree"),
@@ -363,29 +363,6 @@ def test_create_workspace_applies_the_branch_name_rules(
     assert response.status_code == expected_status, response.text
     if expected_detail is not None:
         assert expected_detail in response.json()["detail"]
-
-
-@pytest.mark.parametrize(
-    ("source_branch", "requested_branch_name"),
-    [pytest.param(None, None, id="no-names"), pytest.param("main", "imbue/new-bookmark", id="with-names")],
-)
-def test_no_route_creates_a_jj_workspace(
-    client: TestClient,
-    test_services: CompleteServiceCollection,
-    test_project: Project,
-    source_branch: str | None,
-    requested_branch_name: str | None,
-) -> None:
-    """`POST /api/v1/workspaces` is the only route that creates a workspace, and it refuses jj workspaces."""
-    response = _post_create_workspace(
-        client, test_project, WorkspaceInitializationStrategy.JJ_WORKSPACE, source_branch, requested_branch_name
-    )
-
-    assert response.status_code == 400, response.text
-    assert "jj workspaces cannot be created yet" in response.json()["detail"]
-    with test_services.data_model_service.open_transaction(RequestID()) as transaction:
-        strategies = {workspace.initialization_strategy for workspace in transaction.get_workspaces()}
-    assert WorkspaceInitializationStrategy.JJ_WORKSPACE not in strategies
 
 
 def test_preview_branch_name_names_a_jj_bookmark_as_it_names_a_worktree_branch(
