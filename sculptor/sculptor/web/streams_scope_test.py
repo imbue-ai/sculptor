@@ -17,6 +17,9 @@ from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.task_service.api import TaskMessageContainer
+from sculptor.web.data_types import JjColocationState
+from sculptor.web.data_types import ProjectJjState
+from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import TaskUpdate
 from sculptor.web.derived import UserUpdate
@@ -50,6 +53,8 @@ _EXPECTED_STREAMING_UPDATE_FIELDS: frozenset[str] = frozenset(
         "ui_open_file_by_workspace_id",
         "ui_webview_command_by_workspace_id",
         "ui_extension_command_by_workspace_id",
+        "workspace_jj_state_by_workspace_id",
+        "project_jj_state_by_project_id",
     }
 )
 
@@ -141,6 +146,31 @@ def _make_view(task: Task) -> CodingAgentTaskView:
     return view
 
 
+def _make_workspace_jj_state(workspace_id: WorkspaceID) -> WorkspaceJjStateInfo:
+    return WorkspaceJjStateInfo(
+        workspace_id=workspace_id,
+        working_copy_change_id="kxqpmzvy" * 4,
+        working_copy_change_id_prefix_length=2,
+        working_copy_description="",
+        is_working_copy_empty=True,
+        bookmarks=(),
+        primary_bookmark=None,
+        unbookmarked_revision_count=0,
+        has_conflict=False,
+        is_divergent=False,
+        is_working_copy_stale=False,
+    )
+
+
+def _make_project_jj_state(project_id: ProjectID) -> ProjectJjState:
+    return ProjectJjState(
+        project_id=project_id,
+        colocation=JjColocationState.ABSENT,
+        colocation_error=None,
+        creates_jj_workspaces=False,
+    )
+
+
 def _build_synthetic_update() -> tuple[
     StreamingUpdate,
     ProjectID,
@@ -182,6 +212,13 @@ def _build_synthetic_update() -> tuple[
         pr_status_by_workspace_id={workspace_a1: None, workspace_a2: None, workspace_b1: None},
         finished_request_ids=(RequestID(),),
         dependencies_status=None,
+        workspace_jj_state_by_workspace_id={
+            workspace_id: _make_workspace_jj_state(workspace_id)
+            for workspace_id in (workspace_a1, workspace_a2, workspace_b1)
+        },
+        project_jj_state_by_project_id={
+            project_id: _make_project_jj_state(project_id) for project_id in (project_a, project_b)
+        },
     )
     return update, project_a, project_b, workspace_a1, workspace_a2, workspace_b1, task_a1, task_a2, task_b1
 
@@ -207,6 +244,8 @@ def test_project_for_scope_project() -> None:
     assert set(result.task_update_by_task_id.keys()) == {task_a1.object_id, task_a2.object_id}
     assert set(result.workspace_branch_by_workspace_id.keys()) == {workspace_a1, workspace_a2}
     assert set(result.pr_status_by_workspace_id.keys()) == {workspace_a1, workspace_a2}
+    assert set(result.workspace_jj_state_by_workspace_id.keys()) == {workspace_a1, workspace_a2}
+    assert result.project_jj_state_by_project_id == {}
     assert result.finished_request_ids == ()
     assert result.dependencies_status is None
     assert result.user_update == UserUpdate()
@@ -219,6 +258,8 @@ def test_project_for_scope_workspace() -> None:
     assert set(result.task_update_by_task_id.keys()) == {task_a1.object_id}
     assert set(result.workspace_branch_by_workspace_id.keys()) == {workspace_a1}
     assert set(result.pr_status_by_workspace_id.keys()) == {workspace_a1}
+    assert set(result.workspace_jj_state_by_workspace_id.keys()) == {workspace_a1}
+    assert result.project_jj_state_by_project_id == {}
     assert workspace_a2 not in result.workspace_branch_by_workspace_id
     assert result.finished_request_ids == ()
     assert result.dependencies_status is None
@@ -235,6 +276,8 @@ def test_project_for_scope_agent() -> None:
     assert set(result.task_update_by_task_id.keys()) == {task_a1.object_id}
     assert result.workspace_branch_by_workspace_id == {}
     assert result.pr_status_by_workspace_id == {}
+    assert result.workspace_jj_state_by_workspace_id == {}
+    assert result.project_jj_state_by_project_id == {}
     assert result.finished_request_ids == ()
     assert result.dependencies_status is None
     assert result.user_update == UserUpdate()

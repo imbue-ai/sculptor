@@ -18,10 +18,13 @@ from sculptor.primitives.ids import UserSettingsID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.state.workflow_state import WorkflowTaskState
+from sculptor.web.data_types import JjColocationState
 from sculptor.web.data_types import OpenFileUiAction
+from sculptor.web.data_types import ProjectJjState
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import UserUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceBranchInfo
+from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.derived import TaskUpdate
 from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.streams import LEGACY_SETUP_PLACEHOLDER_BYTES
@@ -190,6 +193,43 @@ def test_convert_ui_open_file_keeps_distinct_workspaces() -> None:
     )
 
     assert update.ui_open_file_by_workspace_id == {workspace_a: action_a, workspace_b: action_b}
+
+
+def test_convert_keys_jj_states_by_their_workspace_and_project() -> None:
+    workspace_id = WorkspaceID()
+    project_id = ProjectID()
+    workspace_jj_state = WorkspaceJjStateInfo(
+        workspace_id=workspace_id,
+        working_copy_change_id="kxqpmzvy" * 4,
+        working_copy_change_id_prefix_length=2,
+        working_copy_description="add the parser",
+        is_working_copy_empty=False,
+        bookmarks=("feature",),
+        primary_bookmark="feature",
+        unbookmarked_revision_count=1,
+        has_conflict=False,
+        is_divergent=False,
+        is_working_copy_stale=False,
+    )
+    project_jj_state = ProjectJjState(
+        project_id=project_id,
+        colocation=JjColocationState.COLOCATED,
+        colocation_error=None,
+        creates_jj_workspaces=True,
+    )
+    all_data: list[StreamingUpdateSourceTypes | None] = [workspace_jj_state, project_jj_state]
+
+    update = _convert_to_streaming_update(
+        all_data=all_data,
+        task_views_by_task_id={},
+        task_update_state_by_task_id={},
+        processed_message_by_task_id={},
+        sent_workflow_states_by_task_id={},
+        settings=_empty_settings(),
+    )
+
+    assert update.workspace_jj_state_by_workspace_id == {workspace_id: workspace_jj_state}
+    assert update.project_jj_state_by_project_id == {project_id: project_jj_state}
 
 
 def _make_task_update(task_id: TaskID, workflow_task_states: dict[str, WorkflowTaskState]) -> TaskUpdate:

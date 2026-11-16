@@ -83,6 +83,35 @@ class WorkspaceTargetBranchesInfo(SerializableModel):
     target_branches: tuple[str, ...]
 
 
+class WorkspaceJjStateInfo(SerializableModel):
+    """A jj workspace's working copy and bookmarks, streamed from backend to frontend.
+
+    It holds no commit id, so a snapshot that only rewrites the working-copy
+    commit leaves it unchanged. Only jj workspaces have one; they never have a
+    ``WorkspaceBranchInfo``.
+    """
+
+    workspace_id: WorkspaceID
+    working_copy_change_id: str = Field(description="The full change id of the working-copy revision")
+    working_copy_change_id_prefix_length: int = Field(description="Length of that change id's shortest unique prefix")
+    working_copy_description: str = Field(description="First line of the working copy's description; empty when unset")
+    is_working_copy_empty: bool
+    bookmarks: tuple[str, ...] = Field(
+        description="Local bookmarks on the workspace's own stack, nearest the working copy first"
+    )
+    primary_bookmark: str | None = Field(description="The bookmark pull requests are looked up by; one of bookmarks")
+    unbookmarked_revision_count: int = Field(description="Described revisions above the primary bookmark")
+    has_conflict: bool
+    is_divergent: bool
+    is_working_copy_stale: bool
+
+    @model_validator(mode="after")
+    def _require_primary_bookmark_from_bookmarks(self) -> "WorkspaceJjStateInfo":
+        if self.primary_bookmark is not None and self.primary_bookmark not in self.bookmarks:
+            raise ValueError("primary_bookmark must be one of bookmarks")
+        return self
+
+
 class PrApproval(SerializableModel):
     """A reviewer's approval status on a pull request."""
 
@@ -554,6 +583,31 @@ class CommitHistoryResponse(SerializableModel):
     fork_point: str | None
 
 
+class RevisionInfo(SerializableModel):
+    """A single revision in a jj workspace's history."""
+
+    change_id: str
+    change_id_prefix_length: int
+    commit_id: str
+    description: str
+    author_name: str
+    timestamp: str
+    parent_commit_ids: list[str]
+    files: list[CommitFileInfo]
+    bookmarks: list[str]
+    is_working_copy: bool
+    is_empty: bool
+    has_conflict: bool
+    is_divergent: bool
+
+
+class RevisionHistoryResponse(SerializableModel):
+    """Response containing a jj workspace's revisions, newest first."""
+
+    revisions: list[RevisionInfo]
+    fork_point: str | None = Field(description="Commit id of the revision the workspace's stack forks from")
+
+
 class CommitDiffResponse(SerializableModel):
     """Response containing the unified diff for a single commit."""
 
@@ -932,6 +986,32 @@ JjReadiness = TypeAliasType(
 )
 
 
+class JjColocationState(UpperCaseStrEnum):
+    """Whether a repository's git checkout is also a jj repository."""
+
+    ABSENT = auto()
+    INITIALIZING = auto()
+    COLOCATED = auto()
+    FAILED = auto()
+
+
+class ProjectJjState(SerializableModel):
+    """A repository's jj colocation and whether it creates jj workspaces, streamed from backend to frontend."""
+
+    project_id: ProjectID
+    colocation: JjColocationState
+    colocation_error: str | None = Field(description="Why colocating failed; set exactly when colocation is FAILED")
+    creates_jj_workspaces: bool = Field(
+        description="New workspaces are jj workspaces: use_jj_for_new_workspaces is on, the repository is colocated and jj is available"
+    )
+
+    @model_validator(mode="after")
+    def _require_error_exactly_when_failed(self) -> "ProjectJjState":
+        if (self.colocation == JjColocationState.FAILED) != (self.colocation_error is not None):
+            raise ValueError("colocation_error must be set exactly when colocation is FAILED")
+        return self
+
+
 class DependenciesStatus(SerializableModel):
     """Status of required dependencies with path/version info."""
 
@@ -1194,6 +1274,8 @@ StreamingUpdateSourceTypes = (
     | UserUpdateSourceTypes
     | WorkspaceBranchInfo
     | WorkspaceTargetBranchesInfo
+    | WorkspaceJjStateInfo
+    | ProjectJjState
     | DependenciesStatus
     | WorkspaceSetupStatus
     | WorkspaceSetupOutputChunk
