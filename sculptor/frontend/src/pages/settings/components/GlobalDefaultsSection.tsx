@@ -35,7 +35,7 @@ export const GlobalDefaultsSection = ({ onSettingChange }: GlobalDefaultsSection
     <Fragment>
       <SettingRow
         title="Default branch-naming pattern"
-        description="Used by clone and worktree workspace creation. Supports <user> and <slug> placeholders. Per-repo overrides on Repositories."
+        description="Names the branch, or the jj bookmark, a new workspace creates. Supports <user> and <slug> placeholders. Per-repo overrides on Repositories."
       >
         {/* Uncontrolled: `key` re-mounts the input when the saved pattern changes,
             so we never copy the prop into local state. */}
@@ -50,8 +50,8 @@ export const GlobalDefaultsSection = ({ onSettingChange }: GlobalDefaultsSection
         />
       </SettingRow>
       <SettingRow
-        title="Branch deletion when worktree workspace is removed"
-        description="“Delete if safe” refuses to delete unmerged branches. “Always” force-deletes regardless. Only applies to worktree-mode workspaces."
+        title="Branch and bookmark deletion when a workspace is removed"
+        description="Applies to a worktree workspace's branch and a jj workspace's bookmarks. “Delete if safe” deletes only what it can without losing work; “Always” deletes regardless."
       >
         <Select.Root
           value={deletionPolicy}
