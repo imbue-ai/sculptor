@@ -116,6 +116,7 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
                   shouldAutoFocusSetupCommand={shouldAutoFocusSetupCommand}
                   workspaceSetupCommand={project.workspaceSetupCommand ?? null}
                   namingPattern={project.namingPattern ?? ""}
+                  useJjForNewWorkspaces={project.useJjForNewWorkspaces ?? false}
                   setToast={setToast}
                 />
               );

@@ -1,4 +1,4 @@
-import { Box, Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
+import { Badge, Box, Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { AlertTriangle, Terminal } from "lucide-react";
 import type { FocusEvent, ReactElement } from "react";
@@ -13,6 +13,7 @@ import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useNamingPatternMutation, useWorkspaceSetupCommandMutation } from "~/common/state/mutations/projects.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
 
+import { RepoJjControls } from "./RepoJjControls.tsx";
 import styles from "./RepoRow.module.scss";
 
 type RepoRowProps = {
@@ -27,6 +28,7 @@ type RepoRowProps = {
   // Any other string: user's custom command.
   workspaceSetupCommand: string | null;
   namingPattern: string;
+  useJjForNewWorkspaces: boolean;
   setToast: (toast: ToastContent | null) => void;
 };
 
@@ -54,6 +56,7 @@ export const RepoRow = ({
   shouldAutoFocusSetupCommand = false,
   workspaceSetupCommand,
   namingPattern,
+  useJjForNewWorkspaces,
   setToast,
 }: RepoRowProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
@@ -114,6 +117,13 @@ export const RepoRow = ({
         <Flex direction="column" className={styles.repoInfo}>
           <Flex align="center" className={styles.repoName}>
             <Text weight="medium">{projectName}</Text>
+            {doesCreateJjWorkspaces && (
+              <Tooltip content="New workspaces in this repository are jj workspaces">
+                <Badge size="1" color="gray" variant="soft" data-testid={ElementIds.REPO_JJ_BADGE}>
+                  jj
+                </Badge>
+              </Tooltip>
+            )}
             {!isPathAccessible && (
               <Tooltip content="This repository path cannot be found">
                 <AlertTriangle size={16} className={styles.warningIcon} />
@@ -200,6 +210,12 @@ export const RepoRow = ({
             />
             <Text className={styles.namingPatternHint}>Leave empty to use the global default.</Text>
           </Box>
+          <RepoJjControls
+            projectId={projectId}
+            projectPath={projectPath}
+            useJjForNewWorkspaces={useJjForNewWorkspaces}
+            setToast={setToast}
+          />
         </Box>
       )}
     </Box>

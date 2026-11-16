@@ -151,6 +151,13 @@ afterEach(() => {
 });
 
 describe("a repository that creates jj workspaces", () => {
+  it("is marked with a jj badge", () => {
+    setCreatesJjWorkspaces(true);
+    renderReposSection();
+
+    expect(screen.getByTestId(ElementIds.REPO_JJ_BADGE)).toHaveTextContent("jj");
+  });
+
   it("shows the jj default setup command while it tracks the default", async () => {
     store.set(updateProjectsAtom, [{ ...PROJECT, workspaceSetupCommand: null }]);
     setCreatesJjWorkspaces(true);
@@ -173,6 +180,13 @@ describe("a repository that creates jj workspaces", () => {
 });
 
 describe("a repository that creates git workspaces", () => {
+  it("has no jj badge", () => {
+    setCreatesJjWorkspaces(false);
+    renderReposSection();
+
+    expect(screen.queryByTestId(ElementIds.REPO_JJ_BADGE)).not.toBeInTheDocument();
+  });
+
   it("shows the git default setup command while it tracks the default", async () => {
     store.set(updateProjectsAtom, [{ ...PROJECT, workspaceSetupCommand: null }]);
     setCreatesJjWorkspaces(false);
@@ -190,6 +204,13 @@ describe("the expanded repository row", () => {
 
     expect(getSetupCommandInput()).toBeDisabled();
     expect(getSetupCommandInput().value).toBe("");
+  });
+
+  it("ends with the repository's jj controls", () => {
+    renderSection();
+
+    expect(screen.getByTestId(ElementIds.REPO_JJ_COLOCATION_SWITCH)).toBeInTheDocument();
+    expect(screen.getByTestId(ElementIds.REPO_JJ_USE_FOR_NEW_WORKSPACES_SWITCH)).toBeInTheDocument();
   });
 });
 
