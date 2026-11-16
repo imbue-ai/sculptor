@@ -16,6 +16,7 @@ import { repositoryWorkspaceVcsAtomFamily } from "~/common/state/atoms/repositor
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
+import { useJjBookmarkChoices } from "~/common/state/hooks/useJjBookmarkChoices.ts";
 import { useNightModeSuppressionReason } from "~/common/state/hooks/useNightModeSuppressionReason.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { usePiModels } from "~/common/state/hooks/usePiModels.ts";
@@ -39,6 +40,7 @@ import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";
 import { BranchNameField } from "~/components/newWorkspace/BranchNameField.tsx";
 import { BranchSelector } from "~/components/newWorkspace/BranchSelector.tsx";
 import { useBranchNamePreview } from "~/components/newWorkspace/hooks/useBranchNamePreview.ts";
+import { JjBookmarkSelector } from "~/components/newWorkspace/JjBookmarkSelector.tsx";
 import { ModeSelect } from "~/components/newWorkspace/ModeSelect.tsx";
 import type { NewWorkspaceDraft } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import {
@@ -196,6 +198,8 @@ export const NewWorkspaceForm = ({
   const mode = resolveCreationMode({ remembered: pickedMode ?? rememberedSettings?.mode, vcs: repositoryVcs });
   // A remembered source belongs to the mode it was picked for: a bookmark is no worktree's source.
   const rememberedSourceBranch = rememberedSettings?.mode === mode ? rememberedSettings.sourceBranch : undefined;
+  const isJjMode = workspaceVcsOf({ initializationStrategy: mode }) === "jj";
+  const jjBookmarks = useJjBookmarkChoices({ projectId: selectedProjectId, isEnabled: isJjMode });
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const openSettings = useOpenSettings();
   // Fetch pi's host-side catalog only while pi is the selected agent type, so the
@@ -367,6 +371,8 @@ export const NewWorkspaceForm = ({
     },
     [mode],
   );
+
+  const handleBookmarkPickerOpen = jjBookmarks.refetch;
 
   const handleShuffle = useCallback((): void => {
     // Return to auto-fill mode and force a fresh preview fetch (re-rolls the
@@ -622,7 +628,16 @@ export const NewWorkspaceForm = ({
             className={styles.toolbarPill}
           />
 
-          {repoInfo ? (
+          {isJjMode ? (
+            <JjBookmarkSelector
+              bookmarks={jjBookmarks.bookmarks}
+              selectedBookmark={sourceBranch}
+              onBookmarkSelected={setUserSelectedBranch}
+              onOpen={handleBookmarkPickerOpen}
+              isLoading={jjBookmarks.isFetching}
+              className={styles.toolbarPill}
+            />
+          ) : repoInfo ? (
             modeRules.sourceBranch.rule === "unused" ? (
               <Tooltip content={modeRules.sourceBranch.whyUnused}>
                 <span style={{ display: "flex" }}>

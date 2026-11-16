@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import type { ComponentProps } from "react";
@@ -24,7 +24,7 @@ import { NewWorkspaceForm } from "./NewWorkspaceForm.tsx";
 // post-create callbacks — so everything that reaches the backend is stubbed at
 // its module seam: the project fetches, the create flow, the per-repo branch
 // info, the terminal-agent registrations, the debounced branch-name
-// preview/validation queries, and the pi model catalog.
+// preview/validation queries, the jj bookmark choices, and the pi model catalog.
 const { mockCreateWorkspace, mockUsePiModels } = vi.hoisted(() => ({
   mockCreateWorkspace: vi.fn(),
   mockUsePiModels: vi.fn(),
@@ -125,6 +125,17 @@ vi.mock("~/components/newWorkspace/hooks/useBranchNamePreview.ts", () => ({
     displayedValue: override ?? "sculptor/test-branch",
     isLoading: false,
     status: mockBranchNameStatus.current,
+  }),
+}));
+
+vi.mock("~/common/state/hooks/useJjBookmarkChoices.ts", () => ({
+  useJjBookmarkChoices: (): unknown => ({
+    bookmarks: [
+      { symbol: "main@origin", name: "main", remote: "origin", commitId: "a1" },
+      { symbol: "release", name: "release", remote: null, commitId: "b2" },
+    ],
+    isFetching: false,
+    refetch: vi.fn(),
   }),
 }));
 
@@ -522,6 +533,23 @@ describe("NewWorkspaceForm", () => {
           branchName: "sculptor/test-branch",
           sourceBranch: undefined,
         }),
+      );
+    });
+
+    it("lists the repository's bookmarks as sources and creates from the one picked", async () => {
+      renderJjRepositoryForm();
+
+      await waitFor(() => expect(screen.getByTestId(ElementIds.BRANCH_SELECTOR)).toHaveTextContent("same as target"));
+      await userEvent.click(screen.getByTestId(ElementIds.BRANCH_SELECTOR));
+      const releaseOption = (await screen.findAllByTestId(ElementIds.BRANCH_OPTION)).find(
+        (option) => within(option).queryByText("release") !== null,
+      );
+      expect(releaseOption).toBeDefined();
+      await userEvent.click(releaseOption as HTMLElement);
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: WorkspaceInitializationStrategy.JJ_WORKSPACE, sourceBranch: "release" }),
       );
     });
 
