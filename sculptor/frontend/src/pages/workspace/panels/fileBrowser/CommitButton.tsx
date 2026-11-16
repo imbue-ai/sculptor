@@ -6,7 +6,6 @@ import { useState } from "react";
 import { ElementIds } from "~/api";
 import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
 import { canCommitAtomFamily, commitActionAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
-import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
@@ -15,16 +14,17 @@ import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 const COMMIT_BUTTON_STYLE: CSSProperties = { width: "100%" };
 
 type CommitButtonProps = {
+  /** The workspace whose current agent receives the commit prompt. */
+  workspaceId: string;
   changesCount: number;
   /** Called after the commit message is sent. */
   onCommit?: () => void;
 };
 
-export const CommitButton = ({ changesCount, onCommit }: CommitButtonProps): ReactElement => {
+export const CommitButton = ({ workspaceId, changesCount, onCommit }: CommitButtonProps): ReactElement => {
   // Committing sends the prompt through the workspace-scoped action rather
   // than the mounted chat's `chatActionsAtom` closures — the Changes panel is
   // usually the active center tab, which unmounts the chat.
-  const workspaceId = useAtomValue(activeWorkspaceIdAtom) ?? "";
   const canCommit = useAtomValue(canCommitAtomFamily(workspaceId));
   const sendCommitMessage = useSetAtom(commitActionAtomFamily(workspaceId));
   const commitPrompt = useAtomValue(commitPromptAtom);

@@ -391,7 +391,7 @@ export const CombinedDiffView = ({
           scope picker (both want the full width) when the panel is narrow. */}
       {scope === "uncommitted" && (
         <Flex flexShrink="0" px="3" py="2" className={styles.commitFooter}>
-          <CommitButton changesCount={isReady ? fileChanges.length : 0} onCommit={onCommit} />
+          <CommitButton workspaceId={workspaceId} changesCount={isReady ? fileChanges.length : 0} onCommit={onCommit} />
         </Flex>
       )}
     </div>
