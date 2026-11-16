@@ -103,6 +103,34 @@ describe("ErrorBlock", () => {
     });
   });
 
+  describe("JjUnavailableError", () => {
+    const jjBlock = makeErrorBlock({
+      message: "jj is not installed: install it or set its path on the Jujutsu settings page",
+      errorType: "sculptor.services.jj_availability.JjUnavailableError",
+    });
+
+    it("says jj is not available, why, and links to the Jujutsu settings page instead of offering a retry", () => {
+      renderErrorBlock({ block: jjBlock, onRetryRequest: vi.fn() });
+
+      expect(screen.getByText("jj Not Available")).toBeInTheDocument();
+      expect(screen.getByText(/jj is not installed: install it or set its path/)).toBeInTheDocument();
+      expect(screen.queryByText(/Retry Request/)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText("Go to Settings"));
+      expect(openSettingsSpy).toHaveBeenCalledWith("JJ");
+    });
+
+    it("says jj is available once the dependency check passes again", () => {
+      renderErrorBlock({
+        block: jjBlock,
+        dependenciesStatus: {
+          jjReadiness: { blocker: null, identity: { name: "Dev", email: "dev@example.com" } },
+        } as DependenciesStatus,
+      });
+
+      expect(screen.getByText("jj available")).toBeInTheDocument();
+    });
+  });
+
   describe("generic errors", () => {
     it("offers a retry button and no settings link", () => {
       renderErrorBlock({ block: makeErrorBlock(), onRetryRequest: vi.fn() });
