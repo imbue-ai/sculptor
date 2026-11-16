@@ -21,6 +21,8 @@ from uvicorn import Server
 
 from sculptor import version as sculptor_version
 from sculptor.foundation.log_utils import ensure_core_log_levels_configured
+from sculptor.services.project_service.jj_workspace_refusal import ProjectInJjWorkspaceError
+from sculptor.services.project_service.jj_workspace_refusal import refuse_project_in_jj_workspace
 from sculptor.services.user_config.user_config import initialize_from_file
 from sculptor.utils.errors import setup_irrecoverable_exception_handler
 from sculptor.utils.logs import setup_loggers
@@ -76,6 +78,17 @@ def cmd_version(value: bool) -> None:
         raise typer.Exit()
 
 
+def _refuse_project_in_jj_workspace(project: Path | None) -> Path | None:
+    """Reject a project directory inside a jj workspace while parsing arguments, before the server starts."""
+    if project is None:
+        return None
+    try:
+        refuse_project_in_jj_workspace(project)
+    except ProjectInJjWorkspaceError as e:
+        raise typer.BadParameter(str(e)) from e
+    return project
+
+
 @typer_cli.callback()
 def main(
     project: Path | None = typer.Argument(
@@ -83,6 +96,7 @@ def main(
         exists=False,
         help="Path to the project repository. If not provided, current directory is used.",
         resolve_path=True,
+        callback=_refuse_project_in_jj_workspace,
     ),
     version: Annotated[bool | None, typer.Option("--version", callback=cmd_version)] = None,
     open_browser: bool = typer.Option(

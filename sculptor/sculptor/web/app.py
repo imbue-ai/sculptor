@@ -137,6 +137,8 @@ from sculptor.services.pi_login_service import broadcast_pi_models_refresh
 from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
+from sculptor.services.project_service.jj_workspace_refusal import ProjectInJjWorkspaceError
+from sculptor.services.project_service.jj_workspace_refusal import refuse_project_in_jj_workspace
 from sculptor.services.task_service.errors import InvalidTaskOperation
 from sculptor.services.task_service.errors import TaskNotFound
 from sculptor.services.terminal_agent_registry.bundled import install_bundled_registrations
@@ -181,7 +183,6 @@ from sculptor.services.workspace_service.vcs.checkout_layout import checkout_pat
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
-from sculptor.services.workspace_service.vcs.git_cli import find_jj_workspace_root
 from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
@@ -4539,22 +4540,11 @@ def get_active_projects(
 
 
 def _raise_if_inside_jj_workspace(project_path: Path) -> None:
-    """Refuse a directory inside a jj workspace, which has `.jj` and no `.git`.
-
-    A `git init` there would put a `.git` into the jj workspace, which switches
-    off the tripwire that keeps Sculptor's git calls out of jj workspaces. The
-    path is resolved first, so a symlink into a jj workspace is refused too.
-    """
-    jj_workspace_root = find_jj_workspace_root(project_path.resolve())
-    if jj_workspace_root is None:
-        return
-    raise HTTPException(
-        status_code=400,
-        detail=(
-            f"Selected directory is inside the jj workspace at {jj_workspace_root}, which has no git repository. "
-            + "Sculptor can only add a jj repository that is colocated with git."
-        ),
-    )
+    """Answer 400 for a project directory inside a jj workspace."""
+    try:
+        refuse_project_in_jj_workspace(project_path)
+    except ProjectInJjWorkspaceError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/api/v1/projects/initialize")
