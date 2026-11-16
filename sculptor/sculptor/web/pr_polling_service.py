@@ -41,8 +41,8 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
-from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
+from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
 from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
 from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
@@ -303,12 +303,6 @@ class _PullRequestLookup:
     base_ref_name: str
     host: str
     name_with_owner: str | None
-
-
-def _read_remote_names(git: GitCli, repo_path: Path) -> frozenset[str]:
-    """The names of the repository's remotes, such as ``origin``."""
-    output = git.run_git(["remote"], repo_path, is_read_only=True).stdout
-    return frozenset(line.strip() for line in output.splitlines() if line.strip())
 
 
 def _build_pr_index(nodes: Sequence[dict]) -> dict[tuple[str, str], list[dict]]:
@@ -841,7 +835,7 @@ class PrPollingService(Service):
         origin_url = read_origin_url(self._runners.git, location.repo_path)
         if origin_url is None or not is_github_remote_url(origin_url):
             return no_pr_status
-        base_ref_name = strip_remote_prefix(target_branch, _read_remote_names(self._runners.git, location.repo_path))
+        base_ref_name = strip_remote_prefix(target_branch, read_remote_names(self._runners.git, location.repo_path))
         if head_ref_names[0] == base_ref_name:
             return no_pr_status
         owner_and_name = parse_remote_owner_and_name(origin_url)
