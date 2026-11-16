@@ -221,11 +221,11 @@ class WorkspaceService(Service, ABC):
     def attempt_initial_bookmark(self, workspace_id: WorkspaceID) -> JjInitialBookmarkOutcome | None:
         """After an agent's turn in a jj workspace, create its requested bookmark while its stack has none.
 
-        Then publishes the jj state of every jj workspace again, so the reminders
-        for the agent's next message see this turn's work. Returns what the attempt
-        did; None when there was nothing to attempt: a git workspace, a missing
-        one, one that requested no bookmark, one whose published state already has
-        a bookmark, or one whose jj commands failed.
+        Then has the jj poller scan at once rather than on its next cycle, so the
+        reminders for the agent's next message see this turn's work. Returns what
+        the attempt did; None when there was nothing to attempt: a git workspace, a
+        missing one, one that requested no bookmark, one whose published state
+        already has a bookmark, or one whose jj commands failed.
         """
 
     @abstractmethod
