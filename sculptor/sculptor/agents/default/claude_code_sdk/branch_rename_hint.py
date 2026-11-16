@@ -15,6 +15,7 @@ has no `<slug>` to replace.
 """
 
 from pathlib import Path
+from typing import assert_never
 
 from loguru import logger
 
@@ -41,8 +42,18 @@ class BranchRenameHint(FrozenModel):
 
 
 def resolve_branch_rename_hint(environment: AgentExecutionEnvironment, naming_pattern: str) -> BranchRenameHint | None:
-    if environment.get_initialization_strategy() == WorkspaceInitializationStrategy.IN_PLACE:
-        return None
+    match environment.get_initialization_strategy():
+        case WorkspaceInitializationStrategy.IN_PLACE:
+            return None
+        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
+            return _resolve_git_branch_rename_hint(environment, naming_pattern)
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _resolve_git_branch_rename_hint(
+    environment: AgentExecutionEnvironment, naming_pattern: str
+) -> BranchRenameHint | None:
     git = build_vcs_runners(
         environment.concurrency_group, environment.get_tool_binary_path, environment.get_project_env_overrides
     ).git

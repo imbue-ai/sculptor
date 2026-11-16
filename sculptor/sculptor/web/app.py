@@ -177,6 +177,8 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
+from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_cli import find_jj_workspace_root
@@ -395,20 +397,19 @@ def _workspace_working_directory(
     environment_id: str | None,
     project_path: str | None,
 ) -> str | None:
-    """Resolve the directory holding a workspace's checkout.
+    """Resolve the directory holding a workspace's checkout, for rows that carry the raw columns.
 
-    Mirrors ``LocalEnvironment.get_working_directory`` without resuming the
-    environment (resume has side effects and is too heavy for list endpoints):
-    clone/worktree checkouts live at ``<environment_id>/code`` (environment_id
-    is the absolute workspace directory path), while in-place workspaces work
-    directly in the project's local repo. None when the environment hasn't been
-    initialized yet.
+    Applies the same rule as ``LocalEnvironment.get_working_directory`` without
+    resuming the environment (resume has side effects and is too heavy for list
+    endpoints); ``environment_id`` is the absolute environment directory path.
+    None when the checkout's location is not known yet.
     """
-    if strategy == WorkspaceInitializationStrategy.IN_PLACE:
-        return project_path
-    if environment_id is None:
-        return None
-    return str(Path(environment_id) / "code")
+    checkout_path = checkout_path_for_strategy(
+        strategy,
+        None if project_path is None else Path(project_path),
+        None if environment_id is None else Path(environment_id),
+    )
+    return None if checkout_path is None else str(checkout_path)
 
 
 def _workspace_to_response(
@@ -924,8 +925,7 @@ def create_workspace_v2(
                     workspace.initialization_strategy
                 ).default_setup_command(),
             )
-            if workspace.initialization_strategy
-            in (WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE)
+            if is_isolated_checkout(workspace.initialization_strategy)
             else None
         )
         return _workspace_to_response(
@@ -954,8 +954,13 @@ def preview_branch_name(
     a `<slug>` derived from the workspace name (random if empty) and a `<user>`
     slug derived from the repo's `git config user.name`.
     """
-    if mode == WorkspaceInitializationStrategy.IN_PLACE:
-        return PreviewBranchNameResponse(branch_name="")
+    match mode:
+        case WorkspaceInitializationStrategy.IN_PLACE:
+            return PreviewBranchNameResponse(branch_name="")
+        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)
 
     validated_project_id = validate_project_id(project_id)
     services = get_services_from_request_or_websocket(request)

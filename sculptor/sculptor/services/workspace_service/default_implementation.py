@@ -64,6 +64,7 @@ from sculptor.services.workspace_service.setup_command_runner import DefaultSetu
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.checkout_paths import workspace_checkout_path
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
@@ -313,16 +314,13 @@ class DefaultWorkspaceService(WorkspaceService):
         # Resolve through the project's tri-state default helper: `None` means
         # "use the current default", `""` means "user cleared", and any other
         # value is the user's custom command. Setup runs on any fresh isolated
-        # checkout — both CLONE and WORKTREE.
+        # checkout.
         resolved_setup_command = resolve_workspace_setup_command(
             project.workspace_setup_command, vcs.default_setup_command()
         )
         has_command = resolved_setup_command is not None and resolved_setup_command != ""
-        is_clone_or_worktree = initialization_strategy in (
-            WorkspaceInitializationStrategy.CLONE,
-            WorkspaceInitializationStrategy.WORKTREE,
-        )
-        initial_setup_status = "pending" if (has_command and is_clone_or_worktree) else "not_configured"
+        is_setup_pending = has_command and is_isolated_checkout(initialization_strategy)
+        initial_setup_status = "pending" if is_setup_pending else "not_configured"
 
         workspace_id = WorkspaceID()
         workspace = Workspace(

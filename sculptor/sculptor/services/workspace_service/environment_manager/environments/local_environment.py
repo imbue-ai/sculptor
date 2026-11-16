@@ -10,6 +10,7 @@ from typing import Mapping
 from typing import Sequence
 from typing import TYPE_CHECKING
 from typing import Union
+from typing import assert_never
 
 from loguru import logger
 from pydantic import PrivateAttr
@@ -41,6 +42,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
+from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import get_workspaces_folder
@@ -142,19 +144,13 @@ class LocalEnvironment(Environment):
         return self.initialization_strategy
 
     def get_working_directory(self) -> Path:
-        """Get the directory where the agent should perform all work.
-
-        - In-place mode: Returns the user's original repository path.
-        - Clone mode / Worktree mode: Returns the checkout at workspace/code/.
-        """
-        if self.initialization_strategy in (
-            WorkspaceInitializationStrategy.CLONE,
-            WorkspaceInitializationStrategy.WORKTREE,
-        ):
-            return self.get_workspace_path() / "code"
-        if self.repo_host_path is None:
+        """Get the directory where the agent should perform all work: the workspace's checkout."""
+        checkout_path = checkout_path_for_strategy(
+            self.initialization_strategy, self.repo_host_path, self.get_workspace_path()
+        )
+        if checkout_path is None:
             raise ValueError("repo_host_path must be set for LocalEnvironment")
-        return self.repo_host_path
+        return checkout_path
 
     def get_system_prompt(self) -> str | None:
         """Get the environment-specific system prompt content.
@@ -162,12 +158,15 @@ class LocalEnvironment(Environment):
         Returns mode-specific instructions based on initialization_strategy,
         plus the workspace attachments path for image display.
         """
-        if self.initialization_strategy == WorkspaceInitializationStrategy.IN_PLACE:
-            mode_prompt = IN_PLACE_MODE_PROMPT
-        elif self.initialization_strategy == WorkspaceInitializationStrategy.WORKTREE:
-            mode_prompt = WORKTREE_MODE_PROMPT
-        else:
-            mode_prompt = CLONE_MODE_PROMPT
+        match self.initialization_strategy:
+            case WorkspaceInitializationStrategy.IN_PLACE:
+                mode_prompt = IN_PLACE_MODE_PROMPT
+            case WorkspaceInitializationStrategy.CLONE:
+                mode_prompt = CLONE_MODE_PROMPT
+            case WorkspaceInitializationStrategy.WORKTREE:
+                mode_prompt = WORKTREE_MODE_PROMPT
+            case _ as unreachable:
+                assert_never(unreachable)
 
         attachments_path = self.get_attachments_path()
         attachments_prompt = f"\nThe workspace attachments directory is: {attachments_path}\nSave any media you want to display (e.g. screenshots, video recordings) to this directory.\n"

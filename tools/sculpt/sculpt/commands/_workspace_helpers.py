@@ -1,5 +1,7 @@
 """Shared helpers for workspace-creating commands (``sculpt workspace create`` and ``sculpt run``)."""
 
+from typing import assert_never
+
 import httpx
 
 from sculpt.client import Client
@@ -9,11 +11,21 @@ from sculpt.client.models.workspace_initialization_strategy import WorkspaceInit
 from sculpt.formatting import cli_error
 from sculpt.formatting import handle_connection_error
 
-STRATEGY_MAPPING = {
-    "clone": WorkspaceInitializationStrategy.CLONE,
-    "in-place": WorkspaceInitializationStrategy.IN_PLACE,
-    "worktree": WorkspaceInitializationStrategy.WORKTREE,
-}
+
+def _strategy_option_name(strategy: WorkspaceInitializationStrategy) -> str:
+    """The ``--strategy`` value that selects ``strategy``."""
+    match strategy:
+        case WorkspaceInitializationStrategy.CLONE:
+            return "clone"
+        case WorkspaceInitializationStrategy.IN_PLACE:
+            return "in-place"
+        case WorkspaceInitializationStrategy.WORKTREE:
+            return "worktree"
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+STRATEGY_MAPPING = {_strategy_option_name(strategy): strategy for strategy in WorkspaceInitializationStrategy}
 
 
 def resolve_strategy(strategy: str, json_output: bool) -> WorkspaceInitializationStrategy:
@@ -44,15 +56,26 @@ def resolve_requested_branch_name(
     """
     if branch_name is not None:
         return branch_name
-    if strategy != WorkspaceInitializationStrategy.WORKTREE:
-        return None
+    match strategy:
+        case WorkspaceInitializationStrategy.WORKTREE:
+            return _preview_worktree_branch_name(
+                client=client, project_id=project_id, workspace_name=workspace_name, json_output=json_output
+            )
+        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.IN_PLACE:
+            return None
+        case _ as unreachable:
+            assert_never(unreachable)
 
+
+def _preview_worktree_branch_name(
+    *, client: Client, project_id: str, workspace_name: str | None, json_output: bool
+) -> str:
     try:
         preview = preview_branch_name.sync(
             client=client,
             project_id=project_id,
             workspace_name=workspace_name or "",
-            mode=strategy,
+            mode=WorkspaceInitializationStrategy.WORKTREE,
         )
     except httpx.ConnectError:
         handle_connection_error(json_output)
