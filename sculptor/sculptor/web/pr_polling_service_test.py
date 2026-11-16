@@ -5,6 +5,7 @@ import queue
 import shutil
 import threading
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -282,7 +283,7 @@ def test_round_reads_the_origin_from_the_main_repo_not_the_checkout(
     assert lookup is not None
     assert lookup.host == "github.example.com"
     assert (lookup.repository_owner, lookup.repository_name) == ("org", "repo")
-    assert lookup.head_ref_name == "feat-1"
+    assert lookup.head_ref_names == ("feat-1",)
     assert lookup.working_dir == checkout
 
 
@@ -535,6 +536,138 @@ def test_a_jj_workspace_is_looked_up_through_jj_and_runs_no_git_in_its_checkout(
     assert Path((tmp_path / "gh-cwd").read_text().strip()) == checkout.resolve()
     gh_arguments = (tmp_path / "gh-args").read_text().splitlines()
     assert {"owner=sculptor-tests", "name=jj-fixture", "branch=feat-1"} <= set(gh_arguments)
+
+
+_JJ_FIXTURE_REPOSITORY = "sculptor-tests/jj-fixture"
+
+
+def _make_jj_workspace_with_bookmarks(
+    jj_binary: JjBinary, repo: JjColocatedRepo, checkout: Path, bookmarks_oldest_first: Sequence[str]
+) -> None:
+    """A jj workspace of `repo` with one described revision per bookmark, each bookmark on its own revision."""
+    run_jj(
+        jj_binary,
+        ("workspace", "add", "--no-colocate", "--name", checkout.name, "-r", repo.default_bookmark, str(checkout)),
+        cwd=repo.path,
+    )
+    for bookmark in bookmarks_oldest_first:
+        (checkout / f"{bookmark}.txt").write_text(f"{bookmark}\n")
+        run_jj(jj_binary, ("commit", "-m", f"work for {bookmark}"), cwd=checkout)
+        run_jj(jj_binary, ("bookmark", "create", "-r", "@-", bookmark), cwd=checkout)
+
+
+def _make_fake_gh_answering_both_queries(
+    directory: Path, search_nodes: list[dict], repository_nodes: list[dict]
+) -> Path:
+    """A gh that answers the batched search with `search_nodes` and the per-workspace query with `repository_nodes`.
+
+    It appends every argument of every call to `gh-args`, each call starting with a `gh-call` line.
+    """
+    search_payload = directory / "gh-search-payload.json"
+    search_payload.write_text(
+        json.dumps({"data": {"search": {"pageInfo": {"hasNextPage": False}, "nodes": search_nodes}}})
+    )
+    repository_payload = directory / "gh-repository-payload.json"
+    repository_payload.write_text(json.dumps({"data": {"repository": {"pullRequests": {"nodes": repository_nodes}}}}))
+    arguments_log = directory / "gh-args"
+    body = "\n".join(
+        (
+            f"echo gh-call >> {arguments_log}",
+            'for argument in "$@"; do',
+            f'  echo "$argument" >> {arguments_log}',
+            "done",
+            'for argument in "$@"; do',
+            f'  case "$argument" in q=*) cat {search_payload}; exit 0;; esac',
+            "done",
+            f"cat {repository_payload}",
+        )
+    )
+    return _write_script(directory / "gh", body)
+
+
+def _register_jj_workspace(
+    svc: PrPollingService, repo: JjColocatedRepo, checkout: Path
+) -> tuple[WorkspaceID, _WorkspacePollState]:
+    return _register_checkout(
+        svc,
+        repo.path,
+        checkout,
+        target_branch=f"{repo.default_bookmark}@origin",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_the_round_finds_a_jj_workspaces_open_pull_request_on_any_of_its_bookmarks(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    _make_jj_workspace_with_bookmarks(jj_binary, jj_colocated_repo, checkout, ("lower", "upper"))
+    lower_node = _open_search_node(
+        9, repo=_JJ_FIXTURE_REPOSITORY, head="lower", base=jj_colocated_repo.default_bookmark
+    )
+    gh = _make_fake_gh_answering_both_queries(tmp_path, search_nodes=[lower_node], repository_nodes=[])
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh), jj_binary.path
+    )
+    workspace_id, _ = _register_jj_workspace(svc, jj_colocated_repo, checkout)
+
+    svc._run_round(_make_user_config())
+
+    assert (svc._cache[workspace_id].pr_state, svc._cache[workspace_id].pr_iid) == ("open", 9)
+    assert workspace_id in svc._matched_workspaces
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_the_fallback_asks_gh_about_a_jj_workspaces_primary_bookmark_only(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    _make_jj_workspace_with_bookmarks(jj_binary, jj_colocated_repo, checkout, ("lower", "upper"))
+    gh = _make_fake_gh_answering_both_queries(tmp_path, search_nodes=[], repository_nodes=[])
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh), jj_binary.path
+    )
+    workspace_id, state = _register_jj_workspace(svc, jj_colocated_repo, checkout)
+
+    status = svc._fetch_status(workspace_id, state)
+
+    assert status == PrStatusInfo(workspace_id=workspace_id, pr_state="none")
+    gh_arguments = (tmp_path / "gh-args").read_text().splitlines()
+    assert gh_arguments.count("gh-call") == 1
+    assert [argument for argument in gh_arguments if argument.startswith("branch=")] == ["branch=upper"]
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_a_jj_workspace_without_bookmarks_reports_no_pull_request_without_running_gh(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    _make_jj_workspace_with_bookmarks(jj_binary, jj_colocated_repo, checkout, ())
+    gh = _make_fake_gh_answering_both_queries(tmp_path, search_nodes=[], repository_nodes=[])
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh), jj_binary.path
+    )
+    workspace_id, state = _register_jj_workspace(svc, jj_colocated_repo, checkout)
+
+    svc._run_round(_make_user_config())
+    status = svc._fetch_status(workspace_id, state)
+
+    assert status == PrStatusInfo(workspace_id=workspace_id, pr_state="none")
+    assert svc._cache[workspace_id] == status
+    assert not (tmp_path / "gh-args").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -1201,7 +1334,7 @@ def _candidate(
         workspace_id=workspace_id,
         working_dir=_WORKING_DIR,
         gh_env={},
-        head_ref_name=head_ref_name,
+        head_ref_names=(head_ref_name,),
         base_ref_name=target_branch,
         host=host,
         repository_owner=repo.split("/")[0],

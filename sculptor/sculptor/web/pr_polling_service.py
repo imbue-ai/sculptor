@@ -287,16 +287,17 @@ class _PullRequestLookup:
 
     Carries everything the batched round and the per-workspace fallback need
     without re-reading git: the workspace's repository by owner and name, its
-    ``head_ref_name`` (with the repository, the index key), the PR base its
-    target names (``base_ref_name``) for the per-workspace derivation, and the
-    checkout and environment gh runs with. Short-circuited workspaces (no PR
-    head / on target / non-GitHub / no owner and name) never get one.
+    candidate PR heads, most likely first (with the repository, the index keys
+    the round tries in order; the per-workspace fallback asks gh about the first
+    only), the PR base its target names (``base_ref_name``), and the checkout
+    and environment gh runs with. Short-circuited workspaces (no PR head / on
+    target / non-GitHub / no owner and name) never get one.
     """
 
     workspace_id: WorkspaceID
     working_dir: Path
     gh_env: Mapping[str, str]
-    head_ref_name: str
+    head_ref_names: tuple[str, ...]
     base_ref_name: str
     host: str
     repository_owner: str
@@ -323,6 +324,15 @@ def _build_pr_index(nodes: Sequence[dict]) -> dict[tuple[str, str], list[dict]]:
             continue
         index.setdefault((repo, head), []).append(node)
     return index
+
+
+def _find_open_pr_nodes(index: Mapping[tuple[str, str], list[dict]], lookup: _PullRequestLookup) -> list[dict]:
+    """The indexed open-PR nodes of the first of the lookup's PR heads that has any; empty when none has."""
+    for head_ref_name in lookup.head_ref_names:
+        nodes = index.get((lookup.name_with_owner, head_ref_name))
+        if nodes:
+            return nodes
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -737,7 +747,7 @@ class PrPollingService(Service):
 
         unmatched_count = 0
         for candidate in candidates:
-            nodes = index.get((candidate.name_with_owner, candidate.head_ref_name))
+            nodes = _find_open_pr_nodes(index, candidate)
             if nodes:
                 # The branch carries at least one of the user's open PRs — derive
                 # this workspace's status directly from them (open if one targets
@@ -859,7 +869,7 @@ class PrPollingService(Service):
             workspace_id=workspace_id,
             working_dir=location.checkout_path,
             gh_env=vcs.agent_environment(location).environment_variables,
-            head_ref_name=head_ref_names[0],
+            head_ref_names=head_ref_names,
             base_ref_name=base_ref_name,
             host=extract_remote_hostname(origin_url),
             repository_owner=repository_owner,
@@ -1163,7 +1173,7 @@ class PrPollingService(Service):
         status = fetch_pr_status(
             self._gh_runner(lookup),
             workspace_id,
-            lookup.head_ref_name,
+            lookup.head_ref_names[0],
             lookup.base_ref_name,
             lookup.repository_owner,
             lookup.repository_name,
