@@ -20,6 +20,7 @@ from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
+from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.state.chat_state import ToolInput
 from sculptor.utils.timeout import log_runtime_decorator
 
@@ -102,9 +103,9 @@ class DiffTracker(TurnDiffTracker):
     def __init__(self, environment: AgentExecutionEnvironment) -> None:
         self.environment = environment
         self.code_directory = environment.get_working_directory()
-        self._git = GitCli(
+        self._git = build_vcs_runners(
             environment.concurrency_group, environment.get_tool_binary_path, environment.get_project_env_overrides
-        )
+        ).git
         self.file_snapshot_by_path: dict[str, str | bytes | None] = {}
         # The temp objects directory holding the baseline tree, or None when the
         # repository's own objects hold it. Kept until the next rebaseline so the

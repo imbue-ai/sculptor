@@ -67,7 +67,7 @@ from sculptor.services.git_repo_service.git_repos import ReadOnlyGitRepo
 from sculptor.services.task_service.api import TaskService
 from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegistration
 from sculptor.services.workspace_service.api import WorkspaceService
-from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
@@ -538,7 +538,7 @@ def _build_coordinator(
         concurrency_group=concurrency_group,
         data_model_service=data_model_service,
         workspace_service=workspace_service,
-        git_cli=GitCli(concurrency_group, lambda tool: None),
+        vcs_runners=build_vcs_runners(concurrency_group, lambda tool: None),
     )
     coordinator = CIBabysitterCoordinator(
         concurrency_group=concurrency_group,

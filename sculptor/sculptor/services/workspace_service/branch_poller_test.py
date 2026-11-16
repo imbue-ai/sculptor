@@ -26,6 +26,7 @@ from sculptor.services.user_config.user_config import get_default_user_config_in
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.branch_poller import WorkspaceBranchPoller
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.testing.local_git_repo import LocalGitRepo
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceBranchInfo
@@ -86,7 +87,7 @@ def _build_poller(
     return WorkspaceBranchPoller(
         concurrency_group=cg,
         data_model_service=_FakeDataModelService(workspaces),  # type: ignore[arg-type]
-        git_cli=git_cli,
+        vcs_runners=VcsRunners(git=git_cli),
         resolve_working_dir=lambda workspace: working_dirs.get(workspace.object_id),
         refresh_diff_on_branch_change=(refresh_calls.append if refresh_calls is not None else (lambda _id: None)),
     )

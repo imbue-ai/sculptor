@@ -52,10 +52,10 @@ from sculptor.services.git_repo_service.git_ref_scanning import remote_refs_sign
 from sculptor.services.git_repo_service.git_ref_scanning import resolve_git_dirs
 from sculptor.services.git_repo_service.git_ref_scanning import stat_signature
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
-from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
 from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
-from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
+from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceBranchInfo
 from sculptor.web.data_types import WorkspaceTargetBranchesInfo
@@ -78,13 +78,13 @@ class WorkspaceBranchPoller:
         *,
         concurrency_group: ConcurrencyGroup,
         data_model_service: DataModelService,
-        git_cli: GitCli,
+        vcs_runners: VcsRunners,
         resolve_working_dir: Callable[[Workspace], Path | None],
         refresh_diff_on_branch_change: Callable[[WorkspaceID], None],
     ) -> None:
         self._concurrency_group = concurrency_group
         self._data_model_service = data_model_service
-        self._git = git_cli
+        self._runners = vcs_runners
         self._resolve_working_dir = resolve_working_dir
         self._refresh_diff_on_branch_change = refresh_diff_on_branch_change
 
@@ -249,7 +249,7 @@ class WorkspaceBranchPoller:
             return  # Fast path: HEAD unchanged since last scan — no read, no fork.
 
         try:
-            identity = read_head_identity(self._git, working_dir)
+            identity = read_head_identity(self._runners.git, working_dir)
         except VcsCommandError as e:
             logger.debug("Cannot read the current branch of {}; retrying next cycle: {}", working_dir, e)
             return
@@ -280,9 +280,9 @@ class WorkspaceBranchPoller:
         if not force_recompute and already_scanned and unchanged:
             return  # Stat fast-path: remote refs unchanged since last scan — no fork.
 
-        vcs = GitWorkspaceVcs(workspace.initialization_strategy, self._git, self._concurrency_group)
+        vcs = make_workspace_vcs(workspace.initialization_strategy, self._runners, self._concurrency_group)
         try:
-            main_repo_path = resolve_main_repo_path(self._git, working_dir)
+            main_repo_path = resolve_main_repo_path(self._runners.git, working_dir)
             target_candidates = tuple(vcs.list_target_candidates(main_repo_path))
         except VcsCommandError as e:
             logger.warning("Failed to list target candidates for {}: {}", common_dir, e)

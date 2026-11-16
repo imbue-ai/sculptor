@@ -6,7 +6,6 @@ from pathlib import Path
 from queue import Queue
 from typing import Generator
 from typing import Self
-from typing import assert_never
 from typing import cast
 
 from loguru import logger
@@ -71,9 +70,10 @@ from sculptor.services.workspace_service.vcs.data_types import CommitRecord
 from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
-from sculptor.services.workspace_service.vcs.git_cli import GitCli
-from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
+from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
+from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
+from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
 from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.timeout import timeout_monitor
@@ -103,7 +103,7 @@ class DefaultWorkspaceService(WorkspaceService):
     project_service: ProjectService
     workspace_sync_dir: Path
     backend_port: int
-    git_cli: GitCli
+    vcs_runners: VcsRunners
 
     _diff_lock_by_workspace: dict[WorkspaceID, threading.Lock] = PrivateAttr(default_factory=dict)
     _diff_lock_map_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
@@ -135,7 +135,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 self._branch_poller_instance = WorkspaceBranchPoller(
                     concurrency_group=self.concurrency_group,
                     data_model_service=self.data_model_service,
-                    git_cli=self.git_cli,
+                    vcs_runners=self.vcs_runners,
                     resolve_working_dir=self.get_workspace_working_directory,
                     refresh_diff_on_branch_change=self.maybe_refresh_workspace_diff,
                 )
@@ -249,19 +249,13 @@ class DefaultWorkspaceService(WorkspaceService):
             project_service=project_service,
             workspace_sync_dir=settings.workspace_sync_path,
             backend_port=settings.BACKEND_PORT,
-            git_cli=GitCli(workspace_concurrency_group, dependency_management_service.resolve_binary_path),
+            vcs_runners=build_vcs_runners(
+                workspace_concurrency_group, dependency_management_service.resolve_binary_path
+            ),
         )
 
     def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
-        match initialization_strategy:
-            case (
-                WorkspaceInitializationStrategy.IN_PLACE
-                | WorkspaceInitializationStrategy.CLONE
-                | WorkspaceInitializationStrategy.WORKTREE
-            ):
-                return GitWorkspaceVcs(initialization_strategy, self.git_cli, self.concurrency_group)
-            case _ as unreachable:
-                assert_never(unreachable)
+        return make_workspace_vcs(initialization_strategy, self.vcs_runners, self.concurrency_group)
 
     def _get_diff_lock(self, workspace_id: WorkspaceID) -> threading.Lock:
         """Get a per-workspace lock for diff generation, creating one lazily if needed."""

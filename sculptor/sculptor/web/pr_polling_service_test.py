@@ -21,6 +21,7 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
@@ -158,7 +159,7 @@ def _make_git_cli(concurrency_group: ConcurrencyGroup, gh: Path | None) -> GitCl
 
 def _make_service_with_git(concurrency_group: ConcurrencyGroup, git_cli: GitCli) -> PrPollingService:
     svc = _make_service()
-    svc._git = git_cli
+    svc._runners = VcsRunners(git=git_cli)
     object.__setattr__(svc, "concurrency_group", concurrency_group)
     return svc
 
