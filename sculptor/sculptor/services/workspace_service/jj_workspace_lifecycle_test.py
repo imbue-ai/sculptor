@@ -20,6 +20,7 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager import (
     default_implementation as environment_manager_default_implementation,
@@ -172,6 +173,23 @@ def test_the_first_agent_start_creates_a_jj_only_checkout_on_the_workspaces_base
     assert _read_commit_id(jj_binary, checkout, "@-") == workspace.source_git_hash
     workspace_names = run_jj(jj_binary, ("workspace", "list", "-T", 'name ++ "\\n"'), cwd=jj_colocated_repo.path)
     assert str(workspace.object_id) in workspace_names.split()
+
+
+def test_resuming_a_jj_workspace_re_applies_the_current_snapshot_size_limit(
+    jj_binary: JjBinary,
+    jj_project: Project,
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
+    checkout = _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+    set_user_config_instance(get_user_config_instance().model_copy(update={"jj_snapshot_max_new_file_size_mib": 3}))
+
+    resumed_checkout = _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+
+    assert resumed_checkout == checkout
+    limit = run_jj(jj_binary, ("config", "get", "snapshot.max-new-file-size"), cwd=checkout).strip()
+    assert limit == str(3 * 1024 * 1024)
 
 
 def test_startup_forgets_a_deleted_jj_workspace_whose_teardown_never_reached_the_repository(
