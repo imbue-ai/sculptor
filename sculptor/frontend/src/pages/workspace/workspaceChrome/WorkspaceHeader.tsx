@@ -4,9 +4,10 @@ import { PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useCallback, useMemo, useState } from "react";
 
-import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/api";
+import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/hooks/navigation";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
+import { ToastType, workspaceTargetChangeErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
@@ -25,6 +26,7 @@ import { primaryOf } from "~/pages/workspace/layout/types/section.ts";
 import { DiffSummary } from "../../../components/diffSummary/DiffSummary";
 import { PrButton } from "../../../components/prButton/PrButton";
 import { useWorkspaceTargetBranches } from "./hooks/useWorkspaceTargetBranches";
+import { useWorkspaceTargetChange } from "./hooks/useWorkspaceTargetChange.ts";
 import { WorkspaceIdentityPill } from "./identityPill/WorkspaceIdentityPill.tsx";
 import { TargetBranchSelector } from "./TargetBranchSelector";
 import styles from "./WorkspaceHeader.module.scss";
@@ -97,6 +99,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const workspaceWidgets = useAtomValue(extensionWorkspaceWidgetsAtom);
+  const setTargetChangeErrorToast = useSetAtom(workspaceTargetChangeErrorToastAtom);
 
   // External hooks
   const { workspaceID } = useWorkspacePageParams();
@@ -106,39 +109,29 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const currentTargetBranch = useWorkspaceTarget(workspaceID);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
   const { targetBranches, prBaseNames } = useWorkspaceTargetBranches(workspaceID);
+  const changeTarget = useWorkspaceTargetChange(workspaceID);
 
   // Internal state
   const [isTargetBranchOpen, setIsTargetBranchOpen] = useState<boolean>(false);
 
   // Functions and callbacks
-  const handleTargetBranchChange = useCallback(
-    async (branch: string): Promise<void> => {
-      try {
-        await updateWorkspace({ path: { workspace_id: workspaceID }, body: { targetBranch: branch } });
-      } catch (e) {
-        console.error("Failed to change target branch:", e);
-      }
-    },
-    [workspaceID],
-  );
-
   // Retarget the workspace at the candidate that opens pull requests into an
   // existing PR's base.
   const handleSwitchTarget = useCallback(
-    async (prBaseName: string): Promise<void> => {
+    (prBaseName: string): void => {
       const newTarget = findTargetForPrBase({ prBaseName, targetBranches, prBaseNames });
       if (newTarget === null) {
-        console.error("No target opens pull requests into", prBaseName);
+        setTargetChangeErrorToast({
+          title: `Could not change the target to ${prBaseName}`,
+          description: "No target candidate opens pull requests into it. Fetch it, then try again.",
+          type: ToastType.ERROR,
+          action: null,
+        });
         return;
       }
-
-      try {
-        await updateWorkspace({ path: { workspace_id: workspaceID }, body: { targetBranch: newTarget } });
-      } catch (e) {
-        console.error("Failed to switch target branch:", e);
-      }
+      changeTarget(newTarget);
     },
-    [workspaceID, targetBranches, prBaseNames],
+    [targetBranches, prBaseNames, changeTarget, setTargetChangeErrorToast],
   );
 
   // JSX and rendering logic
@@ -259,7 +252,7 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
             currentTargetBranch={currentTargetBranch}
             targetBranches={targetBranches}
             prBaseNames={prBaseNames}
-            onBranchChange={handleTargetBranchChange}
+            onBranchChange={changeTarget}
             onOpenChange={setIsTargetBranchOpen}
             variant={isMismatched ? "amber" : "default"}
             mismatch={mismatchForSelector}
