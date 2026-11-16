@@ -25,6 +25,10 @@ from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspa
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
+from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjColocatedRepo
+from sculptor.testing.jj_repos import make_github_looking_origin
+from sculptor.testing.jj_repos import run_jj
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
@@ -161,21 +165,28 @@ def _make_git_cli(concurrency_group: ConcurrencyGroup, gh: Path | None) -> GitCl
     return GitCli(concurrency_group, binaries.get)
 
 
-def _make_service_with_git(concurrency_group: ConcurrencyGroup, git_cli: GitCli) -> PrPollingService:
+def _make_service_with_git(
+    concurrency_group: ConcurrencyGroup, git_cli: GitCli, jj_binary_path: Path | None = None
+) -> PrPollingService:
     svc = _make_service()
-    svc._runners = VcsRunners(git=git_cli, jj=JjCli(concurrency_group, lambda tool: None))
+    jj = JjCli(concurrency_group, lambda tool: None if jj_binary_path is None else str(jj_binary_path))
+    svc._runners = VcsRunners(git=git_cli, jj=jj)
     object.__setattr__(svc, "concurrency_group", concurrency_group)
     return svc
 
 
 def _register_checkout(
-    svc: PrPollingService, repo: Path, checkout: Path, target_branch: str = "origin/main"
+    svc: PrPollingService,
+    repo: Path,
+    checkout: Path,
+    target_branch: str = "origin/main",
+    initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.CLONE,
 ) -> tuple[WorkspaceID, _WorkspacePollState]:
-    """Track a clone-mode workspace whose checkout is already known, so polling never reads the DB."""
+    """Track a workspace, clone-mode unless told otherwise, whose checkout is already known, so polling never reads the DB."""
     workspace_id = WorkspaceID()
     state = _WorkspacePollState(
         workspace_id=workspace_id,
-        initialization_strategy=WorkspaceInitializationStrategy.CLONE,
+        initialization_strategy=initialization_strategy,
         checkout_location=CheckoutLocation(repo_path=repo, checkout_path=checkout, checkout_name=str(workspace_id)),
         target_branch=target_branch,
         requested_branch_name=None,
@@ -365,6 +376,42 @@ def test_jj_checkout_is_logged_once_at_error_across_rounds_and_fallback_polls(
     assert first_poll is None
     assert second_poll is None
     assert levels == ["ERROR"]
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_a_jj_workspace_is_looked_up_through_jj_and_runs_no_git_in_its_checkout(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    run_jj(
+        jj_binary,
+        ("workspace", "add", "--no-colocate", "--name", "ws", "-r", jj_colocated_repo.default_bookmark, str(checkout)),
+        cwd=jj_colocated_repo.path,
+    )
+    (checkout / "feature.txt").write_text("feature\n")
+    run_jj(jj_binary, ("commit", "-m", "add the feature"), cwd=checkout)
+    run_jj(jj_binary, ("bookmark", "create", "-r", "@-", "feat-1"), cwd=checkout)
+    gh = _make_fake_gh(tmp_path, [_open_search_node(7, base=jj_colocated_repo.default_bookmark)])
+    git_cli = _make_git_cli(test_root_concurrency_group, gh)
+    svc = _make_service_with_git(test_root_concurrency_group, git_cli, jj_binary.path)
+    workspace_id, state = _register_checkout(
+        svc,
+        jj_colocated_repo.path,
+        checkout,
+        target_branch=f"{jj_colocated_repo.default_bookmark}@origin",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+
+    with record_logged_error_levels() as levels:
+        status = svc._fetch_status(workspace_id, state)
+
+    assert levels == []
+    assert isinstance(status, PrStatusInfo)
+    assert Path((tmp_path / "gh-cwd").read_text().strip()) == checkout.resolve()
 
 
 # ---------------------------------------------------------------------------
