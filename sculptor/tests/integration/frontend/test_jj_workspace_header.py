@@ -96,6 +96,39 @@ def test_the_pill_ghosts_the_requested_bookmark_until_sculptor_creates_it_after_
         expect(card).to_contain_text(f"1 described revision above {_BOOKMARK}")
 
 
+@user_story("to see the bookmark Sculptor creates after a turn on its revision in the open Revisions panel")
+def test_the_open_revisions_panel_shows_the_bookmark_sculptor_creates_after_a_turn(
+    sculptor_instance_factory_: SculptorInstanceFactory,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    tmp_path: Path,
+) -> None:
+    use_jj_binary(sculptor_instance_factory_, jj_binary)
+    colocate_base_repo_with_origin(sculptor_instance_factory_, jj_binary, tmp_path / "origin.git")
+    jj = f"'{jj_binary.path}'"
+
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        page = instance.page
+        settle_first_run_offer(page)
+        task_page, _ = open_jj_workspace_agent(page, _BOOKMARK)
+        chat_panel = task_page.get_chat_panel()
+        revisions = get_commits_panel_in(open_panel(page, "commits", sub_section="left"), page).get_revision_entries()
+        expect(revisions).to_have_count(1, timeout=60_000)
+
+        send_chat_message(
+            chat_panel=chat_panel,
+            message=multi_step_prompt(
+                [write_file_step("notes.md", "first notes\n"), bash_step(f"{jj} describe -m 'Add notes'")]
+            ),
+        )
+        wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
+        expect(task_page.get_jj_identity_pill()).to_have_attribute("aria-label", f"Copy bookmark {_BOOKMARK}")
+
+        described = revisions.filter(has_text="Add notes")
+        expect(described).to_have_count(1)
+        expect(described).to_contain_text(_BOOKMARK)
+
+
 @user_story("to point my jj workspace at another target bookmark and see its revisions counted from there")
 def test_changing_the_target_bookmark_moves_the_fork_point_and_persists(
     sculptor_instance_factory_: SculptorInstanceFactory,

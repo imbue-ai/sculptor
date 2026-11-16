@@ -62,6 +62,7 @@ export const SCULPTOR_QUERY_KEY_PREFIX = "sculptor";
  *   ["sculptor", "workspace", id, "git", "diff", ...]
  *   ["sculptor", "workspace", id, "git", "files"]
  *   ["sculptor", "workspace", id, "git", "commits", targetBranch]
+ *   ["sculptor", "workspace", id, "git", "revisions", targetBranch]
  *   ["sculptor", "workspace", id, "git", "fileContent", path, gitRef]
  */
 export const workspaceQueryKeyPrefix = (workspaceId: string): QueryKey =>
@@ -69,6 +70,9 @@ export const workspaceQueryKeyPrefix = (workspaceId: string): QueryKey =>
 
 export const workspaceGitQueryKeyPrefix = (workspaceId: string): QueryKey =>
   [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "git"] as const;
+
+export const workspaceRevisionsQueryKeyPrefix = (workspaceId: string): QueryKey =>
+  [...workspaceGitQueryKeyPrefix(workspaceId), "revisions"] as const;
 
 /**
  * Query key for the Home recent-workspaces list — a pulled REST snapshot,
@@ -183,6 +187,15 @@ export type BackendQueryResult<T> = {
  */
 export const invalidateWorkspaceGitQueries = (workspaceId: string): void => {
   void queryClient.invalidateQueries({ queryKey: workspaceGitQueryKeyPrefix(workspaceId) });
+};
+
+/**
+ * Mark a jj workspace's cached revisions stale so any active observer refetches.
+ * Triggered by a change in the workspace's streamed jj state: a bookmark or a
+ * description can change while the diff, and so `diffUpdatedAt`, stays the same.
+ */
+export const invalidateWorkspaceRevisionsQueries = (workspaceId: string): void => {
+  void queryClient.invalidateQueries({ queryKey: workspaceRevisionsQueryKeyPrefix(workspaceId) });
 };
 
 /**
