@@ -12,6 +12,7 @@ import pytest
 
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
@@ -293,6 +294,37 @@ def test_missing_workspaces_targets_and_checkouts_are_tolerated(harness: _Harnes
     assert levels == []
     assert [state.workspace_id for state in _states(items)] == [without_target.object_id]
     assert deleted_checkout.object_id not in {targets.workspace_id for targets in _targets(items)}
+
+
+def test_a_workspace_whose_update_fails_is_logged_once_and_does_not_stop_the_others(
+    harness: _Harness,
+) -> None:
+    failing, failing_checkout = harness.add_workspace()
+    healthy, healthy_checkout = harness.add_workspace()
+    harness.scan()
+
+    def refresh_diff(workspace_id: WorkspaceID) -> None:
+        if workspace_id == failing.object_id:
+            raise _UnexpectedRefreshError(workspace_id)
+
+    harness.poller._refresh_diff_on_working_copy_change = refresh_diff
+    harness.jj(failing_checkout, "new")
+    harness.jj(healthy_checkout, "new")
+
+    with expect_exact_logged_errors(["jj workspace scan is skipping"]):
+        with record_logged_error_levels() as levels:
+            first_states = _states(harness.scan())
+            harness.jj(failing_checkout, "describe", "-m", "still failing")
+            second_states = _states(harness.scan())
+
+    assert levels == ["LOW_PRIORITY"]
+    assert [state.workspace_id for state in first_states] == [healthy.object_id]
+    assert second_states == []
+    assert harness.poller.get_jj_state(failing.object_id) is not None
+
+
+class _UnexpectedRefreshError(Exception):
+    """Raised by a diff refresh standing in for a failure no handler anticipates."""
 
 
 def test_a_git_workspace_is_not_scanned(harness: _Harness, tmp_path: Path) -> None:

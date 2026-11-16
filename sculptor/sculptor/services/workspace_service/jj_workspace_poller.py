@@ -179,7 +179,14 @@ class JjWorkspacePoller:
                 continue
             self._failed_scan_keys.discard(store)
             for workspace, _ in members:
-                if self._update_workspace(workspace, scan):
+                try:
+                    is_in_scan = self._update_workspace(workspace, scan)
+                except Exception as e:
+                    self._log_scan_failure_once(workspace.object_id, e)
+                    kept_workspace_ids.add(workspace.object_id)
+                    continue
+                self._failed_scan_keys.discard(workspace.object_id)
+                if is_in_scan:
                     kept_workspace_ids.add(workspace.object_id)
 
         self._prune(kept_workspace_ids, set(members_by_store))
@@ -197,11 +204,9 @@ class JjWorkspacePoller:
             except Exception as e:
                 self._log_scan_failure_once(workspace.object_id, e)
                 continue
-            self._failed_scan_keys.discard(workspace.object_id)
-            if checkout is None:
-                continue
-            store = _find_repository_store(checkout)
-            if store is None:
+            store = None if checkout is None else _find_repository_store(checkout)
+            if checkout is None or store is None:
+                self._failed_scan_keys.discard(workspace.object_id)
                 continue
             members_by_store.setdefault(store, []).append((workspace, checkout))
         return members_by_store
