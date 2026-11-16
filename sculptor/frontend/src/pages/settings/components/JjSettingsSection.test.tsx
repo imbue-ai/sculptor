@@ -154,6 +154,25 @@ describe("JjSettingsSection", () => {
     expect(store.get(dependenciesStatusAtom)).toBe(NOT_INSTALLED);
   });
 
+  describe("the status of the jj Sculptor runs", () => {
+    it.each([
+      { mode: "MANAGED", source: "MANAGED", status: "v0.47.1 — Managed" },
+      { mode: "MANAGED", source: "EXTERNAL", status: "v0.47.1 — On your PATH, until the managed copy is installed" },
+      { mode: "CUSTOM", source: "EXTERNAL", status: "v0.47.1 — External binary" },
+    ] as const)("reads $status for a $source jj in $mode mode", async ({ mode, source, status }) => {
+      const withJj = {
+        ...AVAILABLE,
+        jj: makeInfo({ installed: true, isVersionInRange: true, mode, source, version: "0.47.1" }),
+      };
+      store.set(dependenciesStatusAtom, withJj);
+      mockGetDependenciesStatus.mockResolvedValue({ data: withJj });
+      renderSection();
+      await act(async () => {});
+
+      expect(screen.getByTestId(ElementIds.JJ_UP_TO_DATE)).toHaveTextContent(status);
+    });
+  });
+
   describe("the repositories using jj", () => {
     it("lists each repository that uses jj for new workspaces, with a link to its settings", () => {
       store.set(updateProjectsAtom, [
