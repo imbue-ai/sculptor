@@ -79,7 +79,7 @@ class _ColocationFailed(FrozenModel):
 
 
 class _StopWorker(FrozenModel):
-    """Asks the worker thread to return."""
+    """Wakes the worker thread so it sees that the service has stopped."""
 
 
 # A project to recompute, or the dependency status, whose jj readiness may have changed.
@@ -135,6 +135,7 @@ class ProjectJjStateService(Service):
         default_factory=dict
     )
     _work_queue: Queue[_WorkItem] = PrivateAttr(default_factory=Queue)
+    _stop_event: threading.Event = PrivateAttr(default_factory=threading.Event)
 
     def start(self) -> None:
         self.project_service.add_activation_observer(self.refresh_project)
@@ -144,6 +145,7 @@ class ProjectJjStateService(Service):
     def stop(self) -> None:
         self.dependency_management_service.remove_observer_queue(self._work_queue)
         self.project_service.remove_activation_observer(self.refresh_project)
+        self._stop_event.set()
         self._work_queue.put(_StopWorker())
 
     def add_observer(self, queue: Queue[StreamingUpdateSourceTypes]) -> None:
@@ -268,9 +270,10 @@ class ProjectJjStateService(Service):
         last_jj_readiness: JjReadiness | None = None
         while True:
             item = self._work_queue.get()
-            if isinstance(item, _StopWorker):
+            # Work still queued at shutdown is dropped rather than holding up the exit.
+            if self._stop_event.is_set() or isinstance(item, _StopWorker):
                 return
-            elif isinstance(item, DependenciesStatus):
+            if isinstance(item, DependenciesStatus):
                 if item.jj_readiness == last_jj_readiness:
                     continue
                 last_jj_readiness = item.jj_readiness
