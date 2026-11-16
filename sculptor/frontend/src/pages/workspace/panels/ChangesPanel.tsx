@@ -11,6 +11,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
+import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
 import { useWorkspaceVcs } from "~/common/state/hooks/useWorkspaceVcs.ts";
 import {
   activeDiffTabAtomFamily,
@@ -24,6 +25,7 @@ import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts
 
 import styles from "./ChangesPanel.module.scss";
 import { DiscardDialog } from "./changesPanel/DiscardDialog.tsx";
+import { JjLeftOutFilesBanner } from "./changesPanel/JjLeftOutFilesBanner.tsx";
 import { useDiscardFile } from "./changesPanel/useDiscardFile.ts";
 import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import {
@@ -43,6 +45,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   const workspace = useWorkspace(workspaceId);
   const hasTargetBranch = workspace?.targetBranch != null;
   const vcs = useWorkspaceVcs(workspaceId);
+  const { data: diff } = useWorkspaceDiff(workspaceId);
 
   const [scope, setScope] = useAtom(changesScopeAtomFamily(workspaceId));
   const viewMode = useAtomValue(fileBrowserViewModeAtomFamily(workspaceId));
@@ -177,6 +180,14 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
           allCount={allStatusMap.size}
         />
       </Flex>
+      {/* In a jj workspace every file error is a new file jj refused to snapshot,
+          which has no diff and so no row in the tree; it is listed here in both
+          scopes, in a region capped so it never squeezes the tree out. */}
+      {vcs === "jj" && (
+        <div className={styles.leftOutFiles}>
+          <JjLeftOutFilesBanner fileErrors={diff?.fileErrors ?? {}} />
+        </div>
+      )}
       <ChangesTreeView
         workspaceId={workspaceId}
         viewMode={viewMode}

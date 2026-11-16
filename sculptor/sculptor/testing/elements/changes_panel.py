@@ -46,6 +46,13 @@ class PlaywrightChangesPanelElement(PlaywrightIntegrationTestElement):
         tree_locator = self.get_by_test_id(ElementIDs.FILE_BROWSER_CHANGES_TREE)
         return PlaywrightFileTreeElement(locator=tree_locator, page=self._page)
 
+    def get_jj_left_out_files_banner(self) -> Locator:
+        """Get the banner listing the new files jj left out of a jj workspace's working copy."""
+        return self.get_by_test_id(ElementIDs.JJ_LEFT_OUT_FILES_BANNER)
+
+    def get_jj_left_out_files(self) -> Locator:
+        return self.get_jj_left_out_files_banner().get_by_test_id(ElementIDs.JJ_LEFT_OUT_FILE)
+
     def get_discard_button(self, row: Locator) -> Locator:
         return row.get_by_test_id(ElementIDs.DISCARD_BUTTON)
 

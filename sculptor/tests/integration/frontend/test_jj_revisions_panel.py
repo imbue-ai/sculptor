@@ -51,6 +51,22 @@ def _use_jj_binary(factory: SculptorInstanceFactory, jj_binary: JjBinary) -> Non
     save_config(config.model_copy(update={"dependency_paths": dependency_paths}), config_path)
 
 
+def _limit_new_jj_files_to_mib(factory: SculptorInstanceFactory, mib: int) -> None:
+    """Set Sculptor's limit on the new files jj snapshots, which it writes into each jj workspace's config."""
+    config_path = factory._delegate.sculptor_folder / "internal" / "config.toml"
+    config = load_config(config_path)
+    save_config(config.model_copy(update={"jj_snapshot_max_new_file_size_mib": mib}), config_path)
+
+
+def _write_small_and_oversized_files_prompt() -> str:
+    """Add a small file and a new file of 2 MiB."""
+    steps = [
+        {"command": "write_file", "args": {"file_path": "small.md", "content": "small\n"}},
+        {"command": "bash", "args": {"command": "head -c 2097152 /dev/zero > big.bin"}},
+    ]
+    return f"fake_claude:multi_step `{json.dumps({'steps': steps})}`"
+
+
 def _describe_then_new_prompt(jj_path: Path) -> str:
     """Describe a change that adds `notes.md`, start a new one, and edit `scratch.md` in it."""
     steps = [
@@ -156,6 +172,38 @@ def test_jj_workspace_lists_revisions_and_discards_the_working_copy(
 
         expect(dialog).to_be_hidden()
         expect(tree_rows).to_have_count(0)
+
+
+@user_story("to be told which new files jj left out of my workspace, and where to raise the limit")
+def test_changes_panel_lists_new_files_jj_left_out(
+    sculptor_instance_factory_: SculptorInstanceFactory, jj_binary: JjBinary, jj_isolated_env: JjIsolatedEnv
+) -> None:
+    _use_jj_binary(sculptor_instance_factory_, jj_binary)
+    _limit_new_jj_files_to_mib(sculptor_instance_factory_, 1)
+    colocate_with_jj(jj_binary, sculptor_instance_factory_.base_repo.base_path)
+
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        page = instance.page
+        task_page = _open_jj_workspace_agent(page)
+        chat_panel = task_page.get_chat_panel()
+        send_chat_message(chat_panel=chat_panel, message=_write_small_and_oversized_files_prompt())
+        wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
+
+        changes_panel = get_changes_panel_in(open_panel(page, "changes", sub_section="left"), page)
+        tree_rows = changes_panel.get_changes_tree().get_tree_rows()
+
+        for scope in (changes_panel.get_scope_uncommitted(), changes_panel.get_scope_all()):
+            scope.click()
+            expect(scope).to_have_attribute("data-state", "on")
+            # The oversized file is listed apart from the changed files, which hold only small.md.
+            expect(tree_rows).to_have_count(1)
+            expect(tree_rows.first).to_contain_text("small.md")
+            banner = changes_panel.get_jj_left_out_files_banner()
+            expect(banner).to_contain_text("Jujutsu settings")
+            left_out_files = changes_panel.get_jj_left_out_files()
+            expect(left_out_files).to_have_count(1)
+            expect(left_out_files.first).to_contain_text("big.bin")
+            expect(left_out_files.first).to_contain_text("2097152 bytes")
 
 
 @user_story("to keep the git words for a git workspace's history and changes")
