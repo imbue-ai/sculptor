@@ -215,6 +215,32 @@ def test_the_setup_command_of_a_jj_workspace_finds_the_managed_jj_and_cannot_run
     assert "not a git repository" in output
 
 
+def test_the_setup_command_of_a_jj_workspace_runs_sculptors_jj_when_the_login_profile_puts_another_first(
+    jj_environment_nested_in_git_repository: JjLaunchEnvironment,  # noqa: F811
+    jj_binary: JjBinary,
+    tmp_path: Path,
+) -> None:
+    launch = jj_environment_nested_in_git_repository
+    other_jj_dir = tmp_path / "other_jj"
+    other_jj_dir.mkdir()
+    other_jj = other_jj_dir / "jj"
+    other_jj.write_text("#!/bin/sh\necho 'jj 0.28.2 from the login profile'\n")
+    other_jj.chmod(0o755)
+    (Path(os.environ["HOME"]) / ".bash_profile").write_text(f'export PATH="{other_jj_dir}:$PATH"\n')
+    vcs_environment = launch.vcs.agent_environment(launch.location)
+    chunks: list[bytes] = []
+
+    exit_code = launch.environment.run_setup_subprocess(
+        "command -v jj && jj --version", chunks.append, lambda _pid: None, Event(), vcs_environment
+    )
+
+    output = b"".join(chunks).decode()
+    assert exit_code == 0, output
+    assert output.splitlines()[0] == str(vcs_environment.path_prefixes[0] / "jj")
+    assert f"jj {jj_binary.version}" in output
+    assert "from the login profile" not in output
+
+
 def test_run_setup_subprocess_non_zero_exit(local_environment: LocalEnvironment) -> None:
     chunks: list[bytes] = []
     rc = local_environment.run_setup_subprocess(

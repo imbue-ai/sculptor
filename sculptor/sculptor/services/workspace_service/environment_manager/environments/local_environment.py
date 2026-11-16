@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -378,7 +379,7 @@ class LocalEnvironment(Environment):
         env = vcs_environment.applied_to({k: v for k, v in merged.items() if v is not None})
         logger.info("Starting setup subprocess in workspace: {}", self.workspace_path)
         process = subprocess.Popen(
-            ["bash", "-l", "-c", command],
+            ["bash", "-l", "-c", _reapply_path_prefixes(command, vcs_environment.path_prefixes)],
             cwd=str(working_directory),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
@@ -547,6 +548,23 @@ class LocalEnvironment(Environment):
         self.close()
         with self._closing_lock:
             remove_local_environment(Path(self.workspace_path))
+
+
+def _reapply_path_prefixes(command: str, path_prefixes: Sequence[Path]) -> str:
+    """`command`, first putting `path_prefixes` back in front of PATH, which a login shell's profile may have reordered.
+
+    The prefixes go on the command's first line, so bash still reports the
+    command's own line numbers.
+
+    >>> _reapply_path_prefixes("jj git fetch", (Path("/internal/jj-bin"),))
+    'export PATH=/internal/jj-bin"${PATH:+:$PATH}"; jj git fetch'
+    >>> _reapply_path_prefixes("make setup", ())
+    'make setup'
+    """
+    if not path_prefixes:
+        return command
+    quoted_prefixes = shlex.quote(os.pathsep.join(str(prefix) for prefix in path_prefixes))
+    return f'export PATH={quoted_prefixes}"${{PATH:+:$PATH}}"; {command}'
 
 
 def _drain_setup_stdout(process: subprocess.Popen, on_chunk: Callable[[bytes], None]) -> None:
