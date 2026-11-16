@@ -123,8 +123,7 @@ type CreatePrControl = {
 };
 
 // Sends through the workspace-scoped action, so the prompt reaches the
-// workspace's current agent whether or not its chat panel is mounted. Like the
-// Commit button, the control is disabled while that agent cannot take a prompt.
+// workspace's current agent whether or not its chat panel is mounted.
 const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs): CreatePrControl => {
   const prCreationPrompt = useAtomValue(prCreationPromptAtom);
   const canPromptAgent = useAtomValue(canPromptActiveAgentAtomFamily(workspaceId));

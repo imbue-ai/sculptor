@@ -1,6 +1,5 @@
-// The messages the Commit and Create PR actions send to a workspace's agent.
-// Every entry point builds its message here, so the button, the menus and the
-// palette all send the same text for the same workspace.
+// The messages the Commit and Create PR actions send to a workspace's agent,
+// built in one place so every entry point sends the same text.
 
 export const buildCommitMessage = (inputs: { prompt: string }): string => inputs.prompt;
 
