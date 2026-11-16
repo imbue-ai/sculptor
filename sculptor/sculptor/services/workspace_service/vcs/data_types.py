@@ -1,3 +1,4 @@
+import os
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
@@ -144,3 +145,15 @@ class AgentVcsEnvironment(FrozenModel):
         default_factory=dict,
         description="Added for chat agents only, whose commands run with no terminal for an editor or prompt",
     )
+
+    def prefix_path(self, path: str) -> str:
+        """`path` with `path_prefixes` in front of it, adding no empty entry, which would mean the working directory.
+
+        >>> AgentVcsEnvironment(path_prefixes=(Path("/jj-bin"),)).prefix_path("/usr/bin:/bin")
+        '/jj-bin:/usr/bin:/bin'
+        >>> AgentVcsEnvironment(path_prefixes=(Path("/jj-bin"),)).prefix_path("")
+        '/jj-bin'
+        >>> AgentVcsEnvironment().prefix_path("/usr/bin")
+        '/usr/bin'
+        """
+        return os.pathsep.join([*(str(prefix) for prefix in self.path_prefixes), *([path] if path else [])])

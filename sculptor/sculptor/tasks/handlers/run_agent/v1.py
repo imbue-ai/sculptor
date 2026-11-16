@@ -86,7 +86,9 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
 from sculptor.state.messages import ModelOption
@@ -375,7 +377,14 @@ def _run_agent_in_environment(
             in_testing=in_testing,
             on_diff_needed=on_diff_needed,
         )
-        secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
+        secrets = _build_agent_secrets(
+            settings=settings,
+            task=task,
+            task_state=task_state,
+            project=project,
+            environment=environment,
+            vcs=services.workspace_service.get_workspace_vcs(environment.get_initialization_strategy()),
+        )
         agent_wrapper.start(secrets)
         if on_agent_started is not None:
             on_agent_started()
@@ -779,12 +788,17 @@ def _build_agent_secrets(
     task: Task,
     task_state: AgentTaskStateV2,
     project: Project,
+    environment: AgentExecutionEnvironment,
+    vcs: WorkspaceVcs,
 ) -> dict[str, str]:
-    """Build the backend-env + PATH secrets an agent subprocess launches with.
+    """Build the backend-env, version-control and PATH secrets an agent subprocess launches with.
 
     Shared by `_run_agent_in_environment` (the normal `agent_wrapper.start`) and
     the pre-message pi catalog probe (`_eager_fetch_pi_models_into_state`), which
-    spawns a throwaway pi process with the same environment.
+    spawns a throwaway pi process with the same environment. `vcs` is the
+    workspace's version control; its agent environment wins over the user's
+    own variables, so `gh` and `git` act on this workspace whatever the backend
+    inherited.
     """
     secrets: dict[str, str] = build_sculpt_backend_env(
         backend_port=settings.BACKEND_PORT,
@@ -793,13 +807,25 @@ def _build_agent_secrets(
         agent_id=task.object_id,
     )
     executable_parent = Path(sys.executable).parent
-    secrets["PATH"] = _build_agent_path(
+    agent_path = _build_agent_path(
         is_packaged=is_packaged(),
         executable_parent=executable_parent,
         current_path=os.environ.get("PATH", ""),
         sculpt_dir=get_sculpt_bin_dir(executable_parent),
     )
-    return secrets
+    vcs_environment = vcs.agent_environment(
+        CheckoutLocation(
+            repo_path=project.get_local_user_path(),
+            checkout_path=environment.get_working_directory(),
+            checkout_name=str(task_state.workspace_id),
+        )
+    )
+    return {
+        **secrets,
+        **vcs_environment.environment_variables,
+        **vcs_environment.chat_agent_environment_variables,
+        "PATH": vcs_environment.prefix_path(agent_path),
+    }
 
 
 def _eager_fetch_pi_models_into_state(
@@ -849,7 +875,14 @@ def _eager_fetch_pi_models_into_state(
     # probe seam rather than starting it eagerly here.
     if not isinstance(agent_wrapper, PiAgent):
         return task_state
-    secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
+    secrets = _build_agent_secrets(
+        settings=settings,
+        task=task,
+        task_state=task_state,
+        project=project,
+        environment=environment,
+        vcs=services.workspace_service.get_workspace_vcs(environment.get_initialization_strategy()),
+    )
     available_models, current_model = agent_wrapper.fetch_available_models_probe(secrets)
     # A create-time selection (the modal's validated backend model) is already on
     # task state; the read-only probe reports pi's own session default, which must
