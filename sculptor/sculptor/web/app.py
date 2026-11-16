@@ -4542,9 +4542,10 @@ def _raise_if_inside_jj_workspace(project_path: Path) -> None:
     """Refuse a directory inside a jj workspace, which has `.jj` and no `.git`.
 
     A `git init` there would put a `.git` into the jj workspace, which switches
-    off the tripwire that keeps Sculptor's git calls out of jj workspaces.
+    off the tripwire that keeps Sculptor's git calls out of jj workspaces. The
+    path is resolved first, so a symlink into a jj workspace is refused too.
     """
-    jj_workspace_root = find_jj_workspace_root(project_path)
+    jj_workspace_root = find_jj_workspace_root(project_path.resolve())
     if jj_workspace_root is None:
         return
     raise HTTPException(

@@ -44,6 +44,21 @@ def test_project_routes_refuse_a_directory_inside_a_jj_workspace(
     assert not (subdirectory / ".git").exists()
 
 
+@pytest.mark.parametrize("route", _PROJECT_ROUTES)
+def test_project_routes_refuse_a_symlink_into_a_jj_workspace(route: str, client: TestClient, tmp_path: Path) -> None:
+    jj_workspace = _make_jj_workspace(tmp_path / "jj-workspace")
+    subdirectory = jj_workspace / "src"
+    subdirectory.mkdir()
+    link = tmp_path / "link-to-src"
+    link.symlink_to(subdirectory)
+
+    response = client.post(route, json={"project_path": str(link)})
+
+    assert response.status_code == 400
+    assert str(jj_workspace) in response.json()["detail"]
+    assert not (subdirectory / ".git").exists()
+
+
 def test_initialize_accepts_a_repository_colocated_with_jj(client: TestClient, tmp_path: Path) -> None:
     colocated_repo = tmp_path / "colocated"
     colocated_repo.mkdir()
