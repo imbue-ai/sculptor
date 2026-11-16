@@ -89,13 +89,13 @@ class JjCli:
         arguments: Sequence[str],
         cwd: Path,
         *,
-        is_checked: bool = True,
         timeout: float | None = DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS,
-        config_overrides: Mapping[str, str] | None = None,
-        extra_env: Mapping[str, str] | None = None,
     ) -> VcsCommandResult:
-        """Run a jj command that has no repository yet, such as `git init --colocate <path>` or `--version`."""
-        return self._run([*_config_options(config_overrides), *arguments], cwd, is_checked, timeout, extra_env)
+        """Run a jj command that has no repository yet, such as `git init --colocate <path>` or `--version`.
+
+        A non-zero exit raises `VcsCommandExitError`.
+        """
+        return self._run(arguments, cwd, is_checked=True, timeout=timeout, extra_env=None)
 
     def _run(
         self,
