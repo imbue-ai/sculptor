@@ -135,6 +135,19 @@ describe("SectionHeader keyboard activation", () => {
     expect(store.get(activePanelIdInSubSectionAtom("center"))).toBe("files");
   });
 
+  it("scrolls the strip to show a tab whole when it becomes active, when the strip is too narrow for every tab", () => {
+    renderTwoTabs();
+    const strip = screen.getByRole("tablist");
+    const changesTab = screen.getByTestId(`${ElementIds.PANEL_TAB}-changes`);
+    // The strip shows x 0-100; the changes tab runs past its right edge, to x 160.
+    vi.spyOn(strip, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 100, 34));
+    vi.spyOn(changesTab, "getBoundingClientRect").mockReturnValue(new DOMRect(80, 4, 80, 26));
+
+    fireEvent.click(changesTab);
+
+    expect(strip.scrollLeft).toBe(60);
+  });
+
   it("does not hijack an Enter aimed at the tab's close button", () => {
     const store = renderTwoTabs();
 

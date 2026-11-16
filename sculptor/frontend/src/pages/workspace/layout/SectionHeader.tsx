@@ -15,7 +15,7 @@ import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Maximize2, Minimize2, PanelBottom, PanelRight, Pencil, Trash2, X } from "lucide-react";
 import type { ReactElement } from "react";
-import { Fragment, memo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { agentRenameTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
@@ -95,6 +95,26 @@ const renderPanelContextMenuItem = (item: PanelContextMenuItem): ReactElement =>
   );
 };
 
+// Scroll the tab strip, and nothing above it, until the tab shows whole inside
+// the strip's padding. Element.scrollIntoView would also scroll the section's
+// clipping ancestors.
+const revealTabInStrip = (tab: HTMLElement): void => {
+  const strip = tab.closest<HTMLElement>("[role=tablist]");
+  if (strip === null) {
+    return;
+  }
+  const tabRect = tab.getBoundingClientRect();
+  const stripRect = strip.getBoundingClientRect();
+  const { paddingLeft, paddingRight } = getComputedStyle(strip);
+  const visibleLeft = stripRect.left + (parseFloat(paddingLeft) || 0);
+  const visibleRight = stripRect.right - (parseFloat(paddingRight) || 0);
+  if (tabRect.left < visibleLeft) {
+    strip.scrollLeft -= visibleLeft - tabRect.left;
+  } else if (tabRect.right > visibleRight) {
+    strip.scrollLeft += tabRect.right - visibleRight;
+  }
+};
+
 type PanelTabProps = {
   panelId: PanelId;
   subSection: SubSectionId;
@@ -141,6 +161,15 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     id: panelId,
     data: { kind: "panel", panelId, from: subSection, index },
   });
+  const tabNodeRef = useRef<HTMLElement | null>(null);
+
+  // The strip scrolls rather than shrinking its tabs, so a tab activated past its
+  // edge would stay cut off, close button and all.
+  useEffect(() => {
+    if (isActive && tabNodeRef.current !== null) {
+      revealTabInStrip(tabNodeRef.current);
+    }
+  }, [isActive]);
 
   if (definition === undefined) {
     return null;
@@ -246,6 +275,7 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const setTabRef = (node: HTMLElement | null): void => {
     setNodeRef(node);
     setActivatorNodeRef(node);
+    tabNodeRef.current = node;
   };
 
   // The label ellipsis-clips at a fixed max-width, so a tooltip is only useful when the
@@ -473,9 +503,12 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
       }
     : undefined;
 
+  // gap="2" keeps the ghost IconButtons' negative margins from overlapping the
+  // tab strip and each other, so a click at the strip's edge lands on a tab.
   return (
     <Flex
       align="center"
+      gap="2"
       className={styles.header}
       style={headerStyle}
       data-maximized={isMaximized ? "true" : undefined}
