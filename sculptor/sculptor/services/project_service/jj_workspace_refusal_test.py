@@ -165,5 +165,6 @@ def test_a_jj_workspace_of_a_colocated_repository_is_refused_as_needing_jj_while
 
     assert str(refusal.value) == (
         f"Selected directory is inside the jj workspace at {jj_workspace.path.resolve()}. "
-        + "Sculptor needs a working jj to find that workspace's repository, but it found no jj."
+        + "Sculptor needs a working jj to find that workspace's repository, "
+        + "but jj is not installed: install it or set its path on the Jujutsu settings page."
     )

@@ -149,4 +149,4 @@ def test_the_cli_names_the_jj_it_found_when_that_jj_is_too_old_to_find_a_jj_work
 
     message = str(refusal.value)
     assert "Sculptor needs a working jj to find that workspace's repository" in message
-    assert f"{jj_too_old} reports jj 0.28.2" in message
+    assert f"jj 0.28.2 at {jj_too_old} is not supported" in message

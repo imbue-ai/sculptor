@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import assert_never
 
 from sculptor.services.dependency_management_service import DependencyManagementService
-from sculptor.services.managed_tools import JJ_VERSION_RANGE
+from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.workspace_service.vcs.git_cli import find_jj_workspace_root
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
@@ -45,7 +45,7 @@ class JjUnusableForProjectError(ProjectInJjWorkspaceError):
     def _describe(self) -> str:
         return (
             f"Selected directory is inside the jj workspace at {self.jj_workspace_root}. "
-            + f"Sculptor needs a working jj to find that workspace's repository, but {_describe_unusable_jj(self.jj_readiness)}."
+            + f"Sculptor needs a working jj to find that workspace's repository, but {describe_jj_unavailability(self.jj_readiness)}."
         )
 
 
@@ -112,24 +112,5 @@ def _raise_if_jj_is_unusable(jj_workspace_root: Path, jj_readiness: JjReadiness)
             return
         case JjNotInstalled() | JjNotRunnable() | JjUnsupportedVersion():
             raise JjUnusableForProjectError(jj_workspace_root, jj_readiness)
-        case _ as unreachable:
-            assert_never(unreachable)
-
-
-def _describe_unusable_jj(jj_readiness: JjNotInstalled | JjNotRunnable | JjUnsupportedVersion) -> str:
-    match jj_readiness:
-        case JjNotInstalled():
-            return "it found no jj"
-        case JjNotRunnable(error=None):
-            return "the jj it found does not run"
-        case JjNotRunnable(error=error):
-            return f"the jj it found does not run: {error}"
-        case JjUnsupportedVersion(path=path, version=None):
-            return f"{path} reports no recognizable jj version"
-        case JjUnsupportedVersion(path=path, version=version):
-            return (
-                f"{path} reports jj {version}, "
-                + f"and Sculptor needs {JJ_VERSION_RANGE.min_version} or a newer compatible version"
-            )
         case _ as unreachable:
             assert_never(unreachable)

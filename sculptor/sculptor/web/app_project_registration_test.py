@@ -213,6 +213,6 @@ def test_initialize_says_it_needs_a_working_jj_when_it_finds_none_for_a_jj_works
 
     assert response.status_code == 400
     assert (
-        "Sculptor needs a working jj to find that workspace's repository, but it found no jj."
+        "Sculptor needs a working jj to find that workspace's repository, but jj is not installed"
         in (response.json()["detail"])
     )
