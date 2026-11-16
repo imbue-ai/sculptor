@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
 from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
@@ -29,7 +30,8 @@ def read_colocation_preflight(
     """
     git_dir, git_common_dir = _read_git_dirs(git, repo_path)
     blockers: list[JjColocationBlocker] = []
-    if jj_readiness.blocker is not None:
+    jj_unavailable_reason = describe_jj_unavailability(jj_readiness)
+    if jj_unavailable_reason is not None:
         blockers.append(JjColocationBlocker.JJ_UNAVAILABLE)
     elif (repo_path / ".jj").exists() and not is_jj_colocated(jj, repo_path):
         blockers.append(JjColocationBlocker.JJ_REPOSITORY_NOT_COLOCATED)
@@ -50,6 +52,7 @@ def read_colocation_preflight(
         blockers=tuple(blockers),
         warnings=tuple(warnings),
         has_uncommitted_changes=_has_uncommitted_changes(git, repo_path),
+        jj_unavailable_reason=jj_unavailable_reason,
     )
 
 

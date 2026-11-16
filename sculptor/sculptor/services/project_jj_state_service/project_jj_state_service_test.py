@@ -16,9 +16,10 @@ from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.jj_availability import JjUnavailableError
+from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.project_jj_state_service.project_jj_state_service import ColocationAlreadyRunningError
 from sculptor.services.project_jj_state_service.project_jj_state_service import ColocationBlockedError
-from sculptor.services.project_jj_state_service.project_jj_state_service import JjUnavailableForRepositoryError
 from sculptor.services.project_jj_state_service.project_jj_state_service import derive_project_jj_state
 from sculptor.services.project_jj_state_service.project_jj_state_service import is_colocation_gone
 from sculptor.services.user_config.user_config import set_user_config_instance
@@ -369,9 +370,10 @@ def test_colocating_is_refused_while_jj_is_unavailable(
     _resolve_jj_to(silly_global_config, "CUSTOM")
     project = _register_project(services, git_repo)
 
-    with pytest.raises(JjUnavailableForRepositoryError):
+    with pytest.raises(JjUnavailableError) as raised:
         services.project_jj_state_service.start_colocation(project)
 
+    assert str(raised.value) == describe_jj_unavailability(_JJ_NOT_INSTALLED)
     assert not (git_repo / ".jj").exists()
 
 

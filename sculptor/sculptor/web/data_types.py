@@ -1042,6 +1042,16 @@ class JjColocationPreflight(SerializableModel):
     has_uncommitted_changes: bool = Field(
         description="The repository has uncommitted changes, which become jj's working-copy commit"
     )
+    jj_unavailable_reason: str | None = Field(
+        description="Why jj cannot be used, worded as the routes that need jj word it; set exactly when JJ_UNAVAILABLE is a blocker"
+    )
+
+    @model_validator(mode="after")
+    def _require_reason_exactly_when_jj_is_unavailable(self) -> "JjColocationPreflight":
+        is_jj_unavailable = JjColocationBlocker.JJ_UNAVAILABLE in self.blockers
+        if is_jj_unavailable != (self.jj_unavailable_reason is not None):
+            raise ValueError("jj_unavailable_reason must be set exactly when JJ_UNAVAILABLE is a blocker")
+        return self
 
 
 class UseJjForNewWorkspacesRequest(RequestModel):

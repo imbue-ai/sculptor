@@ -8,6 +8,7 @@ import pytest
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.project_jj_state_service.colocation_preflight import read_colocation_preflight
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
@@ -26,7 +27,9 @@ from sculptor.web.data_types import JjIdentity
 from sculptor.web.data_types import JjNotInstalled
 
 _JJ_AVAILABLE = JjAvailable(blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL))
-_NOTHING_TO_REPORT = JjColocationPreflight(blockers=(), warnings=(), has_uncommitted_changes=False)
+_NOTHING_TO_REPORT = JjColocationPreflight(
+    blockers=(), warnings=(), has_uncommitted_changes=False, jj_unavailable_reason=None
+)
 
 
 @pytest.fixture
@@ -80,11 +83,12 @@ def test_an_already_colocated_repository_has_nothing_to_report(
 
 
 def test_jj_being_unavailable_blocks_colocation(runners: VcsRunners, git_repo: Path) -> None:
-    preflight = read_colocation_preflight(
-        runners.git, runners.jj, git_repo, JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
-    )
+    jj_not_installed = JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
+
+    preflight = read_colocation_preflight(runners.git, runners.jj, git_repo, jj_not_installed)
 
     assert preflight.blockers == (JjColocationBlocker.JJ_UNAVAILABLE,)
+    assert preflight.jj_unavailable_reason == describe_jj_unavailability(jj_not_installed)
 
 
 def test_a_jj_repository_with_its_own_git_store_blocks_colocation(
@@ -217,7 +221,7 @@ def test_a_modified_file_is_reported_as_uncommitted_changes_only(runners: VcsRun
     (git_repo / "file.txt").write_text("edited\n")
 
     assert _read_preflight(runners, git_repo) == JjColocationPreflight(
-        blockers=(), warnings=(), has_uncommitted_changes=True
+        blockers=(), warnings=(), has_uncommitted_changes=True, jj_unavailable_reason=None
     )
 
 

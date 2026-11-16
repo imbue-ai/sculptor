@@ -16,6 +16,7 @@ from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import DEFAULT_GIT_WORKSPACE_SETUP_COMMAND
@@ -25,11 +26,15 @@ from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import run_jj
 from sculptor.web.auth import authenticate_anonymous
+from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjColocationState
+from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import ProjectJjState
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 
 _STATE_TIMEOUT_SECONDS = 30.0
+# What every route answers while jj resolves to nothing, as `jj_unavailable` arranges.
+_JJ_NOT_INSTALLED_REASON = describe_jj_unavailability(JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED))
 
 
 def _resolve_jj_to(jj_value: str) -> None:
@@ -135,7 +140,25 @@ def test_the_preflight_lists_a_repository_s_blockers_warnings_and_uncommitted_ch
     response = client.get(f"/api/v1/projects/{project.object_id}/jj")
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"blockers": ["SUBMODULES"], "warnings": ["HOOKS"], "hasUncommittedChanges": True}
+    assert response.json() == {
+        "blockers": ["SUBMODULES"],
+        "warnings": ["HOOKS"],
+        "hasUncommittedChanges": True,
+        "jjUnavailableReason": None,
+    }
+
+
+def test_the_preflight_while_jj_is_unavailable_gives_the_reason_the_colocate_refusal_gives(
+    jj_unavailable: None, client: TestClient, test_services: CompleteServiceCollection, git_repo: Path
+) -> None:
+    project = _register_project(test_services, git_repo)
+
+    preflight = client.get(f"/api/v1/projects/{project.object_id}/jj").json()
+    refusal = client.post(f"/api/v1/projects/{project.object_id}/jj/colocate")
+
+    assert refusal.status_code == 412, refusal.text
+    assert preflight["blockers"] == ["JJ_UNAVAILABLE"]
+    assert preflight["jjUnavailableReason"] == refusal.json()["detail"] == _JJ_NOT_INSTALLED_REASON
 
 
 def test_the_preflight_of_an_unknown_project_is_not_found(client: TestClient) -> None:
@@ -168,6 +191,7 @@ def test_colocating_without_jj_is_a_failed_precondition(
     response = client.post(f"/api/v1/projects/{project.object_id}/jj/colocate")
 
     assert response.status_code == 412, response.text
+    assert response.json()["detail"] == _JJ_NOT_INSTALLED_REASON
     assert not (git_repo / ".jj").exists()
 
 
@@ -229,6 +253,7 @@ def test_turning_use_jj_for_new_workspaces_on_without_jj_is_a_failed_preconditio
     response = _put_use_jj_for_new_workspaces(client, project.object_id, True)
 
     assert response.status_code == 412, response.text
+    assert response.json()["detail"] == _JJ_NOT_INSTALLED_REASON
     assert _read_use_jj_for_new_workspaces(test_services, project) is False
 
 
@@ -314,6 +339,7 @@ def test_the_bookmarks_without_jj_are_a_failed_precondition(
     response = client.get(f"/api/v1/projects/{project.object_id}/jj/bookmarks")
 
     assert response.status_code == 412, response.text
+    assert response.json()["detail"] == _JJ_NOT_INSTALLED_REASON
 
 
 def test_each_workspace_kind_s_default_setup_command_comes_from_its_version_control(client: TestClient) -> None:

@@ -14,9 +14,9 @@ from sculptor.database.models import Project
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import ProjectID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.project_jj_state_service.project_jj_state_service import ColocationAlreadyRunningError
 from sculptor.services.project_jj_state_service.project_jj_state_service import ColocationBlockedError
-from sculptor.services.project_jj_state_service.project_jj_state_service import JjUnavailableForRepositoryError
 from sculptor.services.project_jj_state_service.project_jj_state_service import RepositoryNotColocatedError
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
@@ -68,7 +68,7 @@ def colocate_project_with_jj(
     project = _get_project(services, user_session, validate_project_id(project_id))
     try:
         services.project_jj_state_service.start_colocation(project)
-    except JjUnavailableForRepositoryError as e:
+    except JjUnavailableError as e:
         raise HTTPException(status_code=412, detail=str(e)) from e
     except (ColocationBlockedError, ColocationAlreadyRunningError) as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
@@ -116,7 +116,7 @@ def list_project_jj_bookmarks(
     project = _get_project(services, user_session, validate_project_id(project_id))
     try:
         bookmarks = services.project_jj_state_service.list_bookmark_choices(project)
-    except JjUnavailableForRepositoryError as e:
+    except JjUnavailableError as e:
         raise HTTPException(status_code=412, detail=str(e)) from e
     except RepositoryNotColocatedError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
@@ -153,7 +153,7 @@ def _get_project(services: CompleteServiceCollection, user_session: UserSession,
 def _require_colocation(services: CompleteServiceCollection, project: Project) -> None:
     try:
         services.project_jj_state_service.require_colocation(project)
-    except JjUnavailableForRepositoryError as e:
+    except JjUnavailableError as e:
         raise HTTPException(status_code=412, detail=str(e)) from e
     except RepositoryNotColocatedError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e

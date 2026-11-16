@@ -22,6 +22,7 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.service import Service
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.project_jj_state_service.colocation_preflight import read_colocation_preflight
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.workspace_service.jj_workspace_creation import JjWorkspaceCreationFacts
@@ -42,14 +43,6 @@ from sculptor.web.data_types import JjColocationState
 from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import ProjectJjState
 from sculptor.web.data_types import StreamingUpdateSourceTypes
-
-
-class JjUnavailableForRepositoryError(ExpectedError):
-    """A repository operation needs jj, and jj is not available."""
-
-    def __init__(self, jj_readiness: JjReadiness) -> None:
-        self.jj_readiness = jj_readiness
-        super().__init__(f"jj is not available: {jj_readiness.blocker}")
 
 
 class ColocationBlockedError(ExpectedError):
@@ -179,11 +172,10 @@ class ProjectJjStateService(Service):
     def require_colocation(self, project: Project) -> None:
         """Raise unless jj is available and `project`'s repository is a jj colocation.
 
-        Raises `JjUnavailableForRepositoryError` or `RepositoryNotColocatedError`.
+        Raises `JjUnavailableError` or `RepositoryNotColocatedError`.
         """
         facts = gather_jj_workspace_creation_facts(project, self.vcs_runners.jj, self.dependency_management_service)
-        if facts.jj_readiness.blocker is not None:
-            raise JjUnavailableForRepositoryError(facts.jj_readiness)
+        require_jj_available(facts.jj_readiness)
         if not facts.is_colocated:
             raise RepositoryNotColocatedError(f"Project {project.object_id} is not a jj colocation")
 
@@ -212,13 +204,12 @@ class ProjectJjStateService(Service):
         On success the repository's `use_jj_for_new_workspaces` is turned on,
         so the outcome does not depend on anyone watching. A repository that is
         already colocated is not initialized again. Raises
-        `JjUnavailableForRepositoryError`, `ColocationBlockedError` (the
+        `JjUnavailableError`, `ColocationBlockedError` (the
         pre-flight found blockers) or `ColocationAlreadyRunningError`; raises
         `VcsCommandError` when git cannot read the repository.
         """
         jj_readiness = self.dependency_management_service.get_jj_readiness()
-        if jj_readiness.blocker is not None:
-            raise JjUnavailableForRepositoryError(jj_readiness)
+        require_jj_available(jj_readiness)
         with self._lock:
             self._raise_if_colocation_running(project.object_id)
         preflight = read_colocation_preflight(
