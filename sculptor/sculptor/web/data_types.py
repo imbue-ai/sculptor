@@ -1063,6 +1063,14 @@ class JjBookmarkChoicesResponse(SerializableModel):
     bookmarks: list[JjBookmarkChoice]
 
 
+class WorkspaceSetupCommandDefaults(SerializableModel):
+    """The setup command each workspace kind runs when its project configures none."""
+
+    default_setup_command_by_initialization_strategy: dict[WorkspaceInitializationStrategy, str | None] = Field(
+        description="Every workspace kind; None for a kind that runs no setup command"
+    )
+
+
 class DependenciesStatus(SerializableModel):
     """Status of required dependencies with path/version info."""
 
