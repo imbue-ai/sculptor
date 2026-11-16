@@ -49,6 +49,7 @@ from sculptor.services.voice_models import VOICE_MODELS_PIN
 from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
 from sculptor.services.voice_models import find_voice_model_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import parse_env_file
+from sculptor.services.workspace_service.environment_manager.environments.spawned_pty_process import TERMINAL_TYPE
 from sculptor.utils.build import get_internal_folder
 from sculptor.utils.build import get_sculptor_folder
 from sculptor.web.data_types import AuthResult
@@ -1417,7 +1418,11 @@ class DependencyManagementService(Service):
         base_env = self._build_agent_probe_env() or os.environ
         with tempfile.TemporaryDirectory(prefix="sculptor-jj-probe-") as probe_directory:
             (Path(probe_directory) / "jj").symlink_to(sculptor_jj)
-            probe_env = {**base_env, "PATH": os.pathsep.join([probe_directory, base_env.get("PATH", "")])}
+            probe_env = {
+                **base_env,
+                "PATH": os.pathsep.join([probe_directory, base_env.get("PATH", "")]),
+                "TERM": TERMINAL_TYPE,
+            }
             try:
                 process = self.concurrency_group.start_background_process_from_factory(
                     lambda: run_background(

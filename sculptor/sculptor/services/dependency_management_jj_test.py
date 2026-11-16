@@ -498,6 +498,28 @@ def test_the_login_shell_finding_sculptors_own_jj_through_another_directory_is_n
     assert isinstance(status.jj_readiness, JjAvailable)
 
 
+def test_the_login_shell_is_asked_with_the_term_a_workspace_terminal_gives_it(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stage_managed_jj(jj_test_home, JJ_PINNED_VERSION, jj_binary.path)
+    cargo_jj = _jj_stub_in(tmp_path / "cargo_bin", "jj 0.28.2")
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    monkeypatch.setenv("TERM", "dumb")
+    (jj_isolated_env.home_path / ".bash_profile").write_text(
+        f'[ "$TERM" = dumb ] && return\nexport PATH="{cargo_jj.parent}:$PATH"\n'
+    )
+    _configure_jj("MANAGED")
+
+    status = jj_service.get_status()
+
+    assert status.jj_readiness == JjShadowed(blocker=JjBlocker.SHADOWED, path=str(cargo_jj), version="0.28.2")
+
+
 def test_a_gate_reads_the_login_shell_jj_of_the_last_computed_status_without_starting_a_shell(
     jj_test_home: _JjTestHome,
     jj_binary: JjBinary,
