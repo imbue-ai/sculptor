@@ -1,8 +1,4 @@
-"""The rule that keeps a directory inside a jj workspace from becoming a Sculptor project.
-
-The project routes and `sculptor <path>` on the command line share it, and
-each reports a refusal in its own way.
-"""
+"""The rule that keeps a directory inside a jj workspace from becoming a Sculptor project."""
 
 from pathlib import Path
 
@@ -23,12 +19,11 @@ class ProjectInJjWorkspaceError(ValueError):
 def refuse_project_in_jj_workspace(project_path: Path) -> None:
     """Raise `ProjectInJjWorkspaceError` when `project_path` is inside a jj workspace.
 
-    Registering such a directory leaves every workspace creation failing, and
-    making it a project runs git there: `git init` puts a `.git` into the jj
-    workspace, which switches off the tripwire that keeps Sculptor's git calls
-    out of jj workspaces, and `git commit` commits in any git repository around
-    it. The path is resolved first, so a symlink into a jj workspace is refused
-    too.
+    Sculptor runs git in a project directory, and git must not run in a jj
+    workspace: it would act on any git repository around it, and a `.git` it
+    created there would switch off the tripwire that keeps git out of jj
+    workspaces. The path is resolved first, so a symlink into a jj workspace is
+    refused too.
     """
     jj_workspace_root = find_jj_workspace_root(project_path.resolve())
     if jj_workspace_root is not None:

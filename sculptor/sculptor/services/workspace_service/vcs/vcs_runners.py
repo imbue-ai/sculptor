@@ -1,9 +1,4 @@
-"""The command runners the VCS seam uses, built in one place for every caller.
-
-Sculptor's own calls build them from the dependency service's
-`resolve_binary_path`; agent-side calls build them from their execution
-environment's `get_tool_binary_path` and `get_project_env_overrides`.
-"""
+"""The command runners the VCS seam uses, built together so that a new runner is added in one place."""
 
 from typing import Mapping
 

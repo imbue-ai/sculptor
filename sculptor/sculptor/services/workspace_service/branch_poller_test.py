@@ -435,7 +435,7 @@ def test_a_workspace_that_cannot_be_scanned_does_not_stop_the_others(
     assert [(info.workspace_id, info.current_branch) for info in branch_infos] == [(healthy.object_id, "wsbranch")]
 
 
-# What the branch scan logs, once per workspace or repository, when it runs git in a jj workspace.
+# What the branch scan logs when it runs git in a jj workspace.
 _JJ_WORKSPACE_LOG = "Branch scan ran git in a jj workspace"
 
 

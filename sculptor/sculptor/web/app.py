@@ -398,12 +398,11 @@ def _workspace_working_directory(
     environment_id: str | None,
     project_path: str | None,
 ) -> str | None:
-    """Resolve the directory holding a workspace's checkout, for rows that carry the raw columns.
+    """Resolve the directory holding a workspace's checkout from the raw columns of a listing row.
 
-    Applies the same rule as ``LocalEnvironment.get_working_directory`` without
-    resuming the environment (resume has side effects and is too heavy for list
-    endpoints); ``environment_id`` is the absolute environment directory path.
-    None when the checkout's location is not known yet.
+    Resuming the environment to ask it has side effects and is too heavy for
+    list endpoints. ``environment_id`` is the absolute environment directory
+    path. None when the checkout's location is not known yet.
     """
     checkout_path = checkout_path_for_strategy(
         strategy,

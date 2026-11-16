@@ -425,7 +425,7 @@ def _get_tree_hash(diff_tracker: DiffTracker) -> tuple[str | None, Path | None]:
     The directory is None when the repository's own objects hold the tree.
     Otherwise the caller owns it and removes it once the tree SHA is no longer
     needed. Both are None when git fails to read the tree; in a jj workspace
-    the tripwire is raised instead, because there git can never work.
+    the tripwire is raised instead.
     """
     try:
         if _has_untracked_or_unstaged_changes(diff_tracker._git, diff_tracker.code_directory):

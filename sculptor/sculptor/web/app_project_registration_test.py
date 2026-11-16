@@ -1,4 +1,4 @@
-"""Tests for the routes that register a directory as a project: initialize, init-git and create-initial-commit."""
+"""Tests for the routes that register a directory as a project."""
 
 from pathlib import Path
 

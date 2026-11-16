@@ -1,7 +1,4 @@
-"""Real version control for tests that build environments or call the VCS seam directly.
-
-Built through the same runner builder and selection point as the workspace service's.
-"""
+"""Real version control for tests that build environments or call the VCS seam directly."""
 
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
@@ -14,7 +11,6 @@ from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make
 
 
 def _make_test_vcs_runners(concurrency_group: ConcurrencyGroup) -> VcsRunners:
-    """Runners for the binaries the dependency service resolves, as the workspace service's are."""
     dependency_management_service = DependencyManagementService(
         concurrency_group=concurrency_group.make_concurrency_group("dependency_management_service"),
     )

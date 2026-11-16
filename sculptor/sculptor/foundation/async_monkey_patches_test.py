@@ -16,7 +16,6 @@ class IncorrectErrorsLoggedDuringTesting(Exception):
     pass
 
 
-# The levels `check_logged_errors` treats as errors.
 _ERROR_LEVEL_NAMES = (
     "ERROR",
     ExceptionPriority.LOW_PRIORITY.value,

@@ -118,7 +118,6 @@ class WorkspaceBranchPoller:
         self._remote_signature_by_common_dir: dict[Path, RemoteRefsSignature] = {}
         self._target_candidates_by_common_dir: dict[Path, tuple[str, ...]] = {}
         # Workspaces and repositories whose last scan failed, so a lasting failure is logged once.
-        # Scan-thread-only, so it needs no lock.
         self._failed_scan_keys: set[WorkspaceID | Path] = set()
 
         self._cycle = 0
@@ -269,7 +268,7 @@ class WorkspaceBranchPoller:
     def _log_jj_workspace_once(self, key: WorkspaceID | Path, error: GitCommandInJjWorkspaceError) -> None:
         """Log at ERROR, when it starts, that scanning a workspace or repository ran git in a jj workspace.
 
-        That is a dispatch bug rather than a git failure, so it is logged where tests fail on it.
+        That is a dispatch bug, not a git failure.
         """
         if not self._mark_scan_failed(key):
             return

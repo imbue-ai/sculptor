@@ -9,10 +9,7 @@ _CHECKOUT_DIRECTORY_NAME = "code"
 
 
 def is_isolated_checkout(initialization_strategy: WorkspaceInitializationStrategy) -> bool:
-    """Whether a workspace of this kind gets a fresh checkout of its own, rather than working in the user's repository.
-
-    Only an isolated checkout runs the project's setup command.
-    """
+    """Whether a workspace of this kind gets a fresh checkout of its own, rather than working in the user's repository."""
     match initialization_strategy:
         case WorkspaceInitializationStrategy.IN_PLACE:
             return False
@@ -29,10 +26,8 @@ def checkout_path_for_strategy(
 ) -> Path | None:
     """Where a checkout of this kind lives, or None when the directory it lives under is unknown.
 
-    `repo_path` is the user's repository, which an in-place workspace works in
-    directly. A clone or worktree checkout lives in the `code` directory of the
-    workspace's environment at `environment_path`. The path is not checked for
-    existence.
+    `repo_path` is the user's repository and `environment_path` the workspace's
+    environment directory. The path is not checked for existence.
     """
     match initialization_strategy:
         case WorkspaceInitializationStrategy.IN_PLACE:

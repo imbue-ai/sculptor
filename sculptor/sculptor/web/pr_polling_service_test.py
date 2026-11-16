@@ -315,7 +315,7 @@ def test_fallback_raises_for_a_jj_checkout_instead_of_reporting_no_pr(
         svc._fetch_status(workspace_id, state)
 
 
-# What PR polling logs, once per workspace, when it runs git in a jj workspace.
+# What PR polling logs when it runs git in a jj workspace.
 _JJ_WORKSPACE_LOG = "it ran git in a jj workspace"
 
 
