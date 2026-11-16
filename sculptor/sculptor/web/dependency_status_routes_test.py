@@ -12,6 +12,7 @@ from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.recording_binaries import RecordingBinaries
 from sculptor.testing.recording_binaries import recording_git_and_jj  # noqa: F401
 from sculptor.web.data_types import DependenciesStatus
+from sculptor.web.data_types import HealthCheckResponse
 
 
 def _observe_dependency_status(services: CompleteServiceCollection) -> Queue[DependenciesStatus]:
@@ -21,6 +22,39 @@ def _observe_dependency_status(services: CompleteServiceCollection) -> Queue[Dep
     while not queue.empty():
         queue.get_nowait()
     return queue
+
+
+def test_health_checks_before_any_dependency_status_is_computed_report_none_and_run_no_tool(
+    recording_git_and_jj: RecordingBinaries,  # noqa: F811
+    client: TestClient,
+) -> None:
+    responses = [client.get("/api/v1/health") for _ in range(3)]
+
+    assert [response.status_code for response in responses] == [200, 200, 200]
+    assert [HealthCheckResponse.model_validate(response.json()).dependencies_status for response in responses] == [
+        None,
+        None,
+        None,
+    ]
+    assert recording_git_and_jj.read_runs() == []
+
+
+def test_health_checks_report_the_last_computed_dependency_status_and_run_no_tool(
+    recording_git_and_jj: RecordingBinaries,  # noqa: F811
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+) -> None:
+    status = test_services.dependency_management_service.refresh_status()
+    recording_git_and_jj.forget_runs()
+
+    responses = [client.get("/api/v1/health") for _ in range(3)]
+
+    assert [HealthCheckResponse.model_validate(response.json()).dependencies_status for response in responses] == [
+        status,
+        status,
+        status,
+    ]
+    assert recording_git_and_jj.read_runs() == []
 
 
 def test_re_checking_the_dependencies_finds_a_jj_installed_since_the_status_was_computed_and_tells_every_window(

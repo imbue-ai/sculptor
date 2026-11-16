@@ -750,6 +750,10 @@ class DependencyManagementService(Service):
         with self._observer_lock:
             self._observer_queues.discard(queue)
 
+    def get_last_computed_status(self) -> DependenciesStatus | None:
+        """The last computed status of every dependency, or None before the first; never runs a probe."""
+        return self._status
+
     def get_status(self) -> DependenciesStatus:
         """The last computed status of every dependency, computed first if there is none yet."""
         status = self._status

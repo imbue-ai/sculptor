@@ -4553,6 +4553,10 @@ def _get_typed_artifact_data(
 
 @router.get("/api/v1/health")
 def get_health_check(request: Request) -> HealthCheckResponse:
+    """Liveness, version and environment facts, with the last computed dependency status; runs no tool.
+
+    Every open window calls this every few seconds.
+    """
     services = get_services_from_request_or_websocket(request)
     user_config = get_user_config_instance()
     free_gb = (_get_disk_bytes_free(services.settings) or 1_000_000_000_000) / (1024 * 1024 * 1024)
@@ -4561,7 +4565,7 @@ def get_health_check(request: Request) -> HealthCheckResponse:
     with services.data_model_service.open_task_transaction() as transaction:
         active_task_count = len(transaction.get_active_tasks())
 
-    dependencies_status = services.dependency_management_service.get_status()
+    dependencies_status = services.dependency_management_service.get_last_computed_status()
 
     return HealthCheckResponse(
         version=version.__version__,
