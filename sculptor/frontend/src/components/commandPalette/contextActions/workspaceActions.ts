@@ -23,8 +23,11 @@ export const buildWorkspaceActions = (runtime: WorkspaceActionRuntime): Readonly
     paletteSubtitle: "Stage and commit current changes",
     paletteOrder: 10,
     paletteKeywords: ["git", "save"],
-    disabled: (ws): boolean => !runtime.hasUncommittedChanges(ws),
-    disabledReason: (): string => "No uncommitted changes",
+    disabled: (ws): boolean => !runtime.hasUncommittedChanges(ws) || !runtime.canCommit(ws),
+    disabledReason: (ws): string =>
+      runtime.hasUncommittedChanges(ws)
+        ? "The workspace's agent can't take a prompt right now"
+        : "No uncommitted changes",
     perform: (ws): void => runtime.commitChanges(ws),
   },
   {
@@ -35,7 +38,10 @@ export const buildWorkspaceActions = (runtime: WorkspaceActionRuntime): Readonly
     paletteOrder: 20,
     paletteKeywords: ["pr", "pull", "request", "github"],
     disabled: (ws): boolean => !runtime.canCreatePr(ws),
-    disabledReason: (): string => "An open pull request already exists",
+    disabledReason: (ws): string =>
+      runtime.hasOpenPr(ws)
+        ? "An open pull request already exists"
+        : "Needs a target branch and an agent that can take a prompt",
     perform: (ws): void => runtime.createMergeRequest(ws),
   },
   {

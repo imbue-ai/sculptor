@@ -9,14 +9,9 @@ import type { PrStatusInfo } from "../../api";
 import { ElementIds } from "../../api";
 import { openInReusableTab } from "../../common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "../../common/state/atoms/prStatus.ts";
-import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
-import {
-  canPromptActiveAgentAtomFamily,
-  createPrActionAtomFamily,
-} from "../../common/state/atoms/workspaceAgentActions.ts";
+import { canCreatePrAtomFamily, createPrActionAtomFamily } from "../../common/state/atoms/workspaceAgentActions.ts";
 import { workspaceTargetBranchesAtomFamily } from "../../common/state/atoms/workspaceTargetBranches.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
-import { buildCreatePrMessage } from "../../common/utils/agentPrompts.ts";
 import { isPrBaseOtherThanTarget } from "../../common/utils/prBaseNames.ts";
 import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
@@ -124,11 +119,11 @@ type CreatePrControl = {
 };
 
 // Sends through the workspace-scoped action, so the prompt reaches the
-// workspace's current agent whether or not its chat panel is mounted.
-const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs): CreatePrControl => {
-  const prCreationPrompt = useAtomValue(prCreationPromptAtom);
-  const canPromptAgent = useAtomValue(canPromptActiveAgentAtomFamily(workspaceId));
-  const sendCreatePrMessage = useSetAtom(createPrActionAtomFamily(workspaceId));
+// workspace's current agent whether or not its chat panel is mounted. The
+// action builds the workspace's message itself.
+const useCreatePr = ({ workspaceId, gitProvider }: CreatePrInputs): CreatePrControl => {
+  const canCreatePr = useAtomValue(canCreatePrAtomFamily(workspaceId));
+  const createPr = useSetAtom(createPrActionAtomFamily(workspaceId));
 
   const handleCreate = (): void => {
     posthog.capture("pr.create_initiated", {
@@ -136,12 +131,10 @@ const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs)
       // The branch name is user-entered text (it can encode feature/ticket/
       // customer names), so it is deliberately not recorded.
     });
-    void sendCreatePrMessage(
-      buildCreatePrMessage({ prompt: prCreationPrompt, workspace: { vcs: "git", targetBranch } }),
-    );
+    void createPr();
   };
 
-  return { isDisabled: !canPromptAgent, handleCreate };
+  return { isDisabled: !canCreatePr, handleCreate };
 };
 
 type CreatePrButtonProps = CreatePrInputs;

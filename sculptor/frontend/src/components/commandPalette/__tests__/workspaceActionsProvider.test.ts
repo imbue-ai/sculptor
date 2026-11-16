@@ -88,6 +88,7 @@ const makeCommandRuntime = (): CommandRuntime => {
 
 type ActionRuntimeOverrides = {
   hasUncommittedChanges?: boolean;
+  canCommit?: boolean;
   hasOpenPr?: boolean;
   canCreatePr?: boolean;
   canOpenInOS?: boolean;
@@ -101,6 +102,7 @@ const makeActionRuntime = (overrides: ActionRuntimeOverrides = {}): WorkspaceAct
   openMergeRequest: vi.fn(),
   openInApp: vi.fn(),
   hasUncommittedChanges: vi.fn(() => overrides.hasUncommittedChanges ?? false),
+  canCommit: vi.fn(() => overrides.canCommit ?? true),
   hasOpenPr: vi.fn(() => overrides.hasOpenPr ?? false),
   canCreatePr: vi.fn(() => overrides.canCreatePr ?? true),
   canOpenInOS: vi.fn(() => overrides.canOpenInOS ?? true),
@@ -238,11 +240,23 @@ describe("buildWorkspaceActionsProvider", () => {
   it("create_pr disabled subtitle uses pull request terminology", () => {
     seedWorkspace("ws1", "Active");
     setWorkspaceIds(["ws1"]);
+    const cmds = buildWorkspaceActionsProvider(
+      makeCommandRuntime(),
+      makeActionRuntime({ canCreatePr: false, hasOpenPr: true }),
+    ).produce(wsCtx("ws1"));
+    expect(cmds.find((c) => c.id === "workspaces.action.ws1.create_pr")?.subtitle).toBe(
+      "An open pull request already exists",
+    );
+  });
+
+  it("create_pr disabled subtitle names what is missing when no pull request is open", () => {
+    seedWorkspace("ws1", "Active");
+    setWorkspaceIds(["ws1"]);
     const cmds = buildWorkspaceActionsProvider(makeCommandRuntime(), makeActionRuntime({ canCreatePr: false })).produce(
       wsCtx("ws1"),
     );
     expect(cmds.find((c) => c.id === "workspaces.action.ws1.create_pr")?.subtitle).toBe(
-      "An open pull request already exists",
+      "Needs a target branch and an agent that can take a prompt",
     );
   });
 

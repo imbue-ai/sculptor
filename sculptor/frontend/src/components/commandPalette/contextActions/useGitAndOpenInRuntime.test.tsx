@@ -8,6 +8,7 @@ import { LlmModel, TaskStatus, WorkspaceInitializationStrategy } from "~/api";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
@@ -45,6 +46,12 @@ const makeWorkspace = (objectId: string, targetBranch: string | null): Workspace
   targetBranch,
   isDeleted: false,
 });
+
+// The actions read the clicked workspace from the store, as the sidebar row it came from does.
+const seedWorkspace = (store: StoreType, workspace: Workspace): Workspace => {
+  store.set(workspaceAtomFamily(workspace.objectId), workspace);
+  return workspace;
+};
 
 type AgentHarness = "chat" | "prompt-capable-terminal";
 
@@ -109,7 +116,8 @@ describe("useGitAndOpenInRuntime", () => {
       makeAgent({ id: "agent-clicked", workspaceId: CLICKED_WS, harness: "chat" }),
     );
 
-    renderRuntime(store).commitChanges(makeWorkspace(CLICKED_WS, "main"));
+    const clicked = seedWorkspace(store, makeWorkspace(CLICKED_WS, "main"));
+    renderRuntime(store).commitChanges(clicked);
 
     expect(sendMessagesMock).toHaveBeenCalledTimes(1);
     expect(sendMessagesMock).toHaveBeenCalledWith({
@@ -126,7 +134,8 @@ describe("useGitAndOpenInRuntime", () => {
       makeAgent({ id: "agent-clicked", workspaceId: CLICKED_WS, harness: "chat" }),
     );
 
-    renderRuntime(store).createMergeRequest(makeWorkspace(CLICKED_WS, "release"));
+    const clicked = seedWorkspace(store, makeWorkspace(CLICKED_WS, "release"));
+    renderRuntime(store).createMergeRequest(clicked);
 
     expect(sendMessagesMock).toHaveBeenCalledTimes(1);
     expect(sendMessagesMock).toHaveBeenCalledWith({
@@ -146,7 +155,8 @@ describe("useGitAndOpenInRuntime", () => {
       makeAgent({ id: "terminal-clicked", workspaceId: CLICKED_WS, harness: "prompt-capable-terminal" }),
     );
 
-    renderRuntime(store).createMergeRequest(makeWorkspace(CLICKED_WS, null));
+    const clicked = seedWorkspace(store, makeWorkspace(CLICKED_WS, null));
+    renderRuntime(store).createMergeRequest(clicked);
 
     expect(terminalInputMock).toHaveBeenCalledTimes(1);
     expect(terminalInputMock).toHaveBeenCalledWith({

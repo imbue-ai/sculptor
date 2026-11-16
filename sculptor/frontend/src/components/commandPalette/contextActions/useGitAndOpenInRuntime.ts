@@ -8,10 +8,13 @@ import { openInReusableTab } from "../../../common/reusableTabTarget.ts";
 import { getBackendCapabilities } from "../../../common/state/atoms/backendCapabilities.ts";
 import { prStatusAtomFamily } from "../../../common/state/atoms/prStatus.ts";
 import { repoInfoAtomFamily } from "../../../common/state/atoms/repoInfo.ts";
-import { commitPromptAtom, prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
-import { commitActionAtomFamily, createPrActionAtomFamily } from "../../../common/state/atoms/workspaceAgentActions.ts";
+import {
+  canCommitAtomFamily,
+  canCreatePrAtomFamily,
+  commitActionAtomFamily,
+  createPrActionAtomFamily,
+} from "../../../common/state/atoms/workspaceAgentActions.ts";
 import { getCachedWorkspaceDiff } from "../../../common/state/hooks/useWorkspaceDiff.ts";
-import { buildCommitMessage, buildCreatePrMessage } from "../../../common/utils/agentPrompts.ts";
 import { isMac } from "../../../electron/platform.ts";
 
 /**
@@ -28,6 +31,7 @@ export type GitAndOpenInRuntime = {
   openInApp: (workspace: Workspace, app: ExternalApp) => void;
 
   hasUncommittedChanges: (workspace: Workspace) => boolean;
+  canCommit: (workspace: Workspace) => boolean;
   hasOpenPr: (workspace: Workspace) => boolean;
   canCreatePr: (workspace: Workspace) => boolean;
   canOpenInOS: () => boolean;
@@ -57,15 +61,10 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
       // be the workspace on screen: the sidebar menu acts on whichever row
       // was right-clicked.
       commitChanges: (ws): void => {
-        const message = buildCommitMessage({ prompt: store.get(commitPromptAtom), workspace: { vcs: "git" } });
-        void store.set(commitActionAtomFamily(ws.objectId), message);
+        void store.set(commitActionAtomFamily(ws.objectId));
       },
       createMergeRequest: (ws): void => {
-        const message = buildCreatePrMessage({
-          prompt: store.get(prCreationPromptAtom),
-          workspace: { vcs: "git", targetBranch: ws.targetBranch ?? null },
-        });
-        void store.set(createPrActionAtomFamily(ws.objectId), message);
+        void store.set(createPrActionAtomFamily(ws.objectId));
       },
       openMergeRequest: (ws): void => {
         const prStatus = store.get(prStatusAtomFamily(ws.objectId));
@@ -96,6 +95,7 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
         const text = diff?.uncommittedDiff;
         return text != null && text.trim().length > 0;
       },
+      canCommit: (ws): boolean => store.get(canCommitAtomFamily(ws.objectId)),
       hasOpenPr: (ws): boolean => {
         const prStatus = store.get(prStatusAtomFamily(ws.objectId));
         return prStatus?.prState === "open" && Boolean(prStatus.prWebUrl);
@@ -103,8 +103,9 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
       canCreatePr: (ws): boolean => {
         const prStatus = store.get(prStatusAtomFamily(ws.objectId));
         // Allow Create when there's no open PR yet — covers "none" and
-        // "merged" (you can open a follow-up PR after a previous merge).
-        return prStatus?.prState !== "open";
+        // "merged" (you can open a follow-up PR after a previous merge) — and
+        // the rule every Create PR entry point shares allows it.
+        return prStatus?.prState !== "open" && store.get(canCreatePrAtomFamily(ws.objectId));
       },
       canOpenInOS: (): boolean => getBackendCapabilities().canOpenInOS,
       isMacUi: (): boolean => isMac(),

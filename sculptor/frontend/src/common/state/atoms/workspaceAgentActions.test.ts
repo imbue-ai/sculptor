@@ -1,12 +1,22 @@
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ChatMessage, CodingAgentTaskView, HarnessCapabilities } from "~/api";
-import { LlmModel, TaskStatus } from "~/api";
+import type {
+  ChatMessage,
+  CodingAgentTaskView,
+  HarnessCapabilities,
+  UserConfig,
+  Workspace,
+  WorkspaceJjStateInfo,
+} from "~/api";
+import { LlmModel, TaskStatus, WorkspaceInitializationStrategy } from "~/api";
 import { agentDetailStateAtomFamily, getEmptyAgentDetailState } from "~/common/state/atoms/agentDetails.ts";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
-import { tabsAtom } from "~/common/state/atoms/workspaces.ts";
+import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState.ts";
+import { tabsAtom, workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { workspaceTargetBranchesAtomFamily } from "~/common/state/atoms/workspaceTargetBranches.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
@@ -15,6 +25,8 @@ import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanel
 import {
   activeAgentIdAtomFamily,
   activeChatAgentIdAtomFamily,
+  canCommitAtomFamily,
+  canCreatePrAtomFamily,
   canPromptActiveAgentAtomFamily,
   commitActionAtomFamily,
   createPrActionAtomFamily,
@@ -92,6 +104,61 @@ const seedLayout = (store: StoreType, layout: Partial<WorkspaceLayoutState>, wor
   store.set(workspaceLayoutFamily(workspaceId), { ...EMPTY_WORKSPACE_LAYOUT, ...layout });
 };
 
+const COMMIT_PROMPT = "Please commit my changes";
+const PR_PROMPT = "Open a pull request";
+const GIT_PR_MESSAGE = "Open a pull request\n\nTarget the pull request against `origin/main`.";
+const JJ_PREAMBLE = "This is a jj workspace with no git inside, so use jj rather than git.";
+
+// The prompt settings and the workspace the Commit and Create PR actions read
+// their message from; the git workspace targets origin/main unless told otherwise.
+const seedWorkspace = (
+  store: StoreType,
+  overrides: Partial<Workspace> = {},
+  config: Partial<UserConfig> = {},
+): void => {
+  store.set(userConfigAtom, { commitPrompt: COMMIT_PROMPT, prCreationPrompt: PR_PROMPT, ...config } as UserConfig);
+  store.set(workspaceAtomFamily(WS), {
+    objectId: WS,
+    projectId: "proj-1",
+    initializationStrategy: WorkspaceInitializationStrategy.WORKTREE,
+    targetBranch: "origin/main",
+    ...overrides,
+  } as Workspace);
+};
+
+const seedJjWorkspace = (
+  store: StoreType,
+  inputs: { primaryBookmark: string | null; config?: Partial<UserConfig> },
+): void => {
+  seedWorkspace(
+    store,
+    {
+      initializationStrategy: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+      targetBranch: "main@origin",
+      requestedBranchName: "dev/login",
+    },
+    inputs.config,
+  );
+  store.set(workspaceJjStateAtomFamily(WS), {
+    workspaceId: WS,
+    workingCopyChangeId: "qpvuntsm",
+    workingCopyChangeIdPrefixLength: 1,
+    workingCopyDescription: "",
+    isWorkingCopyEmpty: false,
+    bookmarks: inputs.primaryBookmark === null ? [] : [inputs.primaryBookmark],
+    primaryBookmark: inputs.primaryBookmark,
+    unbookmarkedRevisionCount: 0,
+    hasConflict: false,
+    isDivergent: false,
+    isWorkingCopyStale: false,
+  } as WorkspaceJjStateInfo);
+  store.set(workspaceTargetBranchesAtomFamily(WS), {
+    workspaceId: WS,
+    targetBranches: ["main@origin"],
+    prBaseNames: { "main@origin": "main" },
+  });
+};
+
 afterEach(() => {
   sendMessagesMock.mockReset();
   terminalInputMock.mockReset();
@@ -104,6 +171,8 @@ afterEach(() => {
     activeAgentIdAtomFamily.remove(workspaceId);
     activeChatAgentIdAtomFamily.remove(workspaceId);
     canPromptActiveAgentAtomFamily.remove(workspaceId);
+    canCommitAtomFamily.remove(workspaceId);
+    canCreatePrAtomFamily.remove(workspaceId);
     commitActionAtomFamily.remove(workspaceId);
     createPrActionAtomFamily.remove(workspaceId);
     lastFocusedChatAgentAtomFamily.remove(workspaceId);
@@ -286,13 +355,14 @@ describe("canPromptActiveAgentAtomFamily", () => {
 describe("commitActionAtomFamily", () => {
   it("sends the message to the resolved agent with its model", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedAgent(store, createMockAgent({ id: "agent-a", model: LlmModel.CLAUDE_4_SONNET }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center" },
       activePanel: { center: makeAgentPanelId("agent-a") },
     });
 
-    await store.set(commitActionAtomFamily(WS), "Please commit my changes");
+    await store.set(commitActionAtomFamily(WS));
 
     expect(sendMessagesMock).toHaveBeenCalledTimes(1);
     expect(sendMessagesMock).toHaveBeenCalledWith({
@@ -303,19 +373,21 @@ describe("commitActionAtomFamily", () => {
 
   it("no-ops when no chat agent resolves", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedLayout(store, {});
 
-    await store.set(commitActionAtomFamily(WS), "Please commit my changes");
+    await store.set(commitActionAtomFamily(WS));
 
     expect(sendMessagesMock).not.toHaveBeenCalled();
   });
 
   it("targets the last-focused agent when several chats are visible", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedTwoVisibleChats(store);
     store.set(lastFocusedChatAgentAtomFamily(WS), "agent-b");
 
-    await store.set(commitActionAtomFamily(WS), "Please commit my changes");
+    await store.set(commitActionAtomFamily(WS));
 
     expect(sendMessagesMock).toHaveBeenCalledTimes(1);
     expect(sendMessagesMock).toHaveBeenCalledWith({
@@ -326,6 +398,7 @@ describe("commitActionAtomFamily", () => {
 
   it("surfaces a toast when the chat-route send fails", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedAgent(store, createMockAgent({ id: "agent-a" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center" },
@@ -333,7 +406,7 @@ describe("commitActionAtomFamily", () => {
     });
     sendMessagesMock.mockRejectedValueOnce(new Error("network down"));
 
-    await store.set(commitActionAtomFamily(WS), "Please commit my changes");
+    await store.set(commitActionAtomFamily(WS));
 
     expect(store.get(commitPromptSendFailedToastAtom)).toMatchObject({
       title: "Couldn't send commit request",
@@ -452,23 +525,25 @@ describe("canPromptActiveAgentAtomFamily for terminal agents", () => {
 describe("commitActionAtomFamily terminal routing", () => {
   it("types and submits the prompt through the terminal-input endpoint", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
 
-    await store.set(commitActionAtomFamily(WS), "Stage every changed file");
+    await store.set(commitActionAtomFamily(WS));
 
     expect(terminalInputMock).toHaveBeenCalledTimes(1);
     expect(terminalInputMock).toHaveBeenCalledWith({
       path: { agent_id: "terminal-agent" },
-      body: { text: "Stage every changed file", submit: true },
+      body: { text: COMMIT_PROMPT, submit: true },
     });
     expect(sendMessagesMock).not.toHaveBeenCalled();
   });
 
   it("no-ops for a non-opt-in terminal instead of re-routing to the hidden chat", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: false });
 
-    await store.set(commitActionAtomFamily(WS), "Stage every changed file");
+    await store.set(commitActionAtomFamily(WS));
 
     expect(terminalInputMock).not.toHaveBeenCalled();
     expect(sendMessagesMock).not.toHaveBeenCalled();
@@ -476,10 +551,11 @@ describe("commitActionAtomFamily terminal routing", () => {
 
   it("surfaces the busy toast when the terminal-input endpoint rejects", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
     terminalInputMock.mockRejectedValueOnce(new Error("409 agent busy"));
 
-    await store.set(commitActionAtomFamily(WS), "Stage every changed file");
+    await store.set(commitActionAtomFamily(WS));
 
     expect(store.get(terminalPromptRejectedToastAtom)).toMatchObject({ title: "Agent is busy" });
   });
@@ -488,36 +564,39 @@ describe("commitActionAtomFamily terminal routing", () => {
 describe("createPrActionAtomFamily", () => {
   it("sends the message to the resolved chat agent with its model", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedAgent(store, createMockAgent({ id: "agent-a", model: LlmModel.CLAUDE_4_SONNET }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center" },
       activePanel: { center: makeAgentPanelId("agent-a") },
     });
 
-    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+    await store.set(createPrActionAtomFamily(WS));
 
     expect(sendMessagesMock).toHaveBeenCalledTimes(1);
     expect(sendMessagesMock).toHaveBeenCalledWith({
       path: { workspace_id: WS, agent_id: "agent-a" },
-      body: { message: "Open a pull request", model: LlmModel.CLAUDE_4_SONNET },
+      body: { message: GIT_PR_MESSAGE, model: LlmModel.CLAUDE_4_SONNET },
     });
   });
 
   it("types and submits the prompt into a visible prompt-capable terminal", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedVisibleTerminalWithHiddenChat(store, { acceptsAutomatedPrompts: true });
 
-    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+    await store.set(createPrActionAtomFamily(WS));
 
     expect(terminalInputMock).toHaveBeenCalledWith({
       path: { agent_id: "terminal-agent" },
-      body: { text: "Open a pull request", submit: true },
+      body: { text: GIT_PR_MESSAGE, submit: true },
     });
     expect(sendMessagesMock).not.toHaveBeenCalled();
   });
 
   it("surfaces a pull-request toast when the chat-route send fails", async () => {
     const store = createStore();
+    seedWorkspace(store);
     seedAgent(store, createMockAgent({ id: "agent-a" }));
     seedLayout(store, {
       placement: { [makeAgentPanelId("agent-a")]: "center" },
@@ -525,8 +604,93 @@ describe("createPrActionAtomFamily", () => {
     });
     sendMessagesMock.mockRejectedValueOnce(new Error("network down"));
 
-    await store.set(createPrActionAtomFamily(WS), "Open a pull request");
+    await store.set(createPrActionAtomFamily(WS));
 
     expect(store.get(commitPromptSendFailedToastAtom)).toMatchObject({ title: "Couldn't send pull request prompt" });
+  });
+});
+
+describe("the Commit and Create PR messages", () => {
+  const seedCenterChat = (store: StoreType): void => {
+    seedAgent(store, createMockAgent({ id: "agent-a", model: LlmModel.CLAUDE_4_SONNET }));
+    seedLayout(store, {
+      placement: { [makeAgentPanelId("agent-a")]: "center" },
+      activePanel: { center: makeAgentPanelId("agent-a") },
+    });
+  };
+  const sentMessage = (): string => sendMessagesMock.mock.calls[0][0].body.message;
+
+  it("sends a jj workspace's own commit prompt, asking to move its bookmark", async () => {
+    const store = createStore();
+    seedCenterChat(store);
+    seedJjWorkspace(store, { primaryBookmark: "dev/login", config: { jjCommitPrompt: "Commit with jj" } });
+
+    await store.set(commitActionAtomFamily(WS));
+
+    expect(sentMessage()).toBe(
+      `Commit with jj\n\n${JJ_PREAMBLE} Then move the bookmark \`dev/login\` onto the change you committed: \`jj bookmark set dev/login -r @-\` after \`jj commit\`.`,
+    );
+  });
+
+  it("falls back to the git commit prompt when the jj one is unset", async () => {
+    const store = createStore();
+    seedCenterChat(store);
+    seedJjWorkspace(store, { primaryBookmark: "dev/login", config: { jjCommitPrompt: null } });
+
+    await store.set(commitActionAtomFamily(WS));
+
+    expect(sentMessage().startsWith(`${COMMIT_PROMPT}\n\n${JJ_PREAMBLE}`)).toBe(true);
+  });
+
+  it("sends a jj workspace's pull request prompt naming its bookmark and the target's base", async () => {
+    const store = createStore();
+    seedCenterChat(store);
+    seedJjWorkspace(store, { primaryBookmark: null, config: { jjPrCreationPrompt: "Open a jj pull request" } });
+
+    await store.set(createPrActionAtomFamily(WS));
+
+    expect(sentMessage()).toBe(
+      `Open a jj pull request\n\n${JJ_PREAMBLE} First create the bookmark \`dev/login\` on your latest described change with \`jj bookmark create dev/login -r <change>\`. Push the bookmark \`dev/login\` with \`jj git push -b dev/login\`, then open the pull request from \`dev/login\` into \`main\` with \`gh pr create --head dev/login --base main\`.`,
+    );
+  });
+
+  it("enables both for a git workspace whose agent can take a prompt", () => {
+    const store = createStore();
+    seedCenterChat(store);
+    seedWorkspace(store);
+
+    expect(store.get(canCommitAtomFamily(WS))).toBe(true);
+    expect(store.get(canCreatePrAtomFamily(WS))).toBe(true);
+  });
+
+  it("disables Create PR, but not Commit, for a workspace with no target", () => {
+    const store = createStore();
+    seedCenterChat(store);
+    seedWorkspace(store, { targetBranch: null });
+
+    expect(store.get(canCommitAtomFamily(WS))).toBe(true);
+    expect(store.get(canCreatePrAtomFamily(WS))).toBe(false);
+  });
+
+  it("disables both for a jj workspace until its jj state arrives, and sends nothing", async () => {
+    const store = createStore();
+    seedCenterChat(store);
+    seedWorkspace(store, {
+      initializationStrategy: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+      targetBranch: "main@origin",
+    });
+
+    expect(store.get(canCommitAtomFamily(WS))).toBe(false);
+    expect(store.get(canCreatePrAtomFamily(WS))).toBe(false);
+    await store.set(commitActionAtomFamily(WS));
+    expect(sendMessagesMock).not.toHaveBeenCalled();
+  });
+
+  it("disables both while the agent cannot take a prompt", () => {
+    const store = createStore();
+    seedWorkspace(store);
+
+    expect(store.get(canCommitAtomFamily(WS))).toBe(false);
+    expect(store.get(canCreatePrAtomFamily(WS))).toBe(false);
   });
 });

@@ -114,6 +114,10 @@ export const prCreationPromptAtom = atom<string>(
   (get) => get(userConfigAtom)?.prCreationPrompt ?? DEFAULT_PR_CREATION_PROMPT,
 );
 
+// The prompt sent instead of the PR creation prompt from a jj workspace; null
+// means the git prompt is used, and Sculptor appends its jj suffix either way.
+export const jjPrCreationPromptAtom = atom<string | null>((get) => get(userConfigAtom)?.jjPrCreationPrompt ?? null);
+
 export const isPrPollingEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.prPollingEnabled ?? true);
 
 export const prPollIntervalAtom = atom<number>((get) => get(userConfigAtom)?.prPollIntervalSeconds ?? 30);
@@ -169,6 +173,10 @@ export const DEFAULT_COMMIT_PROMPT =
   "Stage every changed and untracked file, then commit with a comprehensive commit message. Do not leave any files unstaged.";
 
 export const commitPromptAtom = atom<string>((get) => get(userConfigAtom)?.commitPrompt ?? DEFAULT_COMMIT_PROMPT);
+
+// The prompt sent instead of the commit prompt from a jj workspace; null means
+// the git prompt is used, and Sculptor appends its jj suffix either way.
+export const jjCommitPromptAtom = atom<string | null>((get) => get(userConfigAtom)?.jjCommitPrompt ?? null);
 
 // Project environment variable settings
 export const envVarOverrideEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.envVarOverrideEnabled ?? false);

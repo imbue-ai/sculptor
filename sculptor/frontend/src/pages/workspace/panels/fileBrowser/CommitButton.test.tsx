@@ -4,9 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CodingAgentTaskView } from "~/api";
-import { ElementIds, LlmModel } from "~/api";
+import type { CodingAgentTaskView, Workspace } from "~/api";
+import { ElementIds, LlmModel, WorkspaceInitializationStrategy } from "~/api";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
+import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
 import { CommitButton } from "./CommitButton.tsx";
@@ -24,6 +25,12 @@ const WS_OTHER = "ws-other";
 type StoreType = ReturnType<typeof createStore>;
 
 const seedChatAgent = (store: StoreType, inputs: { agentId: string; workspaceId: string }): void => {
+  store.set(workspaceAtomFamily(inputs.workspaceId), {
+    objectId: inputs.workspaceId,
+    projectId: "proj-1",
+    initializationStrategy: WorkspaceInitializationStrategy.WORKTREE,
+    targetBranch: "origin/main",
+  } as Workspace);
   const agent = {
     id: inputs.agentId,
     workspaceId: inputs.workspaceId,

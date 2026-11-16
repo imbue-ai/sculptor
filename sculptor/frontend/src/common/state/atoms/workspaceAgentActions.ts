@@ -1,6 +1,8 @@
 // Workspace-scoped agent resolution + actions for panels that act on "the
 // workspace's current agent" without living inside a chat panel (e.g. the
-// Changes panel's commit button, Notes "add to prompt", the Skills gate).
+// Changes panel's commit button, Notes "add to prompt", the Skills gate). The
+// Commit and Create PR actions also gather their own message here, so every
+// entry point sends the same text and is enabled by the same rule.
 //
 // These deliberately do NOT go through `chatActionsAtom`: its closures are
 // registered by a mounted chat panel and nulled on unmount, so any control
@@ -26,8 +28,22 @@ import {
   agentSupportsChatInterfaceAtomFamily,
 } from "~/common/state/atoms/agents.ts";
 import { commitPromptSendFailedToastAtom, terminalPromptRejectedToastAtom } from "~/common/state/atoms/toasts.ts";
-import { agentIdForWorkspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import {
+  commitPromptAtom,
+  jjCommitPromptAtom,
+  jjPrCreationPromptAtom,
+  prCreationPromptAtom,
+} from "~/common/state/atoms/userConfig.ts";
+import { workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState.ts";
+import {
+  agentIdForWorkspaceAtomFamily,
+  asLiveWorkspace,
+  workspaceAtomFamily,
+} from "~/common/state/atoms/workspaces.ts";
+import { workspaceTargetBranchesAtomFamily } from "~/common/state/atoms/workspaceTargetBranches.ts";
+import { buildCommitMessage, buildCreatePrMessage, type JjPromptBookmark } from "~/common/utils/agentPrompts.ts";
 import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
+import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import type { WorkspaceLayoutState } from "~/pages/workspace/layout/persistence/snapshot.ts";
 import { AGENT_PANEL_ID_PREFIX, makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
@@ -282,18 +298,103 @@ const sendAutomatedPrompt = async (
   }
 };
 
-/** Send the commit prompt to the workspace's current agent. */
-export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
-  atom(null, (get, set, message: string): Promise<void> =>
-    sendAutomatedPrompt(get, set, { workspaceId, message, sendFailedTitle: "Couldn't send commit request" }),
+// What the Commit and Create PR messages say about the workspace: its version
+// control, its target, and for jj its bookmark. Undefined until the workspace
+// is loaded and, for a jj workspace, until its jj state arrives, since the
+// message names the bookmark the state reports.
+type MessageWorkspace =
+  | { vcs: "git"; targetBranch: string | null }
+  | { vcs: "jj"; bookmark: JjPromptBookmark; target: { bookmark: string; prBaseName: string | null } | null };
+
+const readMessageWorkspace = (get: Getter, workspaceId: string): MessageWorkspace | undefined => {
+  const workspace = asLiveWorkspace(get(workspaceAtomFamily(workspaceId)));
+  if (workspace === null) return undefined;
+  const targetBranch = workspace.targetBranch || null;
+  switch (workspaceVcsOf(workspace)) {
+    case "git":
+      return { vcs: "git", targetBranch };
+    case "jj": {
+      const jjState = get(workspaceJjStateAtomFamily(workspaceId));
+      if (jjState === null) return undefined;
+      const prBaseNames = get(workspaceTargetBranchesAtomFamily(workspaceId))?.prBaseNames ?? {};
+      return {
+        vcs: "jj",
+        bookmark:
+          jjState.primaryBookmark === null
+            ? { status: "missing", requestedName: workspace.requestedBranchName || null }
+            : { status: "set", name: jjState.primaryBookmark },
+        target:
+          targetBranch === null ? null : { bookmark: targetBranch, prBaseName: prBaseNames[targetBranch] ?? null },
+      };
+    }
+  }
+};
+
+/** The message Commit sends to the workspace's current agent; undefined until its inputs are known. */
+export const commitMessageAtomFamily = atomFamily((workspaceId: string) =>
+  atom<string | undefined>((get) => {
+    const workspace = readMessageWorkspace(get, workspaceId);
+    if (workspace === undefined) return undefined;
+    switch (workspace.vcs) {
+      case "git":
+        return buildCommitMessage({ prompt: get(commitPromptAtom), workspace });
+      case "jj":
+        return buildCommitMessage({ prompt: get(jjCommitPromptAtom) ?? get(commitPromptAtom), workspace });
+    }
+  }),
+);
+
+/** The message Create PR sends to the workspace's current agent; undefined until its inputs are known. */
+export const createPrMessageAtomFamily = atomFamily((workspaceId: string) =>
+  atom<string | undefined>((get) => {
+    const workspace = readMessageWorkspace(get, workspaceId);
+    if (workspace === undefined) return undefined;
+    switch (workspace.vcs) {
+      case "git":
+        return buildCreatePrMessage({ prompt: get(prCreationPromptAtom), workspace });
+      case "jj":
+        return buildCreatePrMessage({ prompt: get(jjPrCreationPromptAtom) ?? get(prCreationPromptAtom), workspace });
+    }
+  }),
+);
+
+/** Whether Commit can be sent now. Every Commit entry point is enabled by this rule. */
+export const canCommitAtomFamily = atomFamily((workspaceId: string) =>
+  atom<boolean>(
+    (get) =>
+      get(canPromptActiveAgentAtomFamily(workspaceId)) && get(commitMessageAtomFamily(workspaceId)) !== undefined,
   ),
 );
 
-/** Send the create-pull-request prompt to the workspace's current agent. */
-export const createPrActionAtomFamily = atomFamily((workspaceId: string) =>
-  atom(null, (get, set, message: string): Promise<void> =>
-    sendAutomatedPrompt(get, set, { workspaceId, message, sendFailedTitle: "Couldn't send pull request prompt" }),
+/**
+ * Whether Create PR can be sent now: as Commit, and the workspace has a target
+ * to open the pull request into. Every Create PR entry point is enabled by this rule.
+ */
+export const canCreatePrAtomFamily = atomFamily((workspaceId: string) =>
+  atom<boolean>(
+    (get) =>
+      get(canPromptActiveAgentAtomFamily(workspaceId)) &&
+      get(createPrMessageAtomFamily(workspaceId)) !== undefined &&
+      Boolean(asLiveWorkspace(get(workspaceAtomFamily(workspaceId)))?.targetBranch),
   ),
+);
+
+/** Send the commit message to the workspace's current agent. */
+export const commitActionAtomFamily = atomFamily((workspaceId: string) =>
+  atom(null, async (get, set): Promise<void> => {
+    const message = get(commitMessageAtomFamily(workspaceId));
+    if (message === undefined) return;
+    await sendAutomatedPrompt(get, set, { workspaceId, message, sendFailedTitle: "Couldn't send commit request" });
+  }),
+);
+
+/** Send the create-pull-request message to the workspace's current agent. */
+export const createPrActionAtomFamily = atomFamily((workspaceId: string) =>
+  atom(null, async (get, set): Promise<void> => {
+    const message = get(createPrMessageAtomFamily(workspaceId));
+    if (message === undefined) return;
+    await sendAutomatedPrompt(get, set, { workspaceId, message, sendFailedTitle: "Couldn't send pull request prompt" });
+  }),
 );
 
 /**
@@ -309,6 +410,10 @@ export const removeWorkspaceAgentActionState = (workspaceId: string): void => {
   activeChatAgentIdAtomFamily.remove(workspaceId);
   activeAgentIdAtomFamily.remove(workspaceId);
   canPromptActiveAgentAtomFamily.remove(workspaceId);
+  commitMessageAtomFamily.remove(workspaceId);
+  createPrMessageAtomFamily.remove(workspaceId);
+  canCommitAtomFamily.remove(workspaceId);
+  canCreatePrAtomFamily.remove(workspaceId);
   commitActionAtomFamily.remove(workspaceId);
   createPrActionAtomFamily.remove(workspaceId);
 };

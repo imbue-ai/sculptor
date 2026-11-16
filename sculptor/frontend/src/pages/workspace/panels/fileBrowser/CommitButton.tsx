@@ -4,9 +4,7 @@ import type { CSSProperties, ReactElement } from "react";
 import { useState } from "react";
 
 import { ElementIds } from "~/api";
-import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
-import { canPromptActiveAgentAtomFamily, commitActionAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
-import { buildCommitMessage } from "~/common/utils/agentPrompts.ts";
+import { canCommitAtomFamily, commitActionAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
@@ -24,16 +22,16 @@ type CommitButtonProps = {
 export const CommitButton = ({ workspaceId, changesCount, onCommit }: CommitButtonProps): ReactElement => {
   // Committing sends the prompt through the workspace-scoped action rather
   // than the mounted chat's `chatActionsAtom` closures — the Changes panel is
-  // usually the active center tab, which unmounts the chat.
-  const canPromptAgent = useAtomValue(canPromptActiveAgentAtomFamily(workspaceId));
-  const sendCommitMessage = useSetAtom(commitActionAtomFamily(workspaceId));
-  const commitPrompt = useAtomValue(commitPromptAtom);
+  // usually the active center tab, which unmounts the chat. The action builds
+  // the workspace's message itself.
+  const canCommit = useAtomValue(canCommitAtomFamily(workspaceId));
+  const commit = useSetAtom(commitActionAtomFamily(workspaceId));
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
 
-  const isDisabled = changesCount === 0 || !canPromptAgent;
+  const isDisabled = changesCount === 0 || !canCommit;
 
   const handleClick = (): void => {
-    void sendCommitMessage(buildCommitMessage({ prompt: commitPrompt, workspace: { vcs: "git" } }));
+    void commit();
     onCommit?.();
   };
 

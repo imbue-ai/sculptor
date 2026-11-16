@@ -3,13 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CodingAgentTaskView, PrStatusInfo, UserConfig } from "~/api";
-import { ElementIds, LlmModel, TaskStatus } from "~/api";
+import type { CodingAgentTaskView, PrStatusInfo, UserConfig, Workspace } from "~/api";
+import { ElementIds, LlmModel, TaskStatus, WorkspaceInitializationStrategy } from "~/api";
 import { reusableTabTarget } from "~/common/reusableTabTarget.ts";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { commitPromptSendFailedToastAtom } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { workspaceTargetBranchesAtomFamily } from "~/common/state/atoms/workspaceTargetBranches.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
@@ -168,6 +169,13 @@ const storeWithAgent = (inputs: {
 }): ReturnType<typeof createStore> => {
   const store = storeWith(inputs.status);
   store.set(userConfigAtom, { prCreationPrompt: PR_PROMPT } as unknown as UserConfig);
+  // The Create PR action reads the message's target from the workspace itself.
+  store.set(workspaceAtomFamily(WORKSPACE_ID), {
+    objectId: WORKSPACE_ID,
+    projectId: "proj-1",
+    initializationStrategy: WorkspaceInitializationStrategy.WORKTREE,
+    targetBranch: "origin/main",
+  } as Workspace);
   store.set(agentAtomFamily(AGENT_ID), {
     id: AGENT_ID,
     workspaceId: WORKSPACE_ID,

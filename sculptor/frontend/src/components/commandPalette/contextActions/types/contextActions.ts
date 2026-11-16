@@ -143,9 +143,11 @@ export type WorkspaceActionRuntime = {
 
   /** True when the workspace has uncommitted changes (for "Commit" enable). */
   hasUncommittedChanges: (workspace: Workspace) => boolean;
+  /** True when the shared Commit rule lets the workspace's agent be sent the commit message. */
+  canCommit: (workspace: Workspace) => boolean;
   /** True when there's an open PR with a web URL ("Open" enable). */
   hasOpenPr: (workspace: Workspace) => boolean;
-  /** True when no open PR exists yet ("Create" enable). */
+  /** True when no open PR exists yet and the shared Create PR rule allows it ("Create" enable). */
   canCreatePr: (workspace: Workspace) => boolean;
   /** Backend exposes the open-in-app endpoint (false on remote backends). */
   canOpenInOS: () => boolean;
