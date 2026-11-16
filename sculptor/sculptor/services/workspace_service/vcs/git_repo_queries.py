@@ -40,6 +40,14 @@ def does_ref_exist(git: GitCli, repo_path: Path, ref: str) -> bool:
     return result.returncode == 0
 
 
+def is_well_formed_branch_name(git: GitCli, repo_path: Path, name: str) -> bool:
+    """Whether git accepts `name` as a branch name (`git check-ref-format --branch`)."""
+    # `check-ref-format` rejects `--end-of-options`; `--branch` consumes the next
+    # argument as the name, so a name starting with `-` is still not an option.
+    result = git.run_git(["check-ref-format", "--branch", name], repo_path, is_read_only=True, is_checked=False)
+    return result.returncode == 0
+
+
 def resolve_main_repo_path(git: GitCli, checkout_path: Path) -> Path:
     """The main repository a linked worktree belongs to; any other path is returned unchanged."""
     if not (checkout_path / ".git").is_file():

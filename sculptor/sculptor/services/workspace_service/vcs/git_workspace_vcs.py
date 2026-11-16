@@ -38,6 +38,7 @@ from sculptor.services.workspace_service.vcs.git_log_parsing import parse_file_d
 from sculptor.services.workspace_service.vcs.git_log_parsing import parse_name_status_lines
 from sculptor.services.workspace_service.vcs.git_log_parsing import parse_numstat_lines
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
+from sculptor.services.workspace_service.vcs.git_repo_queries import is_well_formed_branch_name
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
@@ -293,19 +294,11 @@ class GitWorkspaceVcs(WorkspaceVcs):
         return [] if current_branch is None else [current_branch]
 
     def validate_new_ref_name(self, repo_path: Path, ref_name: str) -> RefNameValidation:
-        if not ref_name or not self._is_well_formed_branch_name(repo_path, ref_name):
+        if not ref_name or not is_well_formed_branch_name(self._git, repo_path, ref_name):
             return RefNameValidation(ref_name=ref_name, status=RefNameStatus.MALFORMED)
         if does_ref_exist(self._git, repo_path, f"refs/heads/{ref_name}"):
             return RefNameValidation(ref_name=ref_name, status=RefNameStatus.ALREADY_EXISTS)
         return RefNameValidation(ref_name=ref_name, status=RefNameStatus.AVAILABLE)
-
-    def _is_well_formed_branch_name(self, repo_path: Path, ref_name: str) -> bool:
-        # `check-ref-format` rejects `--end-of-options`; `--branch` consumes the next
-        # argument as the name, so a name starting with `-` is still not an option.
-        result = self._git.run_git(
-            ["check-ref-format", "--branch", ref_name], repo_path, is_read_only=True, is_checked=False
-        )
-        return result.returncode == 0
 
     def resolve_base_commit_id(self, repo_path: Path, base_ref: str) -> str | None:
         return self._resolve_commit_id(repo_path, base_ref)
