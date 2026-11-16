@@ -129,7 +129,9 @@ class WorkspaceBranchPoller:
         # projection in ``_target_info_by_workspace``).
         self._target_scan_by_common_dir: dict[Path, _RepoTargetScan] = {}
         # Workspaces and repositories whose last scan failed, so a lasting failure is logged once.
+        # Running git in a jj workspace is remembered apart, so logging one never silences the other.
         self._failed_scan_keys: set[WorkspaceID | Path] = set()
+        self._jj_workspace_scan_keys: set[WorkspaceID | Path] = set()
 
         self._cycle = 0
 
@@ -230,7 +232,7 @@ class WorkspaceBranchPoller:
             except Exception as e:
                 self._log_scan_failure_once(workspace.object_id, e)
                 continue
-            self._failed_scan_keys.discard(workspace.object_id)
+            self._forget_scan_failures(workspace.object_id)
             if common_dir is None:
                 continue
             members_by_common_dir.setdefault(common_dir, []).append(workspace)
@@ -247,7 +249,7 @@ class WorkspaceBranchPoller:
             except Exception as e:
                 self._log_scan_failure_once(common_dir, e)
                 continue
-            self._failed_scan_keys.discard(common_dir)
+            self._forget_scan_failures(common_dir)
             for workspace in members:
                 self._update_target_branches(workspace, common_dir)
 
@@ -256,7 +258,9 @@ class WorkspaceBranchPoller:
         }
         self._prune(live_workspace_ids, git_workspace_ids, set(members_by_common_dir))
         undeleted_workspace_ids = {workspace.object_id for workspace in workspaces if not workspace.is_deleted}
-        self._failed_scan_keys &= undeleted_workspace_ids | set(members_by_common_dir)
+        scanned_keys = undeleted_workspace_ids | set(members_by_common_dir)
+        self._failed_scan_keys &= scanned_keys
+        self._jj_workspace_scan_keys &= scanned_keys
 
     def _scan_branch(self, workspace: Workspace, working_dir: Path, force_recompute: bool) -> Path | None:
         """Read and publish the workspace's branch; return its repository's common git dir, or None if it has none."""
@@ -284,24 +288,24 @@ class WorkspaceBranchPoller:
 
         That is a dispatch bug, not a git failure.
         """
-        if not self._mark_scan_failed(key):
+        if key in self._jj_workspace_scan_keys:
             return
+        self._jj_workspace_scan_keys.add(key)
         log_exception(error, f"Branch scan ran git in a jj workspace; skipping {key}")
 
     def _log_scan_failure_once(self, key: WorkspaceID | Path, error: Exception) -> None:
         """Log that a workspace or repository cannot be scanned when that starts, not on every cycle it lasts."""
-        if not self._mark_scan_failed(key):
+        if key in self._failed_scan_keys:
             return
+        self._failed_scan_keys.add(key)
         log_exception(
             error, f"Branch scan is skipping {key} until it can be scanned", priority=ExceptionPriority.LOW_PRIORITY
         )
 
-    def _mark_scan_failed(self, key: WorkspaceID | Path) -> bool:
-        """Record that `key` failed to scan; whether it had scanned cleanly before this failure."""
-        if key in self._failed_scan_keys:
-            return False
-        self._failed_scan_keys.add(key)
-        return True
+    def _forget_scan_failures(self, key: WorkspaceID | Path) -> None:
+        """Record that `key` scanned cleanly, so its next failure of either kind is logged again."""
+        self._failed_scan_keys.discard(key)
+        self._jj_workspace_scan_keys.discard(key)
 
     def _flag_non_git_checkout(self, workspace_id: WorkspaceID, working_dir: Path) -> None:
         """Publish that the workspace's branch cannot be read, logging only when it first happens."""
