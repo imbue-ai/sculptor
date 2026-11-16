@@ -7,6 +7,7 @@ import { ElementIds, type PrStatusInfo } from "~/api";
 import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { openInReusableTab } from "~/common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
+import { canCreatePrAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useGitAndOpenInRuntime } from "~/components/commandPalette/contextActions/useGitAndOpenInRuntime.ts";
 import { DiffScopePicker } from "~/pages/workspace/diffPanel/DiffScopePicker.tsx";
@@ -60,6 +61,8 @@ export const ChangesPill = ({ onReviewAll }: ChangesPillProps): ReactElement | n
   const workspace = useWorkspace(workspaceID);
   const git = useGitAndOpenInRuntime();
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
+  // The rule every Create PR entry point shares, so "+ PR" is disabled exactly when the desktop button is.
+  const canCreatePr = useAtomValue(canCreatePrAtomFamily(workspaceID));
   const [isOpen, setIsOpen] = useState(false);
   const [scope, setScope] = useAtom(changesScopeAtomFamily(workspaceID));
 
@@ -174,7 +177,12 @@ export const ChangesPill = ({ onReviewAll }: ChangesPillProps): ReactElement | n
     }
     if (!workspace) return null;
     return (
-      <button type="button" className={styles.pr} onClick={() => git.createMergeRequest(workspace)}>
+      <button
+        type="button"
+        className={styles.pr}
+        disabled={!canCreatePr}
+        onClick={() => git.createMergeRequest(workspace)}
+      >
         <Plus size={14} /> {prTerm}
       </button>
     );

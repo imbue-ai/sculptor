@@ -46,7 +46,13 @@
   color: var(--gray-11);
 }
 
-.pr:hover {
+/* Disabled like the desktop Create PR: no agent can take the prompt yet, or there is no target. */
+.pr:disabled {
+  color: var(--gray-8);
+  cursor: not-allowed;
+}
+
+.pr:hover:not(:disabled) {
   background: var(--gray-a4);
 }
 
