@@ -8,6 +8,7 @@ from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceRevisionHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceWorkingCopyUpdateUnavailableError
+from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionRecord
 from sculptor.web.auth import UserSession
@@ -31,7 +32,8 @@ def get_workspace_revisions(
 ) -> RevisionHistoryResponse:
     """A jj workspace's revisions, newest first, back to where its stack forks from its target.
 
-    Answers 409 for a git workspace, whose history is served by the commits route.
+    Answers 409 for a git workspace, whose history is served by the commits route,
+    and for a jj workspace whose working copy is stale, which the user updates first.
     """
     validated_workspace_id = validate_workspace_id(workspace_id)
     services = get_services_from_request_or_websocket(request)
@@ -46,6 +48,10 @@ def get_workspace_revisions(
             return RevisionHistoryResponse(revisions=[], fork_point=None)
         except WorkspaceRevisionHistoryUnavailableError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
+        except JjWorkingCopyStaleError as e:
+            raise HTTPException(
+                status_code=409, detail=f"The working copy of workspace {workspace_id} is stale; update it first"
+            ) from e
 
     return RevisionHistoryResponse(
         revisions=[_to_revision_info(record) for record in history.revisions], fork_point=history.fork_point

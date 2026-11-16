@@ -139,6 +139,18 @@ def test_the_revisions_of_a_git_workspace_conflict(
     assert "commits" in response.json()["detail"]
 
 
+def test_the_revisions_of_a_jj_workspace_with_a_stale_working_copy_conflict(
+    client: TestClient, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo, jj_workspace_row: Workspace
+) -> None:
+    assert jj_workspace_row.environment_id is not None
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, Path(jj_workspace_row.environment_id) / "code")
+
+    response = client.get(f"/api/v1/workspaces/{jj_workspace_row.object_id}/revisions")
+
+    assert response.status_code == 409, response.text
+    assert "stale" in response.json()["detail"]
+
+
 def test_the_revisions_of_an_unknown_workspace_are_not_found(client: TestClient) -> None:
     response = client.get(f"/api/v1/workspaces/{WorkspaceID()}/revisions")
 
