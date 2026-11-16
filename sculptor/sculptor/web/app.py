@@ -4635,7 +4635,7 @@ def _resolve_project_in_jj_workspace(request: Request, project_path: Path) -> Pa
     with root_concurrency_group.make_concurrency_group(name="resolve_project_in_jj_workspace") as concurrency_group:
         jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
         try:
-            return resolve_project_in_jj_workspace(project_path, jj)
+            return resolve_project_in_jj_workspace(project_path, jj, services.dependency_management_service)
         except ProjectInJjWorkspaceError as e:
             refusal = e
     raise HTTPException(status_code=400, detail=str(refusal)) from refusal

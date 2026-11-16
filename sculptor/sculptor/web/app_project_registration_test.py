@@ -35,6 +35,15 @@ def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary, jj_isolated_env: JjIso
     set_user_config_instance(None)
 
 
+@pytest.fixture
+def jj_found_nowhere(jj_isolated_env: JjIsolatedEnv) -> Iterator[None]:
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj="CUSTOM")})
+    )
+    yield
+    set_user_config_instance(None)
+
+
 def _make_jj_workspace(path: Path) -> Path:
     """A directory with `.jj` and no `.git`, the shape of a jj workspace."""
     (path / ".jj").mkdir(parents=True)
@@ -195,3 +204,15 @@ def test_routes_that_create_a_git_repository_refuse_a_jj_workspace_of_a_colocate
     assert not (jj_workspace.path / ".git").exists()
     commit_count_after = run_blocking(["git", "rev-list", "--count", "--all"], cwd=jj_colocated_repo.path).stdout
     assert commit_count_after == commit_count_before
+
+
+def test_initialize_says_it_needs_a_working_jj_when_it_finds_none_for_a_jj_workspace(
+    client: TestClient, jj_workspace: JjWorkspace, jj_found_nowhere: None
+) -> None:
+    response = client.post("/api/v1/projects/initialize", json={"project_path": str(jj_workspace.path)})
+
+    assert response.status_code == 400
+    assert (
+        "Sculptor needs a working jj to find that workspace's repository, but it found no jj."
+        in (response.json()["detail"])
+    )

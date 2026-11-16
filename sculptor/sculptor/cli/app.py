@@ -85,7 +85,8 @@ def _resolve_project_in_jj_workspace(project: Path | None) -> Path | None:
     """Resolve a project directory inside a jj workspace to its repository, or reject it, while parsing arguments.
 
     This runs before the server starts and before the user config is loaded,
-    so jj is the managed copy or the one on PATH.
+    so jj is the managed copy or the one on PATH, and a custom jj path set in
+    the user config is ignored here.
     """
     if project is None:
         return None
@@ -93,7 +94,7 @@ def _resolve_project_in_jj_workspace(project: Path | None) -> Path | None:
         dependency_management_service = DependencyManagementService(concurrency_group=concurrency_group)
         jj = build_vcs_runners(concurrency_group, dependency_management_service.resolve_binary_path).jj
         try:
-            return resolve_project_in_jj_workspace(project, jj)
+            return resolve_project_in_jj_workspace(project, jj, dependency_management_service)
         except ProjectInJjWorkspaceError as e:
             refusal = e
     raise typer.BadParameter(str(refusal)) from refusal

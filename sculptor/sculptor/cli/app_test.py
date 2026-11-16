@@ -41,6 +41,20 @@ def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary, jj_isolated_env: JjIso
     set_user_config_instance(None)
 
 
+@pytest.fixture
+def jj_too_old(tmp_path: Path, jj_isolated_env: JjIsolatedEnv) -> Iterator[Path]:
+    """A jj that reports a version older than the one Sculptor supports."""
+    old_jj = tmp_path / "old-jj" / "jj"
+    old_jj.parent.mkdir()
+    old_jj.write_text("#!/bin/sh\necho 'jj 0.28.2-b9ebe2f03c976515d2a155a411a368ae773c5493'\n")
+    old_jj.chmod(0o755)
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj=str(old_jj))})
+    )
+    yield old_jj
+    set_user_config_instance(None)
+
+
 def test_explicit_port_is_published_and_visible_in_the_settings_snapshot(
     fresh_settings_cache: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -123,3 +137,16 @@ def test_the_cli_refuses_a_jj_workspace_of_a_repository_not_colocated_with_git(
 
     with pytest.raises(typer.BadParameter, match="jj workspace"):
         command.make_context("sculptor", [str(jj_workspace)])
+
+
+def test_the_cli_names_the_jj_it_found_when_that_jj_is_too_old_to_find_a_jj_workspace_s_repository(
+    jj_workspace: JjWorkspace, jj_too_old: Path
+) -> None:
+    command = typer.main.get_command(typer_cli)
+
+    with pytest.raises(typer.BadParameter) as refusal:
+        command.make_context("sculptor", [str(jj_workspace.path)])
+
+    message = str(refusal.value)
+    assert "Sculptor needs a working jj to find that workspace's repository" in message
+    assert f"{jj_too_old} reports jj 0.28.2" in message
