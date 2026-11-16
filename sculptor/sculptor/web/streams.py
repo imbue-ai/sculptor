@@ -581,7 +581,7 @@ def stream_everything(
                 # snapshots can be suppressed from subsequent updates. Absence
                 # means nothing was sent yet, so the next update carries the map.
                 sent_workflow_states_by_task_id: dict[TaskID, dict[str, WorkflowTaskState] | None] = {}
-                pr_poll_last_branch: dict[WorkspaceID, str] = {}
+                pr_poll_last_branch: dict[WorkspaceID, str | None] = {}
 
                 def _pr_poll_workspace_in_scope(workspace_id: WorkspaceID) -> bool:
                     # The git-state scanner fans branch infos out for every
@@ -745,14 +745,16 @@ def _scope_subscribed_entity_was_deleted(
 def _notify_pr_polling_service(
     pr_polling_service: PrPollingService | None,
     data: list[StreamingUpdateSourceTypes],
-    last_branch_by_workspace: dict[WorkspaceID, str],
+    last_branch_by_workspace: dict[WorkspaceID, str | None],
     is_workspace_in_scope: Callable[[WorkspaceID], bool],
 ) -> None:
     """Forward workspace and branch change events to the PR polling service (non-blocking).
 
-    When the *current branch* changes, a ``PrStatusInfoCleared`` sentinel is
-    appended directly to *data* so that ``_convert_to_streaming_update``
-    includes it in the **same** ``StreamingUpdate`` as the branch change.
+    A pull request is looked up by a git workspace's current branch and by a jj
+    workspace's primary bookmark, which may be None. When it changes, a
+    ``PrStatusInfoCleared`` sentinel is appended directly to *data* so that
+    ``_convert_to_streaming_update`` includes it in the **same**
+    ``StreamingUpdate`` as the change.
 
     Target branch changes do **not** emit a clearing sentinel — the old PR
     status stays visible until the immediate re-poll replaces it, avoiding
@@ -783,18 +785,38 @@ def _notify_pr_polling_service(
             # and keeping its last branch means recovering on that branch is a no-op.
             if item.current_branch is None:
                 continue
-            prev = last_branch_by_workspace.get(item.workspace_id)
-            last_branch_by_workspace[item.workspace_id] = item.current_branch
-            if prev is None:
-                # First branch info for this workspace — repo is cloned and
-                # git commands work, so it's safe to start PR polling.
-                pr_polling_service.on_workspace_ready(item.workspace_id)
-            elif prev != item.current_branch:
-                pr_polling_service.on_branch_changed(item.workspace_id)
-                # Inject the clearing signal into the current batch so the
-                # frontend resets PR status in the same message as the branch
-                # change, rather than waiting for the next queue drain.
-                data.append(PrStatusInfoCleared(workspace_id=item.workspace_id))
+            _notify_pull_request_head(
+                pr_polling_service, data, last_branch_by_workspace, item.workspace_id, item.current_branch
+            )
+        elif isinstance(item, WorkspaceJjStateInfo):
+            if not is_workspace_in_scope(item.workspace_id):
+                continue
+            _notify_pull_request_head(
+                pr_polling_service, data, last_branch_by_workspace, item.workspace_id, item.primary_bookmark
+            )
+
+
+def _notify_pull_request_head(
+    pr_polling_service: PrPollingService,
+    data: list[StreamingUpdateSourceTypes],
+    last_head_by_workspace: dict[WorkspaceID, str | None],
+    workspace_id: WorkspaceID,
+    head: str | None,
+) -> None:
+    """Start PR polling for a workspace seen for the first time, and poll again when its PR head changes."""
+    is_first_sighting = workspace_id not in last_head_by_workspace
+    previous_head = last_head_by_workspace.get(workspace_id)
+    last_head_by_workspace[workspace_id] = head
+    if is_first_sighting:
+        # The checkout exists and its version control can be read, so it's
+        # safe to start PR polling.
+        pr_polling_service.on_workspace_ready(workspace_id)
+    elif previous_head != head:
+        pr_polling_service.on_branch_changed(workspace_id)
+        # Inject the clearing signal into the current batch so the frontend
+        # resets PR status in the same message as the change, rather than
+        # waiting for the next queue drain.
+        data.append(PrStatusInfoCleared(workspace_id=workspace_id))
 
 
 def _convert_to_streaming_update(

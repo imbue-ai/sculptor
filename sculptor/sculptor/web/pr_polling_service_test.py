@@ -32,7 +32,9 @@ from sculptor.testing.jj_repos import make_github_looking_origin
 from sculptor.testing.jj_repos import run_jj
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
+from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.derived import PrStatusInfo
+from sculptor.web.derived import PrStatusInfoCleared
 from sculptor.web.derived import WorkspaceBranchInfo
 from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.pr_polling_service import _CooldownDeferred
@@ -820,7 +822,7 @@ def test_on_branch_changed_bypasses_pending_dedup() -> None:
 def test_notify_first_branch_info_calls_on_workspace_ready() -> None:
     svc = MagicMock(spec=PrPollingService)
     workspace_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {}
+    last_branch: dict[WorkspaceID, str | None] = {}
 
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id),
@@ -835,7 +837,7 @@ def test_notify_first_branch_info_calls_on_workspace_ready() -> None:
 def test_notify_same_branch_does_not_trigger_anything() -> None:
     svc = MagicMock(spec=PrPollingService)
     workspace_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {workspace_id: "feat-1"}
+    last_branch: dict[WorkspaceID, str | None] = {workspace_id: "feat-1"}
 
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id),
@@ -849,7 +851,7 @@ def test_notify_same_branch_does_not_trigger_anything() -> None:
 def test_notify_branch_change_calls_on_branch_changed() -> None:
     svc = MagicMock(spec=PrPollingService)
     workspace_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {workspace_id: "feat-1"}
+    last_branch: dict[WorkspaceID, str | None] = {workspace_id: "feat-1"}
 
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-2", workspace_id=workspace_id),
@@ -863,7 +865,7 @@ def test_notify_branch_change_calls_on_branch_changed() -> None:
 
 def test_notify_none_service_is_noop() -> None:
     workspace_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {}
+    last_branch: dict[WorkspaceID, str | None] = {}
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="main", workspace_id=workspace_id),
     ]
@@ -879,7 +881,7 @@ def test_notify_skips_out_of_scope_branch_info() -> None:
     svc = MagicMock(spec=PrPollingService)
     in_scope_id = WorkspaceID()
     out_of_scope_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {}
+    last_branch: dict[WorkspaceID, str | None] = {}
 
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=out_of_scope_id),
@@ -889,6 +891,72 @@ def test_notify_skips_out_of_scope_branch_info() -> None:
     svc.on_workspace_ready.assert_not_called()
     svc.on_branch_changed.assert_not_called()
     assert out_of_scope_id not in last_branch
+
+
+def _jj_state(workspace_id: WorkspaceID, bookmarks: tuple[str, ...], description: str = "") -> WorkspaceJjStateInfo:
+    return WorkspaceJjStateInfo(
+        workspace_id=workspace_id,
+        working_copy_change_id="zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        working_copy_change_id_prefix_length=1,
+        working_copy_description=description,
+        is_working_copy_empty=True,
+        bookmarks=bookmarks,
+        primary_bookmark=bookmarks[0] if bookmarks else None,
+        unbookmarked_revision_count=0,
+        has_conflict=False,
+        is_divergent=False,
+        is_working_copy_stale=False,
+    )
+
+
+def _notify_jj_states(
+    svc: PrPollingService, last_head: dict[WorkspaceID, str | None], *states: WorkspaceJjStateInfo
+) -> list[StreamingUpdateSourceTypes]:
+    data: list[StreamingUpdateSourceTypes] = list(states)
+    _notify_pr_polling_service(svc, data, last_head, lambda _workspace_id: True)
+    return data[len(states) :]
+
+
+def test_a_jj_workspaces_first_state_starts_its_pr_polling_even_without_a_bookmark() -> None:
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+    _add_workspace_poll_state(svc, workspace_id)
+
+    injected = _notify_jj_states(svc, {}, _jj_state(workspace_id, bookmarks=()))
+
+    assert workspace_id in svc._pending
+    assert injected == []
+
+
+def test_a_new_primary_bookmark_clears_a_jj_workspaces_pr_status_and_polls_it_again() -> None:
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+    _add_workspace_poll_state(svc, workspace_id)
+    svc._cache[workspace_id] = PrStatusInfo(workspace_id=workspace_id, pr_state="open", pr_iid=3)
+    last_head: dict[WorkspaceID, str | None] = {workspace_id: None}
+
+    injected = _notify_jj_states(svc, last_head, _jj_state(workspace_id, bookmarks=("feat-1",)))
+
+    assert injected == [PrStatusInfoCleared(workspace_id=workspace_id)]
+    assert workspace_id not in svc._cache
+    assert workspace_id in svc._pending
+    assert last_head == {workspace_id: "feat-1"}
+
+
+def test_a_jj_state_that_keeps_its_primary_bookmark_leaves_pr_polling_alone() -> None:
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+    _add_workspace_poll_state(svc, workspace_id)
+    status = PrStatusInfo(workspace_id=workspace_id, pr_state="open", pr_iid=3)
+    svc._cache[workspace_id] = status
+
+    injected = _notify_jj_states(
+        svc, {workspace_id: "feat-1"}, _jj_state(workspace_id, bookmarks=("feat-1", "other"), description="new")
+    )
+
+    assert injected == []
+    assert svc._cache[workspace_id] == status
+    assert workspace_id not in svc._pending
 
 
 # ---------------------------------------------------------------------------
