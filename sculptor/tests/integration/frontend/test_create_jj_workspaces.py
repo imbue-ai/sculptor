@@ -14,14 +14,13 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
-from sculptor.services.user_config.user_config import load_config
-from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.new_workspace_dialog import PlaywrightNewWorkspaceDialog
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import add_bare_origin
 from sculptor.testing.jj_repos import colocate_with_jj
+from sculptor.testing.jj_sculptor_instance import use_jj_binary
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -29,14 +28,6 @@ from sculptor.testing.test_repo_factory import TestRepoFactory
 from sculptor.testing.user_stories import user_story
 
 _GIT_PROJECT_NAME = "git project"
-
-
-def _use_jj_binary(factory: SculptorInstanceFactory, jj_binary: JjBinary) -> None:
-    """Point the backend at the pinned jj as a CUSTOM path, before it starts."""
-    config_path = factory._delegate.sculptor_folder / "internal" / "config.toml"
-    config = load_config(config_path)
-    dependency_paths = config.dependency_paths.model_copy(update={"jj": str(jj_binary.path)})
-    save_config(config.model_copy(update={"dependency_paths": dependency_paths}), config_path)
 
 
 @user_story(
@@ -49,7 +40,7 @@ def test_create_jj_workspaces_from_the_dialog_and_the_sidebar(
     jj_isolated_env: JjIsolatedEnv,
     tmp_path: Path,
 ) -> None:
-    _use_jj_binary(sculptor_instance_factory_, jj_binary)
+    use_jj_binary(sculptor_instance_factory_, jj_binary)
     jj_repo = sculptor_instance_factory_.base_repo
     jj_repo.create_reset_and_checkout_branch("main")
     add_bare_origin(jj_repo.base_path, tmp_path / "origin.git")
