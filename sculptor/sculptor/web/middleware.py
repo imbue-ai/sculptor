@@ -351,6 +351,13 @@ async def lifespan(app: App):
                 except Exception as exc:
                     logger.opt(exception=exc).error("Failed to reconcile workspace setup state on startup")
 
+                # Two removal paths delete a jj workspace's directory without
+                # telling its repository, which keeps recording the workspace.
+                try:
+                    services.workspace_service.forget_orphaned_jj_workspaces()
+                except Exception as exc:
+                    logger.opt(exception=exc).error("Failed to forget orphaned jj workspaces on startup")
+
                 # Set initial project if provided via CLI by setting it as the most recently used project.
                 initial_project_path = getattr(app.state, "initial_project", None)
                 if initial_project_path:

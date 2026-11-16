@@ -64,6 +64,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
+from sculptor.services.workspace_service.jj_orphan_sweep import forget_orphaned_jj_workspaces
 from sculptor.services.workspace_service.setup_command_runner import DefaultSetupStateProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
@@ -76,8 +77,10 @@ from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitCommitHistory
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
+from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
@@ -265,6 +268,21 @@ class DefaultWorkspaceService(WorkspaceService):
         return make_workspace_vcs(
             initialization_strategy, self.vcs_runners, self.concurrency_group, read_jj_snapshot_max_new_file_size_mib
         )
+
+    def forget_orphaned_jj_workspaces(self) -> None:
+        with self.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+            projects = transaction.get_projects()
+            live_workspace_ids = {str(workspace.object_id) for workspace in transaction.get_workspaces()}
+        jj = self.vcs_runners.jj
+        for project in projects:
+            if project.user_git_repo_url is None or not project.is_path_accessible:
+                continue
+            repo_path = project.get_local_user_path()
+            try:
+                if is_jj_colocated(jj, repo_path):
+                    forget_orphaned_jj_workspaces(jj, repo_path, live_workspace_ids)
+            except VcsCommandError as e:
+                logger.debug("Cannot forget the orphaned jj workspaces of {}: {}", repo_path, e)
 
     def _get_diff_lock(self, workspace_id: WorkspaceID) -> threading.Lock:
         """Get a per-workspace lock for diff generation, creating one lazily if needed."""

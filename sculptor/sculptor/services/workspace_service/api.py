@@ -138,6 +138,13 @@ class WorkspaceService(Service, ABC):
     def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
         """The version control for workspaces of the given kind."""
 
+    @abstractmethod
+    def forget_orphaned_jj_workspaces(self) -> None:
+        """Forget, in each colocated repository, the jj workspaces whose Sculptor workspace and directory are both gone.
+
+        Run at startup. A jj workspace whose directory exists is never forgotten.
+        """
+
     # Workspace Operations
 
     @abstractmethod

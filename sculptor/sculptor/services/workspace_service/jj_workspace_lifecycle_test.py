@@ -1,5 +1,6 @@
 """A jj workspace's lifecycle through the workspace service, against a real colocated repository and the real jj."""
 
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
@@ -170,3 +172,38 @@ def test_the_first_agent_start_creates_a_jj_only_checkout_on_the_workspaces_base
     assert _read_commit_id(jj_binary, checkout, "@-") == workspace.source_git_hash
     workspace_names = run_jj(jj_binary, ("workspace", "list", "-T", 'name ++ "\\n"'), cwd=jj_colocated_repo.path)
     assert str(workspace.object_id) in workspace_names.split()
+
+
+def test_startup_forgets_a_deleted_jj_workspace_whose_teardown_never_reached_the_repository(
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_project: Project,
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    """As when Sculptor exits after the soft delete and before the teardown, and the directory is removed later."""
+    workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
+    checkout = _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        stored_workspace = transaction.get_workspace(workspace.object_id)
+        assert stored_workspace is not None
+        transaction.upsert_workspace(stored_workspace.evolve(stored_workspace.ref().is_deleted, True))
+    shutil.rmtree(checkout.parent)
+
+    test_service_collection.workspace_service.forget_orphaned_jj_workspaces()
+
+    workspace_names = run_jj(jj_binary, ("workspace", "list", "-T", 'name ++ "\\n"'), cwd=jj_colocated_repo.path)
+    assert workspace_names.split() == ["default"]
+
+
+def test_the_orphan_sweep_passes_over_a_project_without_a_local_repository(
+    test_service_collection: CompleteServiceCollection,
+) -> None:
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        transaction.upsert_project(
+            Project(
+                object_id=ProjectID(), organization_reference=ANONYMOUS_ORGANIZATION_REFERENCE, name="no repository"
+            )
+        )
+
+    test_service_collection.workspace_service.forget_orphaned_jj_workspaces()

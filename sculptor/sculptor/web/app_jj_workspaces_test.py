@@ -4,6 +4,7 @@ The checkout of a workspace is created when its first agent starts, so tests tha
 need one open the workspace's environment through the workspace service.
 """
 
+import shutil
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -475,3 +476,27 @@ def test_deleting_a_jj_workspace_forgets_it_and_applies_the_deletion_policy_to_i
     assert str(workspace_id) not in _list_jj_workspace_names(jj_binary, jj_colocated_repo.path)
     assert not workspace_config_directory.exists()
     assert ("feature" in _list_local_bookmark_names(jj_binary, jj_colocated_repo.path)) == is_bookmark_kept
+
+
+@pytest.fixture
+def orphaned_jj_workspace_name(
+    jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo, jj_project: Project, tmp_path: Path
+) -> str:
+    """A jj workspace named like a Sculptor workspace that this database does not have, and whose directory is gone."""
+    name = str(WorkspaceID())
+    lost_environment = tmp_path / "lost-environment"
+    lost_environment.mkdir()
+    run_jj(
+        jj_binary,
+        ("workspace", "add", "--no-colocate", "--name", name, "-r", "main", str(lost_environment / "code")),
+        cwd=jj_colocated_repo.path,
+    )
+    shutil.rmtree(lost_environment)
+    return name
+
+
+def test_startup_forgets_a_jj_workspace_whose_sculptor_workspace_and_directory_are_gone(
+    orphaned_jj_workspace_name: str, client: TestClient, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    """The orphan exists before `client` starts the app, whose startup forgets it."""
+    assert _list_jj_workspace_names(jj_binary, jj_colocated_repo.path) == ["default"]
