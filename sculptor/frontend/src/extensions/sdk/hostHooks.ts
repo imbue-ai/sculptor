@@ -49,10 +49,11 @@ const workspaceViewAtomFamily = atomFamily((id: string) =>
   atom((get): WorkspaceView | null => {
     const workspace = asLiveWorkspace(get(workspaceAtomFamily(id)));
     if (!workspace) return null;
+    const identitySources = get(workspaceIdentitySourcesAtomFamily(id));
     return {
       id: workspace.objectId,
       description: workspace.description,
-      branch: get(workspaceIdentitySourcesAtomFamily(id)).liveBranch,
+      branch: identitySources.vcs === "git" ? identitySources.liveBranch : null,
       targetBranch: workspace.targetBranch ?? null,
       pullRequestUrl: get(prStatusAtomFamily(id))?.prWebUrl ?? null,
     };

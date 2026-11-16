@@ -1,12 +1,13 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { GitBranchIcon } from "lucide-react";
+import { BookmarkIcon, GitBranchIcon, GitCommitVerticalIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Workspace } from "~/api";
+import type { Workspace, WorkspaceJjStateInfo } from "~/api";
 import { WorkspaceInitializationStrategy } from "~/api";
 import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
+import { workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 
 import { IDENTITY_LABEL_GRACE_MS, useWorkspaceIdentityLabel } from "./useWorkspaceIdentity.ts";
@@ -25,16 +26,45 @@ const setWorkspace = (
   store: Store,
   workspaceId: string,
   branches: { sourceBranch: string | null; requestedBranchName: string | null },
+  initializationStrategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
 ): void => {
   const workspace: Workspace = {
     objectId: workspaceId,
     projectId: "proj-1",
     organizationReference: "org-1",
     description: "My workspace",
-    initializationStrategy: WorkspaceInitializationStrategy.WORKTREE,
+    initializationStrategy,
     ...branches,
   };
   store.set(workspaceAtomFamily(workspaceId), workspace);
+};
+
+const CHANGE_ID = "kxqpmzvyrstuwlnokxqpmzvyrstuwlno";
+
+const setJjWorkspace = (store: Store, workspaceId: string, requestedBranchName: string | null): void => {
+  setWorkspace(
+    store,
+    workspaceId,
+    { sourceBranch: "main@origin", requestedBranchName },
+    WorkspaceInitializationStrategy.JJ_WORKSPACE,
+  );
+};
+
+const setJjState = (store: Store, workspaceId: string, overrides: Partial<WorkspaceJjStateInfo>): void => {
+  store.set(workspaceJjStateAtomFamily(workspaceId), {
+    workspaceId,
+    workingCopyChangeId: CHANGE_ID,
+    workingCopyChangeIdPrefixLength: 2,
+    workingCopyDescription: "",
+    isWorkingCopyEmpty: true,
+    bookmarks: [],
+    primaryBookmark: null,
+    unbookmarkedRevisionCount: 0,
+    hasConflict: false,
+    isDivergent: false,
+    isWorkingCopyStale: false,
+    ...overrides,
+  });
 };
 
 const passGraceWindow = (): void => {
@@ -77,6 +107,7 @@ describe("useWorkspaceIdentityLabel", () => {
       text: "dev/feature",
       copyText: "dev/feature",
       icon: GitBranchIcon,
+      isTentative: false,
     });
   });
 
@@ -185,5 +216,85 @@ describe("useWorkspaceIdentityLabel", () => {
     expect(result.current).toEqual({ status: "LOADING" });
     passGraceWindow();
     expect(result.current).toMatchObject({ status: "READY", text: "dev/one" });
+  });
+});
+
+describe("useWorkspaceIdentityLabel in a jj workspace", () => {
+  it("labels the workspace with its primary bookmark, copied as-is, under the bookmark icon", () => {
+    const store = createStore();
+    setJjWorkspace(store, "ws1", "dev/requested");
+    setJjState(store, "ws1", { bookmarks: ["dev/feature", "dev/other"], primaryBookmark: "dev/feature" });
+
+    const { result } = renderHook(() => useWorkspaceIdentityLabel({ workspaceId: "ws1" }), {
+      wrapper: createWrapper(store),
+    });
+
+    expect(result.current).toEqual({
+      status: "READY",
+      text: "dev/feature",
+      copyText: "dev/feature",
+      icon: BookmarkIcon,
+      isTentative: false,
+    });
+  });
+
+  it("names the requested bookmark as tentative until it exists, and copies the change id", () => {
+    const store = createStore();
+    setJjWorkspace(store, "ws1", "dev/requested");
+    setJjState(store, "ws1", {});
+
+    const { result } = renderHook(() => useWorkspaceIdentityLabel({ workspaceId: "ws1" }), {
+      wrapper: createWrapper(store),
+    });
+
+    expect(result.current).toEqual({
+      status: "READY",
+      text: "dev/requested",
+      copyText: CHANGE_ID,
+      icon: BookmarkIcon,
+      isTentative: true,
+    });
+  });
+
+  it("names the working copy's change id when there is no bookmark and none was requested", () => {
+    const store = createStore();
+    setJjWorkspace(store, "ws1", null);
+    setJjState(store, "ws1", {});
+
+    const { result } = renderHook(() => useWorkspaceIdentityLabel({ workspaceId: "ws1" }), {
+      wrapper: createWrapper(store),
+    });
+
+    expect(result.current).toEqual({
+      status: "READY",
+      text: "kxqpmzvy",
+      copyText: CHANGE_ID,
+      icon: GitCommitVerticalIcon,
+      isTentative: false,
+    });
+  });
+
+  it("waits for the jj state, then names the requested bookmark as tentative", () => {
+    const store = createStore();
+    setJjWorkspace(store, "ws1", "dev/requested");
+    const { result } = renderHook(() => useWorkspaceIdentityLabel({ workspaceId: "ws1" }), {
+      wrapper: createWrapper(store),
+    });
+
+    expect(result.current).toEqual({ status: "LOADING" });
+    passGraceWindow();
+    expect(result.current).toMatchObject({ status: "READY", text: "dev/requested", isTentative: true });
+  });
+
+  it("has no label when the jj state never arrives and no bookmark was requested", () => {
+    const store = createStore();
+    setJjWorkspace(store, "ws1", null);
+    const { result } = renderHook(() => useWorkspaceIdentityLabel({ workspaceId: "ws1" }), {
+      wrapper: createWrapper(store),
+    });
+
+    passGraceWindow();
+
+    expect(result.current).toEqual({ status: "UNAVAILABLE" });
   });
 });
