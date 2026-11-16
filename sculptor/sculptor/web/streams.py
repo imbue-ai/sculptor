@@ -558,6 +558,10 @@ def stream_everything(
             branch_state_service.add_observer(updates_queue_loosely_typed)
         if btw_service is not None:
             btw_service.add_observer_queue(updates_queue_loosely_typed)
+        # Only the full scope carries repository jj states; project_for_scope drops them from every other.
+        project_jj_state_service = services.project_jj_state_service if attach_full_user_observers else None
+        if project_jj_state_service is not None:
+            project_jj_state_service.add_observer(updates_queue_loosely_typed)
         add_ui_action_subscriber(updates_queue_loosely_typed.put_nowait)
         try:
             with ExitStack() as stack:
@@ -688,6 +692,8 @@ def stream_everything(
                 branch_state_service.remove_observer(updates_queue_loosely_typed)
             if btw_service is not None:
                 btw_service.remove_observer_queue(updates_queue_loosely_typed)
+            if project_jj_state_service is not None:
+                project_jj_state_service.remove_observer(updates_queue_loosely_typed)
             remove_ui_action_subscriber(updates_queue_loosely_typed.put_nowait)
 
 
