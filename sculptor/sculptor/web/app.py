@@ -140,6 +140,7 @@ from sculptor.services.project_service.default_implementation import get_most_re
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.project_service.jj_workspace_refusal import ProjectInJjWorkspaceError
 from sculptor.services.project_service.jj_workspace_refusal import refuse_project_in_jj_workspace
+from sculptor.services.project_service.jj_workspace_refusal import resolve_project_in_jj_workspace
 from sculptor.services.task_service.errors import InvalidTaskOperation
 from sculptor.services.task_service.errors import TaskNotFound
 from sculptor.services.terminal_agent_registry.bundled import install_bundled_registrations
@@ -4627,6 +4628,19 @@ def _raise_if_inside_jj_workspace(project_path: Path) -> None:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+def _resolve_project_in_jj_workspace(request: Request, project_path: Path) -> Path:
+    """The directory to register for `project_path`, answering 400 for a jj workspace whose repository is not colocated with git."""
+    services = get_services_from_request_or_websocket(request)
+    root_concurrency_group = get_root_concurrency_group(request)
+    with root_concurrency_group.make_concurrency_group(name="resolve_project_in_jj_workspace") as concurrency_group:
+        jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
+        try:
+            return resolve_project_in_jj_workspace(project_path, jj)
+        except ProjectInJjWorkspaceError as e:
+            refusal = e
+    raise HTTPException(status_code=400, detail=str(refusal)) from refusal
+
+
 @router.post("/api/v1/projects/initialize")
 def initialize_project(
     request: Request,
@@ -4639,7 +4653,16 @@ def initialize_project(
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
     if not project_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Project path is not a directory: {project_path}")
-    _raise_if_inside_jj_workspace(project_path)
+
+    # A jj workspace has no `.git`; its project is its repository, which has one.
+    repository_path = _resolve_project_in_jj_workspace(request, project_path)
+    if repository_path != project_path:
+        logger.info(
+            "Resolved jj workspace path {} to its repository {} for project registration",
+            project_path,
+            repository_path,
+        )
+        project_path = repository_path
 
     if not (project_path / ".git").exists():
         if is_path_in_git_repo(project_path):
