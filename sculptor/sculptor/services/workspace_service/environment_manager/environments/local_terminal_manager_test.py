@@ -19,6 +19,7 @@ from uuid import uuid4
 import pytest
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     LocalTerminalManager,
 )
@@ -51,6 +52,11 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.environment_manager.environments.spawned_pty_process import SpawnedPtyProcess
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
+from sculptor.testing.jj_launch_environment import JjLaunchEnvironment
+from sculptor.testing.jj_launch_environment import jj_environment_nested_in_git_repository  # noqa: F401
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.web.data_types import JjBlocker
+from sculptor.web.data_types import JjShadowed
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 
@@ -389,3 +395,47 @@ def test_a_terminal_created_for_an_environment_gets_its_vcs_path_and_variables_b
             assert "JJ_EDITOR" not in manager._extra_env
         finally:
             stop_terminals_for_environment(environment_id)
+
+
+def test_readiness_names_the_other_jj_a_jj_workspace_terminal_runs_when_the_login_profile_puts_it_first(
+    jj_environment_nested_in_git_repository: JjLaunchEnvironment,  # noqa: F811
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launch = jj_environment_nested_in_git_repository
+    other_jj_dir = tmp_path / "cargo_bin"
+    other_jj_dir.mkdir()
+    other_jj = other_jj_dir / "jj"
+    other_jj.write_text("#!/bin/sh\necho 'jj 0.28.2'\n")
+    other_jj.chmod(0o755)
+    (Path(os.environ["HOME"]) / ".bash_profile").write_text(f'export PATH="{other_jj_dir}:$PATH"\n')
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    environment_id = str(launch.environment.environment_id)
+    launch.environment.start_terminal_manager(
+        test_root_concurrency_group, launch.vcs.agent_environment(launch.location)
+    )
+    output = bytearray()
+    has_finished = threading.Event()
+
+    def record(data: bytes) -> None:
+        output.extend(data)
+        # The shell echoes the typed command, so only its output reads "finished-2".
+        if b"finished-2" in output:
+            has_finished.set()
+
+    try:
+        manager = create_terminal_for_environment(environment_id, 0)
+        assert manager is not None
+        record(manager.subscribe(record))
+        manager.write(b"command -v jj; echo finished-$((1 + 1))\n")
+        has_finished.wait(timeout=30.0)
+    finally:
+        stop_terminals_for_environment(environment_id)
+    status = DependencyManagementService(concurrency_group=test_root_concurrency_group).get_status()
+
+    terminal_output = output.decode(errors="replace")
+    assert has_finished.is_set(), terminal_output
+    # A shell integration can print escape sequences on the same line as a command's output.
+    assert str(other_jj) in terminal_output
+    assert status.jj_readiness == JjShadowed(blocker=JjBlocker.SHADOWED, path=str(other_jj), version="0.28.2")
