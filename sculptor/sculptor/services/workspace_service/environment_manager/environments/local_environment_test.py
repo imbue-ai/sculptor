@@ -21,6 +21,9 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    get_environment_config,
+)
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
@@ -488,6 +491,20 @@ def test_project_env_overrides_hide_their_values_when_printed(
 
     assert "SCTEST_TOKEN" in repr(overrides)
     assert "very-secret-value" not in repr(overrides)
+
+
+def test_starting_the_terminal_manager_registers_the_vcs_environment_for_the_workspace_terminals(
+    local_environment: LocalEnvironment, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    vcs_environment = AgentVcsEnvironment(
+        path_prefixes=(Path("/sculptor/internal/jj-bin"),), environment_variables={"GH_REPO": "github.com/owner/repo"}
+    )
+
+    local_environment.start_terminal_manager(test_root_concurrency_group, vcs_environment)
+
+    config = get_environment_config(str(local_environment.environment_id))
+    assert config is not None
+    assert config.vcs_environment == vcs_environment
 
 
 def test_get_system_prompt_dispatches_on_initialization_strategy(local_environment: LocalEnvironment) -> None:

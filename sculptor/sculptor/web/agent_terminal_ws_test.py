@@ -30,6 +30,7 @@ from sculptor.service_collections.service_collection import CompleteServiceColle
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     get_terminal_manager,
 )
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import AgentTerminalConfig
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import register_agent_terminal_config
@@ -114,6 +115,7 @@ def terminal_agent_with_config(
                 workspace_path=tmp_path,
                 working_directory=tmp_path,
                 concurrency_group=group,
+                vcs_environment=AgentVcsEnvironment(),
                 extra_env={},
                 env_var_override=False,
                 sculptor_folder=None,

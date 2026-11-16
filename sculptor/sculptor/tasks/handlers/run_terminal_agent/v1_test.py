@@ -1,5 +1,6 @@
 """Tests for the terminal-agent task handler."""
 
+import os
 import threading
 import time
 from contextlib import contextmanager
@@ -46,11 +47,15 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.state.messages import Message
 from sculptor.tasks.api import run_task
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import AgentTerminalConfig
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import get_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.tasks.handlers.run_terminal_agent.v1 import _run_terminal_agent_in_environment
 from sculptor.tasks.handlers.run_terminal_agent.v1 import launch_command_for_start
 from sculptor.tasks.handlers.run_terminal_agent.v1 import run_terminal_agent_task_v1
+from sculptor.testing.jj_launch_environment import JjLaunchEnvironment
+from sculptor.testing.jj_launch_environment import jj_environment_nested_in_git_repository  # noqa: F401
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
 from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
@@ -190,6 +195,54 @@ def test_terminal_handler_spawns_pty_and_pauses_on_shutdown(
     # Cleanup: manager and config are gone after the loop exits.
     assert get_terminal_manager(terminal_id) is None
     assert get_agent_terminal_config(terminal_task.object_id) is None
+
+
+def test_a_terminal_agent_in_a_jj_workspace_gets_jj_first_on_path_and_not_the_chat_agent_variables(
+    terminal_task: Task,
+    services: ServiceCollectionForTask,
+    jj_environment_nested_in_git_repository: JjLaunchEnvironment,  # noqa: F811
+    test_settings: SculptorSettings,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    launch = jj_environment_nested_in_git_repository
+    jj_project = Project(
+        object_id=launch.environment.project_id,
+        name="jj project",
+        organization_reference=terminal_task.organization_reference,
+        user_git_repo_url=f"file://{launch.location.repo_path}",
+    )
+    task_state = AgentTaskStateV2(workspace_id=WorkspaceID(launch.location.checkout_name))
+    _set_task_state(terminal_task, task_state, services)
+    shutdown_event = threading.Event()
+    registered_configs: list[AgentTerminalConfig | None] = []
+    spawned_managers: list[Any] = []
+
+    def record_the_terminal_then_shut_down() -> None:
+        registered_configs.append(get_agent_terminal_config(terminal_task.object_id))
+        spawned_managers.append(get_terminal_manager(make_agent_terminal_id(terminal_task.object_id)))
+        shutdown_event.set()
+
+    with pytest.raises(UserPausedTaskError):
+        _run_terminal_agent_in_environment(
+            task=terminal_task,
+            task_state=task_state,
+            project=jj_project,
+            underlying_env=launch.environment,
+            environment_concurrency_group=test_root_concurrency_group,
+            services=services,
+            settings=test_settings,
+            shutdown_event=shutdown_event,
+            on_started=record_the_terminal_then_shut_down,
+        )
+
+    vcs_environment = launch.vcs.agent_environment(launch.location)
+    config = registered_configs[0]
+    assert config is not None and config.vcs_environment == vcs_environment
+    manager = spawned_managers[0]
+    assert manager is not None
+    assert manager._extra_env["PATH"].split(os.pathsep)[0] == str(vcs_environment.path_prefixes[0])
+    assert manager._extra_env["GIT_CEILING_DIRECTORIES"] == str(launch.location.checkout_path.parent)
+    assert "JJ_EDITOR" not in manager._extra_env
 
 
 def test_outer_handler_emits_acquired_and_released_messages(

@@ -36,6 +36,9 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalTerminalManager,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    build_terminal_extra_env,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     get_terminal_manager,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
@@ -44,6 +47,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.utils.build import get_sculptor_folder
 
 
@@ -65,6 +69,7 @@ class AgentTerminalConfig:
     workspace_path: Path
     working_directory: Path
     concurrency_group: ConcurrencyGroup
+    vcs_environment: AgentVcsEnvironment
     extra_env: dict[str, str]
     env_var_override: bool
     sculptor_folder: Path | None
@@ -109,7 +114,7 @@ def create_agent_terminal(task_id: TaskID) -> LocalTerminalManager | None:
     # Re-read project env vars from disk so a respawned shell sees changes the
     # user made to ~/.sculptor/.env or .sculptor/.env after the agent started.
     project_env = load_project_env_vars(config.working_directory, sculptor_folder=config.sculptor_folder)
-    terminal_extra_env = {**project_env, **config.extra_env}
+    terminal_extra_env = build_terminal_extra_env(config.extra_env, project_env, config.vcs_environment, os.environ)
 
     manager = LocalTerminalManager(
         environment_id=config.environment_id,

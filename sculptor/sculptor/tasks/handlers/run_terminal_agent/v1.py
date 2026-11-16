@@ -203,7 +203,7 @@ def _run_terminal_agent_in_environment(
     # The PTY env: same SCULPT_* vars the workspace terminal gets, plus
     # SCULPT_AGENT_ID so `sculpt signal …` can identify this agent. The pty
     # scrubs inherited SCULPT_*/SCULPTOR_* vars and re-applies extra_env (PATH
-    # is prepended), so everything must go through extra_env.
+    # is prepended), so all of Sculptor's own variables must go through extra_env.
     #
     # SCULPT_PLUGINS_DIR and SCULPT_CLAUDE_BIN exist for registration launch
     # commands (shell-expanded at launch): install-relative paths move on app
@@ -222,6 +222,17 @@ def _run_terminal_agent_in_environment(
         "SCULPT_CLAUDE_BIN": claude_binary_path or "claude",
         "PATH": str(get_sculpt_bin_dir()),
     }
+    vcs = make_workspace_vcs(
+        underlying_env.get_initialization_strategy(),
+        build_vcs_runners(environment_concurrency_group, services.dependency_management_service.resolve_binary_path),
+        environment_concurrency_group,
+        read_jj_snapshot_max_new_file_size_mib,
+    )
+    checkout = CheckoutLocation(
+        repo_path=project.get_local_user_path(),
+        checkout_path=underlying_env.get_working_directory(),
+        checkout_name=str(task_state.workspace_id),
+    )
     register_agent_terminal_config(
         task.object_id,
         AgentTerminalConfig(
@@ -231,6 +242,7 @@ def _run_terminal_agent_in_environment(
             # The environment group, NOT the server-lifetime group workspace
             # terminals use: the agent PTY must not outlive this handler.
             concurrency_group=environment_concurrency_group,
+            vcs_environment=vcs.agent_environment(checkout),
             extra_env=extra_env,
             # Private LocalEnvironment attrs, matching what its own
             # start_terminal_manager reads for workspace terminals.
@@ -267,19 +279,6 @@ def _run_terminal_agent_in_environment(
         if on_started is not None:
             on_started()
 
-        vcs = make_workspace_vcs(
-            underlying_env.get_initialization_strategy(),
-            build_vcs_runners(
-                environment_concurrency_group, services.dependency_management_service.resolve_binary_path
-            ),
-            environment_concurrency_group,
-            read_jj_snapshot_max_new_file_size_mib,
-        )
-        checkout = CheckoutLocation(
-            repo_path=project.get_local_user_path(),
-            checkout_path=underlying_env.get_working_directory(),
-            checkout_name=str(task_state.workspace_id),
-        )
         refresher = PeriodicDiffRefresher(
             compute_fingerprint=lambda: vcs.compute_change_fingerprint(checkout),
             on_change=lambda: services.workspace_service.maybe_refresh_workspace_diff(task_state.workspace_id),

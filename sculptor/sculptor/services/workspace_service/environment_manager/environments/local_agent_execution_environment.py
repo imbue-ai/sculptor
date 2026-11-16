@@ -28,6 +28,7 @@ from sculptor.interfaces.environments.base import STATE_DIRECTORY
 from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
 from sculptor.primitives.ids import TaskID
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 
 if TYPE_CHECKING:
     from _typeshed import OpenBinaryModeReading
@@ -248,9 +249,10 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
     def start_terminal_manager(
         self,
         concurrency_group: ConcurrencyGroup,
+        vcs_environment: AgentVcsEnvironment,
     ) -> None:
         """Start the terminal manager for this environment."""
-        return self._environment.start_terminal_manager(concurrency_group)
+        return self._environment.start_terminal_manager(concurrency_group, vcs_environment)
 
     def stop_terminal_manager(self) -> None:
         """Stop the terminal manager for this environment."""

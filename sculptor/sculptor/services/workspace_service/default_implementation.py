@@ -739,7 +739,7 @@ class DefaultWorkspaceService(WorkspaceService):
         # The terminal will be created on demand when the user first connects.
         if environment.supports_terminal:
             try:
-                environment.start_terminal_manager(self.concurrency_group)
+                environment.start_terminal_manager(self.concurrency_group, vcs_environment)
             except Exception as e:
                 logger.error(
                     "Failed to start terminal for workspace {}, terminal will be created on demand: {}",

@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -22,18 +23,34 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalTerminalManager,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    TerminalEnvironmentConfig,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    build_terminal_extra_env,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    create_terminal_for_environment,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     get_terminal_manager,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     make_terminal_id,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    register_environment_config,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     register_terminal_manager,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    stop_terminals_for_environment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
 from sculptor.services.workspace_service.environment_manager.environments.spawned_pty_process import SpawnedPtyProcess
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 
@@ -299,3 +316,76 @@ def test_read_loop_reads_from_high_numbered_fd(tmp_path: Path) -> None:
                 except OSError:
                     pass
         resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+
+_JJ_VCS_ENVIRONMENT = AgentVcsEnvironment(
+    path_prefixes=(Path("/sculptor/internal/jj-bin"),),
+    environment_variables={"GH_REPO": "github.com/owner/repo", "GIT_CEILING_DIRECTORIES": "/workspaces/ws"},
+    chat_agent_environment_variables={"JJ_EDITOR": "false"},
+)
+
+
+def test_terminal_env_puts_the_vcs_path_first_and_fills_in_its_variables_but_not_the_chat_agent_ones() -> None:
+    terminal_env = build_terminal_extra_env(
+        extra_env={"SCULPT_API_PORT": "5050", "PATH": "/sculptor/internal/sculpt-bin"},
+        project_env={"PROJECT_TOKEN": "from-dotenv"},
+        vcs_environment=_JJ_VCS_ENVIRONMENT,
+        inherited_env={"PATH": "/usr/bin:/bin"},
+    )
+
+    assert terminal_env == {
+        "SCULPT_API_PORT": "5050",
+        "PATH": "/sculptor/internal/jj-bin:/sculptor/internal/sculpt-bin",
+        "PROJECT_TOKEN": "from-dotenv",
+        "GH_REPO": "github.com/owner/repo",
+        "GIT_CEILING_DIRECTORIES": "/workspaces/ws",
+    }
+
+
+def test_terminal_env_leaves_a_gh_repo_the_user_set_in_the_backend_environment_or_the_project_env() -> None:
+    from_backend = build_terminal_extra_env(
+        extra_env={}, project_env={}, vcs_environment=_JJ_VCS_ENVIRONMENT, inherited_env={"GH_REPO": "mine/fork"}
+    )
+    from_project_env = build_terminal_extra_env(
+        extra_env={}, project_env={"GH_REPO": "mine/upstream"}, vcs_environment=_JJ_VCS_ENVIRONMENT, inherited_env={}
+    )
+
+    assert "GH_REPO" not in from_backend
+    assert from_project_env["GH_REPO"] == "mine/upstream"
+
+
+def test_terminal_env_of_a_git_workspace_is_the_project_env_under_sculptors_own() -> None:
+    terminal_env = build_terminal_extra_env(
+        extra_env={"PATH": "/sculptor/internal/sculpt-bin"},
+        project_env={"PATH": "/from/dotenv", "PROJECT_TOKEN": "from-dotenv"},
+        vcs_environment=AgentVcsEnvironment(),
+        inherited_env={},
+    )
+
+    assert terminal_env == {"PATH": "/sculptor/internal/sculpt-bin", "PROJECT_TOKEN": "from-dotenv"}
+
+
+def test_a_terminal_created_for_an_environment_gets_its_vcs_path_and_variables_but_not_the_chat_agent_ones(
+    tmp_path: Path,
+) -> None:
+    environment_id = f"env-vcs-{uuid4().hex}"
+    with ConcurrencyGroup(name="terminal-vcs-environment-test") as group:
+        register_environment_config(
+            environment_id,
+            TerminalEnvironmentConfig(
+                workspace_path=tmp_path,
+                working_directory=tmp_path,
+                concurrency_group=group,
+                extra_env={"PATH": "/sculptor/internal/sculpt-bin"},
+                vcs_environment=_JJ_VCS_ENVIRONMENT,
+            ),
+        )
+        try:
+            manager = create_terminal_for_environment(environment_id, 0)
+
+            assert manager is not None
+            assert manager._extra_env["PATH"] == "/sculptor/internal/jj-bin:/sculptor/internal/sculpt-bin"
+            assert manager._extra_env["GIT_CEILING_DIRECTORIES"] == "/workspaces/ws"
+            assert "JJ_EDITOR" not in manager._extra_env
+        finally:
+            stop_terminals_for_environment(environment_id)

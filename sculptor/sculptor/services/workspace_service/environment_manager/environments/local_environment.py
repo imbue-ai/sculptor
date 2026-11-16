@@ -485,6 +485,7 @@ class LocalEnvironment(Environment):
     def start_terminal_manager(
         self,
         concurrency_group: ConcurrencyGroup,
+        vcs_environment: AgentVcsEnvironment,
     ) -> None:
         """Register terminal config so terminals can be created on demand.
 
@@ -495,6 +496,8 @@ class LocalEnvironment(Environment):
         Args:
             concurrency_group: Long-lived concurrency group for terminal thread/process
                 lifecycle management. Should outlive individual agent runs.
+            vcs_environment: The workspace version control's agent environment,
+                which the terminals' shells get.
         """
         # Register environment config so the on-demand terminal creation path
         # (WebSocket endpoint -> create_terminal_for_environment) can find the
@@ -510,6 +513,7 @@ class LocalEnvironment(Environment):
                 workspace_path=self.get_workspace_path(),
                 working_directory=self.get_working_directory(),
                 concurrency_group=concurrency_group,
+                vcs_environment=vcs_environment,
                 extra_env=dict(self._sculpt_terminal_env_vars),
                 env_var_override=self._env_var_override,
                 sculptor_folder=self._sculptor_folder,

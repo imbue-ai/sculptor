@@ -132,6 +132,7 @@ class Environment(BaseModel, abc.ABC):
     def start_terminal_manager(
         self,
         concurrency_group: ConcurrencyGroup,
+        vcs_environment: AgentVcsEnvironment,
     ) -> None:
         """Start the terminal manager for this environment.
 
@@ -142,6 +143,8 @@ class Environment(BaseModel, abc.ABC):
         Args:
             concurrency_group: Long-lived concurrency group for terminal thread/process
                 lifecycle management. Should outlive individual agent runs.
+            vcs_environment: The workspace version control's agent environment,
+                which the terminals' shells get.
 
         Raises:
             NotImplementedError: If this environment doesn't support terminals.
