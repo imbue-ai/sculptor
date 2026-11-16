@@ -187,6 +187,7 @@ from sculptor.services.workspace_service.vcs.checkout_layout import checkout_pat
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.jj_repo_queries import read_config_value
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
@@ -993,7 +994,7 @@ def create_workspace_v2(
         )
 
 
-_PREVIEW_BRANCH_NAME_GIT_TIMEOUT = 5.0
+_PREVIEW_BRANCH_NAME_VCS_TIMEOUT = 5.0
 
 
 @router.get("/api/v1/workspaces/preview-branch-name")
@@ -1009,8 +1010,8 @@ def preview_branch_name(
     In-place mode returns an empty string since the field is hidden. Every other
     mode resolves the project's or user-global naming pattern against a `<slug>`
     derived from the workspace name (random if empty) and a `<user>` slug derived
-    from the repo's `git config user.name`; for a jj workspace the name is its
-    bookmark's.
+    from the repo's `user.name`: git's, or for a jj workspace, whose name is its
+    bookmark's, jj's.
     """
     match mode:
         case WorkspaceInitializationStrategy.IN_PLACE:
@@ -1040,24 +1041,48 @@ def preview_branch_name(
     if not name_slug:
         name_slug = generate_random_slug()
 
-    full_name = ""
     root_concurrency_group = get_root_concurrency_group(request)
     with root_concurrency_group.make_concurrency_group(name="preview_branch_name") as cg:
-        try:
-            returncode, stdout, _ = run_git_command_local(
-                cg,
-                ["git", "config", "user.name"],
-                cwd=project.get_local_user_path(),
-                check_output=False,
-                timeout=_PREVIEW_BRANCH_NAME_GIT_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode == 0:
-                full_name = stdout.strip()
-        except Exception:
-            full_name = ""
+        full_name = _read_user_name(services, cg, mode, project.get_local_user_path())
     resolved = resolve_pattern(pattern, user_slug=user_slug_from_full_name(full_name), name_slug=name_slug)
     return PreviewBranchNameResponse(branch_name=resolved)
+
+
+def _read_user_name(
+    services: CompleteServiceCollection,
+    concurrency_group: ConcurrencyGroup,
+    initialization_strategy: WorkspaceInitializationStrategy,
+    project_path: Path,
+) -> str:
+    """The `user.name` of the VCS that names a new workspace's ref, or empty when it cannot be read."""
+    match initialization_strategy:
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            try:
+                returncode, stdout, _ = run_git_command_local(
+                    concurrency_group,
+                    ["git", "config", "user.name"],
+                    cwd=project_path,
+                    check_output=False,
+                    timeout=_PREVIEW_BRANCH_NAME_VCS_TIMEOUT,
+                    is_retry_safe=True,
+                )
+            except Exception:
+                return ""
+            return stdout.strip() if returncode == 0 else ""
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
+            try:
+                user_name = read_config_value(jj, project_path, "user.name", timeout=_PREVIEW_BRANCH_NAME_VCS_TIMEOUT)
+            except VcsCommandError as e:
+                logger.debug("Cannot read jj's user.name in {}: {}", project_path, e)
+                return ""
+            return user_name or ""
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _build_setup_snapshot(workspace: Workspace) -> WorkspaceSetupSnapshot:

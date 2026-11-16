@@ -203,6 +203,22 @@ def set_workspace_config(jj: JjCli, workspace_root: Path, key: str, value: str) 
     jj.run(["config", "set", "--workspace", key, value], workspace_root, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY)
 
 
+def read_config_value(
+    jj: JjCli, repo_dir: Path, key: str, *, timeout: float = DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
+) -> str | None:
+    """The value jj resolves for the config option `key` in `repo_dir`, environment variables included; None when unset."""
+    result = jj.run(
+        ["config", "get", key],
+        repo_dir,
+        snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+        is_checked=False,
+        timeout=timeout,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.removesuffix("\n")
+
+
 def read_workspace_config_path(jj: JjCli, workspace_root: Path) -> Path | None:
     """The workspace's own config file, or None when the workspace has never had one.
 

@@ -205,3 +205,23 @@ def test_a_jj_workspace_is_created_on_the_trunk_bookmark_by_default(
     # Creating the row creates no jj workspace: the checkout comes with the first agent.
     workspace_names = run_jj(jj_binary, ("workspace", "list", "-T", 'name ++ "\\n"'), cwd=jj_colocated_repo.path)
     assert workspace_names.split() == ["default"]
+
+
+def test_the_name_preview_for_a_jj_workspace_takes_the_user_from_jj(
+    client: TestClient, jj_project: Project, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """jj and git can name the user differently, and a bookmark name follows jj."""
+    monkeypatch.setenv("JJ_USER", "Jordan Bookmarker")
+
+    previews = {
+        mode: client.get(
+            "/api/v1/workspaces/preview-branch-name",
+            params={"project_id": str(jj_project.object_id), "mode": mode, "workspace_name": "Fix the parser"},
+        )
+        for mode in ("WORKTREE", "JJ_WORKSPACE")
+    }
+
+    assert {mode: response.json()["branchName"] for mode, response in previews.items()} == {
+        "WORKTREE": "sculptor/fix-the-parser",
+        "JJ_WORKSPACE": "jordan/fix-the-parser",
+    }

@@ -365,23 +365,6 @@ def test_create_workspace_applies_the_branch_name_rules(
         assert expected_detail in response.json()["detail"]
 
 
-def test_preview_branch_name_names_a_jj_bookmark_as_it_names_a_worktree_branch(
-    client: TestClient, test_project: Project
-) -> None:
-    previews = {
-        mode: client.get(
-            "/api/v1/workspaces/preview-branch-name",
-            params={"project_id": str(test_project.object_id), "mode": mode, "workspace_name": "Fix the parser"},
-        )
-        for mode in ("WORKTREE", "JJ_WORKSPACE")
-    }
-
-    assert all(response.status_code == 200 for response in previews.values()), previews
-    jj_name = previews["JJ_WORKSPACE"].json()["branchName"]
-    assert jj_name.endswith("fix-the-parser")
-    assert jj_name == previews["WORKTREE"].json()["branchName"]
-
-
 def test_create_workspace_conflicts_when_the_repository_cannot_be_read(
     client: TestClient, test_project: Project, tmp_path: Path
 ) -> None:
