@@ -1,6 +1,7 @@
 """Workspace-related enums."""
 
 from enum import auto
+from typing import Literal
 
 from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
 
@@ -16,6 +17,14 @@ class WorkspaceInitializationStrategy(UpperCaseStrEnum):
     IN_PLACE = auto()
     CLONE = auto()
     WORKTREE = auto()
+
+
+# The kinds whose checkout is a git checkout.
+GitInitializationStrategy = Literal[
+    WorkspaceInitializationStrategy.IN_PLACE,
+    WorkspaceInitializationStrategy.CLONE,
+    WorkspaceInitializationStrategy.WORKTREE,
+]
 
 
 class DiffStatus(UpperCaseStrEnum):

@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from sculptor.database.workspace_enums import GitInitializationStrategy
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.secrets_utils import Secret
@@ -33,7 +34,7 @@ class _SpecRecordingGitWorkspaceVcs(GitWorkspaceVcs):
     """Git version control that remembers every checkout it is asked to create."""
 
     def __init__(
-        self, initialization_strategy: WorkspaceInitializationStrategy, concurrency_group: ConcurrencyGroup
+        self, initialization_strategy: GitInitializationStrategy, concurrency_group: ConcurrencyGroup
     ) -> None:
         super().__init__(initialization_strategy, make_test_git_cli(concurrency_group), concurrency_group)
         self.created_specs: list[CheckoutSpec] = []
@@ -504,7 +505,7 @@ def test_create_worktree_happy_path(tmp_path: Path, test_root_concurrency_group:
     "initialization_strategy", [WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE]
 )
 def test_create_asks_the_workspace_vcs_for_a_checkout_named_after_the_workspace(
-    initialization_strategy: WorkspaceInitializationStrategy,
+    initialization_strategy: GitInitializationStrategy,
     tmp_path: Path,
     test_root_concurrency_group: ConcurrencyGroup,
 ) -> None:

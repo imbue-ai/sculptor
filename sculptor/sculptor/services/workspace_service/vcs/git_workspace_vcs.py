@@ -8,6 +8,7 @@ from typing import assert_never
 
 from loguru import logger
 
+from sculptor.database.workspace_enums import GitInitializationStrategy
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.artifacts import DiffArtifact
@@ -63,7 +64,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
 
     def __init__(
         self,
-        initialization_strategy: WorkspaceInitializationStrategy,
+        initialization_strategy: GitInitializationStrategy,
         git: GitCli,
         concurrency_group: ConcurrencyGroup,
     ) -> None:

@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from sculptor.config.user_config import DependencyPaths
+from sculptor.database.workspace_enums import GitInitializationStrategy
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
@@ -213,7 +214,7 @@ def test_create_checkout_clones_and_creates_the_requested_branch(
     ],
 )
 def test_create_checkout_names_the_location_as_the_spec_does(
-    initialization_strategy: WorkspaceInitializationStrategy,
+    initialization_strategy: GitInitializationStrategy,
     git_cli: GitCli,
     test_root_concurrency_group: ConcurrencyGroup,
     git_repo: Path,

@@ -7,6 +7,7 @@ import pytest
 
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
+from sculptor.database.workspace_enums import GitInitializationStrategy
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.git import get_repo_base_path
@@ -283,7 +284,7 @@ class _CheckoutRejectingGitWorkspaceVcs(GitWorkspaceVcs):
     """Git version control that finds every resumed checkout unusable, as another VCS may."""
 
     def __init__(
-        self, initialization_strategy: WorkspaceInitializationStrategy, concurrency_group: ConcurrencyGroup
+        self, initialization_strategy: GitInitializationStrategy, concurrency_group: ConcurrencyGroup
     ) -> None:
         super().__init__(initialization_strategy, make_test_git_cli(concurrency_group), concurrency_group)
         self.verified_locations: list[CheckoutLocation] = []
