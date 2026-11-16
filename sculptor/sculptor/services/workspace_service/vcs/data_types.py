@@ -130,7 +130,6 @@ class PullRequestRefs(FrozenModel):
     head_ref_names: tuple[str, ...] = Field(
         description="Candidate PR head names, most likely first; empty when there is nothing to look up"
     )
-    origin_url: str | None = Field(description="The `origin` remote's URL; None when there is no origin")
 
 
 class AgentVcsEnvironment(FrozenModel):

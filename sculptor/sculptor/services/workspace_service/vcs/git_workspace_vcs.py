@@ -39,7 +39,6 @@ from sculptor.services.workspace_service.vcs.git_log_parsing import parse_name_s
 from sculptor.services.workspace_service.vcs.git_log_parsing import parse_numstat_lines
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
-from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
 # Fetches the origin remote if present, and succeeds silently when there is no
@@ -620,19 +619,13 @@ class GitWorkspaceVcs(WorkspaceVcs):
         return result.returncode == 0
 
     def get_pull_request_refs(self, location: CheckoutLocation) -> PullRequestRefs:
-        """The checked-out branch as the only head candidate, plus the origin URL.
+        """The checked-out branch as the only head candidate.
 
         A detached HEAD has no candidate. Failures read as "nothing to look up",
         so PR polling reports no pull request rather than erroring.
         """
-        checkout = location.checkout_path
-        branch_name = self._read_checked_out_branch(checkout)
-        try:
-            origin_url = read_origin_url(self._git, checkout)
-        except VcsCommandError as e:
-            logger.debug("Cannot read the origin of {}: {}", checkout, e)
-            origin_url = None
-        return PullRequestRefs(head_ref_names=() if branch_name is None else (branch_name,), origin_url=origin_url)
+        branch_name = self._read_checked_out_branch(location.checkout_path)
+        return PullRequestRefs(head_ref_names=() if branch_name is None else (branch_name,))
 
     def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:
         return AgentVcsEnvironment()

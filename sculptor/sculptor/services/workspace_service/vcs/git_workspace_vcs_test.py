@@ -684,15 +684,10 @@ def test_discard_file_changes_rejects_paths_outside_the_checkout(
     assert traversal.error_message == "Path traversal is not allowed"
 
 
-def test_get_pull_request_refs_reports_the_branch_and_origin(
-    worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation, git_repo: Path
+def test_get_pull_request_refs_reports_the_checked_out_branch(
+    worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation
 ) -> None:
-    _git(git_repo, ["remote", "add", "origin", "git@github.com:owner/repo.git"])
-
-    refs = worktree_vcs.get_pull_request_refs(worktree)
-
-    assert refs.head_ref_names == ("feature",)
-    assert refs.origin_url == "git@github.com:owner/repo.git"
+    assert worktree_vcs.get_pull_request_refs(worktree).head_ref_names == ("feature",)
 
 
 def test_get_pull_request_refs_has_no_head_for_a_detached_checkout(
@@ -700,10 +695,7 @@ def test_get_pull_request_refs_has_no_head_for_a_detached_checkout(
 ) -> None:
     _git(git_repo, ["checkout", "-q", "--detach"])
 
-    refs = in_place_vcs.get_pull_request_refs(_in_place(git_repo))
-
-    assert refs.head_ref_names == ()
-    assert refs.origin_url is None
+    assert in_place_vcs.get_pull_request_refs(_in_place(git_repo)).head_ref_names == ()
 
 
 def test_agent_environment_adds_nothing_for_git(worktree_vcs: GitWorkspaceVcs, worktree: CheckoutLocation) -> None:
