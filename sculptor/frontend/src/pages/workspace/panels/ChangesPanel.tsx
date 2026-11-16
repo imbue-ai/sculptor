@@ -172,7 +172,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
       {/* The commit action is a footer pinned under the tree (which flexes to
           fill), separated from the rows by its own top border. */}
       <Flex flexShrink="0" px="3" py="2" className={styles.commitFooter}>
-        <CommitButton changesCount={uncommittedStatusMap.size} onCommit={handleCommit} />
+        <CommitButton workspaceId={workspaceId} changesCount={uncommittedStatusMap.size} onCommit={handleCommit} />
       </Flex>
       <DiscardDialog
         open={discardTarget !== null}
