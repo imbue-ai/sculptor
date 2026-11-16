@@ -1,6 +1,7 @@
-import { IconButton, Skeleton, Tooltip } from "@radix-ui/themes";
+import { IconButton, Skeleton, Text, Tooltip } from "@radix-ui/themes";
 import { BookmarkIcon, GitBranchIcon, SparklesIcon } from "lucide-react";
 import type { ReactElement } from "react";
+import { useId } from "react";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
 import { ElementIds } from "~/api";
@@ -53,6 +54,7 @@ export const BranchNameField = ({
   disabled,
   variant = "chip",
 }: BranchNameFieldProps): ReactElement | undefined => {
+  const inputId = useId();
   const { branchName: branchNameRule, nameNoun } = WORKSPACE_MODE_RULES[mode];
   if (branchNameRule === "unused") {
     return undefined;
@@ -66,6 +68,9 @@ export const BranchNameField = ({
   const hasCollision = status === "exists";
   const hasError = isInvalid || hasCollision;
   const isPlain = variant === "plain";
+  // A name under the title reads as a git branch without a label, but a jj
+  // bookmark does not, so the plain variant names it.
+  const hasNounLabel = isPlain && nameNoun === "bookmark";
   // The sparkles glyph doubles as the loading affordance: it pulses while a
   // fresh auto-filled name is being generated (there is no separate spinner).
   const isGenerating = isLoading && !isManuallyEdited;
@@ -91,10 +96,16 @@ export const BranchNameField = ({
             {nameNoun === "bookmark" ? <BookmarkIcon size={12} /> : <GitBranchIcon size={12} />}
           </span>
         )}
+        {hasNounLabel ? (
+          <Text as="label" size="1" color="gray" htmlFor={inputId}>
+            {nameNoun}
+          </Text>
+        ) : null}
         {isColdLoading ? (
           <Skeleton className={styles.fieldSkeleton} />
         ) : (
           <input
+            id={inputId}
             type="text"
             className={styles.input}
             style={{ width: plainInputWidth }}
