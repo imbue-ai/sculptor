@@ -8,7 +8,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DependenciesStatus, DependencyInfo, JjColocationState, ProjectJjState } from "~/api";
+import type { DependenciesStatus, DependencyInfo, JjColocationState, JjReadiness, ProjectJjState } from "~/api";
 import { ElementIds } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { updateProjectJjStatesAtom } from "~/common/state/atoms/projectJjState.ts";
@@ -22,6 +22,7 @@ const apiHarness = vi.hoisted(() => ({
   getProjectJjPreflight: vi.fn(),
   colocateProjectWithJj: vi.fn(),
   updateUseJjForNewWorkspaces: vi.fn(),
+  getDependenciesStatus: vi.fn(),
 }));
 
 vi.mock("~/api", async (importOriginal) => {
@@ -31,6 +32,7 @@ vi.mock("~/api", async (importOriginal) => {
     getProjectJjPreflight: apiHarness.getProjectJjPreflight,
     colocateProjectWithJj: apiHarness.colocateProjectWithJj,
     updateUseJjForNewWorkspaces: apiHarness.updateUseJjForNewWorkspaces,
+    getDependenciesStatus: apiHarness.getDependenciesStatus,
   };
 });
 
@@ -50,6 +52,15 @@ const JJ_AVAILABLE_STATUS: DependenciesStatus = {
   jjReadiness: { blocker: null, identity: { name: "Ada Lovelace", email: "ada@example.com" } },
   voiceModels: makeInfo({}),
 };
+
+const NOT_INSTALLED_REASON = "jj is not installed: install it or set its path on the Jujutsu settings page";
+const NO_IDENTITY_REASON = "jj has no author identity: set its user.name and user.email on the Jujutsu settings page";
+
+const withJjReadiness = (jjReadiness: JjReadiness): DependenciesStatus => ({ ...JJ_AVAILABLE_STATUS, jjReadiness });
+
+const unavailablePreflight = (jjUnavailableReason: string): { data: unknown } => ({
+  data: { blockers: ["JJ_UNAVAILABLE"], warnings: [], hasUncommittedChanges: false, jjUnavailableReason },
+});
 
 const jjState = (colocation: JjColocationState, colocationError: string | null = null): ProjectJjState => ({
   projectId: PROJECT_ID,
@@ -111,7 +122,9 @@ const confirmColocation = async (): Promise<void> => {
 
 // Holds the next request open until the test settles it. TanStack Query
 // notifies observers on a timeout, so callers wait for the outcome they expect.
-const holdNextRequest = (request: Mock): { resolve: () => Promise<void>; reject: (error: Error) => Promise<void> } => {
+const holdNextRequest = (
+  request: Mock,
+): { resolve: (data?: unknown) => Promise<void>; reject: (error: Error) => Promise<void> } => {
   let resolveRequest: (value: unknown) => void = () => {};
 
   let rejectRequest: (error: Error) => void = () => {};
@@ -122,9 +135,9 @@ const holdNextRequest = (request: Mock): { resolve: () => Promise<void>; reject:
     }),
   );
   return {
-    resolve: (): Promise<void> =>
+    resolve: (data = null): Promise<void> =>
       act(async () => {
-        resolveRequest({ data: null });
+        resolveRequest({ data });
       }),
     reject: (error): Promise<void> =>
       act(async () => {
@@ -138,7 +151,7 @@ beforeEach(() => {
   store.set(dependenciesStatusAtom, JJ_AVAILABLE_STATUS);
   store.set(updateProjectJjStatesAtom, { [PROJECT_ID]: jjState("ABSENT") });
   apiHarness.getProjectJjPreflight.mockResolvedValue({
-    data: { blockers: [], warnings: [], hasUncommittedChanges: false },
+    data: { blockers: [], warnings: [], hasUncommittedChanges: false, jjUnavailableReason: null },
   });
   apiHarness.colocateProjectWithJj.mockResolvedValue({ data: null });
   apiHarness.updateUseJjForNewWorkspaces.mockResolvedValue({ data: true });
@@ -161,6 +174,59 @@ describe("while jj is unavailable", () => {
 
     expect(getColocationSwitch()).toBeDisabled();
     expect(getUseJjSwitch()).toBeDisabled();
+  });
+
+  it("does not read why before the dependency status is known", () => {
+    renderControls();
+
+    expect(apiHarness.getProjectJjPreflight).not.toHaveBeenCalled();
+  });
+
+  it("says why in the backend's words, next to the link", async () => {
+    store.set(dependenciesStatusAtom, withJjReadiness({ blocker: "NOT_INSTALLED" }));
+    apiHarness.getProjectJjPreflight.mockResolvedValue(unavailablePreflight(NOT_INSTALLED_REASON));
+    renderControls();
+
+    expect(await screen.findByText(`${NOT_INSTALLED_REASON}.`)).toBeInTheDocument();
+    expect(apiHarness.getProjectJjPreflight).toHaveBeenCalledWith({ path: { project_id: PROJECT_ID } });
+    expect(screen.getByRole("link", { name: "Open Jujutsu settings" })).toBeInTheDocument();
+  });
+
+  it("reads why again when jj's readiness changes", async () => {
+    store.set(dependenciesStatusAtom, withJjReadiness({ blocker: "NOT_INSTALLED" }));
+    apiHarness.getProjectJjPreflight.mockResolvedValueOnce(unavailablePreflight(NOT_INSTALLED_REASON));
+    renderControls();
+    await screen.findByText(`${NOT_INSTALLED_REASON}.`);
+
+    apiHarness.getProjectJjPreflight.mockResolvedValueOnce(unavailablePreflight(NO_IDENTITY_REASON));
+    act(() => {
+      store.set(
+        dependenciesStatusAtom,
+        withJjReadiness({ blocker: "NO_IDENTITY", suggestedIdentity: { name: "", email: "" } }),
+      );
+    });
+
+    expect(await screen.findByText(`${NO_IDENTITY_REASON}.`)).toBeInTheDocument();
+    expect(screen.queryByText(`${NOT_INSTALLED_REASON}.`)).not.toBeInTheDocument();
+  });
+
+  it("re-checks the dependency status, shows that it is working, and leaves the status to the stream", async () => {
+    const unavailableStatus = withJjReadiness({ blocker: "NOT_INSTALLED" });
+    store.set(dependenciesStatusAtom, unavailableStatus);
+    apiHarness.getProjectJjPreflight.mockResolvedValue(unavailablePreflight(NOT_INSTALLED_REASON));
+    const request = holdNextRequest(apiHarness.getDependenciesStatus);
+    renderControls();
+
+    fireEvent.click(screen.getByRole("button", { name: "Re-check" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Re-check" })).toBeDisabled());
+    expect(apiHarness.getDependenciesStatus).toHaveBeenCalledWith({ meta: { skipWsAck: true } });
+
+    await request.resolve(JJ_AVAILABLE_STATUS);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Re-check" })).toBeEnabled());
+    expect(store.get(dependenciesStatusAtom)).toBe(unavailableStatus);
+    expect(getColocationSwitch()).toBeDisabled();
   });
 
   it("explains why on hover", async () => {

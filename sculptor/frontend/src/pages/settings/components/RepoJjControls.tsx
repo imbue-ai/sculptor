@@ -1,20 +1,25 @@
-import { Box, Button, Flex, Link, Spinner, Switch, Text, Tooltip } from "@radix-ui/themes";
+import { Box, Button, Flex, Spinner, Switch, Text, Tooltip } from "@radix-ui/themes";
+import { useQuery } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import { GitForkIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useEffect, useState } from "react";
 
-import type { ProjectJjState } from "~/api";
-import { ElementIds } from "~/api";
-import { isJjAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
+import type { JjReadiness, ProjectJjState } from "~/api";
+import { ElementIds, getProjectJjPreflight } from "~/api";
+import {
+  dependenciesStatusAtom,
+  isJjAvailableAtom,
+  refreshDependenciesStatus,
+} from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectJjStateAtomFamily } from "~/common/state/atoms/projectJjState.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
-import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useColocateProjectMutation, useUseJjForNewWorkspacesMutation } from "~/common/state/mutations/projectJj.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
-import { SettingsSection } from "~/pages/settings/sections.ts";
 
 import { JjColocationDialog } from "./JjColocationDialog.tsx";
+import { OpenJjSettingsLink } from "./OpenJjSettingsLink.tsx";
 import styles from "./RepoJjControls.module.scss";
 import {
   type ColocationSwitchState,
@@ -51,7 +56,6 @@ export const RepoJjControls = ({
   const isJjAvailable = useAtomValue(isJjAvailableAtom);
   const jjState = useAtomValue(projectJjStateAtomFamily(projectId));
   const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
-  const openSettings = useOpenSettings();
   const { isColocationRequested, requestColocation } = useColocationRequest({ projectId, jjState, setToast });
   const {
     mutate: saveUseJj,
@@ -135,18 +139,7 @@ export const RepoJjControls = ({
         <Text size="1" className={`${styles.hint} ${styles.indented}`}>
           New workspaces in this repository are jj workspaces, with no git inside. Existing workspaces keep their kind.
         </Text>
-        {colocationState.kind === "UNAVAILABLE" && (
-          <Link
-            href="#"
-            size="1"
-            onClick={(e) => {
-              e.preventDefault();
-              openSettings(SettingsSection.JJ);
-            }}
-          >
-            Open Jujutsu settings
-          </Link>
-        )}
+        {colocationState.kind === "UNAVAILABLE" && <JjUnavailableNotice projectId={projectId} />}
       </Flex>
       <JjColocationDialog
         projectId={projectId}
@@ -157,6 +150,57 @@ export const RepoJjControls = ({
       />
     </Box>
   );
+};
+
+/**
+ * Why jj is unavailable, in the backend's words, with the page that fixes it
+ * and a way to check again: changes to jj's identity or PATH made outside
+ * Sculptor send no event. A re-check's result arrives on the stream.
+ */
+const JjUnavailableNotice = ({ projectId }: { projectId: string }): ReactElement => {
+  const jjReadiness = useAtomValue(dependenciesStatusAtom)?.jjReadiness;
+  const reason = useJjUnavailableReason(projectId, jjReadiness);
+  const [isRechecking, setIsRechecking] = useState<boolean>(false);
+
+  const handleRecheck = async (): Promise<void> => {
+    setIsRechecking(true);
+    await refreshDependenciesStatus();
+    setIsRechecking(false);
+  };
+
+  return (
+    <Flex align="center" gap="2" wrap="wrap">
+      {reason !== undefined && (
+        <Text size="1" color="gray">
+          {reason}.
+        </Text>
+      )}
+      <OpenJjSettingsLink />
+      <Button size="1" variant="soft" onClick={() => void handleRecheck()} disabled={isRechecking}>
+        {isRechecking && <Spinner size="1" />}
+        Re-check
+      </Button>
+    </Flex>
+  );
+};
+
+/**
+ * Why jj cannot be used, worded by the backend, from the repository's
+ * pre-flight. The sentence follows from jj's readiness, so it is read again
+ * whenever the streamed readiness changes, and not at all before it is known.
+ */
+const useJjUnavailableReason = (projectId: string, jjReadiness: JjReadiness | undefined): string | undefined => {
+  const isJjBlocked = jjReadiness !== undefined && jjReadiness.blocker !== null;
+  const { data } = useQuery({
+    queryKey: [SCULPTOR_QUERY_KEY_PREFIX, "projectJjUnavailableReason", projectId, jjReadiness] as const,
+    queryFn: async (): Promise<string | null> => {
+      const { data: preflight } = await getProjectJjPreflight({ path: { project_id: projectId } });
+      return preflight.jjUnavailableReason;
+    },
+    enabled: isJjBlocked,
+    retry: false,
+  });
+  return isJjBlocked ? (data ?? undefined) : undefined;
 };
 
 /**
