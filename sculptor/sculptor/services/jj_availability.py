@@ -14,6 +14,7 @@ from sculptor.web.data_types import JjNoIdentity
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
+from sculptor.web.data_types import JjShadowed
 from sculptor.web.data_types import JjUnsupportedVersion
 
 _NOT_INSTALLED_REASON = "jj is not installed: install it or set its path on the Jujutsu settings page"
@@ -39,6 +40,12 @@ def describe_jj_unavailability(readiness: JjReadiness) -> str | None:
             )
         case JjNoIdentity():
             return "jj has no author identity: set its user.name and user.email on the Jujutsu settings page"
+        case JjShadowed(path=path, version=version):
+            return (
+                f"your login shell runs jj {version or '(unknown version)'} at {path} instead of Sculptor's jj,"
+                + f" and Sculptor needs jj {JJ_PINNED_VERSION} or a newer compatible version: upgrade or remove"
+                + " that jj, or stop your shell profile putting its directory first on PATH"
+            )
         case _ as unreachable:
             assert_never(unreachable)
 

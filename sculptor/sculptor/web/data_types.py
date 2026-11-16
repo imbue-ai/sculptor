@@ -926,6 +926,7 @@ class JjBlocker(UpperCaseStrEnum):
     NOT_RUNNABLE = auto()
     UNSUPPORTED_VERSION = auto()
     NO_IDENTITY = auto()
+    SHADOWED = auto()
 
 
 class JjIdentity(SerializableModel):
@@ -982,10 +983,28 @@ class JjNoIdentity(SerializableModel):
     suggested_identity: JjIdentity
 
 
+class JjShadowed(SerializableModel):
+    """The user's login shell runs another jj instead of Sculptor's, and that jj is outside the versions Sculptor supports."""
+
+    blocker: Literal[JjBlocker.SHADOWED]
+    path: str
+    # None when ``jj --version`` printed no recognizable version.
+    version: str | None
+
+
+class LoginShellJj(SerializableModel):
+    """A jj other than Sculptor's that the user's login shell runs, because its profile puts that jj's directory first on PATH."""
+
+    path: str
+    # None when ``jj --version`` printed no recognizable version.
+    version: str | None
+    is_version_in_range: bool
+
+
 # JJ_AVAILABLE: jj is available to Sculptor exactly when ``blocker`` is None. It is derived
 # on demand and never stored.
 JjReadiness = TypeAliasType(
-    "JjReadiness", JjAvailable | JjNotInstalled | JjNotRunnable | JjUnsupportedVersion | JjNoIdentity
+    "JjReadiness", JjAvailable | JjNotInstalled | JjNotRunnable | JjUnsupportedVersion | JjNoIdentity | JjShadowed
 )
 
 
@@ -1090,6 +1109,9 @@ class DependenciesStatus(SerializableModel):
     gh: DependencyInfo
     jj: DependencyInfo
     jj_readiness: JjReadiness
+    # The other jj an interactive login shell runs when Sculptor puts its own jj first on PATH, as in
+    # a workspace terminal. None when the shell runs Sculptor's jj, or when jj is not otherwise ready.
+    login_shell_jj: LoginShellJj | None = None
     # The renderer's speech-to-text model bundle — a managed artifact (data
     # files, no binary), so only its installed/version/progress/error fields
     # are meaningful.

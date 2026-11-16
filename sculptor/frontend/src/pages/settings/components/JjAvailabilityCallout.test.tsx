@@ -74,6 +74,18 @@ describe("JjAvailabilityCallout", () => {
     expect(availabilityText()).toContain("/usr/bin/jj reports no recognizable jj version");
   });
 
+  it("names the jj the login shell runs instead of Sculptor's and says how to stop it", () => {
+    render(
+      renderCallout(
+        { blocker: "SHADOWED", path: "/home/dev/.cargo/bin/jj", version: "0.28.2" },
+        { installed: true, version: "0.46.0", source: "MANAGED", path: "/managed/jj" },
+      ),
+    );
+    expect(availabilityText()).toContain("/home/dev/.cargo/bin/jj reports jj 0.28.2");
+    expect(availabilityText()).toContain("Sculptor needs jj 0.46.0 or a newer compatible version");
+    expect(availabilityText()).toContain("first on PATH");
+  });
+
   it("shows why jj does not run", () => {
     render(
       renderCallout(

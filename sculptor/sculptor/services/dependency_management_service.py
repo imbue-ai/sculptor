@@ -65,7 +65,9 @@ from sculptor.web.data_types import JjNoIdentity
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
+from sculptor.web.data_types import JjShadowed
 from sculptor.web.data_types import JjUnsupportedVersion
+from sculptor.web.data_types import LoginShellJj
 from sculptor.web.data_types import VersionRangeInfo
 
 
@@ -98,6 +100,10 @@ _DEFAULT_RETENTION_KEEP = 2
 # How often a running service recomputes the status with no event asking for it,
 # because a tool can be installed, removed or reconfigured outside Sculptor.
 _DEPENDENCY_STATUS_REFRESH_INTERVAL_SECONDS = 60.0
+# A login shell runs the user's whole profile; one slower than this is not waited for.
+_LOGIN_SHELL_PROBE_TIMEOUT_SECONDS = 10.0
+# Printed just before PATH, so lines the profile prints are not read as PATH.
+_LOGIN_SHELL_PATH_MARKER = "sculptor-login-shell-path:"
 
 
 def _is_valid_custom_binary(value: str) -> bool:
@@ -583,6 +589,33 @@ def _await_gh_device_code(process: RunningProcess) -> tuple[str | None, str | No
         if time.monotonic() >= deadline:
             return None, None
         time.sleep(0.2)
+
+
+def _read_path_after_marker(output: str) -> str | None:
+    """The line after `_LOGIN_SHELL_PATH_MARKER` in a login shell's output, or None when there is none.
+
+    >>> _read_path_after_marker("Welcome back!\\nsculptor-login-shell-path:\\n/usr/bin:/bin\\n")
+    '/usr/bin:/bin'
+    >>> _read_path_after_marker("bash: no job control in this shell\\n") is None
+    True
+    """
+    lines = [line.strip() for line in output.splitlines()]
+    try:
+        marker_index = lines.index(_LOGIN_SHELL_PATH_MARKER)
+    except ValueError:
+        return None
+    following_lines = lines[marker_index + 1 : marker_index + 2]
+    return following_lines[0] if following_lines else None
+
+
+def _with_login_shell_jj(readiness: JjReadiness, login_shell_jj: LoginShellJj | None) -> JjReadiness:
+    """`readiness`, unless jj is otherwise ready and the user's login shell runs an unsupported jj instead of Sculptor's.
+
+    A supported jj the shell runs instead is only reported, in the status's `login_shell_jj`.
+    """
+    if not isinstance(readiness, JjAvailable) or login_shell_jj is None or login_shell_jj.is_version_in_range:
+        return readiness
+    return JjShadowed(blocker=JjBlocker.SHADOWED, path=login_shell_jj.path, version=login_shell_jj.version)
 
 
 class DependencyManagementService(Service):
@@ -1266,6 +1299,15 @@ class DependencyManagementService(Service):
 
         gh_info = self._get_remote_cli_info(Dependency.GH)
 
+        jj_readiness = self._jj_readiness_from_check(jj_check)
+        # Only this full computation asks a login shell, since that runs the user's whole
+        # profile; gates combine their own jj probe with its answer.
+        login_shell_jj = (
+            self._find_login_shell_jj(jj_check.path)
+            if isinstance(jj_readiness, JjAvailable) and jj_check.path is not None
+            else None
+        )
+
         return DependenciesStatus(
             git=git_info,
             claude=claude_info,
@@ -1276,7 +1318,8 @@ class DependencyManagementService(Service):
             jj=self._build_optional_tool_info(
                 Dependency.JJ, JJ_VERSION_RANGE, jj_check, config, progress_by_tool, error_by_tool
             ),
-            jj_readiness=self._jj_readiness_from_check(jj_check),
+            jj_readiness=_with_login_shell_jj(jj_readiness, login_shell_jj),
+            login_shell_jj=login_shell_jj,
             voice_models=self._get_voice_models_installer().build_info(),
         )
 
@@ -1331,12 +1374,16 @@ class DependencyManagementService(Service):
     def probe_jj_readiness(self) -> JjReadiness:
         """JJ_AVAILABLE as jj reports it now, for a gate about to let jj act on the user's repository.
 
-        A readiness other than the last computed status's requests a refresh, so
-        every observer learns of it too.
+        Which jj the user's login shell runs comes from the last computed status,
+        since asking the shell runs their whole profile. A readiness other than
+        that status's requests a refresh, so every observer learns of it too.
         """
         readiness = self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
         status = self._status
-        if status is not None and status.jj_readiness != readiness:
+        if status is None:
+            return readiness
+        readiness = _with_login_shell_jj(readiness, status.login_shell_jj)
+        if status.jj_readiness != readiness:
             self._status_refresh_requested.set()
         return readiness
 
@@ -1360,6 +1407,58 @@ class DependencyManagementService(Service):
                 name=identity.name or git_identity.name, email=identity.email or git_identity.email
             ),
         )
+
+    def _find_login_shell_jj(self, sculptor_jj: str) -> LoginShellJj | None:
+        """The other jj an interactive login shell of the user's runs with `sculptor_jj` first on PATH, as a workspace terminal does.
+
+        None when the shell runs `sculptor_jj`, finds no jj, or cannot be read.
+        """
+        shell = os.environ.get("SHELL", "/bin/bash")
+        base_env = self._build_agent_probe_env() or os.environ
+        with tempfile.TemporaryDirectory(prefix="sculptor-jj-probe-") as probe_directory:
+            (Path(probe_directory) / "jj").symlink_to(sculptor_jj)
+            probe_env = {**base_env, "PATH": os.pathsep.join([probe_directory, base_env.get("PATH", "")])}
+            try:
+                process = self.concurrency_group.start_background_process_from_factory(
+                    lambda: run_background(
+                        [shell, "-l", "-i", "-c", f"echo {_LOGIN_SHELL_PATH_MARKER}; /usr/bin/printenv PATH"],
+                        timeout=_LOGIN_SHELL_PROBE_TIMEOUT_SECONDS,
+                        cwd=Path(tempfile.gettempdir()),
+                        env=probe_env,
+                        # A session of its own, since an interactive shell takes over the
+                        # controlling terminal of the session it runs in and keeps it.
+                        isolate_process_group=True,
+                    )
+                )
+                process.wait()
+            except ProcessError as e:
+                logger.debug("Could not start the login shell {}: {}", shell, e)
+                return None
+            if process.get_timed_out():
+                logger.debug("The login shell {} did not finish within {}s", shell, _LOGIN_SHELL_PROBE_TIMEOUT_SECONDS)
+                return None
+            login_shell_path = _read_path_after_marker(process.read_stdout())
+            if login_shell_path is None:
+                logger.debug("The login shell {} printed no PATH", shell)
+                return None
+            found = shutil.which("jj", path=login_shell_path)
+            # Inside the probe directory's lifetime, so its link still resolves to `sculptor_jj`.
+            if found is None or Path(found).resolve() == Path(sculptor_jj).resolve():
+                return None
+        version = self._read_jj_version(found)
+        return LoginShellJj(
+            path=found,
+            version=version,
+            is_version_in_range=version is not None and self.is_version_in_range(version, Dependency.JJ),
+        )
+
+    def _read_jj_version(self, binary: str) -> str | None:
+        """The version `binary --version` reports, or None when it fails or reports none."""
+        try:
+            result = self.concurrency_group.run_process_to_completion([binary, "--version"], timeout=5.0)
+        except ProcessError:
+            return None
+        return _parse_version_for_tool(Dependency.JJ, f"{result.stdout}\n{result.stderr}")
 
     def _run_jj_outside_any_repo(self, binary: str, arguments: Sequence[str]) -> str:
         """Run jj where only user-level config applies, with the environment agents get."""

@@ -26,6 +26,7 @@ from sculptor.web.data_types import JjNoIdentity
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
+from sculptor.web.data_types import JjShadowed
 from sculptor.web.data_types import JjUnsupportedVersion
 
 _IDENTITY = JjIdentity(name="Jordan Bookmarker", email="jordan@example.com")
@@ -56,6 +57,13 @@ _IDENTITY = JjIdentity(name="Jordan Bookmarker", email="jordan@example.com")
             JjNoIdentity(blocker=JjBlocker.NO_IDENTITY, suggested_identity=_IDENTITY),
             "jj has no author identity: set its user.name and user.email on the Jujutsu settings page",
             id="no-identity",
+        ),
+        pytest.param(
+            JjShadowed(blocker=JjBlocker.SHADOWED, path="/home/dev/.cargo/bin/jj", version="0.28.2"),
+            "your login shell runs jj 0.28.2 at /home/dev/.cargo/bin/jj instead of Sculptor's jj, and Sculptor needs"
+            + f" jj {JJ_PINNED_VERSION} or a newer compatible version: upgrade or remove that jj, or stop your shell"
+            + " profile putting its directory first on PATH",
+            id="shadowed",
         ),
     ],
 )
