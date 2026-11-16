@@ -25,13 +25,17 @@ vi.mock("~/api", async (importOriginal) => {
 
 const makeInfo = (overrides: Partial<DependencyInfo>): DependencyInfo => ({ installed: false, ...overrides });
 
-const makeStatus = (jjReadiness: JjReadiness): DependenciesStatus => ({
+const makeStatus = (
+  jjReadiness: JjReadiness,
+  loginShellJj: DependenciesStatus["loginShellJj"] = null,
+): DependenciesStatus => ({
   git: makeInfo({ installed: true }),
   claude: makeInfo({ installed: true }),
   pi: makeInfo({}),
   gh: makeInfo({}),
   jj: makeInfo({ installed: true, isVersionInRange: true, mode: "MANAGED", version: "0.46.0" }),
   jjReadiness,
+  loginShellJj,
   voiceModels: makeInfo({}),
 });
 
@@ -97,6 +101,29 @@ describe("JjSettingsSection", () => {
     expect(mockGetDependenciesStatus).toHaveBeenCalledTimes(2);
     expect(store.get(dependenciesStatusAtom)).toBe(NO_IDENTITY);
     expect(screen.getByTestId(ElementIds.JJ_RECHECK_BUTTON)).toBeEnabled();
+  });
+
+  it("shows the other jj the login shell runs, which blocks nothing, beside Sculptor's", async () => {
+    const withHomebrewJj = makeStatus(
+      { blocker: null, identity: IDENTITY },
+      { path: "/opt/homebrew/bin/jj", version: "0.48.0", isVersionInRange: true },
+    );
+    store.set(dependenciesStatusAtom, withHomebrewJj);
+    mockGetDependenciesStatus.mockResolvedValue({ data: withHomebrewJj });
+    renderSection();
+    await act(async () => {});
+
+    expect(screen.getByText("jj in your terminal")).toBeInTheDocument();
+    expect(screen.getByText("/opt/homebrew/bin/jj (jj 0.48.0)")).toBeInTheDocument();
+  });
+
+  it("shows no terminal jj when the login shell runs Sculptor's", async () => {
+    store.set(dependenciesStatusAtom, AVAILABLE);
+    mockGetDependenciesStatus.mockResolvedValue({ data: AVAILABLE });
+    renderSection();
+    await act(async () => {});
+
+    expect(screen.queryByText("jj in your terminal")).not.toBeInTheDocument();
   });
 
   it("keeps a newer stream frame when the identity save responds after it", async () => {
