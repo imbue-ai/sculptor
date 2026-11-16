@@ -29,12 +29,8 @@ def checkout_path_for_strategy(
     `repo_path` is the user's repository and `environment_path` the workspace's
     environment directory. The path is not checked for existence.
     """
-    match initialization_strategy:
-        case WorkspaceInitializationStrategy.IN_PLACE:
-            return repo_path
-        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
-            if environment_path is None:
-                return None
-            return environment_path / _CHECKOUT_DIRECTORY_NAME
-        case _ as unreachable:
-            assert_never(unreachable)
+    if not is_isolated_checkout(initialization_strategy):
+        return repo_path
+    if environment_path is None:
+        return None
+    return environment_path / _CHECKOUT_DIRECTORY_NAME
