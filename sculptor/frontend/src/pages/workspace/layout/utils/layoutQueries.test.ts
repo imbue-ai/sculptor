@@ -108,14 +108,14 @@ describe("listAvailableLocations", () => {
 
 describe("listAvailableStaticPanels", () => {
   const agentDefinition: PanelDefinition = {
-    ...buildStaticPanelDefinitions()[0],
+    ...buildStaticPanelDefinitions("git")[0],
     id: "agent:t1",
     displayName: "Agent 1",
     kind: "agent",
   };
 
   it("offers only static panels that are not currently open", () => {
-    const registry = [...buildStaticPanelDefinitions(), agentDefinition];
+    const registry = [...buildStaticPanelDefinitions("git"), agentDefinition];
     const available = listAvailableStaticPanels(registry, { files: "left", "agent:t1": "center" });
     const ids = available.map((panel) => panel.id);
     // The open static panel is excluded; the closed static panels remain.
@@ -126,7 +126,7 @@ describe("listAvailableStaticPanels", () => {
   });
 
   it("offers every static panel when none are open", () => {
-    const staticDefinitions = buildStaticPanelDefinitions();
+    const staticDefinitions = buildStaticPanelDefinitions("git");
     const available = listAvailableStaticPanels(staticDefinitions, {});
     expect(available.map((panel) => panel.id)).toEqual(staticDefinitions.map((definition) => definition.id));
   });

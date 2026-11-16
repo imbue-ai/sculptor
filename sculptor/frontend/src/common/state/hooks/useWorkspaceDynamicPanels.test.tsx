@@ -4,8 +4,10 @@ import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { CodingAgentTaskView } from "~/api";
+import type { CodingAgentTaskView, Workspace } from "~/api";
+import { WorkspaceInitializationStrategy } from "~/api";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
+import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { queryClient } from "~/common/state/queryClient.ts";
 import { agentDeleteTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
 import { makeAgentPanelId } from "~/pages/workspace/layout/registry/dynamicPanels.tsx";
@@ -47,8 +49,10 @@ const createMockAgent = (overrides: Partial<CodingAgentTaskView> = {}): CodingAg
     ...overrides,
   }) as CodingAgentTaskView;
 
-const renderWithAgent = (agent: CodingAgentTaskView): ReturnType<typeof createStore> => {
-  const store = createStore();
+const renderWithAgent = (
+  agent: CodingAgentTaskView,
+  store: ReturnType<typeof createStore> = createStore(),
+): ReturnType<typeof createStore> => {
   store.set(agentIdsAtom, [agent.id]);
   store.set(agentAtomFamily(agent.id), agent);
 
@@ -78,5 +82,39 @@ describe("useWorkspaceDynamicPanels agent close target", () => {
     const agentPanel = store.get(panelRegistryAtom).find((panel) => panel.id === makeAgentPanelId("agent-1"));
     act(() => agentPanel?.onRequestClose?.());
     expect(store.get(agentDeleteTargetAtom)).toEqual({ id: "agent-1", name: "My agent" });
+  });
+});
+
+describe("useWorkspaceDynamicPanels static panel labels", () => {
+  const storeWithWorkspace = (
+    initializationStrategy: WorkspaceInitializationStrategy,
+  ): ReturnType<typeof createStore> => {
+    const store = createStore();
+    const workspace: Workspace = {
+      objectId: WORKSPACE_ID,
+      projectId: "proj-1",
+      organizationReference: "org-1",
+      description: "Workspace",
+      initializationStrategy,
+      sourceBranch: "main",
+      targetBranch: "main",
+    };
+    store.set(workspaceAtomFamily(WORKSPACE_ID), workspace);
+    return store;
+  };
+
+  const commitsPanelName = (store: ReturnType<typeof createStore>): string | undefined =>
+    store.get(panelRegistryAtom).find((panel) => panel.id === "commits")?.displayName;
+
+  it("calls the commits panel Revisions in a jj workspace", () => {
+    const store = renderWithAgent(createMockAgent(), storeWithWorkspace(WorkspaceInitializationStrategy.JJ_WORKSPACE));
+
+    expect(commitsPanelName(store)).toBe("Revisions");
+  });
+
+  it("calls the commits panel Commits in a git workspace", () => {
+    const store = renderWithAgent(createMockAgent(), storeWithWorkspace(WorkspaceInitializationStrategy.WORKTREE));
+
+    expect(commitsPanelName(store)).toBe("Commits");
   });
 });
