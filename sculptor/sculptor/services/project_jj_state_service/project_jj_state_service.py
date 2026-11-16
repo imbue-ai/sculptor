@@ -28,11 +28,16 @@ from sculptor.services.workspace_service.jj_workspace_creation import JjWorkspac
 from sculptor.services.workspace_service.jj_workspace_creation import creates_jj_workspaces
 from sculptor.services.workspace_service.jj_workspace_creation import gather_jj_workspace_creation_facts
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
 from sculptor.services.workspace_service.vcs.jj_repo_queries import init_colocated
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
+from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
+from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.web.data_types import DependenciesStatus
+from sculptor.web.data_types import JjBookmarkChoice
 from sculptor.web.data_types import JjColocationBlocker
+from sculptor.web.data_types import JjColocationPreflight
 from sculptor.web.data_types import JjColocationState
 from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import ProjectJjState
@@ -57,6 +62,10 @@ class ColocationBlockedError(ExpectedError):
 
 class ColocationAlreadyRunningError(ExpectedError):
     """The repository is already being colocated with jj."""
+
+
+class RepositoryNotColocatedError(ExpectedError):
+    """A repository operation needs a jj colocation, and the repository is not one."""
 
 
 class _ColocationRunning(FrozenModel):
@@ -151,6 +160,49 @@ class ProjectJjStateService(Service):
     def refresh_project(self, project: Project) -> None:
         """Recompute `project`'s state from disk soon, and publish it if it changed."""
         self._work_queue.put(project)
+
+    def read_preflight(self, project: Project) -> JjColocationPreflight:
+        """What colocating `project`'s repository would run into; its published state is refreshed too.
+
+        Raises `VcsCommandError` when git cannot read the repository.
+        """
+        self.refresh_project(project)
+        return read_colocation_preflight(
+            self.vcs_runners.git,
+            self.vcs_runners.jj,
+            project.get_local_user_path(),
+            self.dependency_management_service.get_jj_readiness(),
+        )
+
+    def require_colocation(self, project: Project) -> None:
+        """Raise unless jj is available and `project`'s repository is a jj colocation.
+
+        Raises `JjUnavailableForRepositoryError` or `RepositoryNotColocatedError`.
+        """
+        facts = gather_jj_workspace_creation_facts(project, self.vcs_runners.jj, self.dependency_management_service)
+        if facts.jj_readiness.blocker is not None:
+            raise JjUnavailableForRepositoryError(facts.jj_readiness)
+        if not facts.is_colocated:
+            raise RepositoryNotColocatedError(f"Project {project.object_id} is not a jj colocation")
+
+    def list_bookmark_choices(self, project: Project) -> list[JjBookmarkChoice]:
+        """The bookmarks a new jj workspace in `project`'s repository can start from or target.
+
+        Every local bookmark and every bookmark on a real remote, less the
+        conflicted ones and a local one deleted while its remote is tracked,
+        which point at no single commit. Raises as `require_colocation` does.
+        """
+        self.require_colocation(project)
+        choices: list[JjBookmarkChoice] = []
+        for bookmark in list_bookmarks(self.vcs_runners.jj, project.get_local_user_path()):
+            commit_id = bookmark.commit_id
+            if commit_id is None:
+                continue
+            symbol = format_bookmark_symbol(JjBookmarkSymbol(name=bookmark.name, remote=bookmark.remote))
+            choices.append(
+                JjBookmarkChoice(symbol=symbol, name=bookmark.name, remote=bookmark.remote, commit_id=commit_id)
+            )
+        return choices
 
     def start_colocation(self, project: Project) -> None:
         """Start making `project`'s repository a jj colocation, on a thread of its own.

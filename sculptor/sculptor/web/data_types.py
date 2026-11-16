@@ -1044,6 +1044,25 @@ class JjColocationPreflight(SerializableModel):
     )
 
 
+class UseJjForNewWorkspacesRequest(RequestModel):
+    use_jj_for_new_workspaces: bool
+
+
+class JjBookmarkChoice(SerializableModel):
+    """A bookmark a new jj workspace can start from or target."""
+
+    symbol: str = Field(description="How jj names the bookmark: `main` locally, `main@origin` on a remote")
+    name: str
+    remote: str | None = Field(description="None for a local bookmark")
+    commit_id: str
+
+
+class JjBookmarkChoicesResponse(SerializableModel):
+    """A colocated repository's bookmarks that point at exactly one commit, in jj's order."""
+
+    bookmarks: list[JjBookmarkChoice]
+
+
 class DependenciesStatus(SerializableModel):
     """Status of required dependencies with path/version info."""
 
