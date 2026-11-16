@@ -1,4 +1,4 @@
-"""Tests for the routes that register a directory as a project: initialize and init-git."""
+"""Tests for the routes that register a directory as a project: initialize, init-git and create-initial-commit."""
 
 from pathlib import Path
 
@@ -7,7 +7,11 @@ from fastapi.testclient import TestClient
 
 from sculptor.foundation.processes.local_process import run_blocking
 
-_PROJECT_ROUTES = ("/api/v1/projects/initialize", "/api/v1/projects/init-git")
+_PROJECT_ROUTES = (
+    "/api/v1/projects/initialize",
+    "/api/v1/projects/init-git",
+    "/api/v1/projects/create-initial-commit",
+)
 
 
 def _make_jj_workspace(path: Path) -> Path:
@@ -57,6 +61,38 @@ def test_project_routes_refuse_a_symlink_into_a_jj_workspace(route: str, client:
     assert response.status_code == 400
     assert str(jj_workspace) in response.json()["detail"]
     assert not (subdirectory / ".git").exists()
+
+
+def test_create_initial_commit_in_a_jj_workspace_inside_a_git_repository_commits_nothing(
+    client: TestClient, tmp_path: Path
+) -> None:
+    git_repository = tmp_path / "git-repository"
+    git_repository.mkdir()
+    run_blocking(["git", "init", "-q", "-b", "main"], cwd=git_repository)
+    run_blocking(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "init",
+        ],
+        cwd=git_repository,
+    )
+    jj_workspace = _make_jj_workspace(git_repository / "jj-workspace")
+    (jj_workspace / "file.txt").write_text("content\n")
+
+    response = client.post("/api/v1/projects/create-initial-commit", json={"project_path": str(jj_workspace)})
+
+    assert response.status_code == 400
+    assert "jj workspace" in response.json()["detail"]
+    commit_count = run_blocking(["git", "rev-list", "--count", "HEAD"], cwd=git_repository).stdout.strip()
+    assert commit_count == "1"
 
 
 def test_initialize_accepts_a_repository_colocated_with_jj(client: TestClient, tmp_path: Path) -> None:

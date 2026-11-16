@@ -4964,6 +4964,7 @@ def create_initial_commit(
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
     if not project_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Project path is not a directory: {project_path}")
+    _raise_if_inside_jj_workspace(project_path)
 
     logger.info("Creating initial commit in git repository at: {}", project_path)
 
