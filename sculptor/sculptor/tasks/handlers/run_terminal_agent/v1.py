@@ -16,6 +16,7 @@ next connection.
 from __future__ import annotations
 
 import datetime
+from functools import partial
 from typing import Any
 from typing import Callable
 from typing import cast
@@ -39,6 +40,7 @@ from sculptor.interfaces.agents.agent import EnvironmentTypes
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.dependency_management_service import Dependency
+from sculptor.services.jj_availability import find_ready_jj_binary
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
 from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
@@ -227,6 +229,7 @@ def _run_terminal_agent_in_environment(
         build_vcs_runners(environment_concurrency_group, services.dependency_management_service.resolve_binary_path),
         environment_concurrency_group,
         read_jj_snapshot_max_new_file_size_mib,
+        partial(find_ready_jj_binary, services.dependency_management_service),
     )
     checkout = CheckoutLocation(
         repo_path=project.get_local_user_path(),

@@ -1,9 +1,21 @@
+from collections.abc import Iterator
+from pathlib import Path
+from uuid import uuid4
+
 import pytest
 
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.jj_availability import describe_jj_unavailability
+from sculptor.services.jj_availability import find_ready_jj_binary
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.jj_version import JJ_PINNED_VERSION
+from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjIdentity
@@ -58,3 +70,41 @@ def test_an_available_jj_has_no_unavailability_to_describe() -> None:
 
     assert describe_jj_unavailability(readiness) is None
     require_jj_available(readiness)
+
+
+@pytest.fixture
+def dependency_management_service(jj_isolated_env: JjIsolatedEnv) -> Iterator[DependencyManagementService]:
+    with ConcurrencyGroup(name="dependency_management_service") as concurrency_group:
+        yield DependencyManagementService(concurrency_group=concurrency_group)
+    set_user_config_instance(None)
+
+
+def _resolve_jj_to(jj_path: Path) -> None:
+    set_user_config_instance(
+        UserConfig(
+            user_email="test@example.com",
+            user_id=uuid4().hex,
+            organization_id=uuid4().hex,
+            instance_id=uuid4().hex,
+            dependency_paths=DependencyPaths(jj=str(jj_path)),
+        )
+    )
+
+
+def test_the_ready_jj_binary_is_the_resolved_jj_when_it_passes_readiness(
+    dependency_management_service: DependencyManagementService, jj_binary: JjBinary
+) -> None:
+    _resolve_jj_to(jj_binary.path)
+
+    assert find_ready_jj_binary(dependency_management_service) == jj_binary.path
+
+
+def test_no_jj_binary_is_ready_when_the_resolved_jj_is_a_version_sculptor_refuses(
+    dependency_management_service: DependencyManagementService, tmp_path: Path
+) -> None:
+    old_jj = tmp_path / "jj"
+    old_jj.write_text(f'#!/bin/sh\necho "jj 0.28.2-{uuid4().hex}"\n')
+    old_jj.chmod(0o755)
+    _resolve_jj_to(old_jj)
+
+    assert find_ready_jj_binary(dependency_management_service) is None

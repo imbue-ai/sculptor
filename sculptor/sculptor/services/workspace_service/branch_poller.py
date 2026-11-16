@@ -63,6 +63,7 @@ from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_i
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
 from sculptor.services.workspace_service.vcs.git_repo_queries import strip_remote_prefix
+from sculptor.services.workspace_service.vcs.jj_workspace_vcs import ReadyJjBinaryReader
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
 from sculptor.web.data_types import StreamingUpdateSourceTypes
@@ -96,12 +97,14 @@ class WorkspaceBranchPoller:
         concurrency_group: ConcurrencyGroup,
         data_model_service: DataModelService,
         vcs_runners: VcsRunners,
+        read_ready_jj_binary: ReadyJjBinaryReader,
         resolve_working_dir: Callable[[Workspace], Path | None],
         refresh_diff_on_branch_change: Callable[[WorkspaceID], None],
     ) -> None:
         self._concurrency_group = concurrency_group
         self._data_model_service = data_model_service
         self._runners = vcs_runners
+        self._read_ready_jj_binary = read_ready_jj_binary
         self._resolve_working_dir = resolve_working_dir
         self._refresh_diff_on_branch_change = refresh_diff_on_branch_change
 
@@ -366,6 +369,7 @@ class WorkspaceBranchPoller:
             self._runners,
             self._concurrency_group,
             read_jj_snapshot_max_new_file_size_mib,
+            self._read_ready_jj_binary,
         )
         try:
             main_repo_path = resolve_main_repo_path(self._runners.git, working_dir)

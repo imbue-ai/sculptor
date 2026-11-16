@@ -539,6 +539,7 @@ def _build_coordinator(
         data_model_service=data_model_service,
         workspace_service=workspace_service,
         vcs_runners=build_vcs_runners(concurrency_group, lambda tool: None),
+        read_ready_jj_binary=lambda: None,
     )
     coordinator = CIBabysitterCoordinator(
         concurrency_group=concurrency_group,

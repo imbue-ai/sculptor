@@ -44,6 +44,7 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.jj_availability import find_ready_jj_binary
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
@@ -160,6 +161,7 @@ class DefaultWorkspaceService(WorkspaceService):
                     concurrency_group=self.concurrency_group,
                     data_model_service=self.data_model_service,
                     vcs_runners=self.vcs_runners,
+                    read_ready_jj_binary=partial(find_ready_jj_binary, self.dependency_management_service),
                     resolve_working_dir=self.get_workspace_working_directory,
                     refresh_diff_on_branch_change=self.maybe_refresh_workspace_diff,
                 )
@@ -311,7 +313,11 @@ class DefaultWorkspaceService(WorkspaceService):
 
     def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
         return make_workspace_vcs(
-            initialization_strategy, self.vcs_runners, self.concurrency_group, read_jj_snapshot_max_new_file_size_mib
+            initialization_strategy,
+            self.vcs_runners,
+            self.concurrency_group,
+            read_jj_snapshot_max_new_file_size_mib,
+            partial(find_ready_jj_binary, self.dependency_management_service),
         )
 
     def forget_orphaned_jj_workspaces(self) -> None:

@@ -180,6 +180,7 @@ def _make_service_with_git(
     svc = _make_service()
     jj = JjCli(concurrency_group, lambda tool: None if jj_binary_path is None else str(jj_binary_path))
     svc._runners = VcsRunners(git=git_cli, jj=jj)
+    svc._read_ready_jj_binary = lambda: jj_binary_path
     object.__setattr__(svc, "concurrency_group", concurrency_group)
     return svc
 

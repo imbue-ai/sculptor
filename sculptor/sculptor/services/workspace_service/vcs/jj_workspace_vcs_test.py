@@ -117,9 +117,24 @@ def snapshot_limit() -> _SnapshotLimit:
     return _SnapshotLimit(_SNAPSHOT_LIMIT_MIB)
 
 
+class _ReadyJj:
+    """A settable stand-in for the jj that readiness accepts, or None when it would refuse it."""
+
+    def __init__(self, binary: Path | None) -> None:
+        self.binary = binary
+
+    def read(self) -> Path | None:
+        return self.binary
+
+
 @pytest.fixture
-def jj_vcs(jj_cli: JjCli, git_cli: GitCli, snapshot_limit: _SnapshotLimit) -> JjWorkspaceVcs:
-    return JjWorkspaceVcs(jj_cli, git_cli, snapshot_limit.read)
+def ready_jj(jj_binary: JjBinary) -> _ReadyJj:
+    return _ReadyJj(jj_binary.path)
+
+
+@pytest.fixture
+def jj_vcs(jj_cli: JjCli, git_cli: GitCli, snapshot_limit: _SnapshotLimit, ready_jj: _ReadyJj) -> JjWorkspaceVcs:
+    return JjWorkspaceVcs(jj_cli, git_cli, snapshot_limit.read, ready_jj.read)
 
 
 @pytest.fixture
@@ -1027,6 +1042,23 @@ def test_a_process_on_the_agent_environment_path_finds_the_resolved_jj_when_none
     assert found_jj is not None and Path(found_jj).resolve() == jj_binary.path.resolve()
     assert version.returncode == 0, version.stderr
     assert version.stdout.startswith(f"jj {jj_binary.version}")
+
+
+def test_agent_environment_takes_jj_off_path_once_sculptor_would_refuse_it(
+    jj_vcs: JjWorkspaceVcs,
+    checkout: CheckoutLocation,
+    jj_binary: JjBinary,
+    ready_jj: _ReadyJj,
+    isolated_sculptor_folder: Path,  # noqa: F811
+) -> None:
+    jj_bin_dir = jj_vcs.agent_environment(checkout).path_prefixes[0]
+    assert (jj_bin_dir / "jj").readlink() == jj_binary.path
+
+    ready_jj.binary = None
+    environment = jj_vcs.agent_environment(checkout)
+
+    assert environment.path_prefixes == (jj_bin_dir,)
+    assert list(jj_bin_dir.iterdir()) == []
 
 
 def test_the_chat_agent_variables_make_a_jj_command_that_opens_an_editor_fail_at_once(

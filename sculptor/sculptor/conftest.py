@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Generator
 from typing import cast
 
@@ -17,6 +18,7 @@ from sculptor.services.dependency_management_service import InstallResult
 from sculptor.services.dependency_management_service import VoiceModelsInstaller
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.default_implementation import DefaultGitRepoService
+from sculptor.services.jj_availability import find_ready_jj_binary
 from sculptor.services.pi_login_service import PiLoginService
 from sculptor.services.project_jj_state_service.project_jj_state_service import ProjectJjStateService
 from sculptor.services.project_service.api import ProjectService
@@ -156,6 +158,7 @@ def test_service_collection(
         vcs_runners=build_vcs_runners(
             pr_polling_concurrency_group, _test_dependency_management_service.resolve_binary_path
         ),
+        read_ready_jj_binary=partial(find_ready_jj_binary, _test_dependency_management_service),
     )
     ci_babysitter_service = CIBabysitterCoordinator(
         concurrency_group=test_root_concurrency_group.make_concurrency_group("ci_babysitter"),

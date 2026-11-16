@@ -48,7 +48,9 @@ def test_git_workspace_kinds_get_git_version_control_that_runs_the_given_runner(
         test_root_concurrency_group, lambda tool: str(logging_git) if tool is Dependency.GIT else None
     )
 
-    vcs = make_workspace_vcs(strategy, runners, test_root_concurrency_group, lambda: _UNUSED_SNAPSHOT_LIMIT_MIB)
+    vcs = make_workspace_vcs(
+        strategy, runners, test_root_concurrency_group, lambda: _UNUSED_SNAPSHOT_LIMIT_MIB, lambda: None
+    )
 
     assert isinstance(vcs, GitWorkspaceVcs)
     assert vcs.list_target_candidates(git_repo) == ["main"]
@@ -81,7 +83,11 @@ def test_a_jj_workspace_gets_jj_version_control_that_reads_the_snapshot_limit_it
     )
 
     vcs = make_workspace_vcs(
-        WorkspaceInitializationStrategy.JJ_WORKSPACE, runners, test_root_concurrency_group, lambda: 3
+        WorkspaceInitializationStrategy.JJ_WORKSPACE,
+        runners,
+        test_root_concurrency_group,
+        lambda: 3,
+        lambda: jj_binary.path,
     )
     vcs.verify_checkout(
         CheckoutLocation(

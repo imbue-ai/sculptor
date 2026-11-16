@@ -42,6 +42,7 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
+from sculptor.services.workspace_service.vcs.jj_workspace_vcs import ReadyJjBinaryReader
 from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
 from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
 from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
@@ -382,6 +383,7 @@ class PrPollingService(Service):
     _data_model_service: DataModelService = PrivateAttr()
     _workspace_service: WorkspaceService = PrivateAttr()
     _runners: VcsRunners = PrivateAttr()
+    _read_ready_jj_binary: ReadyJjBinaryReader = PrivateAttr()
     _job_queue: queue.PriorityQueue = PrivateAttr(default_factory=queue.PriorityQueue)
     _pending: set[WorkspaceID] = PrivateAttr(default_factory=set)
     _pending_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
@@ -436,11 +438,13 @@ class PrPollingService(Service):
         data_model_service: DataModelService,
         workspace_service: WorkspaceService,
         vcs_runners: VcsRunners,
+        read_ready_jj_binary: ReadyJjBinaryReader,
     ) -> None:
         super().__init__(concurrency_group=concurrency_group)
         self._data_model_service = data_model_service
         self._workspace_service = workspace_service
         self._runners = vcs_runners
+        self._read_ready_jj_binary = read_ready_jj_binary
 
     # -- Observer registry (multi-observer fan-out) -----------------------
 
@@ -848,6 +852,7 @@ class PrPollingService(Service):
             self._runners,
             self.concurrency_group,
             read_jj_snapshot_max_new_file_size_mib,
+            self._read_ready_jj_binary,
         )
         refs = vcs.get_pull_request_refs(
             location, target_ref=target_branch, requested_ref_name=state.requested_branch_name

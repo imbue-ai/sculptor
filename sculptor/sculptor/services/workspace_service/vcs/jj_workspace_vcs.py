@@ -84,6 +84,10 @@ DEFAULT_JJ_WORKSPACE_SETUP_COMMAND = "jj git fetch --remote origin 2>/dev/null |
 # Returns the user's configured limit, in MiB, on the size of a new file jj snapshots.
 SnapshotSizeLimitReader = Callable[[], int]
 
+# Returns the jj binary that processes launched in a jj workspace may run, or None
+# when Sculptor itself would refuse the jj it resolves.
+ReadyJjBinaryReader = Callable[[], Path | None]
+
 _SNAPSHOT_MAX_NEW_FILE_SIZE_KEY = "snapshot.max-new-file-size"
 _BYTES_PER_MEBIBYTE = 1024 * 1024
 _STORE_LINK = Path(".jj") / "repo"
@@ -137,10 +141,17 @@ class JjWorkspaceVcs(WorkspaceVcs):
     colocated repository, never in the jj workspace.
     """
 
-    def __init__(self, jj: JjCli, git: GitCli, read_snapshot_max_new_file_size_mib: SnapshotSizeLimitReader) -> None:
+    def __init__(
+        self,
+        jj: JjCli,
+        git: GitCli,
+        read_snapshot_max_new_file_size_mib: SnapshotSizeLimitReader,
+        read_ready_jj_binary: ReadyJjBinaryReader,
+    ) -> None:
         self._jj = jj
         self._git = git
         self._read_snapshot_max_new_file_size_mib = read_snapshot_max_new_file_size_mib
+        self._read_ready_jj_binary = read_ready_jj_binary
 
     def create_checkout(self, spec: CheckoutSpec) -> CheckoutLocation:
         """`jj workspace add` from `spec.base_ref`, then the workspace's own config.
@@ -622,8 +633,10 @@ class JjWorkspaceVcs(WorkspaceVcs):
         return GitOperationResult(success=True, stdout=result.stdout, stderr=result.stderr)
 
     def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:
-        """The resolved jj first on PATH, `GH_REPO` for a GitHub origin, a git ceiling above the checkout, and no editor.
+        """The ready jj first on PATH, `GH_REPO` for a GitHub origin, a git ceiling above the checkout, and no editor.
 
+        The PATH entry holds a jj only while readiness accepts the one Sculptor
+        resolves, so a process is never handed a jj Sculptor would refuse.
         gh finds no `.git` to read the repository from, so it needs `GH_REPO`. The
         ceiling makes a `git` run in the workspace fail instead of finding an
         enclosing repository. `JJ_EDITOR=false` makes a jj command that would open
@@ -634,7 +647,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
         if gh_repo is not None:
             environment_variables[_GH_REPO] = gh_repo
         return AgentVcsEnvironment(
-            path_prefixes=(get_jj_bin_dir(self._jj.find_binary()),),
+            path_prefixes=(get_jj_bin_dir(self._read_ready_jj_binary()),),
             environment_variables=environment_variables,
             chat_agent_environment_variables={_JJ_EDITOR: _EDITOR_THAT_FAILS},
         )
