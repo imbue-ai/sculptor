@@ -1,4 +1,4 @@
-import { Button, Flex, Skeleton, Switch, Tooltip } from "@radix-ui/themes";
+import { Button, Callout, Flex, Link, Skeleton, Switch, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -199,7 +199,12 @@ export const NewWorkspaceForm = ({
   // A remembered source belongs to the mode it was picked for: a bookmark is no worktree's source.
   const rememberedSourceBranch = rememberedSettings?.mode === mode ? rememberedSettings.sourceBranch : undefined;
   const isJjMode = workspaceVcsOf({ initializationStrategy: mode }) === "jj";
-  const jjBookmarks = useJjBookmarkChoices({ projectId: selectedProjectId, isEnabled: isJjMode });
+  // A repository that uses jj for new workspaces creates none while jj is unavailable.
+  const isBlockedByJjUnavailable = isJjMode && repositoryVcs === "jj-unavailable";
+  const jjBookmarks = useJjBookmarkChoices({
+    projectId: selectedProjectId,
+    isEnabled: isJjMode && !isBlockedByJjUnavailable,
+  });
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const openSettings = useOpenSettings();
   // Fetch pi's host-side catalog only while pi is the selected agent type, so the
@@ -345,6 +350,10 @@ export const NewWorkspaceForm = ({
     openSettings(SettingsSection.PI);
     onDismiss();
   }, [openSettings, onDismiss]);
+  const handleGoToJjSettings = useCallback((): void => {
+    openSettings(SettingsSection.JJ);
+    onDismiss();
+  }, [openSettings, onDismiss]);
   const handleGoToRepositorySettings = useCallback((): void => {
     if (selectedProjectId === null) {
       openSettings(SettingsSection.REPOSITORIES);
@@ -448,7 +457,8 @@ export const NewWorkspaceForm = ({
     // blocks Create; the backend re-checks at create time as the backstop.
     branchNameStatus === "exists" ||
     branchNameStatus === "invalid" ||
-    isPiPromptBlocked;
+    isPiPromptBlocked ||
+    isBlockedByJjUnavailable;
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmitDisabled || selectedProjectId === null) return;
@@ -760,6 +770,23 @@ export const NewWorkspaceForm = ({
               </Flex>
             ) : null}
           </div>
+
+          {isBlockedByJjUnavailable ? (
+            <Callout.Root color="amber" size="1" data-testid={ElementIds.NEW_WORKSPACE_JJ_UNAVAILABLE_CALLOUT}>
+              <Callout.Text>
+                This repository creates jj workspaces, and jj is unavailable.{" "}
+                <Link
+                  href="#"
+                  onClick={(e): void => {
+                    e.preventDefault();
+                    handleGoToJjSettings();
+                  }}
+                >
+                  Open Jujutsu settings
+                </Link>
+              </Callout.Text>
+            </Callout.Root>
+          ) : null}
         </div>
 
         {/* ── Footer: keep-open toggle + Cmd+Enter hint + Create ── */}

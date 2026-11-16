@@ -583,6 +583,35 @@ describe("NewWorkspaceForm", () => {
     });
   });
 
+  it("blocks Create in a repository that uses jj while jj is unavailable, and links to the Jujutsu page", async () => {
+    const onDismiss = vi.fn();
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One", useJjForNewWorkspaces: true } as Project]);
+    // Without jj the repository cannot be read as colocated, so it creates no jj workspaces.
+    store.set(projectJjStateAtomFamily("p1"), {
+      projectId: "p1",
+      colocation: "ABSENT",
+      colocationError: null,
+      createsJjWorkspaces: false,
+    });
+    store.set(dependenciesStatusAtom, {
+      git: { installed: true },
+      claude: { installed: true },
+      pi: { installed: false },
+      gh: { installed: false },
+      jj: { installed: false },
+      jjReadiness: { blocker: "NOT_INSTALLED" },
+    } as DependenciesStatus);
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={onDismiss} />, { store });
+
+    const callout = await screen.findByTestId(ElementIds.NEW_WORKSPACE_JJ_UNAVAILABLE_CALLOUT);
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON)).toBeDisabled();
+    fireEvent.click(within(callout).getByText("Open Jujutsu settings"));
+
+    expect(mockOpenSettings).toHaveBeenCalledWith(SettingsSection.JJ);
+    expect(onDismiss).toHaveBeenCalled();
+  });
+
   it("dismisses the dialog when Install Pi routes to settings from the agent picker", async () => {
     // With no usable pi binary, the picker's pi entry reads "Install Pi" and
     // routes to Settings — which lands underneath the host dialog, so choosing
