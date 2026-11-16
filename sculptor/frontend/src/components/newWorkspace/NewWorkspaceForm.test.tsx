@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DependenciesStatus, ModelOption, Project } from "~/api";
 import { ElementIds, getActiveProjects, WorkspaceInitializationStrategy } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
+import { projectJjStateAtomFamily } from "~/common/state/atoms/projectJjState.ts";
 import { projectAtomFamily, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { SettingsSection } from "~/pages/settings/sections.ts";
@@ -115,13 +116,15 @@ vi.mock("~/common/state/hooks/useTerminalAgentRegistrations.ts", () => ({
 
 // Honors the override argument the same way the real hook does (override wins
 // over the auto preview), so a seeded or user-edited branch name is observable
-// in the rendered field and in the create call's `branchName`.
+// in the rendered field and in the create call's `branchName`. A test that needs
+// the validator's verdict on the name sets `mockBranchNameStatus.current`.
+const { mockBranchNameStatus } = vi.hoisted(() => ({ mockBranchNameStatus: { current: "available" } }));
 vi.mock("~/components/newWorkspace/hooks/useBranchNamePreview.ts", () => ({
   useBranchNamePreview: ({ override }: { override: string | null }): unknown => ({
     preview: "sculptor/test-branch",
     displayedValue: override ?? "sculptor/test-branch",
     isLoading: false,
-    status: "available",
+    status: mockBranchNameStatus.current,
   }),
 }));
 
@@ -165,6 +168,7 @@ describe("NewWorkspaceForm", () => {
   beforeEach(() => {
     mockCreateWorkspace.mockResolvedValue({ ok: true, workspaceId: "w1" });
     mockRepoInfo.current = REPO_INFO;
+    mockBranchNameStatus.current = "available";
     // Default the catalog to still-resolving; the Claude tests never read it, and
     // the pi tests override per case.
     mockUsePiModels.mockReturnValue(piModelsResolving());
@@ -473,6 +477,81 @@ describe("NewWorkspaceForm", () => {
       expect(mockCreateWorkspace).toHaveBeenCalledWith(
         expect.objectContaining({ projectId: "p1", mode: WORKTREE, sourceBranch: "main" }),
       );
+    });
+  });
+
+  describe("in a repository that creates jj workspaces", () => {
+    const renderJjRepositoryForm = (): void => {
+      const store = createStore();
+      store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One", useJjForNewWorkspaces: true } as Project]);
+      store.set(projectJjStateAtomFamily("p1"), {
+        projectId: "p1",
+        colocation: "COLOCATED",
+        colocationError: null,
+        createsJjWorkspaces: true,
+      });
+      store.set(dependenciesStatusAtom, {
+        git: { installed: true },
+        claude: { installed: true },
+        pi: { installed: false },
+        gh: { installed: false },
+        jj: { installed: true },
+        jjReadiness: { blocker: null, identity: { name: "Dev", email: "dev@example.com" } },
+      } as DependenciesStatus);
+      renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    };
+
+    it("offers a jj workspace in place of Worktree and asks for a bookmark name", async () => {
+      renderJjRepositoryForm();
+
+      expect(await screen.findByTestId(ElementIds.MODE_SELECTOR)).toHaveTextContent("jj workspace");
+      expect(screen.getByTestId(ElementIds.BRANCH_NAME_INPUT)).toHaveAttribute(
+        "placeholder",
+        "Bookmark name (required)",
+      );
+    });
+
+    it("creates a jj workspace with no source, so it starts from its target", async () => {
+      renderJjRepositoryForm();
+
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+          branchName: "sculptor/test-branch",
+          sourceBranch: undefined,
+        }),
+      );
+    });
+
+    it("says a taken name is a bookmark that already exists", async () => {
+      mockBranchNameStatus.current = "exists";
+      renderJjRepositoryForm();
+
+      await waitFor(() =>
+        expect(screen.getByTestId(ElementIds.BRANCH_NAME_COLLISION_ERROR)).toHaveTextContent(
+          "Bookmark 'sculptor/test-branch' already exists",
+        ),
+      );
+    });
+
+    it("routes the jj workspace chip to the repository's settings and dismisses the dialog", async () => {
+      const onDismiss = vi.fn();
+      const store = createStore();
+      store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One", useJjForNewWorkspaces: true } as Project]);
+      store.set(projectJjStateAtomFamily("p1"), {
+        projectId: "p1",
+        colocation: "COLOCATED",
+        colocationError: null,
+        createsJjWorkspaces: true,
+      });
+      renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={onDismiss} />, { store });
+
+      fireEvent.click(await screen.findByTestId(ElementIds.MODE_SELECTOR));
+
+      expect(mockOpenSettings).toHaveBeenCalledWith(SettingsSection.REPOSITORIES, "p1");
+      expect(onDismiss).toHaveBeenCalled();
     });
   });
 

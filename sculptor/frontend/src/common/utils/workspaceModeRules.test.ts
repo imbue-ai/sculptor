@@ -5,6 +5,7 @@ import { WorkspaceInitializationStrategy } from "~/api";
 import {
   defaultSourceFor,
   hasRequiredCreationFields,
+  offeredCreationModes,
   repositoryWorkspaceVcs,
   resolveCreationMode,
   toCreateRequestFields,
@@ -114,4 +115,38 @@ describe("resolveCreationMode", () => {
   ] as const)("picks $expected for $remembered in a $vcs repository", ({ remembered, vcs, expected }) => {
     expect(resolveCreationMode({ remembered, vcs })).toBe(expected);
   });
+});
+
+describe("offeredCreationModes", () => {
+  it.each([
+    { isolatedMode: WORKTREE, isCloneEnabled: false, isInPlaceEnabled: false, value: WORKTREE, expected: [WORKTREE] },
+    {
+      isolatedMode: JJ_WORKSPACE,
+      isCloneEnabled: false,
+      isInPlaceEnabled: false,
+      value: JJ_WORKSPACE,
+      expected: [JJ_WORKSPACE],
+    },
+    // jj takes Worktree's place; clone and in-place stay under their flags.
+    {
+      isolatedMode: JJ_WORKSPACE,
+      isCloneEnabled: true,
+      isInPlaceEnabled: true,
+      value: JJ_WORKSPACE,
+      expected: [JJ_WORKSPACE, CLONE, IN_PLACE],
+    },
+    // A mode whose flag is off stays offered while it is the value, so the user can leave it.
+    {
+      isolatedMode: JJ_WORKSPACE,
+      isCloneEnabled: false,
+      isInPlaceEnabled: false,
+      value: CLONE,
+      expected: [JJ_WORKSPACE, CLONE],
+    },
+  ] as const)(
+    "offers $expected with $isolatedMode, clone on: $isCloneEnabled, in-place on: $isInPlaceEnabled, on $value",
+    ({ expected, ...inputs }) => {
+      expect(offeredCreationModes(inputs)).toEqual(expected);
+    },
+  );
 });

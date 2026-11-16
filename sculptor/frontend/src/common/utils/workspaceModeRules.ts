@@ -118,10 +118,12 @@ export const repositoryWorkspaceVcs = (facts: {
   return facts.usesJjForNewWorkspaces && !facts.isJjAvailable ? "jj-unavailable" : "git";
 };
 
+/** A mode that gives the workspace a checkout of its own: a git worktree or a jj workspace. */
+export type IsolatedCreationMode =
+  typeof WorkspaceInitializationStrategy.WORKTREE | typeof WorkspaceInitializationStrategy.JJ_WORKSPACE;
+
 /** The mode a repository offers in place of a plain worktree. */
-export const isolatedModeFor = (
-  vcs: RepositoryWorkspaceVcs,
-): typeof WorkspaceInitializationStrategy.WORKTREE | typeof WorkspaceInitializationStrategy.JJ_WORKSPACE =>
+export const isolatedModeFor = (vcs: RepositoryWorkspaceVcs): IsolatedCreationMode =>
   vcs === "git" ? WorkspaceInitializationStrategy.WORKTREE : WorkspaceInitializationStrategy.JJ_WORKSPACE;
 
 /**
@@ -143,3 +145,23 @@ export const resolveCreationMode = (inputs: {
       return isolatedModeFor(inputs.vcs);
   }
 };
+
+/**
+ * The modes the picker lists: the repository's isolated mode, then clone and
+ * in-place when their flags are on. A mode whose flag is off stays listed
+ * while it is the current value, so the user can always leave it.
+ */
+export const offeredCreationModes = (inputs: {
+  isolatedMode: IsolatedCreationMode;
+  value: WorkspaceInitializationStrategy;
+  isCloneEnabled: boolean;
+  isInPlaceEnabled: boolean;
+}): ReadonlyArray<WorkspaceInitializationStrategy> => [
+  inputs.isolatedMode,
+  ...(inputs.isCloneEnabled || inputs.value === WorkspaceInitializationStrategy.CLONE
+    ? [WorkspaceInitializationStrategy.CLONE]
+    : []),
+  ...(inputs.isInPlaceEnabled || inputs.value === WorkspaceInitializationStrategy.IN_PLACE
+    ? [WorkspaceInitializationStrategy.IN_PLACE]
+    : []),
+];

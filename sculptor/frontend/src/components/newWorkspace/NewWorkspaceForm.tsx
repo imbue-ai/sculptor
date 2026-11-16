@@ -26,6 +26,7 @@ import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
 import {
   defaultSourceFor,
   hasRequiredCreationFields,
+  isolatedModeFor,
   resolveCreationMode,
   WORKSPACE_MODE_RULES,
 } from "~/common/utils/workspaceModeRules.ts";
@@ -340,6 +341,14 @@ export const NewWorkspaceForm = ({
     openSettings(SettingsSection.PI);
     onDismiss();
   }, [openSettings, onDismiss]);
+  const handleGoToRepositorySettings = useCallback((): void => {
+    if (selectedProjectId === null) {
+      openSettings(SettingsSection.REPOSITORIES);
+    } else {
+      openSettings(SettingsSection.REPOSITORIES, selectedProjectId);
+    }
+    onDismiss();
+  }, [openSettings, onDismiss, selectedProjectId]);
   const handleProjectChange = useCallback((nextProjectId: string): void => {
     setSelectedProjectId(nextProjectId);
     // Switching repos invalidates branch choices made against the old repo.
@@ -456,7 +465,8 @@ export const NewWorkspaceForm = ({
 
     if (!result.ok) {
       if (result.error.kind === "branch-collision") {
-        setToast({ title: `Branch '${result.error.branchName}' already exists`, type: ToastType.ERROR });
+        const noun = WORKSPACE_MODE_RULES[mode].nameNoun === "bookmark" ? "Bookmark" : "Branch";
+        setToast({ title: `${noun} '${result.error.branchName}' already exists`, type: ToastType.ERROR });
       } else {
         setToast({
           title: "",
@@ -604,7 +614,13 @@ export const NewWorkspaceForm = ({
             className={styles.toolbarPill}
           />
 
-          <ModeSelect value={mode} onChange={handleModeChange} className={styles.toolbarPill} />
+          <ModeSelect
+            value={mode}
+            isolatedMode={isolatedModeFor(repositoryVcs)}
+            onChange={handleModeChange}
+            onOpenRepositorySettings={handleGoToRepositorySettings}
+            className={styles.toolbarPill}
+          />
 
           {repoInfo ? (
             modeRules.sourceBranch.rule === "unused" ? (
