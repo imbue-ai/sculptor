@@ -75,6 +75,7 @@ from sculptor.interfaces.environments.errors import EnvironmentFailure
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import UserReference
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.task_service.api import TaskService
@@ -545,7 +546,7 @@ def _run_agent_in_environment(
             last_user_chat_message_id = user_input_message_being_processed.message_id
         # Before the next message is dispatched, so its reminders see the bookmark.
         if is_agent_turn_finished:
-            services.workspace_service.attempt_initial_bookmark(task_state.workspace_id)
+            _attempt_initial_bookmark_without_failing_the_run(services, task_state.workspace_id, shutdown_event)
 
         # send the next message (if there is one waiting). Under the SDK MCP
         # AUQ flow the original chat-input request stays "in flight" while
@@ -627,6 +628,31 @@ def _run_agent_in_environment(
             # otherwise, simply forward the message to the agent and let it figure it out
             else:
                 agent_wrapper.push_message(message)
+
+
+def _attempt_initial_bookmark_without_failing_the_run(
+    services: ServiceCollectionForTask, workspace_id: WorkspaceID, shutdown_event: ReadOnlyEvent
+) -> None:
+    """Attempt the workspace's initial bookmark after a turn; a failure is logged and the run goes on.
+
+    The bookmark is a convenience on top of the turn's work, so only what stops
+    or pauses the task escapes.
+    """
+    try:
+        services.workspace_service.attempt_initial_bookmark(workspace_id)
+    except Exception as e:
+        if _is_task_stopping(e, shutdown_event):
+            raise
+        log_exception(e, f"Attempting the requested bookmark of workspace {workspace_id} failed; the agent runs on")
+
+
+def _is_task_stopping(error: Exception, shutdown_event: ReadOnlyEvent) -> bool:
+    """Whether `error` is one that `on_exception` treats as the task stopping or pausing rather than failing."""
+    if isinstance(error, ConcurrencyExceptionGroup):
+        return shutdown_event.is_set() or GLOBAL_SHUTDOWN_EVENT.is_set()
+    return isinstance(
+        error, (AgentShutdownCleanly, UserPausedTaskError, ConcurrentShutdownError, CancelledByEventError)
+    )
 
 
 InputMessageT = TypeVar("InputMessageT", bound=UserMessageUnion | ResumeAgentResponseRunnerMessage)

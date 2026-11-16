@@ -24,6 +24,7 @@ from sculptor.database.models import Task
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.common import generate_id
+from sculptor.foundation.concurrency_group import ConcurrentShutdownError
 from sculptor.foundation.event_utils import ShutdownEvent
 from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
@@ -2728,3 +2729,117 @@ def test_a_jj_workspaces_requested_bookmark_exists_before_the_message_after_its_
         set_user_config_instance(None)
 
     assert fake_agent.bookmarks_when_the_second_message_arrived == ["dev/graph-view", "main"]
+
+
+class _CompleteFirstTurnThenStopAgent(DefaultAgentWrapper):
+    """Fake agent that completes its first chat turn, then ends the run when the second chat message arrives."""
+
+    _chat_messages: list[ChatInputUserMessage] = PrivateAttr(default_factory=list)
+
+    def _start(self) -> None: ...
+
+    def _terminate(self, force_kill_seconds: float) -> None: ...
+
+    def wait(self, timeout: float) -> int:
+        return self._exit_code if self._exit_code is not None else 0
+
+    @property
+    def chat_messages(self) -> list[ChatInputUserMessage]:
+        return self._chat_messages
+
+    def _push_message(self, message: Message) -> bool:
+        if not isinstance(message, ChatInputUserMessage):
+            return False
+        self._chat_messages.append(message)
+        if len(self._chat_messages) > 1:
+            self._exit_code = AGENT_EXIT_CODE_FROM_SIGTERM
+            return True
+        self._output_messages.put(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=message.message_id)
+        )
+        self._output_messages.put(
+            RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=message.message_id)
+        )
+        return True
+
+
+def _raise_an_unexpected_error(self: object, workspace_id: WorkspaceID) -> None:
+    raise RuntimeError("the bookmark attempt hit a bug")
+
+
+def _raise_a_concurrent_shutdown(self: object, workspace_id: WorkspaceID) -> None:
+    raise ConcurrentShutdownError()
+
+
+def _run_two_chat_turns(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> _CompleteFirstTurnThenStopAgent:
+    """Run the loop over two chat messages; the run ends when the second reaches the agent."""
+    messages = [
+        ChatInputUserMessage(message_id=AgentMessageID(), text=text, model_name=LLMModel.CLAUDE_4_SONNET)
+        for text in ("First", "Second")
+    ]
+    task_state = AgentTaskStateV2(workspace_id=WorkspaceID())
+    _set_task_state(local_task, task_state, services)
+    _persist_messages(local_task, services, list(messages))
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    fake_agent = _CompleteFirstTurnThenStopAgent(
+        harness=CLAUDE_CODE_HARNESS, environment=agent_env, task_id=local_task.object_id, system_prompt=""
+    )
+    assert isinstance(local_task.input_data, AgentTaskInputsV2)
+    with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+        with pytest.raises(AgentPaused):
+            _run_agent_in_environment(
+                task=local_task,
+                task_data=local_task.input_data,
+                task_state=task_state,
+                history_scan=_scan_history(local_task, services),
+                re_queued_messages=tuple(messages),
+                input_message_queue=Queue(),
+                environment=agent_env,
+                services=services,
+                project=project,
+                settings=test_settings,
+                shutdown_event=threading.Event(),
+            )
+    return fake_agent
+
+
+def test_an_unexpected_error_in_the_turn_end_bookmark_attempt_is_logged_once_and_the_run_goes_on(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(type(services.workspace_service), "attempt_initial_bookmark", _raise_an_unexpected_error)
+
+    with expect_exact_logged_errors(["Attempting the requested bookmark of workspace"]):
+        with record_logged_error_levels() as levels:
+            fake_agent = _run_two_chat_turns(local_task, services, project, environment, test_settings)
+
+    assert levels == ["ERROR"]
+    assert [message.text for message in fake_agent.chat_messages] == ["First", "Second"]
+
+
+def test_a_shutdown_in_the_turn_end_bookmark_attempt_still_stops_the_run(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(type(services.workspace_service), "attempt_initial_bookmark", _raise_a_concurrent_shutdown)
+
+    with pytest.raises(ConcurrentShutdownError):
+        _run_two_chat_turns(local_task, services, project, environment, test_settings)
