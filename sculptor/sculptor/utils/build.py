@@ -4,6 +4,7 @@ from functools import cache
 from pathlib import Path
 from typing import Final
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from loguru import logger
 from packaging.version import Version
@@ -79,6 +80,30 @@ def get_sculpt_bin_dir(executable_parent: Path | None = None, *, packaged: bool 
             sculpt_link.unlink()
         sculpt_link.symlink_to(sculpt_target)
     return sculpt_bin_dir
+
+
+def get_jj_bin_dir(jj_binary: Path | None) -> Path:
+    """Return the directory, under the internal folder, holding only a ``jj`` symlink to ``jj_binary``.
+
+    Agents in jj workspaces get this directory at the front of PATH, so the
+    ``jj`` they type is the one Sculptor resolved (managed or custom), as
+    ``sculpt-bin/`` does for ``sculpt``. A changed ``jj_binary`` replaces the link
+    in one rename, so a concurrent PATH lookup never finds it missing. With no
+    resolvable jj (``None``) the link is removed rather than left pointing at a
+    binary Sculptor no longer uses.
+    """
+    jj_bin_dir = get_internal_folder() / "jj-bin"
+    jj_bin_dir.mkdir(parents=True, exist_ok=True)
+    jj_link = jj_bin_dir / "jj"
+    if jj_binary is None:
+        jj_link.unlink(missing_ok=True)
+        return jj_bin_dir
+    if jj_link.is_symlink() and jj_link.readlink() == jj_binary:
+        return jj_bin_dir
+    staged_link = jj_bin_dir / f".jj-{uuid4().hex}"
+    staged_link.symlink_to(jj_binary)
+    staged_link.replace(jj_link)
+    return jj_bin_dir
 
 
 def build_sculpt_backend_env(
