@@ -35,23 +35,23 @@ Integration tests considered:
 | ROUTE | 1 | 1 | 4 | 6 |
 | HELP | 0 | 2 | 1 | 3 |
 | HOME | 2 | 4 | 14 | 20 |
-| ADDWS | 8 | 14 | 3 | 25 |
+| ADDWS | 8 | 17 | 4 | 29 |
 | ADDREPO | 6 | 5 | 2 | 13 |
 | ONB | 11 | 10 | 15 | 36 |
-| WS | 41 | 20 | 18 | 79 |
+| WS | 40 | 22 | 24 | 86 |
 | CHAT | 21 | 16 | 9 | 46 |
 | MSG | 15 | 12 | 10 | 37 |
-| PANEL | 23 | 20 | 14 | 57 |
+| PANEL | 24 | 23 | 15 | 62 |
 | CMDP | 4 | 9 | 18 | 31 |
-| SET | 13 | 18 | 10 | 41 |
+| SET | 13 | 25 | 14 | 52 |
 | DEV | 3 | 1 | 0 | 4 |
 | MENT | 5 | 2 | 3 | 10 |
 | SKILL | 2 | 1 | 0 | 3 |
 | ACT | 2 | 3 | 1 | 6 |
-| **Total** | **181** | **150** | **136** | **467** |
+| **Total** | **181** | **165** | **148** | **494** |
 
-**Under the integration-only standard, 39% of scenarios are completely covered, 32% partially, and
-29% not at all.** (Counts are derived directly from the two sections below.)
+**Under the integration-only standard, 37% of scenarios are completely covered, 33% partially, and
+30% not at all.** (Counts are derived directly from the two sections below.)
 
 The per-scenario detail is split into two sections: **Coverage gaps — Partial & Missing** (every
 scenario needing work, with the test to add) and **Complete coverage** (every scenario already fully
@@ -137,8 +137,12 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | ADDWS-018 | Partial | test_worktree_edge_cases.py::test_clone_mode_hidden_when_flag_off | Add the neither-experimental-mode case: selector hidden, defaults to Worktree. |
 | ADDWS-019 | Partial | test_clone_mode_branch_name.py; test_worktree_edge_cases.py::test_clone_mode_hidden_when_flag_off | Switch modes and assert branch fields update live (Clone optional; In-place removes field + disables selector). |
 | ADDWS-020 | Partial | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation | Assert the Create button's explanatory disabled tooltips and the "Cmd/Ctrl+↵" ready tooltip. |
-| ADDWS-023 | Partial | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation (pre-submit) | Force a submit-time 409; assert toast "Branch '{name}' already exists" and the form stays open. |
+| ADDWS-023 | Partial | test_branch_name_collisions.py::test_worktree_mode_collision_blocks_creation (pre-submit) | Force a submit-time 409; assert toast "Branch '{name}' already exists" (and "Bookmark '{name}' already exists" for a jj workspace) and the form stays open. |
 | ADDWS-024 | Missing | — | Force creation to fail; assert "Failed to create workspace"/"Failed to create agent" toast with details. |
+| ADDWS-026 | Partial | test_create_jj_workspaces.py::test_create_jj_workspaces_from_the_dialog_and_the_sidebar (mode reads "jj workspace"; a git repo shows no mode selector) | Hover the jj chip and assert its tooltip; click it and assert the repository's settings open; with Clone enabled, assert jj workspace is the picker's first option. |
+| ADDWS-027 | Partial | test_create_jj_workspaces.py::test_create_jj_workspaces_from_the_dialog_and_the_sidebar ("Bookmark name (required)" placeholder, auto-fill from the workspace name) | Open the source picker; assert "same as target", the local and remote bookmarks, and that picking one shows it; assert the invalid-name and taken-name messages. |
+| ADDWS-028 | Missing | — | With a repository that uses jj, make jj unusable; open the form; assert the amber callout, its "Open Jujutsu settings" link, and a disabled Create button. |
+| ADDWS-029 | Partial | test_create_jj_workspaces.py::test_create_jj_workspaces_from_the_dialog_and_the_sidebar (sidebar "+" creates a jj workspace with the jj badge and pill) | Make jj unusable; click the repository's "+"; assert the Add Workspace form opens for that repository. |
 | ADDREPO-001 | Partial | test_multi_repo.py::test_adding_duplicate_repo_shows_error; test_regression_settings_delete_repo_stays_on_page.py::test_adding_repo_stays_on_settings_page; test_add_repo_remote_picker.py (dialog opens on GitHub source) | Assert the source picker defaults to GitHub with a Local Folder option, and that Local Folder shows a focused path input + a Browse button on desktop. |
 | ADDREPO-002 | Missing | — | Open the dialog, click Cancel / Escape / overlay; assert it closes with no changes. |
 | ADDREPO-003 | Partial | test_path_autocomplete_keyboard.py::test_cmd_enter_submits_path | While validation is in progress, attempt to close; assert the dialog stays open. |
@@ -229,13 +233,21 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | WS-072 | Partial | test_chat_search_bar.py::test_cmd_f_enter_advances_through_all_matches (Enter nav) | Add Shift+Enter (previous) and up/down arrow navigation. |
 | WS-073 | Missing | — | Press Escape or click close → search bar closes and highlights clear. |
 | WS-077 | Partial | test_ci_babysitter.py::test_plain_terminal_mru_shows_disabled_reason | Assert that a *persistent* disabled reason also forces the dropdown switch off and greys it out (inert). |
+| WS-036 | Partial | test_workspace_banner.py::test_repo_segment_shows_mode_label; test_create_jj_workspaces.py::test_create_jj_workspaces_from_the_dialog_and_the_sidebar ("jj" badge) | Hover the "jj" badge and assert its tooltip "jj workspace — no git inside. Agents use jj here.". |
+| WS-080 | Partial | test_create_jj_workspaces.py::test_create_jj_workspaces_from_the_dialog_and_the_sidebar (pill shows the requested bookmark) | Assert the pill once a bookmark exists, with "+N", "↑N" and "conflict"; and the change id and description when there is no bookmark or requested name. |
+| WS-081 | Missing | — | Hover the pill; assert each card row; click and assert the copied text and "Copied!". |
+| WS-082 | Missing | — | Open a jj workspace's target selector; assert `main` and `main@origin` are listed and the workspace's own bookmark is not; pick one and assert the banner. |
+| WS-083 | Missing | — | Run `jj op restore` in the main repository to make a workspace stale; assert the banner; click "Update working copy" and assert the banner goes away. |
+| WS-084 | Missing | — | Make jj unusable, then start an agent in a jj workspace; assert "jj Not Available", the reason and "Go to Settings"; fix jj and assert "jj available". |
+| WS-085 | Missing | — | In a jj workspace with a GitHub origin, click "Create PR"; assert the sent message names the bookmark and the `--base` branch. |
+| WS-086 | Missing | — | Right-click Create PR in a jj workspace with and without a jj PR-creation prompt; assert "Edit jj prompt..." opens the Jujutsu section, and the fallback notice and its link otherwise. |
 
 ### CHAT
 
 | Scenario | Status | Existing integration test(s) | Integration tests to add |
 |----------|--------|------------------------------|--------------------------|
 | CHAT-001 | Partial | test_alpha_chat_intro.py::test_alpha_chat_intro_shows_names_and_reacts_to_renames; ::test_intro_text_renders_above_first_message | Assert intro also shows project/branch, creation time, source-branch info, shared-code warning, and the `/sculptor:help` hint. |
-| CHAT-002 | Missing | — | Assert intro wording per workspace type: "Working directly in {branch}", "Branched off {branch}", "Cloned {branch} from {project}". |
+| CHAT-002 | Missing | — | Assert intro wording per workspace type: "Working directly in {branch}", "Branched off {branch}", "Cloned {branch} from {project}", "jj workspace on {source} from {project}" plus the jj no-git line. |
 | CHAT-003 | Partial | test_workspace_setup_status.py::test_setup_card_shows_succeeded | Assert the card's setup-step label, progress indicator, and elapsed-time fields specifically. |
 | CHAT-006 | Partial | test_status_pill.py::test_status_pill_shows_animation; test_status_pill_background_wait.py::test_status_pill_shows_waiting_during_background_task; test_regression_auto_compact_indicator.py::test_auto_compaction_indicator_lifecycle | Assert "Thinking…"/"Streaming…"/"Calling Tools…" label text and the frozen-vs-live elapsed counter. |
 | CHAT-007 | Missing | — | Assert the pill shows "X / N · {task subject}" while the agent is active with a plan (existing tests cover only the post-turn "X of N done" summary). |
@@ -325,6 +337,10 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | PANEL-052 | Missing | — | Drag an action/group → drop indicator + order updates; move action between groups; built-in items not draggable. |
 | PANEL-056 | Partial | test_file_browser.py::test_split_view_toggle_persists_across_panel_reopen; ::test_line_wrap_toggle_persists_across_panel_reopen; test_panel_zones.py::test_inner_vertical_split_height_persists_after_navigation | Assert folder-expansion, scroll position, active-tab, view-mode (tree/flat), and diff-scope restored after switching tabs/files and returning. |
 | PANEL-057 | Partial | test_bundled_linear_extension.py::test_bundled_linear_extension_loads_and_renders | Assert the extension-contributed panel is listed with an "extension" badge in the Panels list (not just that it renders). |
+| PANEL-058 | Partial | test_jj_revisions_panel.py::test_jj_workspace_lists_revisions_and_discards_the_working_copy (tab reads "Revisions"; two revisions, "(no description set)", "working copy", the description, the fork-point footer) | Assert the change id, stats, bookmark badges and the empty/conflict/divergent chips, and the loading and empty states. |
+| PANEL-060 | Partial | test_jj_revisions_panel.py::test_jj_workspace_lists_revisions_and_discards_the_working_copy ("Working copy" label; lists only the working copy's file) | Switch to "All" and assert it adds the described revision's file. |
+| PANEL-061 | Partial | test_jj_revisions_panel.py::test_jj_workspace_lists_revisions_and_discards_the_working_copy (dialog text, Discard removes the row) | Make the restore fail; assert the dialog stays open with "Could not discard the changes: …". |
+| PANEL-062 | Missing | — | In a jj workspace, click Commit and assert the jj instructions in the sent message; right-click with and without a jj commit prompt and assert "Edit jj prompt..." and the fallback notice. |
 
 ### CMDP
 
@@ -392,6 +408,17 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | SET-039 | Partial | test_ci_babysitter.py::test_settings_selector_lists_only_driveable_harnesses | Assert the selector saves with a toast and is disabled when the babysitter is off. |
 | SET-040 | Complete | test_extensions_settings_visibility.py::test_extensions_section_present_and_on_by_default; ::test_global_toggle_hides_management_ui_live | — |
 | SET-041 | Complete | test_extension_loader.py::test_failed_extension_can_be_retried | — |
+| SET-042 | Partial | test_repo_jj_controls.py::test_repo_jj_controls_are_disabled_without_jj; ::test_repo_jj_controls_recheck_a_jj_identity_set_outside_sculptor | Hover each disabled switch and assert the "Ensure that jujutsu VCS is available…" tooltip. |
+| SET-043 | Partial | test_repo_jj_controls.py::test_initializing_a_colocation_shows_loading_then_locks_on | Hover the locked-on colocation switch and assert the "Sculptor will not destroy your jj colocation…" tooltip. |
+| SET-044 | Partial | test_repo_jj_controls.py::test_initializing_a_colocation_shows_loading_then_locks_on (clean repository: dialog opens, Initialize enabled) | Open the dialog on repositories with a submodule, Git LFS, a stray `.jj`, a stopped rebase, git hooks and uncommitted changes; assert each callout and that a blocker disables Initialize. |
+| SET-045 | Missing | — | Make `jj git init --colocate` fail; assert the switch returns to off with jj's error and a Retry button; and that a refused request shows an error toast with its reason. |
+| SET-046 | Partial | test_repo_jj_controls.py::test_initializing_a_colocation_shows_loading_then_locks_on (disabled before colocation, toggled off drops the badge); ::test_a_repository_colocated_before_startup_shows_locked_on (toggled on shows the badge) | Assert the "Initialize the jujutsu colocation first" tooltip, the hint text, and the error toast on a failed save. |
+| SET-048 | Partial | test_jj_managed_install.py::test_jj_settings_report_a_managed_jj_with_an_identity_as_available; ::test_jj_settings_report_an_old_jj_as_unsupported; ::test_jj_settings_report_not_installed_and_surface_an_install_failure; ::test_jj_identity_form_fixes_a_missing_identity | Assert "Checking jj…", the "jj is installed but does not run." callout with its error, and that the section's Re-check picks up a change made outside Sculptor. |
+| SET-049 | Partial | test_jj_managed_install.py::test_jj_settings_report_a_managed_jj_with_an_identity_as_available; ::test_jj_settings_report_an_old_jj_as_unsupported; ::test_jj_settings_report_not_installed_and_surface_an_install_failure | Switch to Custom, enter a path and Apply; assert the "v{version} — External binary" status, Active path, and the "Installing..." progress state. |
+| SET-050 | Partial | test_jj_managed_install.py::test_jj_identity_form_fixes_a_missing_identity; ::test_jj_settings_report_a_managed_jj_with_an_identity_as_available | Assert the form is prefilled from the global git identity, a failed save shows its error, and the "Read once jj is installed and runs." text. |
+| SET-051 | Missing | — | Set Maximum new file size to 20 (toast) and to 0 and 2000 (each reverts). |
+| SET-052 | Missing | — | On each jj prompt row: assert "Uses the git prompt:", click "Use suggested wording", edit and blur (toast), then "Use the git prompt". |
+| SET-053 | Missing | — | With one repository using jj, assert it is listed and its Configure link opens the Repositories section on it; with none, assert the empty text; assert the "jj documentation" link. |
 | DEV-001 | Partial | test_tanstack_devtools_panel.py::test_tanstack_devtools_panel_mounts_with_content (panel mounts only) | Cover header Dock/Float/Close controls, floating drag + resize within viewport, docked resize-from-top-edge + pushes content up, and closing hides it. |
 
 ---
@@ -497,7 +524,6 @@ Every scenario an integration test fully covers — it performs the user action 
 | WS-020 | test_queued_messages.py::test_edit_dialog_overwrite_replaces_editor_content; ::test_edit_dialog_remove_discards_queued_message; ::test_edit_dialog_cancel_requeues_message |
 | WS-021 | test_queued_messages.py::test_interrupt_and_send_queued_message; test_regression_queued_messages_after_restart.py::test_queued_message_dispatched_after_graceful_restart |
 | WS-028 | test_ci_babysitter.py::test_scenario_4_pause_toggle_prevents_prompt; ::test_pause_state_persists_across_restart |
-| WS-036 | test_workspace_banner.py::test_repo_segment_shows_mode_label |
 | WS-037 | test_zen_mode.py::test_zen_mode_hides_chrome_and_panels; ::test_focus_mode_hides_panels_but_keeps_chrome |
 | WS-040 | test_workspace_banner.py::test_banner_shows_diff_stats; ::test_banner_click_navigates_to_changes_all |
 | WS-041 | test_multi_agent_workspace.py::test_multiple_agent_tabs_shown_for_shared_workspace; ::test_single_agent_shows_one_agent_tab |
@@ -595,6 +621,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | PANEL-053 | test_browser_panel.py::test_browser_panel_navigation_tour; ::test_browser_panel_screenshot; ::test_browser_panel_url_input_polish |
 | PANEL-054 | test_browser_panel.py::test_browser_panel_navigation_tour; ::test_browser_panel_url_input_polish |
 | PANEL-055 | test_browser_panel.py::test_browser_panel_toggle_shows_and_hides_icon; ::test_browser_panel_electron_mode_hides_web_placeholder |
+| PANEL-059 | test_jj_revisions_panel.py::test_jj_workspace_lists_revisions_and_discards_the_working_copy |
 
 ### CMDP
 
@@ -619,6 +646,7 @@ Every scenario an integration test fully covers — it performs the user action 
 | SET-016 | test_claude_binary_installation.py::test_settings_git_section_visible |
 | SET-028 | test_telemetry_opt_out.py::test_privacy_settings_telemetry_switch; ::test_onboarding_email_with_telemetry_opt_out; ::test_onboarding_skip_account_setup |
 | SET-037 | test_theme_builder.py::test_theme_builder_component_gallery_button; ::test_theme_builder_reset_to_defaults; test_component_gallery_tab.py::test_component_gallery_opens_as_tab |
+| SET-047 | test_repo_jj_controls.py::test_a_repository_colocated_before_startup_shows_locked_on |
 | DEV-002 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (external anchors target=_blank + rel) |
 | DEV-003 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (fragment anchors inert + "not supported" title) |
 | DEV-004 | test_diff_viewer.py::test_gfm_features_render_in_read_only_preview (relative anchors inert + "not supported" title) |
