@@ -7,7 +7,8 @@ import { ElementIds } from "~/api";
 import { workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
-import { shortChangeId } from "~/common/utils/jjChangeId.ts";
+import { useWorkspaceRevisions } from "~/common/state/hooks/useWorkspaceRevisions.ts";
+import { shortChangeId, shortCommitId } from "~/common/utils/jjChangeId.ts";
 import { HoverCard } from "~/components/HoverCard.tsx";
 
 import { useCopyFeedback } from "./hooks/useCopyFeedback.ts";
@@ -40,13 +41,36 @@ const CardRow = ({ label, children }: { label: string; children: ReactNode }): R
 // Described revisions above the primary bookmark; only a workspace with a bookmark has any.
 type RevisionsAhead = { count: number; bookmark: string };
 
+/**
+ * The working copy's commit id. The streamed jj state carries no commit id, so
+ * that a snapshot alone re-emits nothing; the card reads it from the revisions,
+ * which it only fetches once it opens.
+ */
+const WorkingCopyCommitRow = ({ workspaceId }: { workspaceId: string }): ReactElement => {
+  const { data, isPending } = useWorkspaceRevisions(workspaceId);
+  const commitId = data?.revisions.find((revision) => revision.isWorkingCopy)?.commitId ?? null;
+  return (
+    <CardRow label="Commit">
+      {commitId !== null ? (
+        <span className={styles.mono} title={commitId}>
+          {shortCommitId(commitId)}
+        </span>
+      ) : (
+        <span className={styles.muted}>{isPending ? "Loading…" : "Unknown"}</span>
+      )}
+    </CardRow>
+  );
+};
+
 const JjIdentityCard = ({
+  workspaceId,
   jjState,
   ahead,
   requestedBookmark,
   target,
   copyHint,
 }: {
+  workspaceId: string;
   jjState: WorkspaceJjStateInfo | null;
   ahead: RevisionsAhead | null;
   requestedBookmark: string | null;
@@ -97,6 +121,7 @@ const JjIdentityCard = ({
               </span>
             </span>
           </CardRow>
+          <WorkingCopyCommitRow workspaceId={workspaceId} />
           <CardRow label="Description">
             {jjState.workingCopyDescription || <span className={styles.muted}>(no description set)</span>}
           </CardRow>
@@ -210,6 +235,7 @@ export const JjIdentityPill = ({ workspaceId }: { workspaceId: string }): ReactE
       }
       content={
         <JjIdentityCard
+          workspaceId={workspaceId}
           jjState={jjState}
           ahead={ahead}
           requestedBookmark={workspace?.requestedBranchName ?? null}

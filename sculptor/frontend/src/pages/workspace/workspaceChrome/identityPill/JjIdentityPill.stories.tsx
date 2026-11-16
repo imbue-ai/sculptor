@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createStore, Provider as JotaiProvider } from "jotai";
 import type { ReactElement } from "react";
 
@@ -25,6 +26,10 @@ const baseJjState: WorkspaceJjStateInfo = {
   isWorkingCopyStale: false,
 };
 
+// The hover card reads the working copy's commit id from the revisions route,
+// which a story has no backend for, so the card's commit row reads "Unknown".
+const storyQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
 /** Renders the pill the way the workspace header does, from hand-made streamed state. */
 const Wrapper = (props: {
   requestedBookmark: string | null;
@@ -46,11 +51,13 @@ const Wrapper = (props: {
     store.set(workspaceJjStateAtomFamily(WORKSPACE_ID), { ...baseJjState, ...props.jjState });
   }
   return (
-    <JotaiProvider store={store}>
-      <div style={{ background: "var(--gray-2)", display: "flex", padding: "var(--space-4)", width: "520px" }}>
-        <JjIdentityPill workspaceId={WORKSPACE_ID} />
-      </div>
-    </JotaiProvider>
+    <QueryClientProvider client={storyQueryClient}>
+      <JotaiProvider store={store}>
+        <div style={{ background: "var(--gray-2)", display: "flex", padding: "var(--space-4)", width: "520px" }}>
+          <JjIdentityPill workspaceId={WORKSPACE_ID} />
+        </div>
+      </JotaiProvider>
+    </QueryClientProvider>
   );
 };
 
