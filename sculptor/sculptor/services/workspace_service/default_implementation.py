@@ -308,16 +308,30 @@ class DefaultWorkspaceService(WorkspaceService):
         if description is None:
             description = uuid.uuid4().hex[:8]
 
-        # Record the commit the workspace starts from: its source branch's, or
-        # the user's checked-out commit when it has none.
         project_path = project.get_local_user_path()
         vcs = self.get_workspace_vcs(initialization_strategy)
-        source_git_hash = vcs.resolve_base_commit_id(project_path, source_branch or "HEAD")
 
         # Use the caller-provided target branch if given, otherwise resolve a
         # sensible default from the user's repo.
         if target_branch is None:
             target_branch = vcs.resolve_default_target(project_path)
+
+        # Record the commit the workspace starts from: its source branch's, or
+        # when it has none, the user's checked-out commit for git. jj has no
+        # checked-out commit, so a jj workspace starts from its target instead.
+        match initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                base_ref = source_branch or "HEAD"
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                source_branch = source_branch or target_branch
+                base_ref = source_branch
+            case _ as unreachable:
+                assert_never(unreachable)
+        source_git_hash = None if base_ref is None else vcs.resolve_base_commit_id(project_path, base_ref)
 
         # Resolve through the project's tri-state default helper: `None` means
         # "use the current default", `""` means "user cleared", and any other
