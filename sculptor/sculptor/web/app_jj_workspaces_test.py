@@ -15,16 +15,35 @@ from fastapi.testclient import TestClient
 from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.foundation.pydantic_serialization import model_dump
 from sculptor.primitives.ids import RequestID
+from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.services.workspace_service.environment_manager import (
+    default_implementation as environment_manager_default_implementation,
+)
+from sculptor.services.workspace_service.environment_manager.environments import local_environment
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import run_jj
+from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
 from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.data_types import CreateWorkspaceRequestV2
+from sculptor.web.data_types import UpdateWorkspaceRequest
+
+
+@pytest.fixture(autouse=True)
+def _redirect_workspace_checkouts_to_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Create environments under `tmp_path`; both environment-manager modules read the directory at import time."""
+    workspaces_dir = tmp_path / "workspaces"
+    workspaces_dir.mkdir()
+    monkeypatch.setattr(environment_manager_default_implementation, "LOCAL_WORKSPACE_DIR", workspaces_dir)
+    monkeypatch.setattr(local_environment, "LOCAL_WORKSPACE_DIR", workspaces_dir)
 
 
 def _resolve_jj_to(jj_value: str) -> None:
@@ -96,6 +115,35 @@ def _post_jj_workspace(
             ),
             is_camel_case=True,
         ),
+    )
+
+
+def _create_jj_workspace_with_checkout(
+    client: TestClient,
+    project: Project,
+    test_services: CompleteServiceCollection,
+    concurrency_group: ConcurrencyGroup,
+) -> tuple[WorkspaceID, Path]:
+    """Create a jj workspace through the route, then open its environment as its first agent's start does."""
+    response = _post_jj_workspace(client, project)
+    assert response.status_code == 200, response.text
+    workspace_id = WorkspaceID(response.json()["objectId"])
+    with concurrency_group.make_concurrency_group("agent_environment") as agent_concurrency_group:
+        with test_services.workspace_service.agent_environment_context(
+            project=project,
+            workspace_id=workspace_id,
+            task_id=TaskID(),
+            concurrency_group=agent_concurrency_group,
+            root_progress_handle=RootProgressHandle(),
+            shutdown_event=GLOBAL_SHUTDOWN_EVENT,
+        ) as agent_environment:
+            return workspace_id, agent_environment.get_working_directory()
+
+
+def _patch_target(client: TestClient, workspace_id: WorkspaceID, target_branch: str) -> httpx.Response:
+    return client.patch(
+        f"/api/v1/workspaces/{workspace_id}",
+        json=model_dump(UpdateWorkspaceRequest(target_branch=target_branch), is_camel_case=True),
     )
 
 
@@ -225,3 +273,23 @@ def test_the_name_preview_for_a_jj_workspace_takes_the_user_from_jj(
         "WORKTREE": "sculptor/fix-the-parser",
         "JJ_WORKSPACE": "jordan/fix-the-parser",
     }
+
+
+def test_a_jj_workspace_target_changes_only_to_a_bookmark_the_repository_lists(
+    client: TestClient,
+    jj_project: Project,
+    test_services: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    workspace_id, _ = _create_jj_workspace_with_checkout(
+        client, jj_project, test_services, test_root_concurrency_group
+    )
+
+    accepted = _patch_target(client, workspace_id, "main")
+    refused = _patch_target(client, workspace_id, "origin/main")
+
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["targetBranch"] == "main"
+    assert refused.status_code == 400, refused.text
+    assert "'origin/main' is not a bookmark" in _detail(refused)
+    assert client.get(f"/api/v1/workspaces/{workspace_id}").json()["targetBranch"] == "main"

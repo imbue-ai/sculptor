@@ -1232,6 +1232,8 @@ def update_workspace(
     services = get_services_from_request_or_websocket(request)
 
     with user_session.open_transaction(services) as transaction:
+        if update_request.target_branch is not None:
+            _validate_target_change(services, transaction, validated_workspace_id, update_request.target_branch)
         try:
             updated_workspace = services.workspace_service.update_workspace(
                 workspace_id=validated_workspace_id,
@@ -1255,6 +1257,47 @@ def update_workspace(
         project_path=_project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None,
         current_branch=services.workspace_service.get_cached_current_branch(updated_workspace.object_id),
     )
+
+
+def _validate_target_change(
+    services: CompleteServiceCollection,
+    transaction: DataModelTransaction,
+    workspace_id: WorkspaceID,
+    target_branch: str,
+) -> None:
+    """Raise an HTTPException when a jj workspace's new target is not one of its repository's target candidates.
+
+    git workspaces accept any target: switching to an open PR's base can name a
+    remote branch that has not been fetched yet.
+    """
+    workspace = transaction.get_workspace(workspace_id)
+    if workspace is None:
+        return
+    project = transaction.get_project(workspace.project_id)
+    if project is None:
+        return
+    match workspace.initialization_strategy:
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            return
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)
+    project_path = project.get_local_user_path()
+    vcs = services.workspace_service.get_workspace_vcs(workspace.initialization_strategy)
+    try:
+        candidates = vcs.list_target_candidates(project_path)
+    except VcsCommandError as e:
+        raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
+    if target_branch not in candidates:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{target_branch}' is not a bookmark this workspace can target; choose one such as main@origin",
+        )
 
 
 @router.post("/api/v1/workspaces/batch-update-open-state")
