@@ -1,0 +1,33 @@
+.jjControls {
+  margin-top: var(--space-4);
+}
+
+.sectionLabel {
+  align-items: center;
+  color: var(--gray-11);
+  display: flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+
+  svg {
+    color: var(--gray-9);
+  }
+}
+
+.switchWrapper {
+  display: inline-flex;
+}
+
+// Lines that belong to the switch above them line up with its label.
+.indented {
+  padding-left: calc(var(--space-6) + var(--space-1));
+}
+
+.hint {
+  color: var(--gray-9);
+}
+
+.error {
+  word-break: break-word;
+}
