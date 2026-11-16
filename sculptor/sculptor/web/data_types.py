@@ -1013,6 +1013,37 @@ class ProjectJjState(SerializableModel):
         return self
 
 
+class JjColocationBlocker(UpperCaseStrEnum):
+    """Something about a repository that stops Sculptor making it a jj colocation."""
+
+    JJ_UNAVAILABLE = auto()
+    # A `.jj` whose git store is not this repository's `.git`.
+    JJ_REPOSITORY_NOT_COLOCATED = auto()
+    # jj workspaces cannot hold submodules or LFS files.
+    SUBMODULES = auto()
+    LFS = auto()
+    # A merge, rebase, cherry-pick or revert that git has stopped in.
+    GIT_OPERATION_IN_PROGRESS = auto()
+
+
+class JjColocationWarning(UpperCaseStrEnum):
+    """Something about a repository that works differently once its workspaces are jj workspaces."""
+
+    # Git hooks never run in a jj workspace.
+    HOOKS = auto()
+    SPARSE_CHECKOUT = auto()
+
+
+class JjColocationPreflight(SerializableModel):
+    """What colocating a repository with jj would run into; reading it changes nothing."""
+
+    blockers: tuple[JjColocationBlocker, ...]
+    warnings: tuple[JjColocationWarning, ...]
+    has_uncommitted_changes: bool = Field(
+        description="The repository has uncommitted changes, which become jj's working-copy commit"
+    )
+
+
 class DependenciesStatus(SerializableModel):
     """Status of required dependencies with path/version info."""
 
