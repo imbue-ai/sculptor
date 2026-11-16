@@ -282,6 +282,26 @@ def test_the_name_preview_for_a_jj_workspace_takes_the_user_from_jj(
     }
 
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        pytest.param("feature", {"isValid": True, "alreadyExists": False}, id="available"),
+        pytest.param("has space", {"isValid": False, "alreadyExists": False}, id="illegal"),
+        pytest.param("main", {"isValid": True, "alreadyExists": True}, id="existing-bookmark"),
+    ],
+)
+def test_the_name_validation_for_a_jj_workspace_checks_bookmarks(
+    client: TestClient, jj_project: Project, name: str, expected: dict[str, bool]
+) -> None:
+    response = client.get(
+        f"/api/v1/projects/{jj_project.object_id}/validate-new-branch-name",
+        params={"name": name, "mode": "JJ_WORKSPACE"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == expected
+
+
 def test_a_jj_workspace_target_changes_only_to_a_bookmark_the_repository_lists(
     client: TestClient,
     jj_project: Project,
