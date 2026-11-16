@@ -87,6 +87,12 @@ describe("JjColocationDialog", () => {
     expect(screen.getByText(/git shows untracked files as added/i)).toBeInTheDocument();
   });
 
+  it("lets the repository path wrap after a slash rather than inside a directory name", () => {
+    renderDialog();
+
+    expect(screen.getByText("/home/dev/code/sculptor").innerHTML).toBe("/<wbr>home/<wbr>dev/<wbr>code/<wbr>sculptor");
+  });
+
   it("does not read the pre-flight while closed", () => {
     renderDialog(false);
 
