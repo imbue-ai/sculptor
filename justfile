@@ -196,6 +196,25 @@ typecheck:
 # Exclude pattern for style checks (test fixtures and snapshots)
 _style_exclude := '__snapshots__|test_data'
 
+# Defines list_tracked_files, which prints the repository's tracked files when
+# run from the repository root. A jj workspace has no .git, and git run in one
+# lists the files of whatever checkout encloses it, usually none, so there jj
+# lists them: the pinned jj from `just install-jj`, else the jj on PATH.
+_list_tracked_files_fn := '''
+list_tracked_files() {
+  if [ -e .git ]; then
+    git ls-files
+  elif [ -d .jj ]; then
+    local jj="''' + justfile_directory() + '''/.venv/bin/jj"
+    [ -x "$jj" ] || jj=jj
+    "$jj" file list
+  else
+    echo "list_tracked_files: $(pwd) is neither a git checkout nor a jj workspace" >&2
+    return 1
+  fi
+}
+'''
+
 # File patterns to skip in hygiene checks (binary and cache files)
 _binary_file_pattern := '*.png|*.ico|*.jpg|*.jpeg|*.gif|*.webp|*.pdf|*.woff|*.woff2|*.ttf|*.eot'
 _cache_file_pattern := '*.raw|*.llm_cache_json|*.transport_cache_jsonl|*.count_tokens_cache_json|*.golden.html'
@@ -206,9 +225,11 @@ check-file-hygiene:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
+    {{ _list_tracked_files_fn }}
     _do_check_file_hygiene() {
       cd "{{justfile_directory()}}"
       echo "Checking file hygiene (trailing whitespace and EOF formatting)..."
+      TRACKED_FILES="$(list_tracked_files)"
       # Helper function to check if file should be skipped
       # Using a function avoids bash 3.2 bug with case statements inside $()
       should_skip() {
@@ -234,7 +255,7 @@ check-file-hygiene:
         elif [ "$(tail -c 2 "$f" | wc -l)" -gt 1 ]; then
           PROBLEMS="${PROBLEMS}${f}: multiple trailing newlines\n"
         fi
-      done < <(git ls-files | grep -Ev '{{_style_exclude}}')
+      done < <(printf '%s\n' "$TRACKED_FILES" | grep -Ev '{{_style_exclude}}')
       if [ -n "$PROBLEMS" ]; then
         echo "File hygiene issues found:"
         echo -e "$PROBLEMS"
@@ -279,10 +300,11 @@ check-yaml:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
+    {{ _list_tracked_files_fn }}
     _do_check_yaml() {
       cd "{{justfile_directory()}}"
       echo "Checking YAML file syntax..."
-      YAML_FILES=$(git ls-files '*.yaml' '*.yml' | grep -Ev '{{_style_exclude}}|authentik')
+      YAML_FILES=$(list_tracked_files | grep -E '\.ya?ml$' | grep -Ev '{{_style_exclude}}|authentik')
       if [ -z "$YAML_FILES" ]; then
         echo "No YAML files to check."
         exit 0
@@ -308,11 +330,13 @@ check-uv-lock:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
+    {{ _list_tracked_files_fn }}
     _do_check_uv_lock() {
       cd "{{justfile_directory()}}"
       echo "Checking uv.lock is up to date..."
       # Find all pyproject.toml files that have corresponding uv.lock files
-      for lockfile in $(git ls-files '**/uv.lock' 'uv.lock'); do
+      LOCKFILES=$(list_tracked_files | grep -E '(^|/)uv\.lock$')
+      for lockfile in $LOCKFILES; do
         dir=$(dirname "$lockfile")
         if [ -f "$dir/pyproject.toml" ]; then
           echo "Checking $lockfile..."
@@ -332,10 +356,11 @@ check-shellcheck:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
+    {{ _list_tracked_files_fn }}
     _do_check_shellcheck() {
       cd "{{justfile_directory()}}"
       echo "Running shellcheck on shell scripts..."
-      SHELL_FILES=$(git ls-files '*.sh' '*.bash' | grep -Ev '{{_style_exclude}}|infra_scripts')
+      SHELL_FILES=$(list_tracked_files | grep -E '\.(sh|bash)$' | grep -Ev '{{_style_exclude}}|infra_scripts')
       if [ -z "$SHELL_FILES" ]; then
         echo "No shell scripts to check."
         exit 0
