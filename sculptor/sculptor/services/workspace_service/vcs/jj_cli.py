@@ -178,14 +178,13 @@ def parse_refused_snapshot_files(stderr: str) -> dict[str, str]:
     refused_files: dict[str, str] = {}
     is_in_refused_list = False
     for line in stderr.splitlines():
+        match = _REFUSED_SNAPSHOT_FILE_LINE.fullmatch(line)
         if line == _REFUSED_SNAPSHOT_HEADER:
             is_in_refused_list = True
-            continue
-        match = _REFUSED_SNAPSHOT_FILE_LINE.fullmatch(line) if is_in_refused_list else None
-        if match is None:
+        elif is_in_refused_list and match is not None:
+            refused_files[match["path"]] = match["message"]
+        else:
             is_in_refused_list = False
-            continue
-        refused_files[match["path"]] = match["message"]
     return refused_files
 
 

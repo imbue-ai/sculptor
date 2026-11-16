@@ -161,6 +161,14 @@ def test_parse_refused_snapshot_files_reads_jj_warning_into_path_and_message() -
     }
 
 
+def test_parse_refused_snapshot_files_ignores_size_lines_outside_the_refused_list() -> None:
+    stray_line = "  stray.bin: 1.0KiB (1000 bytes); the maximum size allowed is 100B (100 bytes)\n"
+
+    refused_files = parse_refused_snapshot_files(stray_line + _REFUSED_SNAPSHOT_STDERR + stray_line)
+
+    assert set(refused_files) == {"sub/a: b c.bin", 'x"y.bin'}
+
+
 def test_parse_refused_snapshot_files_is_empty_without_the_warning() -> None:
     assert parse_refused_snapshot_files("Warning: Some unrelated warning\n  indented: line\n") == {}
 
