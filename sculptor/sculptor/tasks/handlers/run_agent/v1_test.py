@@ -16,6 +16,7 @@ from pydantic import PrivateAttr
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.config.settings import SculptorSettings
+from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
@@ -47,6 +48,8 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
+from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
@@ -79,6 +82,10 @@ from sculptor.tasks.handlers.run_agent.v1 import _send_user_input_message
 from sculptor.tasks.handlers.run_agent.v1 import on_exception
 from sculptor.testing.jj_launch_environment import JjLaunchEnvironment
 from sculptor.testing.jj_launch_environment import jj_environment_nested_in_git_repository  # noqa: F401
+from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjColocatedRepo
+from sculptor.testing.jj_repos import run_jj
+from sculptor.testing.jj_workspace_rows import create_jj_workspace_row
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.build import is_packaged
@@ -2609,3 +2616,115 @@ def test_an_agent_stopped_because_jj_is_unavailable_shows_the_reason_in_its_chat
         (str(raised.value), "JjUnavailableError")
     ]
     assert str(raised.value).startswith("jj is not installed")
+
+
+class _CommitThenRecordBookmarksAgent(DefaultAgentWrapper):
+    """Fake agent in a jj workspace: its first chat turn commits a described change and completes.
+
+    The second chat message records the checkout's bookmarks as it arrives,
+    then ends the run with a SIGTERM exit code.
+    """
+
+    checkout: Path
+    jj_binary: JjBinary
+    _chat_turns: int = PrivateAttr(default=0)
+    _bookmarks_when_the_second_message_arrived: list[str] | None = PrivateAttr(default=None)
+
+    def _start(self) -> None: ...
+
+    def _terminate(self, force_kill_seconds: float) -> None: ...
+
+    def wait(self, timeout: float) -> int:
+        return self._exit_code if self._exit_code is not None else 0
+
+    @property
+    def bookmarks_when_the_second_message_arrived(self) -> list[str] | None:
+        return self._bookmarks_when_the_second_message_arrived
+
+    def _push_message(self, message: Message) -> bool:
+        if not isinstance(message, ChatInputUserMessage):
+            return False
+        self._chat_turns += 1
+        if self._chat_turns > 1:
+            bookmarks = run_jj(
+                self.jj_binary, ("--ignore-working-copy", "bookmark", "list", "-T", 'name ++ "\\n"'), self.checkout
+            )
+            self._bookmarks_when_the_second_message_arrived = bookmarks.split()
+            self._exit_code = AGENT_EXIT_CODE_FROM_SIGTERM
+            return True
+        self._output_messages.put(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=message.message_id)
+        )
+        (self.checkout / "work.txt").write_text("the agent's work\n")
+        run_jj(self.jj_binary, ("commit", "-m", "the agent's work"), self.checkout)
+        self._output_messages.put(
+            RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=message.message_id)
+        )
+        return True
+
+
+def test_a_jj_workspaces_requested_bookmark_exists_before_the_message_after_its_first_described_turn(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    tmp_path: Path,
+) -> None:
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(
+            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
+        )
+    )
+    try:
+        workspace = create_jj_workspace_row(
+            services.data_model_service,
+            services.project_service,
+            services.workspace_service,
+            jj_colocated_repo,
+            tmp_path / "jj_environment",
+            "dev/graph-view",
+        )
+        first = ChatInputUserMessage(
+            message_id=AgentMessageID(), text="Do the work", model_name=LLMModel.CLAUDE_4_SONNET
+        )
+        second = ChatInputUserMessage(message_id=AgentMessageID(), text="Next", model_name=LLMModel.CLAUDE_4_SONNET)
+        task_state = AgentTaskStateV2(workspace_id=workspace.object_id)
+        _set_task_state(local_task, task_state, services)
+        _persist_messages(local_task, services, [first, second])
+        agent_env = LocalAgentExecutionEnvironment(
+            environment=environment,
+            task_id=local_task.object_id,
+            dependency_management_service=services.dependency_management_service,
+        )
+        fake_agent = _CommitThenRecordBookmarksAgent(
+            harness=CLAUDE_CODE_HARNESS,
+            environment=agent_env,
+            task_id=local_task.object_id,
+            system_prompt="",
+            checkout=tmp_path / "jj_environment" / "code",
+            jj_binary=jj_binary,
+        )
+        assert isinstance(local_task.input_data, AgentTaskInputsV2)
+
+        with patch("sculptor.tasks.handlers.run_agent.v1._get_agent_wrapper", return_value=fake_agent):
+            with pytest.raises(AgentPaused):
+                _run_agent_in_environment(
+                    task=local_task,
+                    task_data=local_task.input_data,
+                    task_state=task_state,
+                    history_scan=_scan_history(local_task, services),
+                    re_queued_messages=(first, second),
+                    input_message_queue=Queue(),
+                    environment=agent_env,
+                    services=services,
+                    project=project,
+                    settings=test_settings,
+                    shutdown_event=threading.Event(),
+                )
+    finally:
+        set_user_config_instance(None)
+
+    assert fake_agent.bookmarks_when_the_second_message_arrived == ["dev/graph-view", "main"]

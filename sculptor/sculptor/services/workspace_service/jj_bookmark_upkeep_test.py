@@ -1,22 +1,19 @@
 """The workspace service's upkeep of a jj workspace's bookmarks, and what it tells the workspace's agents about them.
 
-jj workspaces cannot be created through the service's create path yet, so the
-workspace row is written through the service and its checkout built with jj's
-seam directly. A service built here is never started, so its poller scans only
-when a test asks it to.
+A service built here is never started, so its poller scans only when a test
+asks it to.
 """
 
 from collections.abc import Iterator
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
 from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Workspace
-from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
-from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.user_config.user_config import get_default_user_config_instance
@@ -24,9 +21,12 @@ from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFacts
 from sculptor.services.workspace_service.jj_bookmark_facts import JjStackBookmarks
-from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
+from sculptor.services.workspace_service.vcs.jj_data_types import JjInitialBookmarkOutcome
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
+from sculptor.testing.jj_repos import make_workspace_stale
+from sculptor.testing.jj_repos import run_jj
+from sculptor.testing.jj_workspace_rows import create_jj_workspace_row
 
 _REQUESTED_BOOKMARK = "dev/graph-view"
 
@@ -67,35 +67,14 @@ def jj_workspace_row(
     tmp_path: Path,
 ) -> Workspace:
     """A jj workspace of `jj_colocated_repo` that requested `_REQUESTED_BOOKMARK`, with its checkout built."""
-    environment_path = tmp_path / "environment"
-    with test_service_collection.data_model_service.open_transaction(RequestID()) as transaction:
-        project = test_service_collection.project_service.initialize_project(
-            project_path=jj_colocated_repo.path,
-            organization_reference=ANONYMOUS_ORGANIZATION_REFERENCE,
-            transaction=transaction,
-        )
-        assert project is not None
-        workspace = unstarted_workspace_service.create_workspace(
-            project=project,
-            initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
-            source_branch=f"{jj_colocated_repo.default_bookmark}@origin",
-            requested_branch_name=_REQUESTED_BOOKMARK,
-            description="jj workspace",
-            transaction=transaction,
-            target_branch=f"{jj_colocated_repo.default_bookmark}@origin",
-        )
-        updated = transaction.update_workspace_fields(workspace.object_id, environment_id=str(environment_path))
-        assert updated is not None
-    unstarted_workspace_service.get_workspace_vcs(WorkspaceInitializationStrategy.JJ_WORKSPACE).create_checkout(
-        CheckoutSpec(
-            repo_path=jj_colocated_repo.path,
-            checkout_path=environment_path / "code",
-            base_ref=f"{jj_colocated_repo.default_bookmark}@origin",
-            new_ref_name=_REQUESTED_BOOKMARK,
-            checkout_name=str(workspace.object_id),
-        )
+    return create_jj_workspace_row(
+        test_service_collection.data_model_service,
+        test_service_collection.project_service,
+        unstarted_workspace_service,
+        jj_colocated_repo,
+        tmp_path / "environment",
+        _REQUESTED_BOOKMARK,
     )
-    return updated
 
 
 def test_the_jj_bookmark_facts_carry_the_requested_bookmark_and_the_cached_jj_state(
@@ -126,3 +105,72 @@ def test_the_jj_bookmark_facts_of_a_missing_workspace_have_no_requested_bookmark
     facts = unstarted_workspace_service.make_jj_bookmark_facts_provider(WorkspaceID()).get_jj_bookmark_facts()
 
     assert facts == JjBookmarkFacts(requested_bookmark=None, stack=None)
+
+
+def _checkout(workspace: Workspace) -> Path:
+    assert workspace.environment_id is not None
+    return Path(workspace.environment_id) / "code"
+
+
+def _commit_change(jj_binary: JjBinary, checkout: Path, message: str) -> None:
+    (checkout / f"{uuid4().hex}.txt").write_text(message)
+    run_jj(jj_binary, ("commit", "-m", message), cwd=checkout)
+
+
+def test_attempt_initial_bookmark_creates_the_requested_bookmark_and_publishes_it_at_once(
+    unstarted_workspace_service: DefaultWorkspaceService, jj_workspace_row: Workspace, jj_binary: JjBinary
+) -> None:
+    unstarted_workspace_service._jj_workspace_poller._scan_once()
+    _commit_change(jj_binary, _checkout(jj_workspace_row), "first")
+
+    outcome = unstarted_workspace_service.attempt_initial_bookmark(jj_workspace_row.object_id)
+
+    assert outcome is JjInitialBookmarkOutcome.CREATED
+    state = unstarted_workspace_service.get_cached_jj_state(jj_workspace_row.object_id)
+    assert state is not None
+    assert (state.bookmarks, state.primary_bookmark, state.unbookmarked_revision_count) == (
+        (_REQUESTED_BOOKMARK,),
+        _REQUESTED_BOOKMARK,
+        0,
+    )
+
+
+def test_attempt_initial_bookmark_leaves_a_workspace_whose_published_state_has_a_bookmark(
+    unstarted_workspace_service: DefaultWorkspaceService, jj_workspace_row: Workspace, jj_binary: JjBinary
+) -> None:
+    checkout = _checkout(jj_workspace_row)
+    _commit_change(jj_binary, checkout, "first")
+    run_jj(jj_binary, ("bookmark", "create", "mine", "-r", "@-"), cwd=checkout)
+    unstarted_workspace_service._jj_workspace_poller._scan_once()
+
+    outcome = unstarted_workspace_service.attempt_initial_bookmark(jj_workspace_row.object_id)
+
+    assert outcome is None
+
+
+def test_attempt_initial_bookmark_marks_a_stale_workspace_stale_and_creates_nothing(
+    unstarted_workspace_service: DefaultWorkspaceService,
+    jj_workspace_row: Workspace,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    unstarted_workspace_service._jj_workspace_poller._scan_once()
+    checkout = _checkout(jj_workspace_row)
+    _commit_change(jj_binary, checkout, "first")
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout)
+
+    with record_logged_error_levels() as logged_error_levels:
+        outcome = unstarted_workspace_service.attempt_initial_bookmark(jj_workspace_row.object_id)
+
+    assert outcome is None
+    assert logged_error_levels == []
+    state = unstarted_workspace_service.get_cached_jj_state(jj_workspace_row.object_id)
+    assert state is not None
+    assert state.is_working_copy_stale
+    assert state.bookmarks == ()
+
+
+def test_attempt_initial_bookmark_does_nothing_for_a_missing_workspace(
+    unstarted_workspace_service: DefaultWorkspaceService,
+) -> None:
+    assert unstarted_workspace_service.attempt_initial_bookmark(WorkspaceID()) is None

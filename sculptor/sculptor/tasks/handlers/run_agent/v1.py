@@ -543,6 +543,9 @@ def _run_agent_in_environment(
             and isinstance(user_input_message_being_processed, ChatInputUserMessage)
         ):
             last_user_chat_message_id = user_input_message_being_processed.message_id
+        # Before the next message is dispatched, so its reminders see the bookmark.
+        if is_agent_turn_finished:
+            services.workspace_service.attempt_initial_bookmark(task_state.workspace_id)
 
         # send the next message (if there is one waiting). Under the SDK MCP
         # AUQ flow the original chat-input request stays "in flight" while
