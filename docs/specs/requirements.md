@@ -64,6 +64,7 @@ pointers to their spec/scenario home.
 | REQ-FUNC-013 | Actions & notes; mentions & path autocomplete | §7.11 | `ACT`, `MENT` | Optional |
 | REQ-FUNC-014 | Experimental surface (toggles, experimental skills/panels, container backend) | §7.12 | `SET`, `PANEL` | Experimental |
 | REQ-FUNC-016 | Extensions: on-by-default extension system, Extensions settings section with a global enable/disable toggle, bundled Linear extension enabled by default | §7.13 | `PANEL`, `SET` | Standard |
+| REQ-FUNC-017 | jj (Jujutsu) workspaces: Jujutsu settings section, per-repository colocation and use-jj switches, jj workspace creation, bookmark pill, Revisions panel, stale working copies | §7.14 | `ADDWS`, `WS`, `PANEL`, `SET` | Optional |
 | REQ-FUNC-015 | `sculpt` CLI: full command surface, `--json`, env-var defaults, cross-surface visibility | §8 | (CLI-level, see §5.4) | Standard |
 
 - **REQ-FUNC-100 (MUST).** Every behavior enumerated in `scenarios.md` is a product requirement; that
@@ -152,6 +153,13 @@ and flags the targets it does not currently define.
   IPC handler, so image attachment works in web mode too; an HTTP-uploaded attachment is cleaned up
   when its task is deleted (`sculptor/sculptor/agents/attachments.py`).
 - **REQ-NFR-052 [Unspecified].** Max **attachment count** per message is not enforced. → OPEN-4 (§7).
+- **REQ-NFR-054 (SHOULD).** In a **jj workspace**, jj snapshots a new file only up to **10 MiB** by
+  default (jj's own default is 1 MiB); larger new files stay untracked and never reach the diff. The
+  limit is user-configurable in Settings → Jujutsu, which accepts **1 to 1024 MiB**
+  (`MIN_SNAPSHOT_SIZE_MIB` / `MAX_SNAPSHOT_SIZE_MIB`,
+  `sculptor/frontend/src/pages/settings/components/JjSettingsSection.tsx`); the stored setting itself
+  only has to be at least 1 (`jj_snapshot_max_new_file_size_mib`, `ge=1`,
+  `sculptor/sculptor/config/user_config.py`; `SPEC.md` §7.14).
 - **REQ-NFR-053 (MAY).** Default file-browser split ratio is **50/50**; split-vs-unified, wrapping,
   and tab-close behavior are user-configurable (`sculptor/sculptor/config/user_config.py`; `SPEC.md` §7.10).
 
@@ -228,6 +236,19 @@ packaging Sculptor):
   authenticated; absence/non-auth degrades to a documented error state, never a crash (§5.1,
   `SPEC.md` §7.6). `gh` is also the optional credential used for in-app GitHub repo cloning and the
   onboarding GitHub sign-in (REQ-INT-004; `SPEC.md` §7.1) — optional, not required to launch Sculptor.
+- **REQ-COMPAT-024 (SHOULD).** **jj (Jujutsu)** is **optional** and needed only by repositories that
+  use jj workspaces. Sculptor pins **0.47.1** for its managed copy and accepts any jj from **0.47.1 up
+  to 0.999.999** (that release or any later 0.x; a 1.x jj is refused); the managed copy ships for
+  **darwin-arm64, darwin-x64, linux-x64 and linux-arm64**, each with a sha256 checksum
+  (`JJ_PINNED_VERSION`, `sculptor/sculptor/services/jj_version.py`; `JJ_VERSION_RANGE`,
+  `sculptor/sculptor/services/managed_tools.py`). The managed copy is first downloaded **only on an
+  explicit user action**, never at startup (`installs_on_startup_when_missing = False`); once a managed
+  copy exists, startup replaces it when it is broken or out of range (`_auto_install_if_needed`,
+  `sculptor/sculptor/services/dependency_management_service.py`). jj counts as usable
+  only when it is installed, runs, is in that range, and has an **author identity** (`user.name` and
+  `user.email`); the readiness check reports the first of those that fails, in that order
+  (`_jj_readiness_from_check`, `sculptor/sculptor/services/dependency_management_service.py`), and
+  `sculptor/sculptor/services/jj_availability.py` words it for the user (`SPEC.md` §7.14).
 
 ---
 
@@ -241,7 +262,7 @@ makes durability and upgrade-survival guarantees (§9.5) that rest directly on t
 - **REQ-DATA-001 (MUST).** User data lives in a single **Sculptor folder**, resolved from **build
   context** in strict precedence (`get_sculptor_folder()`, `sculptor/sculptor/utils/build.py`): (1) the
   **`SCULPTOR_FOLDER` env var**, if set, wins outright; else (2) **running from source** — detected by
-  walking parents for a `.git` directory — uses `<repo>/.dev_sculptor` (or `~/.dev-sculptor` if no repo
+  walking parents for a `.git` or `.jj` directory — uses `<repo>/.dev_sculptor` (or `~/.dev-sculptor` if no repo
   root is found); else (3) a **packaged dev build** — detected by a `.dev` version suffix — uses
   `~/.dev-sculptor`; else (4) a **packaged production build** uses `~/.sculptor`. "Packaged" means a
   PyInstaller bundle (`hasattr(sys, "frozen")`), mirrored on the Electron side as `app.isPackaged`. The
@@ -249,7 +270,9 @@ makes durability and upgrade-survival guarantees (§9.5) that rest directly on t
   resolves the same folder independently and **must stay consistent** with the backend
   (`sculptor/frontend/src/electron/logger.ts` `getSculptorFolder`).
 - **REQ-DATA-002 (MUST).** Within it: `internal/database.db` (SQLite), `internal/config.toml`
-  (settings), `internal/logs/`, `internal/uploads/`, `internal/artifacts/`, `workspaces/`, and a
+  (settings), `internal/logs/`, `internal/uploads/`, `internal/artifacts/`, `internal/jj-bin/` (a single
+  `jj` symlink to the jj Sculptor resolved, put first on `PATH` for processes in jj workspaces;
+  `get_jj_bin_dir`, `sculptor/sculptor/utils/build.py`), `workspaces/`, and a
   top-level `.format_version` marker (`sculptor/sculptor/utils/build.py`, `sculptor/sculptor/utils/migration.py`).
 - **REQ-DATA-003 (MUST).** The store keeps an **append-only immutable snapshot table per entity plus a
   materialized `<entity>_latest` view maintained by DB triggers**; the immutable log is the source of
@@ -284,6 +307,11 @@ makes durability and upgrade-survival guarantees (§9.5) that rest directly on t
   (`Workspace.ci_babysitter_paused`) and **survives an app restart** — a paused babysitter stays paused
   on relaunch rather than silently resuming (`sculptor/sculptor/services/ci_babysitter_service/coordinator.py`;
   `SPEC.md` §7.6).
+- **REQ-DATA-015 (MUST).** A project's **`use_jj_for_new_workspaces`** flag is persisted on the
+  `project` row, added by migration `66b62ccf5ff4` with a default of **off**, so every existing
+  repository keeps creating git worktrees after the upgrade (`sculptor/sculptor/database/models.py`).
+  A workspace's kind (git worktree or jj workspace) is fixed when it is created; changing the flag
+  later affects only new workspaces (`SPEC.md` §7.14).
 - **REQ-DATA-013 (MUST).** Versioned JSON columns (e.g. `Task.task_inputs`, `SavedAgentMessage.message`,
   which store unions of agent-message/input variants) are guarded by a **frozen Pydantic-schema
   snapshot** (`alembic/frozen_pydantic_schemas.json`); a model change that isn't reflected fails a test
@@ -389,6 +417,58 @@ rules behind them.
   (`sculptor/sculptor/services/workspace_service/environment_manager/env_file_parser.py`; `SPEC.md` §7.10). An
   override toggle governs whether these replace pre-existing variables.
 
+### 5.6 jj (Jujutsu)
+
+These hold only for repositories that use jj (`SPEC.md` §7.14; REQ-COMPAT-024). Paths are under
+`sculptor/sculptor/services/workspace_service/vcs/` unless given in full.
+
+- **REQ-INT-060 (MUST).** **Colocation.** Sculptor colocates a repository by running
+  `jj git init --colocate` in it, only on the user's confirmation or a Retry after a failed attempt, and
+  never on a repository jj already
+  reads as colocated; the checked-out git branch stays checked out and no remote bookmark is tracked
+  (`init_colocated`, `jj_repo_queries.py`; covered by
+  `test_init_colocated_keeps_the_git_branch_checked_out_and_tracks_no_bookmark`). The run may take up
+  to **600 s** (`COLOCATION_INIT_TIMEOUT_SECONDS`). Git submodules, Git LFS, a `.jj` not colocated with
+  the `.git`, and a stopped git merge/rebase/cherry-pick/revert block it; git hooks and a sparse
+  checkout are warnings (`sculptor/sculptor/services/project_jj_state_service/colocation_preflight.py`).
+- **REQ-INT-061 (MUST).** **Workspace creation.** A jj workspace is made with
+  `jj workspace add --no-colocate --name <workspace id> -r <base> --sparse-patterns full <dir>` and holds
+  no `.git` (`jj_repo_queries.py`). Its base is the source if given, else the target; a base must be a
+  local bookmark (`main`), a remote bookmark (`main@origin`), or a full commit id — git-style refs such
+  as `origin/main` are refused with HTTP 400 (`jj_revsets.py`; `sculptor/sculptor/web/app.py`
+  `_validate_workspace_creation_request`). The default target is the first remote bookmark on jj's
+  `trunk()`, else local `main`, else `master`. The requested bookmark name must be a valid git branch
+  name without `@` that no local, remote or git branch already uses (HTTP 400 / 409).
+- **REQ-INT-062 (MUST).** **Process environment.** Starting or resuming a jj workspace's environment —
+  for a chat or terminal agent, or to re-run the setup command — first passes a jj readiness check and
+  is refused while jj is unusable; HTTP routes that would run jj answer **412** with the same reason
+  sentence (`_prepare_vcs_for_launch`, `sculptor/sculptor/services/workspace_service/default_implementation.py`;
+  `sculptor/sculptor/services/jj_availability.py`). Processes in a jj workspace get `internal/jj-bin`
+  first on `PATH`, `GIT_CEILING_DIRECTORIES` set to the workspace's parent directory so git cannot find
+  an enclosing repository, and `GH_REPO` naming the GitHub repository when `origin` is on GitHub; chat
+  agents also get `JJ_EDITOR=false` (`jj_workspace_vcs.py`). Terminals take these only where the user
+  has not set them.
+- **REQ-INT-063 (SHOULD).** **State polling.** The jj poller runs a cycle every **3 s**, re-reads a
+  repository only when its jj operation heads, its member workspaces, or a member's target change, and
+  forces a re-read every **20** cycles; its reads never snapshot a working copy, and it does nothing while
+  jj is unusable (`sculptor/sculptor/services/workspace_service/jj_workspace_poller.py`).
+- **REQ-INT-064 (MUST).** **Pull requests.** A jj workspace's pull request is looked up with `gh`, taking
+  the workspace's bookmarks in rank order as the head and the target bookmark's name as the base (`main`
+  for `main@origin`), and only for a GitHub `origin` (`jj_workspace_vcs.py`;
+  `sculptor/sculptor/web/pr_polling_service.py`). Sculptor never runs `jj git export`: a push from a jj
+  workspace reaches the remote at once, and the user's own checkout gains the git branch when the user
+  next runs a jj command there.
+- **REQ-INT-065 (MUST).** **Deletion.** Deleting a jj workspace runs `jj workspace forget`, removes its
+  directory, and forgets (`jj bookmark forget --include-remotes`) the workspace's own bookmarks as the
+  branch-deletion policy selects; it deletes no remote branch and abandons no revision. Bookmarks on the
+  target or on another workspace's stack are never forgotten (`jj_workspace_vcs.py` `remove_checkout`).
+  At startup, a jj workspace is forgotten only when its name is a Sculptor workspace id that no live
+  workspace owns and its directory is gone
+  (`sculptor/sculptor/services/workspace_service/jj_orphan_sweep.py`).
+- **REQ-INT-066 (SHOULD).** **Snapshot limit.** The configured limit (REQ-NFR-054) is written to each jj
+  workspace's own jj config as `snapshot.max-new-file-size` when the workspace is created and each time
+  its environment resumes (`jj_workspace_vcs.py`, `jj_repo_queries.py`).
+
 ---
 
 ## 6. Security, privacy & telemetry (→ SPEC §9.1, §9.6, §9.7)
@@ -397,7 +477,12 @@ rules behind them.
   workspace copy and MAY run real shell commands there; **nothing is pushed to a remote and no PR is
   opened without an explicit user action**. In-place mode (editing the real checkout) and the
   container/remote backend are the deliberate, opt-in exceptions (`SPEC.md` §9.1). This boundary holds
-  for both the GUI and `sculpt`.
+  for both the GUI and `sculpt`. Colocating a repository with jj writes a `.jj` into the user's own
+  checkout only after the user confirms the "Initialize jujutsu colocation" dialog (or clicks Retry
+  after a failed attempt), and Sculptor
+  never deletes the repository's `.jj` directory or undoes a colocation
+  (`sculptor/frontend/src/pages/settings/components/JjColocationDialog.tsx`,
+  `sculptor/sculptor/services/project_jj_state_service/project_jj_state_service.py`).
 - **REQ-SEC-002 (MUST).** **Local-first, single-user.** Code and secrets stay on the user's machine;
   Imbue does not store repositories or train on user code (`SPEC.md` §9.6). Pi API keys and similar
   secrets are read from the environment and **never persisted to config** (REQ-INT-022).
