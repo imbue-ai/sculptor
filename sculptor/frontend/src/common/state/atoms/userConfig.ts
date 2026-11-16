@@ -153,6 +153,16 @@ export const ciBabysitterMergeConflictPromptAtom = atom<string>(
   (get) => get(ciBabysitterConfigAtom)?.mergeConflictPrompt ?? DEFAULT_CI_BABYSITTER_MERGE_CONFLICT_PROMPT,
 );
 
+// The prompts sent instead of the two above when the PR comes from a jj
+// workspace; null means the git prompt is used.
+export const ciBabysitterJjPipelineFailedPromptAtom = atom<string | null>(
+  (get) => get(ciBabysitterConfigAtom)?.jjPipelineFailedPrompt ?? null,
+);
+
+export const ciBabysitterJjMergeConflictPromptAtom = atom<string | null>(
+  (get) => get(ciBabysitterConfigAtom)?.jjMergeConflictPrompt ?? null,
+);
+
 // Which agent the babysitter drives: the discriminated union from the backend
 // (MRU | Claude | Pi | Registered{registrationId}); null until config loads.
 export const ciBabysitterAgentAtom = atom<NonNullable<CiBabysitterConfig["agent"]> | null>(

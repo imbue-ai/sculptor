@@ -3,19 +3,82 @@ import { Box, Button, Flex, Link, Progress, Select, Spinner, Text, TextField } f
 import { useAtomValue } from "jotai";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
 
-import type { JjIdentity } from "../../../api";
+import type { CiBabysitterConfig, JjIdentity, Project } from "../../../api";
 import { ElementIds, setJjIdentity, UserConfigField } from "../../../api";
 import { dependenciesStatusAtom, refreshDependenciesStatus } from "../../../common/state/atoms/dependenciesStatus";
-import { jjSnapshotMaxNewFileSizeMibAtom } from "../../../common/state/atoms/userConfig";
+import { projectsArrayAtom } from "../../../common/state/atoms/projects.ts";
+import {
+  ciBabysitterConfigAtom,
+  ciBabysitterJjMergeConflictPromptAtom,
+  ciBabysitterJjPipelineFailedPromptAtom,
+  ciBabysitterMergeConflictPromptAtom,
+  ciBabysitterPipelineFailedPromptAtom,
+  commitPromptAtom,
+  jjCommitPromptAtom,
+  jjPrCreationPromptAtom,
+  jjSnapshotMaxNewFileSizeMibAtom,
+  prCreationPromptAtom,
+} from "../../../common/state/atoms/userConfig";
+import { useOpenSettings } from "../../../common/state/hooks/useOpenSettings.ts";
 import { useManagedDependency } from "../hooks/useManagedDependency";
 import { JjAvailabilityCallout } from "./JjAvailabilityCallout.tsx";
 import { JjIdentityRow } from "./JjIdentityRow.tsx";
+import { JjPromptSettingRow } from "./JjPromptSettingRow.tsx";
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 
 const JJ_DOCS_URL = "https://jj-vcs.github.io/jj/latest/";
 const MIN_SNAPSHOT_SIZE_MIB = 1;
 const MAX_SNAPSHOT_SIZE_MIB = 1024;
+
+// Suggested jj wordings. Sculptor appends its own jj instructions (the bookmark
+// and the pull request's base) to whichever prompt is sent.
+const SUGGESTED_JJ_COMMIT_PROMPT =
+  "Describe the working-copy change with a comprehensive message and start a new change on top of it with `jj commit -m`. Leave no work outside the described change.";
+const SUGGESTED_JJ_PR_CREATION_PROMPT =
+  "Push my work to origin with jj and create a pull request using the GitHub CLI (gh). Write a clear description summarizing the changes.";
+const SUGGESTED_JJ_CI_PIPELINE_FAILED_PROMPT =
+  "Investigate the failing pipeline for this PR, identify the root cause and fix the code. Describe the change, move the PR's bookmark onto it, and push it with `jj git push`.";
+const SUGGESTED_JJ_CI_MERGE_CONFLICT_PROMPT =
+  "This PR has a merge conflict with its base branch. Fetch with `jj git fetch`, rebase this workspace's revisions onto the target bookmark with `jj rebase`, resolve the conflicts, and push the PR's bookmark with `jj git push`.";
+
+const JjRepositoriesRow = ({
+  projects,
+  onConfigure,
+}: {
+  projects: ReadonlyArray<Project>;
+  onConfigure: (projectId: string) => void;
+}): ReactElement => (
+  <SettingRow
+    title="Repositories using jj"
+    description="Repositories whose new workspaces are jj workspaces. Turn jj on or off in a repository's settings."
+    data-testid={ElementIds.JJ_REPOSITORIES}
+  >
+    {projects.length === 0 ? (
+      <Text size="2" color="gray">
+        No repository uses jj for new workspaces yet.
+      </Text>
+    ) : (
+      <Flex direction="column" gap="2" align="end">
+        {projects.map((project) => (
+          <Flex key={project.objectId} align="center" gap="3">
+            <Text size="2">{project.name}</Text>
+            <Link
+              href="#"
+              size="2"
+              onClick={(e) => {
+                e.preventDefault();
+                onConfigure(project.objectId);
+              }}
+            >
+              Configure
+            </Link>
+          </Flex>
+        ))}
+      </Flex>
+    )}
+  </SettingRow>
+);
 
 type JjSettingsSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
@@ -24,6 +87,17 @@ type JjSettingsSectionProps = {
 export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): ReactElement => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
   const snapshotSizeMib = useAtomValue(jjSnapshotMaxNewFileSizeMibAtom);
+  const commitPrompt = useAtomValue(commitPromptAtom);
+  const jjCommitPrompt = useAtomValue(jjCommitPromptAtom);
+  const prCreationPrompt = useAtomValue(prCreationPromptAtom);
+  const jjPrCreationPrompt = useAtomValue(jjPrCreationPromptAtom);
+  const ciBabysitterConfig = useAtomValue(ciBabysitterConfigAtom);
+  const pipelineFailedPrompt = useAtomValue(ciBabysitterPipelineFailedPromptAtom);
+  const jjPipelineFailedPrompt = useAtomValue(ciBabysitterJjPipelineFailedPromptAtom);
+  const mergeConflictPrompt = useAtomValue(ciBabysitterMergeConflictPromptAtom);
+  const jjMergeConflictPrompt = useAtomValue(ciBabysitterJjMergeConflictPromptAtom);
+  const projects = useAtomValue(projectsArrayAtom);
+  const openSettings = useOpenSettings();
 
   // Reset the draft when the saved value changes, during render rather than in an effect.
   const [snapshotSizeValue, setSnapshotSizeValue] = useState(String(snapshotSizeMib));
@@ -81,6 +155,15 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
     }
   };
 
+  // The babysitter's settings are one nested object; the whole object is sent
+  // so the optimistic copy keeps its other fields.
+  const saveCiBabysitterPrompt = (
+    overrides: Pick<CiBabysitterConfig, "jjPipelineFailedPrompt"> | Pick<CiBabysitterConfig, "jjMergeConflictPrompt">,
+  ): void => {
+    void onSettingChange(UserConfigField.CI_BABYSITTER, { ...ciBabysitterConfig, ...overrides });
+  };
+
+  const jjProjects = projects.filter((project) => project.useJjForNewWorkspaces);
   const minimumVersion = jj?.versionRange?.minVersion ?? null;
 
   return (
@@ -263,6 +346,48 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
           </TextField.Slot>
         </TextField.Root>
       </SettingRow>
+
+      <JjPromptSettingRow
+        title="jj commit prompt"
+        description="Sent instead of the commit prompt when you click Commit in a jj workspace. Sculptor adds what to do with the workspace's bookmark."
+        value={jjCommitPrompt}
+        gitPrompt={commitPrompt}
+        suggestedPrompt={SUGGESTED_JJ_COMMIT_PROMPT}
+        onSave={(value) => void onSettingChange(UserConfigField.JJ_COMMIT_PROMPT, value)}
+        data-testid={ElementIds.JJ_COMMIT_PROMPT_SETTING}
+      />
+
+      <JjPromptSettingRow
+        title="jj PR creation prompt"
+        description="Sent instead of the PR creation prompt when you click Create PR in a jj workspace. Sculptor adds the bookmark to push and the branch to open the pull request into."
+        value={jjPrCreationPrompt}
+        gitPrompt={prCreationPrompt}
+        suggestedPrompt={SUGGESTED_JJ_PR_CREATION_PROMPT}
+        onSave={(value) => void onSettingChange(UserConfigField.JJ_PR_CREATION_PROMPT, value)}
+        data-testid={ElementIds.JJ_PR_CREATION_PROMPT_SETTING}
+      />
+
+      <JjPromptSettingRow
+        title="jj CI Babysitter pipeline prompt"
+        description="Sent instead of the CI Babysitter's pipeline-failed prompt when the pull request comes from a jj workspace."
+        value={jjPipelineFailedPrompt}
+        gitPrompt={pipelineFailedPrompt}
+        suggestedPrompt={SUGGESTED_JJ_CI_PIPELINE_FAILED_PROMPT}
+        onSave={(value) => saveCiBabysitterPrompt({ jjPipelineFailedPrompt: value })}
+        data-testid={ElementIds.JJ_CI_PIPELINE_FAILED_PROMPT_SETTING}
+      />
+
+      <JjPromptSettingRow
+        title="jj CI Babysitter merge conflict prompt"
+        description="Sent instead of the CI Babysitter's merge-conflict prompt when the pull request comes from a jj workspace."
+        value={jjMergeConflictPrompt}
+        gitPrompt={mergeConflictPrompt}
+        suggestedPrompt={SUGGESTED_JJ_CI_MERGE_CONFLICT_PROMPT}
+        onSave={(value) => saveCiBabysitterPrompt({ jjMergeConflictPrompt: value })}
+        data-testid={ElementIds.JJ_CI_MERGE_CONFLICT_PROMPT_SETTING}
+      />
+
+      <JjRepositoriesRow projects={jjProjects} onConfigure={(projectId) => openSettings("REPOSITORIES", projectId)} />
 
       <SettingRow title="Documentation" description="How jj works, and how it differs from git.">
         <Link href={JJ_DOCS_URL} target="_blank" rel="noreferrer" size="2">
