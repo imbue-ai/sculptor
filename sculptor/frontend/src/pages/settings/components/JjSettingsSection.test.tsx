@@ -159,6 +159,27 @@ describe("JjSettingsSection", () => {
   });
 
   describe("the jj prompts", () => {
+    it.each([
+      { jjCommitPrompt: "Commit with jj", focused: "textbox" },
+      { jjCommitPrompt: null, focused: "button" },
+    ] as const)(
+      "focuses the prompt it was opened for: the field when set ($jjCommitPrompt), else its suggested wording",
+      ({ jjCommitPrompt, focused }) => {
+        store.set(userConfigAtom, { commitPrompt: "Commit it all", jjCommitPrompt } as UserConfig);
+        renderWithProviders(<JjSettingsSection onSettingChange={vi.fn().mockResolvedValue(undefined)} />, {
+          store,
+          initialEntries: ["/settings?section=JJ&focusPrompt=commit"],
+        });
+
+        const commitRow = screen.getByTestId(ElementIds.JJ_COMMIT_PROMPT_SETTING);
+        const target =
+          focused === "textbox"
+            ? within(commitRow).getByRole("textbox")
+            : within(commitRow).getByRole("button", { name: "Use suggested wording" });
+        expect(target).toHaveFocus();
+      },
+    );
+
     const renderSectionSaving = (): ReturnType<typeof vi.fn> => {
       const onSettingChange = vi.fn().mockResolvedValue(undefined);
       renderWithProviders(<JjSettingsSection onSettingChange={onSettingChange} />, { store });

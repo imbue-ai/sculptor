@@ -41,7 +41,12 @@ import {
   workspaceAtomFamily,
 } from "~/common/state/atoms/workspaces.ts";
 import { workspaceTargetBranchesAtomFamily } from "~/common/state/atoms/workspaceTargetBranches.ts";
-import { buildCommitMessage, buildCreatePrMessage, type JjPromptBookmark } from "~/common/utils/agentPrompts.ts";
+import {
+  type AgentPromptKind,
+  buildCommitMessage,
+  buildCreatePrMessage,
+  type JjPromptBookmark,
+} from "~/common/utils/agentPrompts.ts";
 import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
 import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
@@ -330,17 +335,58 @@ const readMessageWorkspace = (get: Getter, workspaceId: string): MessageWorkspac
   }
 };
 
+/**
+ * Which setting a workspace's Commit or Create PR prompt comes from: a git
+ * workspace's git prompt; a jj workspace's jj prompt, or, while no jj prompt is
+ * set, the git prompt in its place. The messages and the Edit prompt menus both
+ * follow it.
+ */
+export type AgentPromptSource = "git" | "jj" | "git-for-jj";
+
+const PROMPT_SETTINGS = {
+  commit: { gitPrompt: commitPromptAtom, jjPrompt: jjCommitPromptAtom },
+  "pr-creation": { gitPrompt: prCreationPromptAtom, jjPrompt: jjPrCreationPromptAtom },
+} as const satisfies Record<AgentPromptKind, unknown>;
+
+// The prompt a workspace's message starts from and the setting it came from;
+// undefined until the workspace is loaded.
+const choosePrompt = (
+  get: Getter,
+  workspaceId: string,
+  kind: AgentPromptKind,
+): { source: AgentPromptSource; prompt: string } | undefined => {
+  const workspace = asLiveWorkspace(get(workspaceAtomFamily(workspaceId)));
+  if (workspace === null) return undefined;
+  const settings = PROMPT_SETTINGS[kind];
+  switch (workspaceVcsOf(workspace)) {
+    case "git":
+      return { source: "git", prompt: get(settings.gitPrompt) };
+    case "jj": {
+      const jjPrompt = get(settings.jjPrompt);
+      return jjPrompt === null
+        ? { source: "git-for-jj", prompt: get(settings.gitPrompt) }
+        : { source: "jj", prompt: jjPrompt };
+    }
+  }
+};
+
+/** Which setting the workspace's commit prompt comes from; undefined until the workspace is loaded. */
+export const commitPromptSourceAtomFamily = atomFamily((workspaceId: string) =>
+  atom<AgentPromptSource | undefined>((get) => choosePrompt(get, workspaceId, "commit")?.source),
+);
+
+/** Which setting the workspace's PR creation prompt comes from; undefined until the workspace is loaded. */
+export const prCreationPromptSourceAtomFamily = atomFamily((workspaceId: string) =>
+  atom<AgentPromptSource | undefined>((get) => choosePrompt(get, workspaceId, "pr-creation")?.source),
+);
+
 /** The message Commit sends to the workspace's current agent; undefined until its inputs are known. */
 export const commitMessageAtomFamily = atomFamily((workspaceId: string) =>
   atom<string | undefined>((get) => {
     const workspace = readMessageWorkspace(get, workspaceId);
-    if (workspace === undefined) return undefined;
-    switch (workspace.vcs) {
-      case "git":
-        return buildCommitMessage({ prompt: get(commitPromptAtom), workspace });
-      case "jj":
-        return buildCommitMessage({ prompt: get(jjCommitPromptAtom) ?? get(commitPromptAtom), workspace });
-    }
+    const chosen = choosePrompt(get, workspaceId, "commit");
+    if (workspace === undefined || chosen === undefined) return undefined;
+    return buildCommitMessage({ prompt: chosen.prompt, workspace });
   }),
 );
 
@@ -348,13 +394,9 @@ export const commitMessageAtomFamily = atomFamily((workspaceId: string) =>
 export const createPrMessageAtomFamily = atomFamily((workspaceId: string) =>
   atom<string | undefined>((get) => {
     const workspace = readMessageWorkspace(get, workspaceId);
-    if (workspace === undefined) return undefined;
-    switch (workspace.vcs) {
-      case "git":
-        return buildCreatePrMessage({ prompt: get(prCreationPromptAtom), workspace });
-      case "jj":
-        return buildCreatePrMessage({ prompt: get(jjPrCreationPromptAtom) ?? get(prCreationPromptAtom), workspace });
-    }
+    const chosen = choosePrompt(get, workspaceId, "pr-creation");
+    if (workspace === undefined || chosen === undefined) return undefined;
+    return buildCreatePrMessage({ prompt: chosen.prompt, workspace });
   }),
 );
 
@@ -410,6 +452,8 @@ export const removeWorkspaceAgentActionState = (workspaceId: string): void => {
   activeChatAgentIdAtomFamily.remove(workspaceId);
   activeAgentIdAtomFamily.remove(workspaceId);
   canPromptActiveAgentAtomFamily.remove(workspaceId);
+  commitPromptSourceAtomFamily.remove(workspaceId);
+  prCreationPromptSourceAtomFamily.remove(workspaceId);
   commitMessageAtomFamily.remove(workspaceId);
   createPrMessageAtomFamily.remove(workspaceId);
   canCommitAtomFamily.remove(workspaceId);

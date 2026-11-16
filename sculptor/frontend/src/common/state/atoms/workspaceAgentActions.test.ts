@@ -29,8 +29,10 @@ import {
   canCreatePrAtomFamily,
   canPromptActiveAgentAtomFamily,
   commitActionAtomFamily,
+  commitPromptSourceAtomFamily,
   createPrActionAtomFamily,
   lastFocusedChatAgentAtomFamily,
+  prCreationPromptSourceAtomFamily,
 } from "./workspaceAgentActions.ts";
 
 // sendWorkspaceAgentMessages and postAgentTerminalInput hit the backend; stub
@@ -692,5 +694,29 @@ describe("the Commit and Create PR messages", () => {
 
     expect(store.get(canCommitAtomFamily(WS))).toBe(false);
     expect(store.get(canCreatePrAtomFamily(WS))).toBe(false);
+  });
+});
+
+describe("which setting a workspace's prompts come from", () => {
+  it("is the git prompts for a git workspace", () => {
+    const store = createStore();
+    seedWorkspace(store, {}, { jjCommitPrompt: "Commit with jj", jjPrCreationPrompt: "Open a jj PR" });
+
+    expect(store.get(commitPromptSourceAtomFamily(WS))).toBe("git");
+    expect(store.get(prCreationPromptSourceAtomFamily(WS))).toBe("git");
+  });
+
+  it("is a jj workspace's jj prompt where one is set, and the git prompt in its place where not", () => {
+    const store = createStore();
+    seedJjWorkspace(store, { primaryBookmark: "dev/login", config: { jjCommitPrompt: "Commit with jj" } });
+
+    expect(store.get(commitPromptSourceAtomFamily(WS))).toBe("jj");
+    expect(store.get(prCreationPromptSourceAtomFamily(WS))).toBe("git-for-jj");
+  });
+
+  it("is unknown until the workspace is loaded", () => {
+    const store = createStore();
+
+    expect(store.get(commitPromptSourceAtomFamily(WS))).toBeUndefined();
   });
 });

@@ -2,8 +2,8 @@ import { ContextMenu, DropdownMenu, Flex, IconButton, Popover, Spinner, Text, To
 import { useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronDown, ChevronUp, CopyIcon, GitMergeIcon, Info, PlusIcon, TriangleAlert } from "lucide-react";
 import { posthog } from "posthog-js";
-import type { ReactElement } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { ButtonHTMLAttributes, ReactElement } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 
 import type { PrStatusInfo } from "../../api";
 import { ElementIds } from "../../api";
@@ -11,6 +11,7 @@ import { openInReusableTab } from "../../common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "../../common/state/atoms/prStatus.ts";
 import { canCreatePrAtomFamily, createPrActionAtomFamily } from "../../common/state/atoms/workspaceAgentActions.ts";
 import { workspaceTargetBranchesAtomFamily } from "../../common/state/atoms/workspaceTargetBranches.ts";
+import { useEditAgentPrompt } from "../../common/state/hooks/useEditAgentPrompt.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
 import { isPrBaseOtherThanTarget } from "../../common/utils/prBaseNames.ts";
 import styles from "./PrButton.module.scss";
@@ -92,20 +93,27 @@ type PrButtonProps = {
 type CreatePrButtonFaceProps = {
   onClick?: () => void;
   isDisabled?: boolean;
-};
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "disabled" | "type">;
 
-const CreatePrButtonFace = ({ onClick, isDisabled = false }: CreatePrButtonFaceProps): ReactElement => (
-  <button
-    type="button"
-    className={styles.createButton}
-    onClick={onClick}
-    disabled={isDisabled}
-    data-testid={ElementIds.PR_BUTTON_CREATE}
-  >
-    <PlusIcon size={12} className={styles.plusIcon} />
-    <Text size="1">Create PR</Text>
-  </button>
+// Forwards its ref and the remaining props to the button, because the context
+// menu trigger it sits in attaches its right-click handler through them.
+const CreatePrButtonFace = forwardRef<HTMLButtonElement, CreatePrButtonFaceProps>(
+  ({ onClick, isDisabled = false, ...triggerProps }, ref) => (
+    <button
+      {...triggerProps}
+      ref={ref}
+      type="button"
+      className={styles.createButton}
+      onClick={onClick}
+      disabled={isDisabled}
+      data-testid={ElementIds.PR_BUTTON_CREATE}
+    >
+      <PlusIcon size={12} className={styles.plusIcon} />
+      <Text size="1">Create PR</Text>
+    </button>
+  ),
 );
+CreatePrButtonFace.displayName = "CreatePrButtonFace";
 
 type CreatePrInputs = {
   workspaceId: string;
@@ -141,7 +149,7 @@ type CreatePrButtonProps = CreatePrInputs;
 
 const CreatePrButton = ({ workspaceId, targetBranch, gitProvider }: CreatePrButtonProps): ReactElement => {
   const { isDisabled, handleCreate } = useCreatePr({ workspaceId, targetBranch, gitProvider });
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  const editPrompt = useEditAgentPrompt({ workspaceId, kind: "pr-creation" });
 
   return (
     <>
@@ -150,10 +158,14 @@ const CreatePrButton = ({ workspaceId, targetBranch, gitProvider }: CreatePrButt
           <CreatePrButtonFace onClick={handleCreate} isDisabled={isDisabled} />
         </ContextMenu.Trigger>
         <ContextMenu.Content size="1">
-          <ContextMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</ContextMenu.Item>
+          <ContextMenu.Item onSelect={editPrompt.handleMenuSelect}>{editPrompt.menuLabel}</ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Root>
-      <PrPromptDialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen} />
+      <PrPromptDialog
+        open={editPrompt.isDialogOpen}
+        onOpenChange={editPrompt.handleDialogOpenChange}
+        isJjFallback={editPrompt.isJjFallback}
+      />
     </>
   );
 };

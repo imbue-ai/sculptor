@@ -2,6 +2,7 @@ import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@ra
 import { Box, Button, Flex, Link, Progress, Select, Spinner, Text, TextField } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import type { CiBabysitterConfig, JjIdentity, Project } from "../../../api";
 import { ElementIds, setJjIdentity, UserConfigField } from "../../../api";
@@ -98,6 +99,9 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
   const jjMergeConflictPrompt = useAtomValue(ciBabysitterJjMergeConflictPromptAtom);
   const projects = useAtomValue(projectsArrayAtom);
   const openSettings = useOpenSettings();
+  // Set when an Edit prompt menu opened the page for one of its prompts.
+  const [searchParams] = useSearchParams();
+  const focusPrompt = searchParams.get("focusPrompt");
 
   // Reset the draft when the saved value changes, during render rather than in an effect.
   const [snapshotSizeValue, setSnapshotSizeValue] = useState(String(snapshotSizeMib));
@@ -354,6 +358,7 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
         gitPrompt={commitPrompt}
         suggestedPrompt={SUGGESTED_JJ_COMMIT_PROMPT}
         onSave={(value) => void onSettingChange(UserConfigField.JJ_COMMIT_PROMPT, value)}
+        shouldFocusOnMount={focusPrompt === "commit"}
         data-testid={ElementIds.JJ_COMMIT_PROMPT_SETTING}
       />
 
@@ -364,6 +369,7 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
         gitPrompt={prCreationPrompt}
         suggestedPrompt={SUGGESTED_JJ_PR_CREATION_PROMPT}
         onSave={(value) => void onSettingChange(UserConfigField.JJ_PR_CREATION_PROMPT, value)}
+        shouldFocusOnMount={focusPrompt === "pr-creation"}
         data-testid={ElementIds.JJ_PR_CREATION_PROMPT_SETTING}
       />
 

@@ -1,6 +1,8 @@
 import { Button, Flex, Text, TextArea } from "@radix-ui/themes";
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+
+import { useOnMountIf } from "~/common/hooks/useOnMountIf";
 
 import { SettingRow } from "./SettingRow.tsx";
 import styles from "./TextAreaSettingRow.module.scss";
@@ -16,6 +18,8 @@ type JjPromptSettingRowProps = {
   suggestedPrompt: string;
   /** Called with the new jj prompt, or null to go back to the git prompt. */
   onSave: (value: string | null) => void;
+  /** Focus the row on mount, as when an Edit prompt menu opened the page for it. */
+  shouldFocusOnMount?: boolean;
   "data-testid"?: string;
 };
 
@@ -32,8 +36,11 @@ export const JjPromptSettingRow = ({
   gitPrompt,
   suggestedPrompt,
   onSave,
+  shouldFocusOnMount = false,
   "data-testid": dataTestId,
 }: JjPromptSettingRowProps): ReactElement => {
+  const fieldRef = useRef<HTMLTextAreaElement | null>(null);
+  const suggestButtonRef = useRef<HTMLButtonElement | null>(null);
   // Local draft of the field, resynced during render whenever the saved value changes.
   const [draft, setDraft] = useState<string>(value ?? "");
   const [syncedValue, setSyncedValue] = useState<string | null>(value);
@@ -41,6 +48,11 @@ export const JjPromptSettingRow = ({
     setSyncedValue(value);
     setDraft(value ?? "");
   }
+
+  // Focusing also scrolls the row into view.
+  useOnMountIf(shouldFocusOnMount, () => {
+    (fieldRef.current ?? suggestButtonRef.current)?.focus();
+  });
 
   const handleBlur = (): void => {
     const next = draft.trim() === "" ? null : draft;
@@ -67,6 +79,7 @@ export const JjPromptSettingRow = ({
             </>
           ) : (
             <TextArea
+              ref={fieldRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={handleBlur}
@@ -78,7 +91,7 @@ export const JjPromptSettingRow = ({
       }
     >
       {value === null ? (
-        <Button variant="soft" size="1" onClick={() => onSave(suggestedPrompt)}>
+        <Button ref={suggestButtonRef} variant="soft" size="1" onClick={() => onSave(suggestedPrompt)}>
           Use suggested wording
         </Button>
       ) : (

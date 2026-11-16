@@ -9,6 +9,7 @@ import {
   setAgentForWorkspaceAtom,
   workspaceAtomFamily,
 } from "../state/atoms/workspaces";
+import type { AgentPromptKind } from "../utils/agentPrompts.ts";
 
 type ImbueNavigationFunctions = {
   navigateToWorkspace: (workspaceID: string) => void;
@@ -16,6 +17,7 @@ type ImbueNavigationFunctions = {
   navigateToHome: () => void;
   navigateToGlobalSettings: (section?: string) => void;
   navigateToRepoSetupCommand: (projectId: string) => void;
+  navigateToJjPrompt: (kind: AgentPromptKind) => void;
   navigateToRoot: () => void;
 };
 
@@ -59,6 +61,12 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
     navigateToRepoSetupCommand: useCallback(
       (projectId: string): void => {
         navigate(`/settings?section=REPOSITORIES&focusRepo=${encodeURIComponent(projectId)}`);
+      },
+      [navigate],
+    ),
+    navigateToJjPrompt: useCallback(
+      (kind: AgentPromptKind): void => {
+        navigate(`/settings?section=JJ&focusPrompt=${kind}`);
       },
       [navigate],
     ),

@@ -1,10 +1,10 @@
 import { Button, ContextMenu } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { CSSProperties, ReactElement } from "react";
-import { useState } from "react";
 
 import { ElementIds } from "~/api";
 import { canCommitAtomFamily, commitActionAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
+import { useEditAgentPrompt } from "~/common/state/hooks/useEditAgentPrompt.ts";
 
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
@@ -26,7 +26,7 @@ export const CommitButton = ({ workspaceId, changesCount, onCommit }: CommitButt
   // the workspace's message itself.
   const canCommit = useAtomValue(canCommitAtomFamily(workspaceId));
   const commit = useSetAtom(commitActionAtomFamily(workspaceId));
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  const editPrompt = useEditAgentPrompt({ workspaceId, kind: "commit" });
 
   const isDisabled = changesCount === 0 || !canCommit;
 
@@ -52,10 +52,14 @@ export const CommitButton = ({ workspaceId, changesCount, onCommit }: CommitButt
           </Button>
         </ContextMenu.Trigger>
         <ContextMenu.Content size="1">
-          <ContextMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</ContextMenu.Item>
+          <ContextMenu.Item onSelect={editPrompt.handleMenuSelect}>{editPrompt.menuLabel}</ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Root>
-      <CommitPromptDialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen} />
+      <CommitPromptDialog
+        open={editPrompt.isDialogOpen}
+        onOpenChange={editPrompt.handleDialogOpenChange}
+        isJjFallback={editPrompt.isJjFallback}
+      />
     </>
   );
 };

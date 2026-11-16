@@ -3,6 +3,7 @@ import { useMemo } from "react";
 
 import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 import { ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
+import type { AgentPromptKind } from "~/common/utils/agentPrompts.ts";
 import { SETTINGS_TAB_ID } from "~/common/utils/workspaceTabIds.ts";
 
 // `section` is a `SettingsSection` id from `~/pages/settings/sections.ts`.
@@ -11,6 +12,7 @@ import { SETTINGS_TAB_ID } from "~/common/utils/workspaceTabIds.ts";
 type OpenSettings = {
   (section?: string): void;
   (section: "REPOSITORIES", focusRepoId: string): void;
+  (section: "JJ", focusPrompt: AgentPromptKind): void;
 };
 
 /**
@@ -20,20 +22,23 @@ type OpenSettings = {
  * rather than navigating to `/settings` directly (see SCU-1581).
  */
 export const useOpenSettings = (): OpenSettings => {
-  const { navigateToGlobalSettings, navigateToRepoSetupCommand } = useImbueNavigate();
+  const { navigateToGlobalSettings, navigateToRepoSetupCommand, navigateToJjPrompt } = useImbueNavigate();
   const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
 
   return useMemo<OpenSettings>(() => {
     function openSettings(section?: string): void;
     function openSettings(section: "REPOSITORIES", focusRepoId: string): void;
+    function openSettings(section: "JJ", focusPrompt: AgentPromptKind): void;
     function openSettings(section?: string, focusId?: string): void {
       ensurePseudoTab(SETTINGS_TAB_ID);
       if (focusId !== undefined && section === "REPOSITORIES") {
         navigateToRepoSetupCommand(focusId);
+      } else if ((focusId === "commit" || focusId === "pr-creation") && section === "JJ") {
+        navigateToJjPrompt(focusId);
       } else {
         navigateToGlobalSettings(section);
       }
     }
     return openSettings;
-  }, [ensurePseudoTab, navigateToGlobalSettings, navigateToRepoSetupCommand]);
+  }, [ensurePseudoTab, navigateToGlobalSettings, navigateToRepoSetupCommand, navigateToJjPrompt]);
 };
