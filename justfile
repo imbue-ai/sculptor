@@ -1589,6 +1589,43 @@ test-unit-backend junitxml="": install-jj
     }
     quiet_by_default test-unit-backend _do_test_unit_backend
 
+# The oldest git Sculptor supports. Apple's Command Line Tools ship git 2.39 up to
+# Xcode 16, the oldest git on a platform Sculptor ships for; 2.39.5 is the last
+# release of that line, and Debian 12's git.
+_oldest_supported_git := "2.39.5"
+# The oldest git the pinned jj accepts: jj runs git to fetch and push, and refuses
+# a git older than 2.42.0.
+_oldest_git_for_jj := "2.42.0"
+
+# Run the VCS seam's unit tests against old gits that scripts/build_git.sh builds
+# from source into .venv/git-<version>: the jj tests against the oldest git jj
+# accepts, the rest against the oldest git Sculptor supports. The other test
+# recipes use the git on PATH, usually a recent one.
+[group("test")]
+test-vcs-oldest-git: install-jj
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _run_tests_with_git() {
+      local version="$1"; shift
+      local prefix="{{justfile_directory()}}/.venv/git-$version"
+      # Callers run this under `||`, which turns off `set -e` inside it.
+      "{{justfile_directory()}}/scripts/build_git.sh" "$version" "$prefix" || return 1
+      echo "=== VCS tests with $("$prefix/bin/git" --version) ==="
+      PATH="$prefix/bin:$PATH" env -u SESSION_TOKEN uv run --project sculptor pytest -n "${SCULPTOR_TEST_WORKERS:-8}" -m "not integration and not acceptance" "$@"
+    }
+    _do_test_vcs_oldest_git() {
+      vcs_tests="{{justfile_directory()}}/sculptor/sculptor/services/workspace_service/vcs"
+      failed=""
+      _run_tests_with_git {{ _oldest_supported_git }} "$vcs_tests" --ignore-glob='*/jj_*_test.py' || failed="$failed {{ _oldest_supported_git }}"
+      _run_tests_with_git {{ _oldest_git_for_jj }} "$vcs_tests"/jj_*_test.py || failed="$failed {{ _oldest_git_for_jj }}"
+      if [ -n "$failed" ]; then
+        echo "VCS tests failed with git$failed"
+        return 1
+      fi
+    }
+    quiet_by_default test-vcs-oldest-git _do_test_vcs_oldest_git
+
 [group("test")]
 test-unit-frontend:
     #!/usr/bin/env bash
