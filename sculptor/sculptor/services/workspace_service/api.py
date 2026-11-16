@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     # runtime import here would cycle.
     from sculptor.web import data_types as web_data_types
 from sculptor.services.data_model_service.data_types import DataModelTransaction
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFactsProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
 from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
@@ -206,6 +207,13 @@ class WorkspaceService(Service, ABC):
         The provider asks ``SetupCommandRunner`` for the absolute setup-log
         path internally — callers never need to compute workspace state
         directories themselves.
+        """
+
+    @abstractmethod
+    def make_jj_bookmark_facts_provider(self, workspace_id: WorkspaceID) -> JjBookmarkFactsProvider:
+        """Build a workspace-scoped provider of what the agent reminders say about a jj workspace's bookmarks.
+
+        Reading it runs neither jj nor git: the jj state is the jj poller's cache.
         """
 
     @abstractmethod

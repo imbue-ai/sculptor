@@ -12,6 +12,7 @@ from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRen
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import AutoRenameReminder
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import JjWorkspaceReminders
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_synthetic_diff_from_tool_input
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_tool_content
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _extract_edits
@@ -923,3 +924,75 @@ def test_get_user_instructions_omits_the_branch_rename_without_a_hint() -> None:
     result = get_user_instructions(message, file_paths=(), is_first_message=True, auto_rename=AutoRenameReminder())
     assert _AUTO_RENAME_MARKER in result
     assert "git branch -m" not in result
+
+
+# Markers that only appear in the jj workspace reminders.
+_JJ_SKILL_MARKER = 'skill="sculptor-jj:jujutsu"'
+_JJ_BOOKMARK_MARKER = "Sculptor names this workspace's work with the jj bookmark"
+
+
+def test_get_user_instructions_tells_a_jj_workspace_agent_to_invoke_the_jj_skill_before_anything_else() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message, file_paths=(), is_first_message=True, jj_workspace=JjWorkspaceReminders(requested_bookmark=None)
+    )
+    assert result.startswith("<system-reminder>")
+    assert result.index(_JJ_SKILL_MARKER) < result.index("</system-reminder>")
+    assert "Before you do anything else" in result
+    assert result.endswith("hello")
+
+
+def test_get_user_instructions_puts_the_jj_skill_above_a_skill_the_user_invoked_and_the_setup_reminder() -> None:
+    message = ChatInputUserMessage(text="/address-comments XYZ")
+    setup_state = RunningSetup(command="npm ci", pid=12345, log_path="/abs/setup_log.txt")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        setup_state=setup_state,
+        jj_workspace=JjWorkspaceReminders(requested_bookmark=None),
+    )
+    jj_skill_idx = result.index(_JJ_SKILL_MARKER)
+    assert jj_skill_idx < result.index(_SKILL_INVOCATION_PREAMBLE + "/address-comments")
+    assert jj_skill_idx < result.index(_SETUP_RUNNING_PREAMBLE)
+
+
+def test_get_user_instructions_names_the_requested_bookmark_on_a_jj_workspace_first_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        auto_rename=AutoRenameReminder(),
+        jj_workspace=JjWorkspaceReminders(requested_bookmark="dev/graph-view"),
+    )
+    assert _JJ_BOOKMARK_MARKER + " `dev/graph-view`" in result
+    assert "jj bookmark set dev/graph-view -r @-" in result
+    assert "git branch -m" not in result
+
+
+def test_get_user_instructions_has_no_bookmark_reminder_for_a_jj_workspace_without_a_requested_bookmark() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message, file_paths=(), is_first_message=True, jj_workspace=JjWorkspaceReminders(requested_bookmark=None)
+    )
+    assert _JJ_SKILL_MARKER in result
+    assert _JJ_BOOKMARK_MARKER not in result
+
+
+def test_get_user_instructions_sends_the_jj_first_message_reminders_only_on_the_first_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=False,
+        jj_workspace=JjWorkspaceReminders(requested_bookmark="dev/graph-view"),
+    )
+    assert result == "hello"
+
+
+def test_get_user_instructions_has_no_jj_reminders_for_a_git_workspace() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(message, file_paths=(), is_first_message=True)
+    assert _JJ_SKILL_MARKER not in result
+    assert _JJ_BOOKMARK_MARKER not in result

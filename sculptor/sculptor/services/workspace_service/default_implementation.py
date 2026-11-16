@@ -69,6 +69,9 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
+from sculptor.services.workspace_service.jj_bookmark_facts import DefaultJjBookmarkFactsProvider
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFactsProvider
+from sculptor.services.workspace_service.jj_bookmark_facts import JjStackBookmarks
 from sculptor.services.workspace_service.jj_orphan_sweep import forget_orphaned_jj_workspaces
 from sculptor.services.workspace_service.jj_workspace_poller import JjWorkspacePoller
 from sculptor.services.workspace_service.jj_workspace_poller import PublishedJjReadiness
@@ -264,6 +267,20 @@ class DefaultWorkspaceService(WorkspaceService):
 
     def make_setup_state_provider(self, workspace_id: str) -> SetupStateProvider:
         return DefaultSetupStateProvider(self.setup_runner, workspace_id)
+
+    def make_jj_bookmark_facts_provider(self, workspace_id: WorkspaceID) -> JjBookmarkFactsProvider:
+        return DefaultJjBookmarkFactsProvider(workspace_id, self.data_model_service, self._read_cached_stack_bookmarks)
+
+    def _read_cached_stack_bookmarks(self, workspace_id: WorkspaceID) -> JjStackBookmarks | None:
+        state = self.get_cached_jj_state(workspace_id)
+        if state is None:
+            return None
+        return JjStackBookmarks(
+            working_copy_change_id=state.working_copy_change_id,
+            bookmarks=state.bookmarks,
+            primary_bookmark=state.primary_bookmark,
+            unbookmarked_revision_count=state.unbookmarked_revision_count,
+        )
 
     def _persist_setup_state(self, change: SetupStateChanged) -> None:
         fields: WorkspaceFieldUpdate = {

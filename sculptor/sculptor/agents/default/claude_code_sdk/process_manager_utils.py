@@ -15,6 +15,7 @@ from loguru import logger
 from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.constants import FAST_MODE_MODELS
+from sculptor.agents.default.constants import JJ_SKILL_NAME
 from sculptor.config.user_config import NightMode
 from sculptor.config.user_config import is_night_mode_active
 from sculptor.foundation.async_monkey_patches import log_exception
@@ -296,6 +297,32 @@ The naming conventions below apply here and OVERRIDE the guidance above where th
     return _AUTO_RENAME_REMINDER_PREFIX + branch_block + conventions_block + _AUTO_RENAME_REMINDER_SUFFIX
 
 
+_JJ_SKILL_PREACTIVATION_REMINDER = f"""<system-reminder>
+This is a jj (Jujutsu) workspace. Before you do anything else, invoke the `{JJ_SKILL_NAME}` skill with the Skill tool (skill="{JJ_SKILL_NAME}") and follow it for all version control here. If the skill is not in your available-skills list, call the Skill tool anyway; the harness will return a clear error if it truly doesn't exist.
+</system-reminder>
+
+"""
+
+
+def _build_jj_bookmark_reminder(requested_bookmark: str) -> str:
+    return f"""<system-reminder>
+Sculptor names this workspace's work with the jj bookmark `{requested_bookmark}`. Until a bookmark is on your stack, Sculptor creates `{requested_bookmark}` on your newest described change each time one of your turns ends, if the name is free. So describe your work with `jj describe -m` or `jj commit -m`, and do not create a bookmark under another name. Keep the bookmark on your newest described change as you go, for example `jj bookmark set {requested_bookmark} -r @-`.
+</system-reminder>
+
+"""
+
+
+class JjWorkspaceReminders(FrozenModel):
+    """The reminders for an agent in a jj workspace; `None` in its place, for a git workspace, emits none.
+
+    The first message of a conversation tells the agent to invoke the jj skill
+    and, when the workspace has a ``requested_bookmark``, which bookmark
+    Sculptor creates for its work.
+    """
+
+    requested_bookmark: str | None
+
+
 def get_user_instructions(
     message: ChatInputUserMessage | ResumeAgentResponseRunnerMessage | UserQuestionAnswerMessage,
     file_paths: tuple[str, ...],
@@ -304,6 +331,7 @@ def get_user_instructions(
     is_first_message: bool = False,
     setup_state: SetupReminderState | None = None,
     auto_rename: AutoRenameReminder | None = None,
+    jj_workspace: JjWorkspaceReminders | None = None,
 ) -> str:
     if isinstance(message, ChatInputUserMessage):
         user_instructions = _strip_and_unescape_html(message.text)
@@ -340,6 +368,8 @@ The user has configured the following environment variables for this agent: {", 
             user_instructions = env_var_instructions + user_instructions
         if is_first_message and auto_rename is not None:
             user_instructions = _build_auto_rename_reminder(auto_rename) + user_instructions
+        if is_first_message and jj_workspace is not None and jj_workspace.requested_bookmark is not None:
+            user_instructions = _build_jj_bookmark_reminder(jj_workspace.requested_bookmark) + user_instructions
         # Prepend the setup reminder after the auto-rename one so it ends up above it: a
         # running or failed setup command is higher-priority first-message context than the
         # rename nudge, and shouldn't be pushed down by it.
@@ -349,6 +379,10 @@ The user has configured the following environment variables for this agent: {", 
             skill_name = skill_invocation_match.group(1)
             if skill_name not in _CLAUDE_CLI_BUILTINS:
                 user_instructions = _build_skill_invocation_reminder(skill_name) + user_instructions
+        # Prepended last, so the agent reads it first: the jj skill governs every
+        # version-control step that follows, including those of a skill the user invoked.
+        if is_first_message and jj_workspace is not None:
+            user_instructions = _JJ_SKILL_PREACTIVATION_REMINDER + user_instructions
     elif isinstance(message, ResumeAgentResponseRunnerMessage):
         user_instructions = """<system-reminder>\nYour previous response was interrupted. Please continue from where you left off. DO NOT respond to this message, just keep continuing with your previous reply as if you had not been stopped part-way through.\n</system-reminder>"""
     elif isinstance(message, UserQuestionAnswerMessage):
