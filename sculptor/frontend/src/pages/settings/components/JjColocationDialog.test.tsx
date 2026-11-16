@@ -1,7 +1,9 @@
 import { Theme } from "@radix-ui/themes";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, type RenderResult, screen, waitFor } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
 import type { ReactElement } from "react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { JjColocationPreflight } from "~/api";
@@ -20,22 +22,39 @@ vi.mock("~/api", async (importOriginal) => {
   return { ...actual, getProjectJjPreflight: apiHarness.getProjectJjPreflight };
 });
 
-const CLEAN_PREFLIGHT: JjColocationPreflight = { blockers: [], warnings: [], hasUncommittedChanges: false };
+const CLEAN_PREFLIGHT: JjColocationPreflight = {
+  blockers: [],
+  warnings: [],
+  hasUncommittedChanges: false,
+  jjUnavailableReason: null,
+};
 
 const onClose = vi.fn();
 const onConfirm = vi.fn();
 
+const store = createStore();
+
+const LocationProbe = (): ReactElement => {
+  const location = useLocation();
+  return <div data-testid="location">{location.search}</div>;
+};
+
 const dialogTree = (isOpen: boolean): ReactElement => (
   <QueryClientProvider client={queryClient}>
-    <Theme>
-      <JjColocationDialog
-        projectId="prj-1"
-        projectPath="/home/dev/code/sculptor"
-        isOpen={isOpen}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />
-    </Theme>
+    <Provider store={store}>
+      <MemoryRouter initialEntries={["/settings?section=REPOSITORIES"]}>
+        <Theme>
+          <JjColocationDialog
+            projectId="prj-1"
+            projectPath="/home/dev/code/sculptor"
+            isOpen={isOpen}
+            onClose={onClose}
+            onConfirm={onConfirm}
+          />
+          <LocationProbe />
+        </Theme>
+      </MemoryRouter>
+    </Provider>
   </QueryClientProvider>
 );
 
@@ -109,9 +128,27 @@ describe("JjColocationDialog", () => {
     expect(getConfirm()).toBeDisabled();
   });
 
+  it("says why jj is unavailable in the backend's words, with a link to the Jujutsu page", async () => {
+    apiHarness.getProjectJjPreflight.mockResolvedValue({
+      data: {
+        ...CLEAN_PREFLIGHT,
+        blockers: ["JJ_UNAVAILABLE"],
+        jjUnavailableReason: "jj cannot run: Config error: expected a table",
+      },
+    });
+    renderDialog();
+
+    await screen.findByText(/jj cannot run: Config error: expected a table/);
+    expect(getConfirm()).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("link", { name: "Open Jujutsu settings" }));
+
+    expect(screen.getByTestId("location")).toHaveTextContent("?section=JJ");
+  });
+
   it("lists warnings and uncommitted changes without blocking", async () => {
     apiHarness.getProjectJjPreflight.mockResolvedValue({
-      data: { blockers: [], warnings: ["HOOKS", "SPARSE_CHECKOUT"], hasUncommittedChanges: true },
+      data: { ...CLEAN_PREFLIGHT, warnings: ["HOOKS", "SPARSE_CHECKOUT"], hasUncommittedChanges: true },
     });
     renderDialog();
 

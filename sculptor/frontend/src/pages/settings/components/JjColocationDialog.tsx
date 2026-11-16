@@ -1,7 +1,7 @@
 import { CrossCircledIcon, ExclamationTriangleIcon, InfoCircledIcon } from "@radix-ui/react-icons";
 import { Button, Callout, Code, Dialog, Flex, Spinner, Text } from "@radix-ui/themes";
 import { useQuery } from "@tanstack/react-query";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import type { JjColocationBlocker, JjColocationPreflight, JjColocationWarning } from "~/api";
 import { ElementIds, getProjectJjPreflight } from "~/api";
@@ -9,16 +9,23 @@ import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
 
 import styles from "./JjColocationDialog.module.scss";
+import { OpenJjSettingsLink } from "./OpenJjSettingsLink.tsx";
+
+// The repository's own blockers. JJ_UNAVAILABLE is worded by the backend,
+// which sends its reason with the pre-flight.
+type RepositoryBlocker = Exclude<JjColocationBlocker, "JJ_UNAVAILABLE">;
 
 const BLOCKER_COPY = {
-  JJ_UNAVAILABLE: "jj is not available. Set it up on the Jujutsu settings page.",
   JJ_REPOSITORY_NOT_COLOCATED:
     "This repository has a .jj directory that is not colocated with its .git. Sculptor never deletes a .jj directory: remove it yourself, then try again.",
   SUBMODULES: "This repository uses git submodules, which jj workspaces cannot hold.",
   LFS: "This repository uses Git LFS, which jj workspaces cannot hold.",
   GIT_OPERATION_IN_PROGRESS:
     "git has stopped in a merge, rebase, cherry-pick or revert. Finish or abort it, then try again.",
-} as const satisfies Record<JjColocationBlocker, string>;
+} as const satisfies Record<RepositoryBlocker, string>;
+
+const isRepositoryBlocker = (blocker: JjColocationBlocker): blocker is RepositoryBlocker =>
+  blocker !== "JJ_UNAVAILABLE";
 
 const WARNING_COPY = {
   HOOKS: "This repository has git hooks. Hooks do not run in jj workspaces.",
@@ -135,19 +142,34 @@ const JjColocationPreflightFindings = ({ preflight }: { preflight: PreflightResu
   }
 
   if (preflight.status === "error") {
-    return <PreflightCallout color="red" icon={<CrossCircledIcon />} text={preflight.message} />;
+    return (
+      <PreflightCallout color="red" icon={<CrossCircledIcon />}>
+        {preflight.message}
+      </PreflightCallout>
+    );
   }
-  const { blockers, warnings, hasUncommittedChanges } = preflight.preflight;
+  const { blockers, warnings, hasUncommittedChanges, jjUnavailableReason } = preflight.preflight;
   return (
     <>
-      {blockers.map((blocker) => (
-        <PreflightCallout key={blocker} color="red" icon={<CrossCircledIcon />} text={BLOCKER_COPY[blocker]} />
+      {jjUnavailableReason !== null && (
+        <PreflightCallout color="red" icon={<CrossCircledIcon />}>
+          {jjUnavailableReason}. <OpenJjSettingsLink />
+        </PreflightCallout>
+      )}
+      {blockers.filter(isRepositoryBlocker).map((blocker) => (
+        <PreflightCallout key={blocker} color="red" icon={<CrossCircledIcon />}>
+          {BLOCKER_COPY[blocker]}
+        </PreflightCallout>
       ))}
       {warnings.map((warning) => (
-        <PreflightCallout key={warning} color="amber" icon={<ExclamationTriangleIcon />} text={WARNING_COPY[warning]} />
+        <PreflightCallout key={warning} color="amber" icon={<ExclamationTriangleIcon />}>
+          {WARNING_COPY[warning]}
+        </PreflightCallout>
       ))}
       {hasUncommittedChanges && (
-        <PreflightCallout color="gray" icon={<InfoCircledIcon />} text={UNCOMMITTED_CHANGES_COPY} />
+        <PreflightCallout color="gray" icon={<InfoCircledIcon />}>
+          {UNCOMMITTED_CHANGES_COPY}
+        </PreflightCallout>
       )}
     </>
   );
@@ -156,14 +178,14 @@ const JjColocationPreflightFindings = ({ preflight }: { preflight: PreflightResu
 const PreflightCallout = ({
   color,
   icon,
-  text,
+  children,
 }: {
   color: "red" | "amber" | "gray";
   icon: ReactElement;
-  text: string;
+  children: ReactNode;
 }): ReactElement => (
   <Callout.Root color={color} size="1">
     <Callout.Icon>{icon}</Callout.Icon>
-    <Callout.Text>{text}</Callout.Text>
+    <Callout.Text>{children}</Callout.Text>
   </Callout.Root>
 );
