@@ -1002,3 +1002,168 @@ def test_reads_of_an_unchanged_workspace_add_no_operation(
     jj_vcs.agent_environment(checkout)
 
     assert _count_operations(jj_binary, checkout.checkout_path) == operations_before
+
+
+def _local_bookmark_names(jj_binary: JjBinary, repo_dir: Path) -> set[str]:
+    output = _jj(jj_binary, repo_dir, "--ignore-working-copy", "bookmark", "list", "-T", 'name ++ "\\n"')
+    return set(output.split())
+
+
+def _workspace_config_directory(jj_binary: JjBinary, checkout: Path) -> Path:
+    return Path(_jj(jj_binary, checkout, "--ignore-working-copy", "config", "path", "--workspace").strip()).parent
+
+
+def _is_visible(jj_binary: JjBinary, repo_dir: Path, commit_id: str) -> bool:
+    revset = f"present({commit_id}) & ::visible_heads()"
+    return _jj(jj_binary, repo_dir, "--ignore-working-copy", "log", "--no-graph", "-r", revset, "-T", '"x"') != ""
+
+
+def _move_origin_main_to(jj_binary: JjBinary, repo: JjColocatedRepo, commit_id: str) -> None:
+    """Make `main` on the remote point at `commit_id`, as merging a pull request does, then fetch it."""
+    run_blocking(["git", "push", "-q", "origin", f"{commit_id}:refs/heads/main"], cwd=repo.path)
+    _jj(jj_binary, repo.path, "--ignore-working-copy", "git", "fetch")
+
+
+def _remote_branches(repo: JjColocatedRepo) -> set[str]:
+    output = run_blocking(["git", "ls-remote", "--heads", str(repo.remote_path)], cwd=repo.path).stdout
+    return {line.split("refs/heads/", 1)[1] for line in output.splitlines()}
+
+
+@pytest.fixture
+def stacked_checkout(checkout: CheckoutLocation, jj_binary: JjBinary) -> CheckoutLocation:
+    """`checkout` with `lower` on its first revision, `upper` on its second, and an edit in the working copy."""
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "lower")
+    _commit_change(jj_binary, checkout.checkout_path, "b.txt", "b\n", "second")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "upper")
+    (checkout.checkout_path / "c.txt").write_text("c\n")
+    _jj(jj_binary, checkout.checkout_path, "describe", "-m", "third")
+    return checkout
+
+
+def test_remove_checkout_under_never_forgets_the_workspace_and_its_config_but_keeps_its_bookmarks(
+    jj_vcs: JjWorkspaceVcs, stacked_checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    config_directory = _workspace_config_directory(jj_binary, stacked_checkout.checkout_path)
+    assert config_directory.is_dir()
+
+    jj_vcs.remove_checkout(stacked_checkout, target_ref=_BASE, created_ref_name="upper", deletion_policy="never")
+
+    assert stacked_checkout.checkout_name not in _workspace_roots_by_name(jj_binary, jj_colocated_repo.path)
+    assert not config_directory.exists()
+    assert {"lower", "upper"} <= _local_bookmark_names(jj_binary, jj_colocated_repo.path)
+
+
+def test_remove_checkout_under_always_forgets_every_bookmark_on_the_stack_and_keeps_the_commits(
+    jj_vcs: JjWorkspaceVcs, stacked_checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    described_working_copy = _commit_id(jj_binary, stacked_checkout.checkout_path, "@")
+    lower_commit = _commit_id(jj_binary, stacked_checkout.checkout_path, "lower")
+
+    jj_vcs.remove_checkout(stacked_checkout, target_ref=_BASE, created_ref_name="upper", deletion_policy="always")
+
+    assert _local_bookmark_names(jj_binary, jj_colocated_repo.path) == {"main"}
+    assert _is_visible(jj_binary, jj_colocated_repo.path, described_working_copy)
+    assert _is_visible(jj_binary, jj_colocated_repo.path, lower_commit)
+
+
+def test_remove_checkout_never_forgets_the_targets_own_name(
+    jj_vcs: JjWorkspaceVcs, stacked_checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    _set_bookmarks(jj_binary, stacked_checkout.checkout_path, "lower", "main")
+
+    jj_vcs.remove_checkout(stacked_checkout, target_ref="main@origin", created_ref_name=None, deletion_policy="always")
+
+    assert _local_bookmark_names(jj_binary, jj_colocated_repo.path) == {"main"}
+
+
+def test_remove_checkout_keeps_a_bookmark_on_another_live_workspaces_stack(
+    jj_vcs: JjWorkspaceVcs, stacked_checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    other_workspace = jj_colocated_repo.path.parent / "other"
+    _jj(
+        jj_binary,
+        jj_colocated_repo.path,
+        "workspace",
+        "add",
+        "--no-colocate",
+        "--name",
+        "other",
+        "-r",
+        "lower",
+        str(other_workspace),
+    )
+
+    jj_vcs.remove_checkout(stacked_checkout, target_ref=_BASE, created_ref_name="upper", deletion_policy="always")
+
+    assert _local_bookmark_names(jj_binary, jj_colocated_repo.path) == {"main", "lower"}
+
+
+@pytest.mark.parametrize("is_main_tracked", [True, False])
+def test_remove_checkout_when_safe_forgets_a_fully_pushed_bookmark_and_leaves_the_remote_branch(
+    jj_vcs: JjWorkspaceVcs,
+    stacked_checkout: CheckoutLocation,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    is_main_tracked: bool,
+) -> None:
+    if not is_main_tracked:
+        _untrack_main(jj_binary, jj_colocated_repo)
+    _jj(jj_binary, stacked_checkout.checkout_path, "--ignore-working-copy", "git", "push", "--bookmark", "upper")
+
+    jj_vcs.remove_checkout(
+        stacked_checkout, target_ref=_BASE, created_ref_name="upper", deletion_policy="delete_if_safe"
+    )
+
+    assert _local_bookmark_names(jj_binary, jj_colocated_repo.path) == {"main", "lower"}
+    assert "upper" in _remote_branches(jj_colocated_repo)
+
+
+def test_remove_checkout_when_safe_keeps_a_bookmark_pushed_before_its_latest_change(
+    jj_vcs: JjWorkspaceVcs, stacked_checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    _jj(jj_binary, stacked_checkout.checkout_path, "--ignore-working-copy", "git", "push", "--bookmark", "lower")
+    _set_bookmarks(jj_binary, stacked_checkout.checkout_path, "upper", "lower")
+
+    jj_vcs.remove_checkout(stacked_checkout, target_ref=_BASE, created_ref_name=None, deletion_policy="delete_if_safe")
+
+    assert {"lower", "upper"} <= _local_bookmark_names(jj_binary, jj_colocated_repo.path)
+
+
+@pytest.mark.parametrize("is_main_tracked", [True, False])
+def test_remove_checkout_when_safe_forgets_the_created_bookmark_once_the_target_contains_it(
+    jj_vcs: JjWorkspaceVcs,
+    stacked_checkout: CheckoutLocation,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    is_main_tracked: bool,
+) -> None:
+    if not is_main_tracked:
+        _untrack_main(jj_binary, jj_colocated_repo)
+    _move_origin_main_to(jj_binary, jj_colocated_repo, _commit_id(jj_binary, stacked_checkout.checkout_path, "lower"))
+
+    jj_vcs.remove_checkout(
+        stacked_checkout, target_ref=_BASE, created_ref_name="lower", deletion_policy="delete_if_safe"
+    )
+
+    assert "lower" not in _local_bookmark_names(jj_binary, jj_colocated_repo.path)
+    assert "upper" in _local_bookmark_names(jj_binary, jj_colocated_repo.path)
+
+
+def test_remove_checkout_still_forgets_the_workspace_and_bookmarks_when_its_directory_is_gone(
+    jj_vcs: JjWorkspaceVcs, stacked_checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    shutil.rmtree(stacked_checkout.checkout_path)
+
+    jj_vcs.remove_checkout(stacked_checkout, target_ref=_BASE, created_ref_name="upper", deletion_policy="always")
+
+    assert stacked_checkout.checkout_name not in _workspace_roots_by_name(jj_binary, jj_colocated_repo.path)
+    assert _local_bookmark_names(jj_binary, jj_colocated_repo.path) == {"main"}
+
+
+def test_remove_checkout_survives_a_repository_that_is_gone(jj_vcs: JjWorkspaceVcs, tmp_path: Path) -> None:
+    location = CheckoutLocation(
+        repo_path=tmp_path / "no-repo", checkout_path=tmp_path / "no-checkout", checkout_name=f"ws_{uuid4().hex}"
+    )
+
+    jj_vcs.remove_checkout(location, target_ref=_BASE, created_ref_name="feat", deletion_policy="always")

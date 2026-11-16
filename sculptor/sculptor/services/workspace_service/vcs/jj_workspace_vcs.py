@@ -9,11 +9,14 @@ the interface gives the method a failure value of its own.
 
 import base64
 import json
+import shutil
 from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
 from pathlib import Path
 from typing import Any
+from typing import assert_never
 
 from loguru import logger
 
@@ -22,6 +25,7 @@ from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.vcs.checkout_paths import validate_checkout_relative_path
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
+from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.data_types import CommitFileChange
@@ -49,11 +53,13 @@ from sculptor.services.workspace_service.vcs.jj_data_types import JjStackProject
 from sculptor.services.workspace_service.vcs.jj_data_types import JjStackRevision
 from sculptor.services.workspace_service.vcs.jj_repo_queries import add_workspace
 from sculptor.services.workspace_service.vcs.jj_repo_queries import does_bookmark_exist
+from sculptor.services.workspace_service.vcs.jj_repo_queries import forget_bookmarks
 from sculptor.services.workspace_service.vcs.jj_repo_queries import forget_workspace
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_tracked_bookmark_names
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_workspaces
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_remotes
+from sculptor.services.workspace_service.vcs.jj_repo_queries import read_workspace_config_path
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_commit_id
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_trunk_symbol
 from sculptor.services.workspace_service.vcs.jj_repo_queries import set_workspace_config
@@ -61,9 +67,11 @@ from sculptor.services.workspace_service.vcs.jj_repo_queries import snapshot_wor
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
 from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import is_full_commit_id
+from sculptor.services.workspace_service.vcs.jj_revsets import local_bookmark_revset
 from sculptor.services.workspace_service.vcs.jj_revsets import parse_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import revset_for_base
 from sculptor.services.workspace_service.vcs.jj_revsets import root_file_fileset
+from sculptor.services.workspace_service.vcs.jj_revsets import working_copy_revset
 from sculptor.services.workspace_service.vcs.jj_stack_projection import project_jj_stack
 from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
 from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
@@ -177,6 +185,149 @@ class JjWorkspaceVcs:
         if not (location.checkout_path / _STORE_LINK).is_file():
             raise EnvironmentNotFoundError(f"jj workspace {location.checkout_path} has no {_STORE_LINK}")
         self._apply_workspace_config(location.checkout_path)
+
+    def remove_checkout(
+        self,
+        location: CheckoutLocation,
+        target_ref: str | None,
+        created_ref_name: str | None,
+        deletion_policy: BranchDeletionPolicy,
+    ) -> None:
+        """Forget the jj workspace, apply `deletion_policy` to its own bookmarks, and delete its jj config.
+
+        The workspace's own bookmarks are those on its stack, plus
+        `created_ref_name` while it is an ancestor of the working copy, so a
+        bookmark merged into the target still counts. The target's own name and
+        any bookmark on another workspace's stack are never touched. Bookmarks
+        are forgotten, never deleted, so no later push deletes a remote branch;
+        the workspace's commits stay visible. Works when the checkout directory
+        is already gone, though its jj config then stays behind.
+        """
+        config_path = self._read_workspace_config_path(location.checkout_path)
+        try:
+            bookmarks_to_forget = self._resolve_bookmarks_to_forget(
+                location, target_ref, created_ref_name, deletion_policy
+            )
+        except VcsCommandError as e:
+            logger.info("Cannot resolve the bookmarks of jj workspace {}; keeping them: {}", location.checkout_name, e)
+            bookmarks_to_forget = []
+        logger.debug(
+            "Forgetting jj workspace {} and bookmarks {} (policy {}, user repo: {})",
+            location.checkout_name,
+            bookmarks_to_forget,
+            deletion_policy,
+            location.repo_path,
+        )
+        try:
+            forget_workspace(self._jj, location.repo_path, location.checkout_name)
+            forget_bookmarks(self._jj, location.repo_path, bookmarks_to_forget)
+        except VcsCommandError as e:
+            logger.info("Failed to forget jj workspace {}: {}", location.checkout_name, e)
+        if config_path is not None:
+            self._delete_workspace_config_directory(config_path.parent)
+
+    def _read_workspace_config_path(self, checkout_path: Path) -> Path | None:
+        try:
+            return read_workspace_config_path(self._jj, checkout_path)
+        except VcsCommandError as e:
+            logger.debug("Cannot find the jj config of {}: {}", checkout_path, e)
+            return None
+
+    def _delete_workspace_config_directory(self, config_directory: Path) -> None:
+        try:
+            shutil.rmtree(config_directory)
+        except OSError as e:
+            logger.info("Failed to delete jj workspace config {}: {}", config_directory, e)
+
+    def _resolve_bookmarks_to_forget(
+        self,
+        location: CheckoutLocation,
+        target_ref: str | None,
+        created_ref_name: str | None,
+        deletion_policy: BranchDeletionPolicy,
+    ) -> list[str]:
+        match deletion_policy:
+            case "never":
+                return []
+            case "always":
+                return sorted(self._find_own_bookmarks(location, target_ref, created_ref_name))
+            case "delete_if_safe":
+                own_bookmarks = self._find_own_bookmarks(location, target_ref, created_ref_name)
+                return self._filter_safe_to_forget(location.repo_path, own_bookmarks, target_ref)
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def _find_own_bookmarks(
+        self, location: CheckoutLocation, target_ref: str | None, created_ref_name: str | None
+    ) -> set[str]:
+        """The bookmarks `remove_checkout` may forget; empty when the repository no longer has the workspace."""
+        repo_path = location.repo_path
+        working_copy_commit_id = resolve_commit_id(self._jj, repo_path, working_copy_revset(location.checkout_name))
+        if working_copy_commit_id is None:
+            logger.debug("jj workspace {} has no working copy; keeping its bookmarks", location.checkout_name)
+            return set()
+        target_commit_id = self._resolve_target_commit_id(repo_path, target_ref)
+        own_bookmarks = self._read_bookmark_names(
+            repo_path, _stack_revset(JjRevset(working_copy_commit_id), target_commit_id)
+        )
+        if created_ref_name is not None and created_ref_name in self._read_bookmark_names(
+            repo_path, JjRevset(f"{local_bookmark_revset(created_ref_name)} & ::{working_copy_commit_id}")
+        ):
+            own_bookmarks.add(created_ref_name)
+        own_bookmarks.discard(_target_bookmark_name(target_ref))
+        own_bookmarks -= self._read_bookmarks_on_other_stacks(repo_path, location.checkout_name, target_commit_id)
+        return own_bookmarks
+
+    def _read_bookmark_names(self, repo_dir: Path, revset: JjRevset) -> set[str]:
+        """The unconflicted local bookmarks on `revset`."""
+        return {
+            bookmark for revision in self._read_stack_revisions(repo_dir, revset) for bookmark in revision.bookmarks
+        }
+
+    def _read_bookmarks_on_other_stacks(
+        self, repo_path: Path, workspace_name: str, target_commit_id: str | None
+    ) -> set[str]:
+        """The bookmarks on the stack of any other workspace, including the user's own checkout."""
+        other_working_copies = [
+            f"present({working_copy_revset(entry.name)})"
+            for entry in list_workspaces(self._jj, repo_path)
+            if entry.name != workspace_name
+        ]
+        if not other_working_copies:
+            return set()
+        return self._read_bookmark_names(
+            repo_path, _stack_revset(JjRevset(" | ".join(other_working_copies)), target_commit_id)
+        )
+
+    def _filter_safe_to_forget(
+        self, repo_path: Path, bookmark_names: AbstractSet[str], target_ref: str | None
+    ) -> list[str]:
+        """The bookmarks that are merged into the target, or that track a remote bookmark on the same commit."""
+        if not bookmark_names:
+            return []
+        target_commit_id = self._resolve_target_commit_id(repo_path, target_ref)
+        bookmarks = list_bookmarks(self._jj, repo_path)
+        local_commit_id_by_name = {
+            bookmark.name: bookmark.commit_id for bookmark in bookmarks if bookmark.remote is None
+        }
+        fully_pushed = {
+            bookmark.name
+            for bookmark in bookmarks
+            if bookmark.remote is not None
+            and bookmark.is_tracked
+            and bookmark.commit_id is not None
+            and bookmark.commit_id == local_commit_id_by_name.get(bookmark.name)
+        }
+        if target_commit_id is None:
+            merged: set[str] = set()
+        else:
+            named_bookmarks = " | ".join(local_bookmark_revset(name) for name in sorted(bookmark_names))
+            merged = self._read_bookmark_names(repo_path, JjRevset(f"::{target_commit_id} & ({named_bookmarks})"))
+        safe = sorted(name for name in bookmark_names if name in fully_pushed or name in merged)
+        unsafe = sorted(set(bookmark_names) - set(safe))
+        if unsafe:
+            logger.info("Keeping bookmarks {}: neither merged into the target nor fully pushed", unsafe)
+        return safe
 
     def resolve_default_target(self, repo_path: Path) -> str | None:
         """The remote bookmark on `trunk()`, such as `main@origin`; without one, the local `main` or `master`."""
