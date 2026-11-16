@@ -317,8 +317,7 @@ def fetch_open_prs_for_token(run_gh: GhRunner) -> OpenPrSearchResult:
     token-global — not repo-scoped) returning all of the user's open PRs across
     every repo, each with the per-PR check/review/comment detail the
     per-workspace query carries. Paginates only when the user has more than
-    ``_SEARCH_PAGE_SIZE`` open PRs (rare), logging a warning when it does so
-    silent truncation can't masquerade as full coverage. Returns the
+    ``_SEARCH_PAGE_SIZE`` open PRs, following every page. Returns the
     accumulated nodes plus the token's ``rateLimit`` snapshot (``None`` if the
     block is absent) for the governor.
 
@@ -340,7 +339,7 @@ def fetch_open_prs_for_token(run_gh: GhRunner) -> OpenPrSearchResult:
             break
         after = page_info["endCursor"]
         page += 1
-        logger.warning(
+        logger.debug(
             "PR search returned more than {} open PRs; following pagination to page {}",
             _SEARCH_PAGE_SIZE,
             page,
