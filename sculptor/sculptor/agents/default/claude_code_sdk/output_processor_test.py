@@ -1,4 +1,5 @@
 import json
+import shutil
 import time
 from collections.abc import Iterable
 from collections.abc import Sequence
@@ -10,6 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.errors import ClaudeAPIError
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
@@ -33,17 +35,30 @@ from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
 from sculptor.agents.testing.fake_claude_jsonl import make_workflow_agent_entry
 from sculptor.agents.testing.fake_claude_jsonl import make_workflow_phase_entry
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
+from sculptor.interfaces.agents.agent import ResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import WarningAgentMessage
 from sculptor.interfaces.agents.agent import WorkflowTaskProgressAgentMessage
 from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import AgentTransientError
 from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import ToolUseID
+from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
+    LocalAgentExecutionEnvironment,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.state.chat_state import FileBlock
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolResultBlock
@@ -58,6 +73,7 @@ from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import ParsedTaskUpdatedResponse
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.workflow_state import WorkflowAgentProgress
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 
 
@@ -1924,6 +1940,85 @@ class TestParserExceptionContainment:
         assert notifications[0].background_task_id == "bg_after_crash"
         # And the turn still reached its terminating result frame.
         assert processor.found_final_message
+
+
+def _make_jj_checkout_with_a_tracker_built_while_it_was_git(
+    checkout: Path, concurrency_group: ConcurrencyGroup
+) -> tuple[DiffTracker, str]:
+    """A tracker baselined on a git checkout that has since become a jj workspace, and a file it tracks."""
+    file_path = str(checkout / "module.py")
+    checkout.mkdir()
+    Path(file_path).write_text("print('hello')\n")
+    run_blocking(["git", "init", "-q"], cwd=checkout)
+    run_blocking(["git", "add", "."], cwd=checkout)
+    run_blocking(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "init"], cwd=checkout
+    )
+    local_environment = LocalEnvironment.create(
+        environment_id=LocalEnvironmentID(str(checkout)),
+        project_id=ProjectID(),
+        concurrency_group=concurrency_group,
+        repo_host_path=checkout,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, concurrency_group),
+        workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+    )
+    dependency_management_service = DependencyManagementService.model_construct(
+        concurrency_group=MagicMock(spec=ConcurrencyGroup)
+    )
+    environment = LocalAgentExecutionEnvironment(local_environment, TaskID(), dependency_management_service)
+    diff_tracker = DiffTracker(environment=environment)
+    shutil.rmtree(checkout / ".git")
+    (checkout / ".jj").mkdir()
+    Path(file_path).write_text("print('hello world')\n")
+    return diff_tracker, file_path
+
+
+def test_tool_result_in_a_jj_workspace_ends_the_turn_instead_of_becoming_a_warning(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    diff_tracker, file_path = _make_jj_checkout_with_a_tracker_built_while_it_was_git(
+        tmp_path / "checkout", test_root_concurrency_group
+    )
+    tool_use_id = "toolu_edit_in_jj_workspace"
+    tool_input = {"file_path": file_path, "old_string": "print('hello')", "new_string": "print('hello world')"}
+    input_queue: Queue = Queue()
+    for message in [
+        make_init_message(session_id="s1"),
+        make_assistant_message(
+            message_id="msg_edit", content_blocks=[make_tool_use_block(tool_use_id, "Edit", tool_input)]
+        ),
+        make_tool_result_message(tool_use_id=tool_use_id, content="ok", is_error=False),
+    ]:
+        input_queue.put((json.dumps(message), True))
+    process = MagicMock()
+    process.get_queue.return_value = input_queue
+    process.is_finished.return_value = True
+    processor = ClaudeOutputProcessor(
+        process=process,
+        source_command="test",
+        output_message_queue=Queue(),
+        environment=MagicMock(),
+        diff_tracker=diff_tracker,
+        task_id=TaskID(),
+        session_id_written_event=Event(),
+        harness=CLAUDE_CODE_HARNESS,
+        streaming_enabled=True,
+    )
+
+    with pytest.raises(GitCommandInJjWorkspaceError):
+        processor._process_output()
+
+    emitted = _drain_queue(processor.output_message_queue)
+    assert not any(isinstance(message, WarningAgentMessage) for message in emitted)
+    tool_results = [
+        block
+        for message in emitted
+        if isinstance(message, ResponseBlockAgentMessage)
+        for block in message.content
+        if isinstance(block, ToolResultBlock)
+    ]
+    assert tool_results == []
 
 
 def _collect_text(messages: Iterable) -> str:

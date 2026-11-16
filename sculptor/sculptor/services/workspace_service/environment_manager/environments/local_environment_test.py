@@ -10,6 +10,7 @@ from typing import Generator
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
@@ -57,6 +58,7 @@ def local_environment(test_root_concurrency_group: ConcurrencyGroup) -> Generato
             repo_host_path=repo_dir,
             vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
             workspace_id=WorkspaceID(),
+            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
         )
         yield local_env
     finally:
@@ -587,3 +589,17 @@ def test_create_worktree_branch_exists_raises(tmp_path: Path, test_root_concurre
     finally:
         if workspace_dir.exists():
             shutil.rmtree(workspace_dir, ignore_errors=True)
+
+
+def test_local_environment_requires_an_initialization_strategy(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    with pytest.raises(ValidationError, match="initialization_strategy"):
+        LocalEnvironment.model_validate(
+            {
+                "environment_id": LocalEnvironmentID(str(tmp_path / "workspace")),
+                "project_id": ProjectID(),
+                "concurrency_group": test_root_concurrency_group,
+                "repo_host_path": tmp_path / "repo",
+            }
+        )

@@ -17,9 +17,11 @@ from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
+from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.state.chat_state import ToolInput
 from sculptor.utils.timeout import log_runtime_decorator
 
@@ -102,9 +104,9 @@ class DiffTracker(TurnDiffTracker):
     def __init__(self, environment: AgentExecutionEnvironment) -> None:
         self.environment = environment
         self.code_directory = environment.get_working_directory()
-        self._git = GitCli(
+        self._git = build_vcs_runners(
             environment.concurrency_group, environment.get_tool_binary_path, environment.get_project_env_overrides
-        )
+        ).git
         self.file_snapshot_by_path: dict[str, str | bytes | None] = {}
         # The temp objects directory holding the baseline tree, or None when the
         # repository's own objects hold it. Kept until the next rebaseline so the
@@ -183,6 +185,8 @@ class DiffTracker(TurnDiffTracker):
             self.file_snapshot_by_path[file_path] = new_content
             logger.debug("Updated snapshot for {}", file_path)
             return diff
+        except GitCommandInJjWorkspaceError:
+            raise
         except Exception as e:
             log_exception(
                 e,
@@ -241,7 +245,8 @@ class DiffTracker(TurnDiffTracker):
         current working tree state (including untracked files). This catches
         ALL file changes regardless of which tool made them (Edit, Write, Bash, etc.).
 
-        Returns git-relative file paths. Returns an empty list on any error.
+        Returns git-relative file paths, or an empty list when git fails. Raises
+        `GitCommandInJjWorkspaceError` in a jj workspace.
         """
         if not self.initial_tree_sha:
             return []
@@ -272,6 +277,8 @@ class DiffTracker(TurnDiffTracker):
                 return []
 
             return [line for line in result.stdout.strip().split("\n") if line]
+        except GitCommandInJjWorkspaceError:
+            raise
         except Exception as e:
             log_exception(
                 e,
@@ -417,13 +424,16 @@ def _get_tree_hash(diff_tracker: DiffTracker) -> tuple[str | None, Path | None]:
 
     The directory is None when the repository's own objects hold the tree.
     Otherwise the caller owns it and removes it once the tree SHA is no longer
-    needed. Both are None when the tree cannot be read.
+    needed. Both are None when git fails to read the tree; in a jj workspace
+    the tripwire is raised instead.
     """
     try:
         if _has_untracked_or_unstaged_changes(diff_tracker._git, diff_tracker.code_directory):
             return _get_tree_hash_with_untracked_and_unstaged_changes(diff_tracker)
         else:
             return _get_tree_hash_from_staged_changes(diff_tracker._git, diff_tracker.code_directory), None
+    except GitCommandInJjWorkspaceError:
+        raise
     except Exception as e:
         log_exception(
             e,

@@ -137,6 +137,8 @@ from sculptor.services.pi_login_service import broadcast_pi_models_refresh
 from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
+from sculptor.services.project_service.jj_workspace_refusal import ProjectInJjWorkspaceError
+from sculptor.services.project_service.jj_workspace_refusal import refuse_project_in_jj_workspace
 from sculptor.services.task_service.errors import InvalidTaskOperation
 from sculptor.services.task_service.errors import TaskNotFound
 from sculptor.services.terminal_agent_registry.bundled import install_bundled_registrations
@@ -177,6 +179,8 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
+from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.startup_checks import check_is_user_email_field_valid
@@ -394,20 +398,18 @@ def _workspace_working_directory(
     environment_id: str | None,
     project_path: str | None,
 ) -> str | None:
-    """Resolve the directory holding a workspace's checkout.
+    """Resolve the directory holding a workspace's checkout from the raw columns of a listing row.
 
-    Mirrors ``LocalEnvironment.get_working_directory`` without resuming the
-    environment (resume has side effects and is too heavy for list endpoints):
-    clone/worktree checkouts live at ``<environment_id>/code`` (environment_id
-    is the absolute workspace directory path), while in-place workspaces work
-    directly in the project's local repo. None when the environment hasn't been
-    initialized yet.
+    Resuming the environment to ask it has side effects and is too heavy for
+    list endpoints. ``environment_id`` is the absolute environment directory
+    path. None when the checkout's location is not known yet.
     """
-    if strategy == WorkspaceInitializationStrategy.IN_PLACE:
-        return project_path
-    if environment_id is None:
-        return None
-    return str(Path(environment_id) / "code")
+    checkout_path = checkout_path_for_strategy(
+        strategy,
+        None if project_path is None else Path(project_path),
+        None if environment_id is None else Path(environment_id),
+    )
+    return None if checkout_path is None else str(checkout_path)
 
 
 def _workspace_to_response(
@@ -923,8 +925,7 @@ def create_workspace_v2(
                     workspace.initialization_strategy
                 ).default_setup_command(),
             )
-            if workspace.initialization_strategy
-            in (WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE)
+            if is_isolated_checkout(workspace.initialization_strategy)
             else None
         )
         return _workspace_to_response(
@@ -942,8 +943,8 @@ _PREVIEW_BRANCH_NAME_GIT_TIMEOUT = 5.0
 def preview_branch_name(
     request: Request,
     project_id: str,
+    mode: WorkspaceInitializationStrategy,
     workspace_name: str = "",
-    mode: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
     user_session: UserSession = Depends(get_user_session),
 ) -> PreviewBranchNameResponse:
     """Resolve the auto-filled branch-name preview for the Add Workspace form.
@@ -953,8 +954,13 @@ def preview_branch_name(
     a `<slug>` derived from the workspace name (random if empty) and a `<user>`
     slug derived from the repo's `git config user.name`.
     """
-    if mode == WorkspaceInitializationStrategy.IN_PLACE:
-        return PreviewBranchNameResponse(branch_name="")
+    match mode:
+        case WorkspaceInitializationStrategy.IN_PLACE:
+            return PreviewBranchNameResponse(branch_name="")
+        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)
 
     validated_project_id = validate_project_id(project_id)
     services = get_services_from_request_or_websocket(request)
@@ -3723,7 +3729,7 @@ def validate_new_branch_name(
     project_id: str,
     name: str,
     request: Request,
-    mode: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
+    mode: WorkspaceInitializationStrategy,
     user_session: UserSession = Depends(get_user_session),
 ) -> NewBranchNameValidationResponse:
     """Validate a prospective new workspace branch name in the project's repo.
@@ -4532,6 +4538,14 @@ def get_active_projects(
     return services.project_service.get_active_projects()
 
 
+def _raise_if_inside_jj_workspace(project_path: Path) -> None:
+    """Answer 400 for a project directory inside a jj workspace."""
+    try:
+        refuse_project_in_jj_workspace(project_path)
+    except ProjectInJjWorkspaceError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @router.post("/api/v1/projects/initialize")
 def initialize_project(
     request: Request,
@@ -4544,6 +4558,7 @@ def initialize_project(
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
     if not project_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Project path is not a directory: {project_path}")
+    _raise_if_inside_jj_workspace(project_path)
 
     if not (project_path / ".git").exists():
         if is_path_in_git_repo(project_path):
@@ -4896,6 +4911,7 @@ def initialize_git_repository(
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
     if not project_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Project path is not a directory: {project_path}")
+    _raise_if_inside_jj_workspace(project_path)
     if (project_path / ".git").exists():
         raise HTTPException(status_code=400, detail=f"Directory is already a git repository: {project_path}")
 
@@ -4937,6 +4953,7 @@ def create_initial_commit(
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
     if not project_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Project path is not a directory: {project_path}")
+    _raise_if_inside_jj_workspace(project_path)
 
     logger.info("Creating initial commit in git repository at: {}", project_path)
 

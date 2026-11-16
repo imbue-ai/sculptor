@@ -10,6 +10,7 @@ from typing import Mapping
 from typing import Sequence
 from typing import TYPE_CHECKING
 from typing import Union
+from typing import assert_never
 
 from loguru import logger
 from pydantic import PrivateAttr
@@ -41,6 +42,8 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
+from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
+from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import get_workspaces_folder
@@ -78,7 +81,7 @@ class LocalEnvironment(Environment):
     # The repo host path - points directly to the user's repository.
     # This is always set when creating or resuming an environment.
     repo_host_path: Path | None = None
-    initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE
+    initialization_strategy: WorkspaceInitializationStrategy
     _processes: list[RunningProcess] = PrivateAttr(default_factory=list)
     _is_closed: bool = PrivateAttr(default=False)
     _closing_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
@@ -142,19 +145,13 @@ class LocalEnvironment(Environment):
         return self.initialization_strategy
 
     def get_working_directory(self) -> Path:
-        """Get the directory where the agent should perform all work.
-
-        - In-place mode: Returns the user's original repository path.
-        - Clone mode / Worktree mode: Returns the checkout at workspace/code/.
-        """
-        if self.initialization_strategy in (
-            WorkspaceInitializationStrategy.CLONE,
-            WorkspaceInitializationStrategy.WORKTREE,
-        ):
-            return self.get_workspace_path() / "code"
-        if self.repo_host_path is None:
+        """Get the directory where the agent should perform all work: the workspace's checkout."""
+        checkout_path = checkout_path_for_strategy(
+            self.initialization_strategy, self.repo_host_path, self.get_workspace_path()
+        )
+        if checkout_path is None:
             raise ValueError("repo_host_path must be set for LocalEnvironment")
-        return self.repo_host_path
+        return checkout_path
 
     def get_system_prompt(self) -> str | None:
         """Get the environment-specific system prompt content.
@@ -162,12 +159,15 @@ class LocalEnvironment(Environment):
         Returns mode-specific instructions based on initialization_strategy,
         plus the workspace attachments path for image display.
         """
-        if self.initialization_strategy == WorkspaceInitializationStrategy.IN_PLACE:
-            mode_prompt = IN_PLACE_MODE_PROMPT
-        elif self.initialization_strategy == WorkspaceInitializationStrategy.WORKTREE:
-            mode_prompt = WORKTREE_MODE_PROMPT
-        else:
-            mode_prompt = CLONE_MODE_PROMPT
+        match self.initialization_strategy:
+            case WorkspaceInitializationStrategy.IN_PLACE:
+                mode_prompt = IN_PLACE_MODE_PROMPT
+            case WorkspaceInitializationStrategy.CLONE:
+                mode_prompt = CLONE_MODE_PROMPT
+            case WorkspaceInitializationStrategy.WORKTREE:
+                mode_prompt = WORKTREE_MODE_PROMPT
+            case _ as unreachable:
+                assert_never(unreachable)
 
         attachments_path = self.get_attachments_path()
         attachments_prompt = f"\nThe workspace attachments directory is: {attachments_path}\nSave any media you want to display (e.g. screenshots, video recordings) to this directory.\n"
@@ -183,7 +183,7 @@ class LocalEnvironment(Environment):
         repo_host_path: Path,
         vcs: WorkspaceVcs,
         workspace_id: WorkspaceID,
-        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
+        initialization_strategy: WorkspaceInitializationStrategy,
         source_branch: str | None = None,
         requested_branch_name: str | None = None,
         env_var_override: bool = False,
@@ -229,9 +229,9 @@ class LocalEnvironment(Environment):
                 checkout_name=str(workspace_id),
             )
         )
-        # A separate checkout gets only tracked files, so the gitignored `.sculptor/.env` is copied in explicitly.
+        # An isolated checkout gets only tracked files, so the gitignored `.sculptor/.env` is copied in explicitly.
         source_env_file = repo_host_path / ".sculptor" / ".env"
-        if location.checkout_path != repo_host_path and source_env_file.exists():
+        if is_isolated_checkout(initialization_strategy) and source_env_file.exists():
             atomic_copy_env_file(source_env_file, location.checkout_path / ".sculptor" / ".env")
 
         environment._sculptor_folder = sculptor_folder

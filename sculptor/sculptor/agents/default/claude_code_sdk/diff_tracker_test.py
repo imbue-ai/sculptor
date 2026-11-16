@@ -44,6 +44,7 @@ def _create_agent_execution_environment(
         repo_host_path=path,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     mock_cg = MagicMock(spec=ConcurrencyGroup)
     dep_service = DependencyManagementService.model_construct(concurrency_group=mock_cg)

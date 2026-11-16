@@ -32,7 +32,7 @@ class EnvironmentManager(ABC):
         concurrency_group: ConcurrencyGroup,
         vcs: WorkspaceVcs,
         workspace_id: WorkspaceID,
-        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
+        initialization_strategy: WorkspaceInitializationStrategy,
         source_branch: str | None = None,
         requested_branch_name: str | None = None,
         env_var_override: bool = False,
@@ -64,7 +64,7 @@ class EnvironmentManager(ABC):
         concurrency_group: ConcurrencyGroup,
         vcs: WorkspaceVcs,
         workspace_id: WorkspaceID,
-        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
+        initialization_strategy: WorkspaceInitializationStrategy,
         env_var_override: bool = False,
         sculptor_folder: Path | None = None,
     ) -> Environment:

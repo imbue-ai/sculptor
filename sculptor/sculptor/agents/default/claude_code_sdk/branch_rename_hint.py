@@ -15,6 +15,7 @@ has no `<slug>` to replace.
 """
 
 from pathlib import Path
+from typing import assert_never
 
 from loguru import logger
 
@@ -27,6 +28,7 @@ from sculptor.services.workspace_service.branch_naming import user_slug_from_ful
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
+from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 
 # The user-name query runs on the path that assembles the user's first message,
 # so a stuck git must not hold up the prompt.
@@ -40,11 +42,21 @@ class BranchRenameHint(FrozenModel):
 
 
 def resolve_branch_rename_hint(environment: AgentExecutionEnvironment, naming_pattern: str) -> BranchRenameHint | None:
-    if environment.get_initialization_strategy() == WorkspaceInitializationStrategy.IN_PLACE:
-        return None
-    git = GitCli(
+    match environment.get_initialization_strategy():
+        case WorkspaceInitializationStrategy.IN_PLACE:
+            return None
+        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
+            return _resolve_git_branch_rename_hint(environment, naming_pattern)
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _resolve_git_branch_rename_hint(
+    environment: AgentExecutionEnvironment, naming_pattern: str
+) -> BranchRenameHint | None:
+    git = build_vcs_runners(
         environment.concurrency_group, environment.get_tool_binary_path, environment.get_project_env_overrides
-    )
+    ).git
     checkout = environment.get_working_directory()
     try:
         current_branch = read_head_identity(git, checkout).branch_name

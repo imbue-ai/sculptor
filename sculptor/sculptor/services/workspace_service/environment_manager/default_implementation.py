@@ -1,5 +1,6 @@
 import shutil
 from pathlib import Path
+from typing import assert_never
 from uuid import uuid4
 
 from loguru import logger
@@ -57,7 +58,7 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
         concurrency_group: ConcurrencyGroup,
         vcs: WorkspaceVcs,
         workspace_id: WorkspaceID,
-        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
+        initialization_strategy: WorkspaceInitializationStrategy,
         source_branch: str | None = None,
         requested_branch_name: str | None = None,
         env_var_override: bool = False,
@@ -102,7 +103,7 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
         concurrency_group: ConcurrencyGroup,
         vcs: WorkspaceVcs,
         workspace_id: WorkspaceID,
-        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
+        initialization_strategy: WorkspaceInitializationStrategy,
         env_var_override: bool = False,
         sculptor_folder: Path | None = None,
     ) -> Environment:
@@ -134,15 +135,20 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
                 repo_path=project_path, checkout_path=env.get_working_directory(), checkout_name=str(workspace_id)
             )
         )
-        # For clone mode, re-copy .sculptor/.env from the source repo so that
-        # edits made since the clone was created are picked up on resume.
-        if initialization_strategy == WorkspaceInitializationStrategy.CLONE:
-            source_env_file = project_path / ".sculptor" / ".env"
-            dest_env_file = env.get_working_directory() / ".sculptor" / ".env"
-            if source_env_file.exists():
-                atomic_copy_env_file(source_env_file, dest_env_file)
-            elif dest_env_file.exists():
-                dest_env_file.unlink()
+        match initialization_strategy:
+            case WorkspaceInitializationStrategy.CLONE:
+                # Re-copy .sculptor/.env from the source repo so that edits made
+                # since the clone was created are picked up on resume.
+                source_env_file = project_path / ".sculptor" / ".env"
+                dest_env_file = env.get_working_directory() / ".sculptor" / ".env"
+                if source_env_file.exists():
+                    atomic_copy_env_file(source_env_file, dest_env_file)
+                elif dest_env_file.exists():
+                    dest_env_file.unlink()
+            case WorkspaceInitializationStrategy.IN_PLACE | WorkspaceInitializationStrategy.WORKTREE:
+                pass
+            case _ as unreachable:
+                assert_never(unreachable)
         env._sculptor_folder = sculptor_folder
         env._project_env_vars = load_project_env_vars(env.get_working_directory(), sculptor_folder=sculptor_folder)
         env._env_var_override = env_var_override

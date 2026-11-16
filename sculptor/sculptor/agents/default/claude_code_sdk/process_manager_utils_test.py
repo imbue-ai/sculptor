@@ -1,4 +1,5 @@
 import json
+import shutil
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -41,6 +42,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.setup_command_runner import FailedSetup
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import DiffToolContent
 from sculptor.state.chat_state import GenericToolContent
@@ -617,6 +619,7 @@ def _make_repo_with_file_ending_in_newline(
         repo_host_path=tmp_path,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     dep_service = DependencyManagementService.model_construct(concurrency_group=MagicMock(spec=ConcurrencyGroup))
     environment = LocalAgentExecutionEnvironment(local_env, TaskID(), dep_service)
@@ -674,6 +677,23 @@ def test_failed_edit_on_unchanged_file_preserves_error_text(
         f"Failed Edit on unchanged file must not synthesize a DiffToolContent; got {type(block.content).__name__}: {block.content!r}"
     )
     assert "File has not been read yet" in block.content.text
+
+
+def test_tool_result_in_a_checkout_that_became_a_jj_workspace_raises_instead_of_a_synthetic_diff(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    environment, file_path = _make_repo_with_file_ending_in_newline(tmp_path, test_root_concurrency_group)
+    diff_tracker = DiffTracker(environment=environment)
+    shutil.rmtree(tmp_path / ".git")
+    (tmp_path / ".jj").mkdir()
+    environment.write_file(file_path, "print('hello world')\n")
+    tool_use_id = "toolu_edit_in_jj_workspace"
+    tool_input = {"file_path": file_path, "old_string": "print('hello')", "new_string": "print('hello world')"}
+    tool_use_map: dict = {tool_use_id: ("Edit", tool_input)}
+    result_line = json.dumps(make_tool_result_message(tool_use_id=tool_use_id, content="ok", is_error=False))
+
+    with pytest.raises(GitCommandInJjWorkspaceError):
+        parse_claude_code_json_lines(result_line, tool_use_map, diff_tracker)
 
 
 # ---------------------------------------------------------------------------

@@ -74,6 +74,7 @@ def test_simple_local_environment_run(
         concurrency_group=test_root_concurrency_group,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     try:
         process = environment.run_process_in_background(["echo", "hello"], secrets={})
@@ -109,6 +110,7 @@ def test_simple_local_environment_run_with_content(
         concurrency_group=test_root_concurrency_group,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     try:
         process = environment.run_process_in_background(["cat", test_file_name], secrets={})
@@ -139,6 +141,7 @@ def test_create_environment_directly(
         concurrency_group=test_root_concurrency_group,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
 
     try:
@@ -163,6 +166,7 @@ def test_resume_environment(
         concurrency_group=test_root_concurrency_group,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     environment_id = environment.environment_id
     environment.close()
@@ -174,6 +178,7 @@ def test_resume_environment(
         concurrency_group=test_root_concurrency_group,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
 
     try:

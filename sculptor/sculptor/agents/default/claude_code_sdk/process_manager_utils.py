@@ -29,6 +29,7 @@ from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.interfaces import TurnDiffTracker
 from sculptor.state.chat_state import DiffToolContent
 from sculptor.state.chat_state import GenericToolContent
@@ -567,6 +568,8 @@ def _create_tool_content(
         if diff_tracker:
             try:
                 diff = diff_tracker.compute_diff_for_tool(tool_name, tool_input)
+            except GitCommandInJjWorkspaceError:
+                raise
             except Exception as e:
                 log_exception(e, "Failed to compute diff for tool, falling back to synthetic diff")
 
@@ -735,6 +738,8 @@ def _load_content_for_tool_result_message(
     """
     try:
         return _load_content_for_tool_result_message_no_error_checking(simple_tool_result, diff_tracker)
+    except GitCommandInJjWorkspaceError:
+        raise
     except Exception as e:
         if isinstance(e, json.JSONDecodeError):
             raise e

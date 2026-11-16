@@ -83,6 +83,7 @@ def environment(
         repo_host_path=code_dir,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     try:
         yield environment

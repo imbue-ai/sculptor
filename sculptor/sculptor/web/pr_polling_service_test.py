@@ -14,6 +14,8 @@ import pytest
 
 from sculptor.config.user_config import UserConfig
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
@@ -21,6 +23,7 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
@@ -158,7 +161,7 @@ def _make_git_cli(concurrency_group: ConcurrencyGroup, gh: Path | None) -> GitCl
 
 def _make_service_with_git(concurrency_group: ConcurrencyGroup, git_cli: GitCli) -> PrPollingService:
     svc = _make_service()
-    svc._git = git_cli
+    svc._runners = VcsRunners(git=git_cli)
     object.__setattr__(svc, "concurrency_group", concurrency_group)
     return svc
 
@@ -310,6 +313,55 @@ def test_fallback_raises_for_a_jj_checkout_instead_of_reporting_no_pr(
 
     with pytest.raises(GitCommandInJjWorkspaceError):
         svc._fetch_status(workspace_id, state)
+
+
+# What PR polling logs when it runs git in a jj workspace.
+_JJ_WORKSPACE_LOG = "it ran git in a jj workspace"
+
+
+def _make_jj_checkout(path: Path) -> Path:
+    """A directory with `.jj` and no `.git`, the shape of a jj workspace."""
+    (path / ".jj").mkdir(parents=True)
+    return path
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_round_skips_a_jj_checkout_and_still_resolves_the_other_workspaces(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    on_target_checkout = _make_repo(tmp_path / "checkout", "main", _GITHUB_ORIGIN)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    jj_workspace_id, _ = _register_checkout(svc, repo, _make_jj_checkout(tmp_path / "jj-checkout"))
+    git_workspace_id, _ = _register_checkout(svc, repo, on_target_checkout)
+
+    with expect_exact_logged_errors([_JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+
+    assert levels == ["ERROR"]
+    assert svc._cache[git_workspace_id] == PrStatusInfo(workspace_id=git_workspace_id, pr_state="none")
+    assert jj_workspace_id not in svc._cache
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_jj_checkout_is_logged_once_at_error_across_rounds_and_fallback_polls(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    workspace_id, state = _register_checkout(svc, repo, _make_jj_checkout(tmp_path / "jj-checkout"))
+
+    with expect_exact_logged_errors([_JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+            svc._run_round(_make_user_config())
+            first_poll = svc._execute_poll(workspace_id, state)
+            second_poll = svc._execute_poll(workspace_id, state)
+
+    assert first_poll is None
+    assert second_poll is None
+    assert levels == ["ERROR"]
 
 
 # ---------------------------------------------------------------------------

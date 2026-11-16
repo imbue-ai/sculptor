@@ -29,6 +29,7 @@ def _create_local_environment_from_path(path: Path, concurrency_group: Concurren
         repo_host_path=path,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
 
 

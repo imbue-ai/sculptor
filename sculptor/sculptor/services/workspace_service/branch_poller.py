@@ -37,11 +37,15 @@ import threading
 from pathlib import Path
 from queue import Queue
 from typing import Callable
+from typing import assert_never
 
 from loguru import logger
 
 from sculptor.database.models import Workspace
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.errors import ExpectedError
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
@@ -51,11 +55,12 @@ from sculptor.services.git_repo_service.git_ref_scanning import StatSignature
 from sculptor.services.git_repo_service.git_ref_scanning import remote_refs_signature
 from sculptor.services.git_repo_service.git_ref_scanning import resolve_git_dirs
 from sculptor.services.git_repo_service.git_ref_scanning import stat_signature
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
-from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
 from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
-from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
+from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceBranchInfo
 from sculptor.web.data_types import WorkspaceTargetBranchesInfo
@@ -78,13 +83,13 @@ class WorkspaceBranchPoller:
         *,
         concurrency_group: ConcurrencyGroup,
         data_model_service: DataModelService,
-        git_cli: GitCli,
+        vcs_runners: VcsRunners,
         resolve_working_dir: Callable[[Workspace], Path | None],
         refresh_diff_on_branch_change: Callable[[WorkspaceID], None],
     ) -> None:
         self._concurrency_group = concurrency_group
         self._data_model_service = data_model_service
-        self._git = git_cli
+        self._runners = vcs_runners
         self._resolve_working_dir = resolve_working_dir
         self._refresh_diff_on_branch_change = refresh_diff_on_branch_change
 
@@ -112,6 +117,8 @@ class WorkspaceBranchPoller:
         # projection in ``_target_info_by_workspace``).
         self._remote_signature_by_common_dir: dict[Path, RemoteRefsSignature] = {}
         self._target_candidates_by_common_dir: dict[Path, tuple[str, ...]] = {}
+        # Workspaces and repositories whose last scan failed, so a lasting failure is logged once.
+        self._failed_scan_keys: set[WorkspaceID | Path] = set()
 
         self._cycle = 0
 
@@ -198,25 +205,38 @@ class WorkspaceBranchPoller:
         for workspace in workspaces:
             if workspace.is_deleted:
                 continue
-            working_dir = self._resolve_working_dir(workspace)
-            if working_dir is None:
+            try:
+                working_dir = self._resolve_working_dir(workspace)
+                if working_dir is None:
+                    continue
+                live_workspace_ids.add(workspace.object_id)
+                # Branch first: the target projection excludes the workspace's own
+                # (current) branch, so the branch cache must be current.
+                common_dir = self._scan_branch(workspace, working_dir, force_recompute)
+            except GitCommandInJjWorkspaceError as e:
+                self._log_jj_workspace_once(workspace.object_id, e)
                 continue
-            live_workspace_ids.add(workspace.object_id)
-            git_dirs = resolve_git_dirs(working_dir)
-            if git_dirs is None:
-                self._flag_non_git_checkout(workspace.object_id, working_dir)
+            except Exception as e:
+                self._log_scan_failure_once(workspace.object_id, e)
                 continue
-            git_dir, common_dir = git_dirs
-            # Branch first: the target projection excludes the workspace's own
-            # (current) branch, so the branch cache must be current.
-            self._update_branch(workspace, working_dir, git_dir, force_recompute)
+            self._failed_scan_keys.discard(workspace.object_id)
+            if common_dir is None:
+                continue
             members_by_common_dir.setdefault(common_dir, []).append(workspace)
             working_dir_by_common_dir.setdefault(common_dir, working_dir)
 
         for common_dir, members in members_by_common_dir.items():
-            self._scan_target_candidates(
-                common_dir, members[0], working_dir_by_common_dir[common_dir], force_recompute
-            )
+            try:
+                self._scan_target_candidates(
+                    common_dir, members[0], working_dir_by_common_dir[common_dir], force_recompute
+                )
+            except GitCommandInJjWorkspaceError as e:
+                self._log_jj_workspace_once(common_dir, e)
+                continue
+            except Exception as e:
+                self._log_scan_failure_once(common_dir, e)
+                continue
+            self._failed_scan_keys.discard(common_dir)
             for workspace in members:
                 self._update_target_branches(workspace, common_dir)
 
@@ -224,6 +244,50 @@ class WorkspaceBranchPoller:
             workspace.object_id for members in members_by_common_dir.values() for workspace in members
         }
         self._prune(live_workspace_ids, git_workspace_ids, set(members_by_common_dir))
+        undeleted_workspace_ids = {workspace.object_id for workspace in workspaces if not workspace.is_deleted}
+        self._failed_scan_keys &= undeleted_workspace_ids | set(members_by_common_dir)
+
+    def _scan_branch(self, workspace: Workspace, working_dir: Path, force_recompute: bool) -> Path | None:
+        """Read and publish the workspace's branch; return its repository's common git dir, or None if it has none."""
+        match workspace.initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                git_dirs = resolve_git_dirs(working_dir)
+                if git_dirs is None:
+                    self._flag_non_git_checkout(workspace.object_id, working_dir)
+                    return None
+                git_dir, common_dir = git_dirs
+                self._update_branch(workspace, working_dir, git_dir, force_recompute)
+                return common_dir
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def _log_jj_workspace_once(self, key: WorkspaceID | Path, error: GitCommandInJjWorkspaceError) -> None:
+        """Log at ERROR, when it starts, that scanning a workspace or repository ran git in a jj workspace.
+
+        That is a dispatch bug, not a git failure.
+        """
+        if not self._mark_scan_failed(key):
+            return
+        log_exception(error, f"Branch scan ran git in a jj workspace; skipping {key}")
+
+    def _log_scan_failure_once(self, key: WorkspaceID | Path, error: Exception) -> None:
+        """Log that a workspace or repository cannot be scanned when that starts, not on every cycle it lasts."""
+        if not self._mark_scan_failed(key):
+            return
+        log_exception(
+            error, f"Branch scan is skipping {key} until it can be scanned", priority=ExceptionPriority.LOW_PRIORITY
+        )
+
+    def _mark_scan_failed(self, key: WorkspaceID | Path) -> bool:
+        """Record that `key` failed to scan; whether it had scanned cleanly before this failure."""
+        if key in self._failed_scan_keys:
+            return False
+        self._failed_scan_keys.add(key)
+        return True
 
     def _flag_non_git_checkout(self, workspace_id: WorkspaceID, working_dir: Path) -> None:
         """Publish that the workspace's branch cannot be read, logging only when it first happens."""
@@ -249,7 +313,7 @@ class WorkspaceBranchPoller:
             return  # Fast path: HEAD unchanged since last scan — no read, no fork.
 
         try:
-            identity = read_head_identity(self._git, working_dir)
+            identity = read_head_identity(self._runners.git, working_dir)
         except VcsCommandError as e:
             logger.debug("Cannot read the current branch of {}; retrying next cycle: {}", working_dir, e)
             return
@@ -280,9 +344,9 @@ class WorkspaceBranchPoller:
         if not force_recompute and already_scanned and unchanged:
             return  # Stat fast-path: remote refs unchanged since last scan — no fork.
 
-        vcs = GitWorkspaceVcs(workspace.initialization_strategy, self._git, self._concurrency_group)
+        vcs = make_workspace_vcs(workspace.initialization_strategy, self._runners, self._concurrency_group)
         try:
-            main_repo_path = resolve_main_repo_path(self._git, working_dir)
+            main_repo_path = resolve_main_repo_path(self._runners.git, working_dir)
             target_candidates = tuple(vcs.list_target_candidates(main_repo_path))
         except VcsCommandError as e:
             logger.warning("Failed to list target candidates for {}: {}", common_dir, e)

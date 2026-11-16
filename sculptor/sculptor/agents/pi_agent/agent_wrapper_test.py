@@ -53,6 +53,7 @@ from sculptor.agents.pi_agent.subagent import SUBAGENT_NOTIFY_MARKER
 from sculptor.agents.pi_agent.subagent import parse_subagent_completion
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
@@ -82,7 +83,16 @@ from sculptor.interfaces.agents.errors import PiCrashError
 from sculptor.interfaces.agents.errors import PiVersionMismatchError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
+    LocalAgentExecutionEnvironment,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import GenericToolContent
 from sculptor.state.chat_state import TextBlock
@@ -92,6 +102,7 @@ from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 _PROMPT_ID = "prompt-1"
 
@@ -3859,3 +3870,35 @@ class TestSculptorInitiatedWake:
         assert isinstance(emitted[0], RequestStartedAgentMessage)
         assert isinstance(emitted[-1], RequestSuccessAgentMessage)
         assert emitted[-1].interrupted is True
+
+
+def test_prompt_turn_reports_a_jj_workspace_diff_baseline_as_a_turn_failure(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    jj_checkout = tmp_path / "jj-checkout"
+    (jj_checkout / ".jj").mkdir(parents=True)
+    local_environment = LocalEnvironment.create(
+        environment_id=LocalEnvironmentID(str(tmp_path / "workspace")),
+        project_id=ProjectID(),
+        concurrency_group=test_root_concurrency_group,
+        repo_host_path=jj_checkout,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
+        sculptor_folder=tmp_path / "sculptor_folder",
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+    )
+    dependency_management_service = DependencyManagementService(
+        concurrency_group=test_root_concurrency_group.make_concurrency_group("dependency_management_service"),
+    )
+    agent = _make_agent(
+        environment=LocalAgentExecutionEnvironment(local_environment, TaskID(), dependency_management_service)
+    )
+    message = ChatInputUserMessage(text="do the thing")
+
+    with expect_exact_logged_errors(["Error handling user message"]):
+        with pytest.raises(GitCommandInJjWorkspaceError):
+            agent._run_prompt_turn(message)
+
+    emitted = _drain(agent._output_messages)
+    assert [type(m) for m in emitted] == [RequestStartedAgentMessage, RequestFailureAgentMessage]
+    assert emitted[1].request_id == message.message_id

@@ -16,6 +16,14 @@ class IncorrectErrorsLoggedDuringTesting(Exception):
     pass
 
 
+_ERROR_LEVEL_NAMES = (
+    "ERROR",
+    ExceptionPriority.LOW_PRIORITY.value,
+    ExceptionPriority.MEDIUM_PRIORITY.value,
+    ExceptionPriority.HIGH_PRIORITY.value,
+)
+
+
 @contextmanager
 def check_logged_errors(check_func: Callable[[list[str]], None]) -> Generator[None, None, None]:
     """Context manager that monkey patches logger._log to accumulate error messages instead of logging them.
@@ -23,13 +31,6 @@ def check_logged_errors(check_func: Callable[[list[str]], None]) -> Generator[No
     # pyrefly: ignore [missing-attribute]
     original_log_func = logger._log
     accumulated_errors: list[str] = []
-
-    error_level_names = (
-        "ERROR",
-        ExceptionPriority.LOW_PRIORITY.value,
-        ExceptionPriority.MEDIUM_PRIORITY.value,
-        ExceptionPriority.HIGH_PRIORITY.value,
-    )
 
     # pyrefly: ignore [missing-attribute]
     logger._log = lambda level, flag, options, message, args, kwargs: (
@@ -39,7 +40,7 @@ def check_logged_errors(check_func: Callable[[list[str]], None]) -> Generator[No
                 "INFO", flag, options, "CAUGHT ERROR LOG: " + message.splitlines()[0][:100], args, kwargs
             )
         )
-        if level in error_level_names
+        if level in _ERROR_LEVEL_NAMES
         else original_log_func(level, flag, options, message, args, kwargs)
     )
     try:
@@ -102,6 +103,30 @@ def expect_exact_logged_errors(expected_errors: list[str]) -> Generator[None, No
     check_func = exact_check_maker(expected_errors)
     with check_logged_errors(check_func):
         yield
+
+
+@contextmanager
+def record_logged_error_levels() -> Generator[list[str], None, None]:
+    """Record the level of each error log, passing every log through unchanged.
+
+    `expect_exact_logged_errors` accepts an error at ERROR or at any exception
+    priority, while `explode_on_error` fails a test only on ERROR. Nest this
+    inside `expect_exact_logged_errors` to check which level an expected error
+    is logged at.
+    """
+    original_log_func = getattr(logger, "_log")
+    levels: list[str] = []
+
+    def _record_level(level: str, flag: int, options: tuple[int, ...], message: str, args: tuple, kwargs: dict) -> Any:
+        if level in _ERROR_LEVEL_NAMES:
+            levels.append(level)
+        return original_log_func(level, flag, options, message, args, kwargs)
+
+    setattr(logger, "_log", _record_level)
+    try:
+        yield levels
+    finally:
+        setattr(logger, "_log", original_log_func)
 
 
 def _raise_zero_division() -> NoReturn:
@@ -247,3 +272,12 @@ def test_log_exception_reports_anyway_when_the_first_attempt_cannot_be_expanded(
     assert fallback_extra is None, "the fallback must leave loguru nothing to expand"
     assert "could not shut the process down" in fallback_message
     assert "KeyError('unexpandable')" in fallback_message, "the reporting failure must not be swallowed silently"
+
+
+def test_record_logged_error_levels_tells_an_error_from_an_exception_priority() -> None:
+    with expect_exact_logged_errors(["at error", "at medium priority"]):
+        with record_logged_error_levels() as levels:
+            logger.error("at error")
+            log_exception(ValueError("boom"), "at medium priority", priority=ExceptionPriority.MEDIUM_PRIORITY)
+
+    assert levels == ["ERROR", ExceptionPriority.MEDIUM_PRIORITY.value]

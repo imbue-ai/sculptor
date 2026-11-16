@@ -1388,8 +1388,8 @@ class PiAgent(DefaultAgentWrapper):
         # leaves this set so Stop can still settle it.
         self._in_flight_request_id = get_turn_request_id(message)
         self._update_plan_mode_from_message(message)
-        self._ensure_diff_baseline()
         with self._handle_user_message(message):
+            self._ensure_diff_baseline()
             try:
                 self._drive_turn(lambda prompt_id: self._build_prompt_payload(prompt_id, message))
             except PiCrashError as error:
@@ -2532,8 +2532,8 @@ class PiAgent(DefaultAgentWrapper):
         """Capture the working-tree baseline before a turn, once.
 
         Created lazily (not in `start()`) so a git failure never blocks startup and
-        the baseline reflects the tree right before the turn. `DiffTracker.__init__`
-        captures the tree SHA and never raises (it logs and degrades internally).
+        the baseline reflects the tree right before the turn. Raises
+        `GitCommandInJjWorkspaceError` in a jj workspace.
         """
         if self._diff_tracker is None:
             self._diff_tracker = make_turn_diff_tracker(self.environment)

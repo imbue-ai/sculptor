@@ -1,6 +1,8 @@
 import shutil
 from pathlib import Path
 
+import pytest
+
 from sculptor.config.user_config import DependencyPaths
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
@@ -17,6 +19,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.turn_diff_tracker import make_turn_diff_tracker
 from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
@@ -33,6 +36,7 @@ def _in_place_environment(
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, concurrency_group),
         workspace_id=WorkspaceID(),
         sculptor_folder=workspace / "sculptor_folder",
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     dependency_management_service = DependencyManagementService(
         concurrency_group=concurrency_group.make_concurrency_group("dependency_management_service"),
@@ -143,3 +147,43 @@ def test_tracker_sees_the_checkout_through_the_project_env_variables(
     (git_repo / "notes.txt").write_text("kept\n")
 
     assert tracker.get_changed_file_paths() == ["notes.txt"]
+
+
+def _turn_checkout_into_a_jj_workspace(checkout: Path) -> None:
+    """Leave `checkout` with `.jj` and no `.git`, the shape of a jj workspace."""
+    shutil.rmtree(checkout / ".git")
+    (checkout / ".jj").mkdir()
+
+
+def test_constructing_a_tracker_in_a_jj_workspace_raises_the_tripwire(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    jj_checkout = tmp_path / "jj-checkout"
+    (jj_checkout / ".jj").mkdir(parents=True)
+    environment = _in_place_environment(jj_checkout, tmp_path / "workspace", test_root_concurrency_group)
+
+    with pytest.raises(GitCommandInJjWorkspaceError):
+        make_turn_diff_tracker(environment)
+
+
+def test_tool_diff_in_a_checkout_that_became_a_jj_workspace_raises_the_tripwire(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+    tracker = make_turn_diff_tracker(environment)
+    _turn_checkout_into_a_jj_workspace(git_repo)
+    (git_repo / "file.txt").write_text("edited\n")
+
+    with pytest.raises(GitCommandInJjWorkspaceError):
+        tracker.compute_diff_for_tool(AgentToolName.EDIT, {"file_path": str(git_repo / "file.txt")})
+
+
+def test_changed_file_paths_in_a_checkout_that_became_a_jj_workspace_raise_the_tripwire(
+    git_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    environment = _in_place_environment(git_repo, tmp_path / "workspace", test_root_concurrency_group)
+    tracker = make_turn_diff_tracker(environment)
+    _turn_checkout_into_a_jj_workspace(git_repo)
+
+    with pytest.raises(GitCommandInJjWorkspaceError):
+        tracker.get_changed_file_paths()

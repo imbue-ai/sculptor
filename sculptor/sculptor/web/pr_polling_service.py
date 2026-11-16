@@ -21,7 +21,6 @@ from dataclasses import field
 from pathlib import Path
 from queue import Queue
 from typing import Literal
-from typing import assert_never
 
 from loguru import logger
 from pydantic import PrivateAttr
@@ -40,14 +39,15 @@ from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
-from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
-from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
 from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
 from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
+from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
+from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.cli_status_utils import GhRunner
 from sculptor.web.cli_status_utils import run_gh_with_retry
@@ -344,6 +344,7 @@ class _WorkspacePollState:
         "is_deleted",
         "first_failure",
         "poll_generation",
+        "is_jj_workspace_logged",
     )
 
     def __init__(
@@ -362,6 +363,8 @@ class _WorkspacePollState:
         self.is_deleted = False
         self.first_failure: tuple[datetime.datetime, Exception] | None = None
         self.poll_generation: int = 0
+        # Whether git running in this workspace's jj checkout has been logged.
+        self.is_jj_workspace_logged = False
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +377,7 @@ class PrPollingService(Service):
 
     _data_model_service: DataModelService = PrivateAttr()
     _workspace_service: WorkspaceService = PrivateAttr()
-    _git: GitCli = PrivateAttr()
+    _runners: VcsRunners = PrivateAttr()
     _job_queue: queue.PriorityQueue = PrivateAttr(default_factory=queue.PriorityQueue)
     _pending: set[WorkspaceID] = PrivateAttr(default_factory=set)
     _pending_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
@@ -420,12 +423,12 @@ class PrPollingService(Service):
         concurrency_group: ConcurrencyGroup,
         data_model_service: DataModelService,
         workspace_service: WorkspaceService,
-        git_cli: GitCli,
+        vcs_runners: VcsRunners,
     ) -> None:
         super().__init__(concurrency_group=concurrency_group)
         self._data_model_service = data_model_service
         self._workspace_service = workspace_service
-        self._git = git_cli
+        self._runners = vcs_runners
 
     # -- Observer registry (multi-observer fan-out) -----------------------
 
@@ -790,13 +793,17 @@ class PrPollingService(Service):
         """Resolve a workspace for the round, emitting its status when it short-circuits.
 
         Returns a candidate only for a GitHub workspace off its target branch (the
-        population the search can match). A ``VcsCommandError`` while reading one
-        workspace skips that workspace for this round instead of failing the round.
+        population the search can match). A ``VcsCommandError`` or the jj tripwire
+        while reading one workspace skips that workspace for this round instead of
+        failing the round.
         """
         try:
             lookup = self._resolve_pull_request_lookup(workspace_id, state)
         except VcsCommandError as e:
             logger.debug("PR search round: skipping workspace {}: {}", workspace_id, e)
+            return None
+        except GitCommandInJjWorkspaceError as e:
+            self._log_jj_workspace_once(state, e)
             return None
         if isinstance(lookup, PrStatusInfo):
             self._emit_status(workspace_id, lookup)
@@ -821,14 +828,14 @@ class PrPollingService(Service):
         target_branch = state.target_branch
         if target_branch is None:
             return no_pr_status
-        vcs = self._get_workspace_vcs(state.initialization_strategy)
+        vcs = make_workspace_vcs(state.initialization_strategy, self._runners, self.concurrency_group)
         head_ref_names = vcs.get_pull_request_refs(location).head_ref_names
         if not head_ref_names:
             return no_pr_status
-        origin_url = read_origin_url(self._git, location.repo_path)
+        origin_url = read_origin_url(self._runners.git, location.repo_path)
         if origin_url is None or not is_github_remote_url(origin_url):
             return no_pr_status
-        base_ref_name = strip_remote_prefix(target_branch, _read_remote_names(self._git, location.repo_path))
+        base_ref_name = strip_remote_prefix(target_branch, _read_remote_names(self._runners.git, location.repo_path))
         if head_ref_names[0] == base_ref_name:
             return no_pr_status
         owner_and_name = parse_remote_owner_and_name(origin_url)
@@ -842,20 +849,9 @@ class PrPollingService(Service):
             name_with_owner=f"{owner_and_name[0]}/{owner_and_name[1]}" if owner_and_name is not None else None,
         )
 
-    def _get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
-        match initialization_strategy:
-            case (
-                WorkspaceInitializationStrategy.IN_PLACE
-                | WorkspaceInitializationStrategy.CLONE
-                | WorkspaceInitializationStrategy.WORKTREE
-            ):
-                return GitWorkspaceVcs(initialization_strategy, self._git, self.concurrency_group)
-            case _ as unreachable:
-                assert_never(unreachable)
-
     def _gh_runner(self, lookup: _PullRequestLookup) -> GhRunner:
         """Run gh in the workspace's checkout, where gh expands ``{owner}``/``{repo}`` from its remotes."""
-        return lambda arguments: run_gh_with_retry(self._git, arguments, lookup.working_dir, lookup.gh_env)
+        return lambda arguments: run_gh_with_retry(self._runners.git, arguments, lookup.working_dir, lookup.gh_env)
 
     def _emit_status(self, workspace_id: WorkspaceID, status: PrStatusInfo) -> None:
         """Cache and fan out a status, but only if it changed.
@@ -1049,6 +1045,9 @@ class PrPollingService(Service):
             status = self._fetch_status(workspace_id, state)
             state.first_failure = None
             return status
+        except GitCommandInJjWorkspaceError as e:
+            self._log_jj_workspace_once(state, e)
+            return None
         except Exception as e:
             if state.first_failure is None:
                 state.first_failure = (datetime.datetime.now(), e)
@@ -1064,6 +1063,13 @@ class PrPollingService(Service):
                 original_time.isoformat(),
             )
             return None
+
+    def _log_jj_workspace_once(self, state: _WorkspacePollState, error: GitCommandInJjWorkspaceError) -> None:
+        """Report at ERROR, once per workspace, that PR polling ran git in a jj workspace, which is a dispatch bug."""
+        if state.is_jj_workspace_logged:
+            return
+        state.is_jj_workspace_logged = True
+        log_exception(error, f"PR polling skips workspace {state.workspace_id}: it ran git in a jj workspace")
 
     def _respect_throttle(self) -> _CooldownDeferred | None:
         """Apply the global throttle before an API-backed poll.
