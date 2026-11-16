@@ -25,6 +25,7 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
@@ -41,6 +42,8 @@ from sculptor.testing.jj_repos import run_jj
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
 from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.data_types import CreateWorkspaceRequestV2
+from sculptor.web.data_types import JjBlocker
+from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import UpdateWorkspaceRequest
 
 
@@ -563,3 +566,40 @@ def test_startup_forgets_a_jj_workspace_whose_sculptor_workspace_and_directory_a
 ) -> None:
     """The orphan exists before `client` starts the app, whose startup forgets it."""
     assert _list_jj_workspace_names(jj_binary, jj_colocated_repo.path) == ["default"]
+
+
+def test_rerunning_a_jj_workspaces_setup_command_starts_a_new_run(
+    jj_project: Project,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    workspace_id, _ = _create_jj_workspace_with_checkout(
+        client, jj_project, test_services, test_root_concurrency_group
+    )
+    with test_services.data_model_service.open_transaction(RequestID()) as transaction:
+        transaction.update_project_fields(jj_project.object_id, workspace_setup_command="jj --version")
+
+    response = client.post(f"/api/v1/workspaces/{workspace_id}/setup/rerun")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["runId"] is not None
+
+
+def test_rerunning_a_jj_workspaces_setup_command_while_jj_is_unavailable_says_why(
+    jj_project: Project,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    workspace_id, _ = _create_jj_workspace_with_checkout(
+        client, jj_project, test_services, test_root_concurrency_group
+    )
+    with test_services.data_model_service.open_transaction(RequestID()) as transaction:
+        transaction.update_project_fields(jj_project.object_id, workspace_setup_command="true")
+    _resolve_jj_to("CUSTOM")
+
+    response = client.post(f"/api/v1/workspaces/{workspace_id}/setup/rerun")
+
+    assert response.status_code == 412, response.text
+    assert _detail(response) == {"error": describe_jj_unavailability(JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED))}

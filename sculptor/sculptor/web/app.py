@@ -134,6 +134,7 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.pi_login_service import PiLoginMode
 from sculptor.services.pi_login_service import broadcast_pi_models_refresh
@@ -1090,9 +1091,6 @@ def rerun_workspace_setup(
         if workspace is None or workspace.is_deleted:
             raise HTTPException(status_code=404, detail="Workspace not found")
         project = transaction.get_project(workspace.project_id)
-        environment_id = workspace.environment_id
-        project_path = project.get_local_user_path() if project is not None else None
-        project_id = project.object_id if project is not None else None
         initialization_strategy = workspace.initialization_strategy
         # Resolve through the project's tri-state default helper so a `None`
         # stored value runs the current default and `""` (user-cleared) blocks.
@@ -1106,28 +1104,23 @@ def rerun_workspace_setup(
         )
     if command is None or not command.strip():
         raise HTTPException(status_code=409, detail={"error": "no setup command configured"})
-    if environment_id is None or project_id is None or project_path is None:
+    if workspace.environment_id is None or project is None:
         raise HTTPException(status_code=409, detail={"error": "environment not ready"})
     if workspace_service.setup_runner.get_state(workspace_id) is not None:
         existing = workspace_service.setup_runner.get_state(workspace_id)
         if existing is not None and existing.status == "running":
             raise HTTPException(status_code=409, detail={"error": "setup already running"})
-    vcs = workspace_service.get_workspace_vcs(initialization_strategy)
     try:
-        environment = workspace_service.environment_manager.resume_environment(
-            environment_id=environment_id,
-            project_path=project_path,
-            project_id=project_id,
-            concurrency_group=workspace_service.concurrency_group,
-            vcs=vcs,
-            workspace_id=WorkspaceID(workspace_id),
-            initialization_strategy=initialization_strategy,
-        )
+        environment = workspace_service.resume_workspace_environment(project, workspace)
     except EnvironmentNotFoundError as e:
         raise HTTPException(status_code=409, detail={"error": "environment not ready"}) from e
-    vcs_environment = vcs.agent_environment(
+    except JjUnavailableError as e:
+        raise HTTPException(status_code=412, detail={"error": str(e)}) from e
+    vcs_environment = workspace_service.get_workspace_vcs(initialization_strategy).agent_environment(
         CheckoutLocation(
-            repo_path=project_path, checkout_path=environment.get_working_directory(), checkout_name=workspace_id
+            repo_path=project.get_local_user_path(),
+            checkout_path=environment.get_working_directory(),
+            checkout_name=workspace_id,
         )
     )
     state_dir = environment.to_host_path(environment.get_state_path())

@@ -589,6 +589,26 @@ class DefaultWorkspaceService(WorkspaceService):
             case _ as unreachable:
                 assert_never(unreachable)
 
+    def resume_workspace_environment(self, project: Project, workspace: Workspace) -> Environment:
+        """Resume the workspace's existing environment, for a caller that is not an agent.
+
+        Passes the same gate as an agent's start, so it raises `JjUnavailableError`
+        for a jj workspace while jj cannot be used, and `EnvironmentNotFoundError`
+        when the workspace has no environment to resume.
+        """
+        self._require_vcs_available(workspace.initialization_strategy)
+        if workspace.environment_id is None:
+            raise EnvironmentNotFoundError()
+        return self.environment_manager.resume_environment(
+            environment_id=workspace.environment_id,
+            project_path=project.get_local_user_path(),
+            project_id=project.object_id,
+            concurrency_group=self.concurrency_group,
+            vcs=self.get_workspace_vcs(workspace.initialization_strategy),
+            workspace_id=workspace.object_id,
+            initialization_strategy=workspace.initialization_strategy,
+        )
+
     def _create_or_resume_environment(
         self,
         project: Project,
