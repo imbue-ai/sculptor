@@ -540,6 +540,8 @@ class DefaultWorkspaceService(WorkspaceService):
                         project_path=project_path,
                         project_id=project.object_id,
                         concurrency_group=concurrency_group,
+                        vcs=self._get_workspace_vcs(workspace.initialization_strategy),
+                        workspace_id=workspace.object_id,
                         initialization_strategy=workspace.initialization_strategy,
                         source_branch=workspace.source_branch,
                         requested_branch_name=workspace.requested_branch_name,

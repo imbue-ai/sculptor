@@ -13,12 +13,14 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 _PLACEHOLDER_BRANCH = "dev/gorgeous-emu"
 
@@ -46,6 +48,8 @@ def _in_place_environment(repo: Path, concurrency_group: ConcurrencyGroup) -> Lo
         project_id=ProjectID(),
         concurrency_group=concurrency_group,
         repo_host_path=repo,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     return _wrap(environment)
 
@@ -58,6 +62,8 @@ def _worktree_environment(
         project_id=ProjectID(),
         concurrency_group=concurrency_group,
         repo_host_path=repo,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.WORKTREE, concurrency_group),
+        workspace_id=WorkspaceID(),
         initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
         source_branch="main",
         requested_branch_name=branch,

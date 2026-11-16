@@ -23,6 +23,7 @@ from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
 from sculptor.config.user_config import NIGHT_MODE_OFF
 from sculptor.config.user_config import NIGHT_MODE_ON
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
@@ -32,6 +33,7 @@ from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
@@ -50,6 +52,7 @@ from sculptor.state.claude_state import ParsedAssistantResponse
 from sculptor.state.claude_state import ParsedToolResultResponse
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
 def test_get_user_instructions_enter_plan_mode_true() -> None:
@@ -612,6 +615,8 @@ def _make_repo_with_file_ending_in_newline(
         project_id=ProjectID(),
         concurrency_group=test_root_concurrency_group,
         repo_host_path=tmp_path,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     dep_service = DependencyManagementService.model_construct(concurrency_group=MagicMock(spec=ConcurrencyGroup))
     environment = LocalAgentExecutionEnvironment(local_env, TaskID(), dep_service)

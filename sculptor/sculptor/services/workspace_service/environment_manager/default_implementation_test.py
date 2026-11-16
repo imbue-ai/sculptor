@@ -12,11 +12,13 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.git import get_repo_base_path
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import RequestID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.workspace_service.environment_manager.api import EnvironmentManager
 from sculptor.services.workspace_service.environment_manager.default_implementation import DefaultEnvironmentManager
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
 @pytest.fixture
@@ -66,6 +68,8 @@ def test_simple_local_environment_run(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     try:
         process = environment.run_process_in_background(["echo", "hello"], secrets={})
@@ -99,6 +103,8 @@ def test_simple_local_environment_run_with_content(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     try:
         process = environment.run_process_in_background(["cat", test_file_name], secrets={})
@@ -127,6 +133,8 @@ def test_create_environment_directly(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
 
     try:
@@ -149,6 +157,8 @@ def test_resume_environment(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     environment_id = environment.environment_id
     environment.close()
@@ -183,6 +193,8 @@ def _create_clone_with_env_file(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=concurrency_group,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.CLONE, concurrency_group),
+        workspace_id=WorkspaceID(),
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
     )
     environment_id = environment.environment_id

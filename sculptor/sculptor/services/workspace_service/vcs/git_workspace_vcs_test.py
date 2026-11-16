@@ -104,6 +104,26 @@ def test_create_checkout_fails_for_a_worktree_with_a_missing_base(
     assert not _branch_exists(git_repo, "feature")
 
 
+def test_create_checkout_fails_for_a_worktree_whose_directory_already_has_files(
+    worktree_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path
+) -> None:
+    checkout_path = tmp_path / "code"
+    checkout_path.mkdir()
+    (checkout_path / "existing.txt").write_text("kept\n")
+    spec = CheckoutSpec(
+        repo_path=git_repo,
+        checkout_path=checkout_path,
+        base_ref="main",
+        new_ref_name="feature",
+        checkout_name=_CHECKOUT_NAME,
+    )
+
+    with pytest.raises(VcsCommandError):
+        worktree_vcs.create_checkout(spec)
+
+    assert (checkout_path / "existing.txt").read_text() == "kept\n"
+
+
 def test_create_checkout_requires_a_base_and_a_branch_for_a_worktree(
     worktree_vcs: GitWorkspaceVcs, git_repo: Path, tmp_path: Path
 ) -> None:

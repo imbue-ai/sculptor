@@ -29,9 +29,9 @@ from sculptor.interfaces.environments.base import Environment
 from sculptor.interfaces.environments.errors import FileOrDirectoryCouldNotBeDeletedError
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.environment_manager.env_file_parser import atomic_copy_env_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
-from sculptor.services.workspace_service.environment_manager.environments.clone_strategy import clone_repository
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     TerminalEnvironmentConfig,
 )
@@ -41,7 +41,8 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
-from sculptor.services.workspace_service.environment_manager.environments.worktree_strategy import create_worktree
+from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import get_workspaces_folder
 
 # Workspace directory for local environments
@@ -180,6 +181,8 @@ class LocalEnvironment(Environment):
         project_id: ProjectID,
         concurrency_group: ConcurrencyGroup,
         repo_host_path: Path,
+        vcs: WorkspaceVcs,
+        workspace_id: WorkspaceID,
         initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
         source_branch: str | None = None,
         requested_branch_name: str | None = None,
@@ -188,22 +191,22 @@ class LocalEnvironment(Environment):
     ) -> "LocalEnvironment":
         """Factory method to create a new LocalEnvironment with directories initialized.
 
-        Creates the environment and ensures the state and artifacts directories exist.
-        For clone mode, clones the repository to workspace/code/.
-        For worktree mode, runs `git worktree add` off the user's repository into workspace/code/.
-        For in-place mode, the agent works directly in the user's repository.
-        Use the constructor directly when resuming an existing environment.
+        Creates the environment, ensures the state and artifacts directories
+        exist, and has `vcs` create the workspace's checkout: in-place workspaces
+        work directly in the user's repository, every other kind gets its own
+        checkout at workspace/code/. Use the constructor directly when resuming
+        an existing environment.
 
         Args:
             environment_id: The ID for this environment.
             project_id: The project this environment belongs to.
             concurrency_group: Concurrency group for process management.
             repo_host_path: Path to the user's repository.
+            vcs: The workspace's version control, which creates the checkout.
+            workspace_id: The workspace this environment belongs to; it names the checkout.
             initialization_strategy: Strategy for workspace initialization.
-            source_branch: Branch to checkout after cloning (for CLONE mode) or base
-                ref off which to create the worktree branch (for WORKTREE mode).
-            requested_branch_name: For WORKTREE mode, the new branch name created by
-                `git worktree add -b`; required for WORKTREE, unused otherwise.
+            source_branch: The ref the checkout starts from.
+            requested_branch_name: The ref created for the workspace.
             sculptor_folder: Override for the sculptor folder path (uses get_workspaces_folder() if None).
         """
         environment = cls(
@@ -217,47 +220,19 @@ class LocalEnvironment(Environment):
         environment.to_host_path(environment.get_state_path()).mkdir(parents=True, exist_ok=True)
         environment.to_host_path(environment.get_artifacts_path()).mkdir(parents=True, exist_ok=True)
 
-        # For clone mode, clone the repository to workspace/code/
-        if initialization_strategy == WorkspaceInitializationStrategy.CLONE:
-            assert repo_host_path is not None
-            clone_repository(
-                source_repo_path=repo_host_path,
-                destination=environment.get_working_directory(),
-                concurrency_group=concurrency_group,
-                target_branch=source_branch,
-            )
-            # If the user asked for a named branch inside the clone, create and
-            # check it out off the base branch. The collision re-check happens at
-            # the API layer so we don't need to handle "already exists" here.
-            if requested_branch_name is not None and requested_branch_name.strip():
-                concurrency_group.run_process_to_completion(
-                    command=["git", "checkout", "-b", requested_branch_name],
-                    cwd=environment.get_working_directory(),
-                    is_checked_after=True,
-                )
-            # Copy .sculptor/.env from the source repo into the clone.
-            # Git does not copy gitignored files, so this must be done explicitly.
-            source_env_file = repo_host_path / ".sculptor" / ".env"
-            if source_env_file.exists():
-                dest_env_file = environment.get_working_directory() / ".sculptor" / ".env"
-                atomic_copy_env_file(source_env_file, dest_env_file)
-        elif initialization_strategy == WorkspaceInitializationStrategy.WORKTREE:
-            if requested_branch_name is None:
-                raise ValueError("requested_branch_name is required for WORKTREE initialization")
-            if source_branch is None:
-                raise ValueError("source_branch (base ref) is required for WORKTREE initialization")
-            create_worktree(
-                user_repo_path=repo_host_path,
-                destination=environment.get_working_directory(),
-                concurrency_group=concurrency_group,
+        location = vcs.create_checkout(
+            CheckoutSpec(
+                repo_path=repo_host_path,
+                checkout_path=environment.get_working_directory(),
                 base_ref=source_branch,
-                new_branch=requested_branch_name,
+                new_ref_name=requested_branch_name,
+                checkout_name=str(workspace_id),
             )
-            # Gitignored files don't follow the worktree either; mirror the CLONE behavior.
-            source_env_file = repo_host_path / ".sculptor" / ".env"
-            if source_env_file.exists():
-                dest_env_file = environment.get_working_directory() / ".sculptor" / ".env"
-                atomic_copy_env_file(source_env_file, dest_env_file)
+        )
+        # A separate checkout gets only tracked files, so the gitignored `.sculptor/.env` is copied in explicitly.
+        source_env_file = repo_host_path / ".sculptor" / ".env"
+        if location.checkout_path != repo_host_path and source_env_file.exists():
+            atomic_copy_env_file(source_env_file, location.checkout_path / ".sculptor" / ".env")
 
         environment._sculptor_folder = sculptor_folder
         environment._project_env_vars = load_project_env_vars(

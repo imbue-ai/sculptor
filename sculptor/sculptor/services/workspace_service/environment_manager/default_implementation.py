@@ -10,11 +10,13 @@ from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.interfaces.environments.base import Environment
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.workspace_service.environment_manager.api import EnvironmentManager
 from sculptor.services.workspace_service.environment_manager.env_file_parser import atomic_copy_env_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import get_workspaces_folder
 
 # Workspace directory for local environments
@@ -52,6 +54,8 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
         project_path: Path,
         project_id: ProjectID,
         concurrency_group: ConcurrencyGroup,
+        vcs: WorkspaceVcs,
+        workspace_id: WorkspaceID,
         initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
         source_branch: str | None = None,
         requested_branch_name: str | None = None,
@@ -63,11 +67,11 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
             project_path: Path to the project's repository.
             project_id: ID of the project.
             concurrency_group: Concurrency group for process management.
+            vcs: The workspace's version control, which creates its checkout.
+            workspace_id: The workspace the environment belongs to; it names the checkout.
             initialization_strategy: Strategy for workspace initialization.
-            source_branch: Branch to checkout after cloning (for CLONE mode) or base
-                ref off which to create the worktree branch (for WORKTREE mode).
-            requested_branch_name: For WORKTREE mode, the new branch name created by
-                `git worktree add -b`; required for WORKTREE, unused otherwise.
+            source_branch: The ref the checkout starts from.
+            requested_branch_name: The ref created for the workspace.
             env_var_override: Whether project env vars override os.environ on collision.
 
         Returns:
@@ -81,6 +85,8 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
             concurrency_group=concurrency_group,
             project_id=project_id,
             repo_host_path=project_path,
+            vcs=vcs,
+            workspace_id=workspace_id,
             initialization_strategy=initialization_strategy,
             source_branch=source_branch,
             requested_branch_name=requested_branch_name,

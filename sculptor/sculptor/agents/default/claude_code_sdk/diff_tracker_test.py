@@ -16,12 +16,14 @@ from sculptor.interfaces.environments.agent_execution_environment import AgentEx
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 _FILE_CONTENTS: Final[str] = """def foo() -> None:
     pass"""
@@ -40,6 +42,8 @@ def _create_agent_execution_environment(
         project_id=ProjectID(),
         concurrency_group=test_root_concurrency_group,
         repo_host_path=path,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     mock_cg = MagicMock(spec=ConcurrencyGroup)
     dep_service = DependencyManagementService.model_construct(concurrency_group=mock_cg)

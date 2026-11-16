@@ -6,6 +6,8 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.environments.base import Environment
 from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
 
 class EnvironmentManager(ABC):
@@ -28,6 +30,8 @@ class EnvironmentManager(ABC):
         project_path: Path,
         project_id: ProjectID,
         concurrency_group: ConcurrencyGroup,
+        vcs: WorkspaceVcs,
+        workspace_id: WorkspaceID,
         initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
         source_branch: str | None = None,
         requested_branch_name: str | None = None,
@@ -40,11 +44,11 @@ class EnvironmentManager(ABC):
             project_path: Path to the project's repository.
             project_id: ID of the project.
             concurrency_group: Concurrency group for process management.
+            vcs: The workspace's version control, which creates its checkout.
+            workspace_id: The workspace the environment belongs to; it names the checkout.
             initialization_strategy: Strategy for workspace initialization.
-            source_branch: Branch to checkout after cloning (for CLONE mode) or base
-                ref off which to create the worktree branch (for WORKTREE mode).
-            requested_branch_name: For WORKTREE mode, the new branch name created by
-                `git worktree add -b`; required for WORKTREE, unused otherwise.
+            source_branch: The ref the checkout starts from.
+            requested_branch_name: The ref created for the workspace.
             env_var_override: Whether project env vars override os.environ on collision.
 
         Returns:

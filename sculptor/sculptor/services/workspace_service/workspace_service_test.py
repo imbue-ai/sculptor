@@ -27,6 +27,7 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -50,6 +51,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.testing.git_snapshot import FullLocalGitRepo
@@ -727,6 +729,21 @@ def test_delete_workspace_offloads_environment_teardown_off_request_thread(
     )
 
 
+def _initialize_project_without_setup_command(
+    test_service_collection: CompleteServiceCollection, repo_path: Path, transaction: DataModelTransaction
+) -> Project:
+    """A project for `repo_path` that runs no setup command, so no background setup process outlives the test."""
+    initialized_project = test_service_collection.project_service.initialize_project(
+        project_path=repo_path,
+        organization_reference=ANONYMOUS_ORGANIZATION_REFERENCE,
+        transaction=transaction,
+    )
+    test_service_collection.project_service.activate_project(initialized_project)
+    project = transaction.update_project_fields(initialized_project.object_id, workspace_setup_command="")
+    assert project is not None
+    return project
+
+
 def test_delete_worktree_workspace_removes_the_worktree_and_its_merged_branch(
     test_service_collection: CompleteServiceCollection,
     test_root_concurrency_group: ConcurrencyGroup,
@@ -737,15 +754,7 @@ def test_delete_worktree_workspace_removes_the_worktree_and_its_merged_branch(
     repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
     branch_name = f"worktree-{uuid4().hex[:8]}"
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
-        initialized_project = test_service_collection.project_service.initialize_project(
-            project_path=repo_path,
-            organization_reference=ANONYMOUS_ORGANIZATION_REFERENCE,
-            transaction=transaction,
-        )
-        test_service_collection.project_service.activate_project(initialized_project)
-        # No setup command, so no background setup process outlives the test.
-        project = transaction.update_project_fields(initialized_project.object_id, workspace_setup_command="")
-        assert project is not None
+        project = _initialize_project_without_setup_command(test_service_collection, repo_path, transaction)
         workspace = workspace_service.create_workspace(
             project=project,
             initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
@@ -786,6 +795,47 @@ def test_delete_worktree_workspace_removes_the_worktree_and_its_merged_branch(
     ).stdout
     assert str(checkout_path) not in worktree_list
     assert branch_list == ""
+
+
+def test_environment_creation_names_the_checkout_after_the_workspace(
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_service = test_service_collection.workspace_service
+    repo_path = _create_isolated_git_repo(tmp_path / "repo", test_root_concurrency_group)
+    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+        project = _initialize_project_without_setup_command(test_service_collection, repo_path, transaction)
+        workspace = workspace_service.create_workspace(
+            project=project,
+            initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+            source_branch="main",
+            requested_branch_name=f"named-{uuid4().hex[:8]}",
+            description="Checkout naming",
+            transaction=transaction,
+        )
+    created_specs: list[CheckoutSpec] = []
+    create_checkout = GitWorkspaceVcs.create_checkout
+
+    def _record_spec(self: GitWorkspaceVcs, spec: CheckoutSpec) -> CheckoutLocation:
+        created_specs.append(spec)
+        return create_checkout(self, spec)
+
+    monkeypatch.setattr(GitWorkspaceVcs, "create_checkout", _record_spec)
+
+    with test_root_concurrency_group.make_concurrency_group("env_test") as concurrency_group:
+        with workspace_service.agent_environment_context(
+            project=project,
+            workspace_id=workspace.object_id,
+            task_id=TaskID(),
+            concurrency_group=concurrency_group,
+            root_progress_handle=RootProgressHandle(),
+            shutdown_event=GLOBAL_SHUTDOWN_EVENT,
+        ) as agent_environment:
+            assert (agent_environment.get_working_directory() / ".git").is_file()
+
+    assert [spec.checkout_name for spec in created_specs] == [str(workspace.object_id)]
 
 
 class _ResumeCountingEnvironmentManager(DefaultEnvironmentManager):

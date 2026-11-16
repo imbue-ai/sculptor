@@ -12,15 +12,34 @@ from uuid import uuid4
 import pytest
 
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
-from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.secrets_utils import Secret
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
-from sculptor.services.workspace_service.environment_manager.environments.worktree_strategy import WorktreeError
+from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.testing.local_git_repo import LocalGitRepo
+from sculptor.testing.workspace_vcs import make_test_git_cli
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
+
+
+class _SpecRecordingGitWorkspaceVcs(GitWorkspaceVcs):
+    """Git version control that remembers every checkout it is asked to create."""
+
+    def __init__(
+        self, initialization_strategy: WorkspaceInitializationStrategy, concurrency_group: ConcurrencyGroup
+    ) -> None:
+        super().__init__(initialization_strategy, make_test_git_cli(concurrency_group), concurrency_group)
+        self.created_specs: list[CheckoutSpec] = []
+
+    def create_checkout(self, spec: CheckoutSpec) -> CheckoutLocation:
+        self.created_specs.append(spec)
+        return super().create_checkout(spec)
 
 
 @pytest.fixture
@@ -36,6 +55,8 @@ def local_environment(test_root_concurrency_group: ConcurrencyGroup) -> Generato
             project_id=ProjectID(),
             concurrency_group=test_root_concurrency_group,
             repo_host_path=repo_dir,
+            vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
+            workspace_id=WorkspaceID(),
         )
         yield local_env
     finally:
@@ -140,6 +161,8 @@ def test_run_setup_subprocess_cwd_is_working_directory(clone_test_ctx: CloneTest
         project_id=ProjectID(),
         concurrency_group=clone_test_ctx.concurrency_group,
         repo_host_path=clone_test_ctx.source_repo_path,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.CLONE, clone_test_ctx.concurrency_group),
+        workspace_id=WorkspaceID(),
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
         sculptor_folder=clone_test_ctx.sculptor_folder,
     )
@@ -326,6 +349,8 @@ def test_project_env_vars_available_in_process(clone_test_ctx: CloneTestContext)
         project_id=ProjectID(),
         concurrency_group=clone_test_ctx.concurrency_group,
         repo_host_path=clone_test_ctx.source_repo_path,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.CLONE, clone_test_ctx.concurrency_group),
+        workspace_id=WorkspaceID(),
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
         sculptor_folder=clone_test_ctx.sculptor_folder,
     )
@@ -456,6 +481,8 @@ def test_create_worktree_happy_path(tmp_path: Path, test_root_concurrency_group:
             project_id=ProjectID(),
             concurrency_group=test_root_concurrency_group,
             repo_host_path=user_repo_path,
+            vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.WORKTREE, test_root_concurrency_group),
+            workspace_id=WorkspaceID(),
             initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
             source_branch="main",
             requested_branch_name="feat/x",
@@ -471,45 +498,69 @@ def test_create_worktree_happy_path(tmp_path: Path, test_root_concurrency_group:
             shutil.rmtree(workspace_dir, ignore_errors=True)
 
 
-def test_create_worktree_missing_branch_name_raises(
-    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
+@pytest.mark.parametrize(
+    "initialization_strategy", [WorkspaceInitializationStrategy.CLONE, WorkspaceInitializationStrategy.WORKTREE]
+)
+def test_create_asks_the_workspace_vcs_for_a_checkout_named_after_the_workspace(
+    initialization_strategy: WorkspaceInitializationStrategy,
+    tmp_path: Path,
+    test_root_concurrency_group: ConcurrencyGroup,
 ) -> None:
     user_repo_path = tmp_path / "user_repo"
     make_test_repo(user_repo_path)
+    vcs = _SpecRecordingGitWorkspaceVcs(initialization_strategy, test_root_concurrency_group)
+    workspace_id = WorkspaceID()
     workspace_dir = LOCAL_WORKSPACE_DIR / uuid4().hex
     try:
-        with pytest.raises(ValueError, match="requested_branch_name is required"):
-            LocalEnvironment.create(
-                environment_id=LocalEnvironmentID(str(workspace_dir)),
-                project_id=ProjectID(),
-                concurrency_group=test_root_concurrency_group,
-                repo_host_path=user_repo_path,
-                initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
-                source_branch="main",
-                requested_branch_name=None,
+        env = LocalEnvironment.create(
+            environment_id=LocalEnvironmentID(str(workspace_dir)),
+            project_id=ProjectID(),
+            concurrency_group=test_root_concurrency_group,
+            repo_host_path=user_repo_path,
+            vcs=vcs,
+            workspace_id=workspace_id,
+            initialization_strategy=initialization_strategy,
+            source_branch="main",
+            requested_branch_name="feat/x",
+        )
+
+        assert vcs.created_specs == [
+            CheckoutSpec(
+                repo_path=user_repo_path,
+                checkout_path=env.get_working_directory(),
+                base_ref="main",
+                new_ref_name="feat/x",
+                checkout_name=str(workspace_id),
             )
+        ]
     finally:
         if workspace_dir.exists():
             shutil.rmtree(workspace_dir, ignore_errors=True)
 
 
-def test_create_worktree_missing_source_branch_raises(
+def test_create_copies_the_project_env_file_into_a_worktree_checkout(
     tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     user_repo_path = tmp_path / "user_repo"
     make_test_repo(user_repo_path)
+    (user_repo_path / ".sculptor").mkdir()
+    (user_repo_path / ".sculptor" / ".env").write_text("SCTEST_WORKTREE_VAR=copied\n")
     workspace_dir = LOCAL_WORKSPACE_DIR / uuid4().hex
     try:
-        with pytest.raises(ValueError, match="source_branch"):
-            LocalEnvironment.create(
-                environment_id=LocalEnvironmentID(str(workspace_dir)),
-                project_id=ProjectID(),
-                concurrency_group=test_root_concurrency_group,
-                repo_host_path=user_repo_path,
-                initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
-                source_branch=None,
-                requested_branch_name="feat/x",
-            )
+        env = LocalEnvironment.create(
+            environment_id=LocalEnvironmentID(str(workspace_dir)),
+            project_id=ProjectID(),
+            concurrency_group=test_root_concurrency_group,
+            repo_host_path=user_repo_path,
+            vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.WORKTREE, test_root_concurrency_group),
+            workspace_id=WorkspaceID(),
+            initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+            source_branch="main",
+            requested_branch_name="feat/x",
+            sculptor_folder=tmp_path / "fake_sculptor",
+        )
+
+        assert (env.get_working_directory() / ".sculptor" / ".env").read_text() == "SCTEST_WORKTREE_VAR=copied\n"
     finally:
         if workspace_dir.exists():
             shutil.rmtree(workspace_dir, ignore_errors=True)
@@ -521,17 +572,18 @@ def test_create_worktree_branch_exists_raises(tmp_path: Path, test_root_concurre
     LocalGitRepo(user_repo_path).run_git(["branch", "feat/x"])
     workspace_dir = LOCAL_WORKSPACE_DIR / uuid4().hex
     try:
-        with expect_exact_logged_errors(["{}: {}"]):
-            with pytest.raises(WorktreeError):
-                LocalEnvironment.create(
-                    environment_id=LocalEnvironmentID(str(workspace_dir)),
-                    project_id=ProjectID(),
-                    concurrency_group=test_root_concurrency_group,
-                    repo_host_path=user_repo_path,
-                    initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
-                    source_branch="main",
-                    requested_branch_name="feat/x",
-                )
+        with pytest.raises(VcsCommandError):
+            LocalEnvironment.create(
+                environment_id=LocalEnvironmentID(str(workspace_dir)),
+                project_id=ProjectID(),
+                concurrency_group=test_root_concurrency_group,
+                repo_host_path=user_repo_path,
+                vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.WORKTREE, test_root_concurrency_group),
+                workspace_id=WorkspaceID(),
+                initialization_strategy=WorkspaceInitializationStrategy.WORKTREE,
+                source_branch="main",
+                requested_branch_name="feat/x",
+            )
     finally:
         if workspace_dir.exists():
             shutil.rmtree(workspace_dir, ignore_errors=True)

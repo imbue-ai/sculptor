@@ -5,15 +5,18 @@ from sculptor.agents.default.claude_code_sdk.naming_conventions import _MAX_TIER
 from sculptor.agents.default.claude_code_sdk.naming_conventions import resolve_naming_conventions
 from sculptor.config.naming_convention_files import NAMING_CONVENTIONS_FILENAME
 from sculptor.config.naming_convention_files import NAMING_CONVENTIONS_LOCAL_FILENAME
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 # Human-readable fragments of each tier's section header; used to assert ordering.
 _USER_LABEL = "your personal conventions"
@@ -28,6 +31,8 @@ def _make_environment(repo_path: Path, concurrency_group: ConcurrencyGroup) -> L
         project_id=ProjectID(),
         concurrency_group=concurrency_group,
         repo_host_path=repo_path,
+        vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, concurrency_group),
+        workspace_id=WorkspaceID(),
     )
     dep_service = DependencyManagementService.model_construct(concurrency_group=MagicMock(spec=ConcurrencyGroup))
     return LocalAgentExecutionEnvironment(local_env, TaskID(), dep_service)
