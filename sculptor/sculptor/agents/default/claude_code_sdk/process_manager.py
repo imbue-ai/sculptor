@@ -24,12 +24,14 @@ from sculptor.agents.default.claude_code_sdk.naming_conventions import resolve_n
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor
 from sculptor.agents.default.claude_code_sdk.output_processor import is_first_user_message_of_conversation
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import AutoRenameReminder
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import JjBookmarkNudge
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import JjWorkspaceReminders
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_claude_command
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_user_instructions
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import is_plan_approval
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import is_session_id_valid
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import resolve_fast_mode
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import select_jj_bookmark_nudge
 from sculptor.agents.default.claude_code_sdk.transcript_collector import TranscriptCollector
 from sculptor.agents.default.constants import CLAUDE_JJ_SKILL_REQUIRED_PROMPT
 from sculptor.agents.default.constants import ENTITY_MENTIONS_SYSTEM_PROMPT
@@ -69,6 +71,7 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.workspace_service.branch_naming import resolve_naming_pattern
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFacts
 from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFactsProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
@@ -101,6 +104,10 @@ def resolve_auto_rename_reminder(
         naming_conventions=resolve_naming_conventions(environment),
         branch_rename=branch_rename,
     )
+
+
+# The jj stack state the previous chat message saw, so a bookmark nudge is sent once per state.
+_JJ_BOOKMARK_NUDGE_STATE_FILE = "jj_bookmark_nudge_stack_state.json"
 
 
 def _is_jj_workspace(environment: AgentExecutionEnvironment) -> bool:
@@ -213,14 +220,31 @@ class ClaudeProcessManager:
         return result
 
     def _resolve_jj_workspace_reminders(self) -> JjWorkspaceReminders | None:
-        """The jj reminders for this workspace; None for a git workspace."""
+        """The jj reminders for a chat message in this workspace; None for a git workspace."""
         if not _is_jj_workspace(self.environment):
             return None
         provider = self._jj_bookmark_facts_provider
         if provider is None:
             return JjWorkspaceReminders(requested_bookmark=None)
         facts = provider.get_jj_bookmark_facts()
-        return JjWorkspaceReminders(requested_bookmark=facts.requested_bookmark)
+        return JjWorkspaceReminders(
+            requested_bookmark=facts.requested_bookmark, bookmark_nudge=self._claim_jj_bookmark_nudge(facts)
+        )
+
+    def _claim_jj_bookmark_nudge(self, facts: JjBookmarkFacts) -> JjBookmarkNudge | None:
+        """The bookmark nudge for this message, unless the previous chat message saw the stack in the same state.
+
+        The state is recorded in the agent's state directory, so the rule holds across restarts and `/clear`.
+        """
+        if facts.stack is None:
+            return None
+        stack_state = facts.stack.model_dump_json()
+        if get_state_file_contents(self.environment, _JJ_BOOKMARK_NUDGE_STATE_FILE) == stack_state:
+            return None
+        self.environment.write_file(
+            str(self.environment.get_state_path() / _JJ_BOOKMARK_NUDGE_STATE_FILE), stack_state
+        )
+        return select_jj_bookmark_nudge(facts)
 
     def _record_and_write_stdin(self, process: RunningProcess, stdin_line: str) -> None:
         self._transcript_collector.record_stdin(stdin_line)
@@ -695,7 +719,9 @@ class ClaudeProcessManager:
                 is_first_message=is_first_message,
                 setup_state=setup_state,
                 auto_rename=auto_rename,
-                jj_workspace=self._resolve_jj_workspace_reminders(),
+                jj_workspace=(
+                    self._resolve_jj_workspace_reminders() if isinstance(message, ChatInputUserMessage) else None
+                ),
             )
             filename = str(self.environment.get_state_path() / f"user_instructions_{message.message_id}.txt")
             self.environment.write_file(filename, user_instructions)
