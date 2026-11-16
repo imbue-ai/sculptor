@@ -333,6 +333,7 @@ from sculptor.web.ui_actions import next_webview_seq
 from sculptor.web.ui_actions import publish_ui_action
 from sculptor.web.ui_actions import subscriber_count
 from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload_diagnostics
+from sculptor.web.workspace_jj_routes import workspace_jj_router
 
 UpdateT = TypeVar("UpdateT", bound=StreamingUpdate)
 
@@ -5388,6 +5389,7 @@ def _element_tags() -> ElementIDs:
 
 APP.include_router(router)
 APP.include_router(remote_repos_router)
+APP.include_router(workspace_jj_router)
 
 APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 

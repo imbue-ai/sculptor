@@ -49,6 +49,7 @@ from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_f
 from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
+from sculptor.services.workspace_service.api import WorkspaceRevisionHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.api import resolve_workspace_setup_command
 from sculptor.services.workspace_service.branch_poller import WorkspaceBranchPoller
@@ -959,6 +960,28 @@ class DefaultWorkspaceService(WorkspaceService):
                 return (history.commits, history.fork_point)
             case JjRevisionHistory():
                 raise WorkspaceCommitHistoryUnavailableError(workspace_id)
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def get_revision_history(
+        self,
+        workspace_id: WorkspaceID,
+        transaction: DataModelTransaction,
+    ) -> JjRevisionHistory:
+        workspace = transaction.get_workspace(workspace_id)
+        if workspace is None:
+            raise WorkspaceNotFoundError(workspace_id)
+
+        location = self._get_checkout_location(workspace, transaction)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
+        history = vcs.get_revision_history(
+            location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
+        )
+        match history:
+            case JjRevisionHistory():
+                return history
+            case GitCommitHistory():
+                raise WorkspaceRevisionHistoryUnavailableError(workspace_id)
             case _ as unreachable:
                 assert_never(unreachable)
 
