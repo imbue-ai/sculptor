@@ -7,28 +7,44 @@ snapshotting read in a stale workspace raises `JjWorkingCopyStaleError`, unless
 the interface gives the method a failure value of its own.
 """
 
+import base64
 import json
 from collections.abc import Callable
+from collections.abc import Mapping
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
+from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
+from sculptor.services.workspace_service.api import FileNotFoundAtRefError
+from sculptor.services.workspace_service.vcs.checkout_paths import validate_checkout_relative_path
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
+from sculptor.services.workspace_service.vcs.data_types import CommitFileChange
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.data_types import PullRequestRefs
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.data_types import RefNameValidation
+from sculptor.services.workspace_service.vcs.data_types import RevisionDiff
+from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
 from sculptor.services.workspace_service.vcs.errors import InvalidCheckoutSpecError
 from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.git_log_parsing import CommitFileStatus
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
 from sculptor.services.workspace_service.vcs.git_repo_queries import is_well_formed_branch_name
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
+from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
+from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionRecord
 from sculptor.services.workspace_service.vcs.jj_data_types import JjStackProjection
 from sculptor.services.workspace_service.vcs.jj_data_types import JjStackRevision
 from sculptor.services.workspace_service.vcs.jj_repo_queries import add_workspace
@@ -37,14 +53,21 @@ from sculptor.services.workspace_service.vcs.jj_repo_queries import forget_works
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_tracked_bookmark_names
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_workspaces
+from sculptor.services.workspace_service.vcs.jj_repo_queries import read_remotes
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_commit_id
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_trunk_symbol
 from sculptor.services.workspace_service.vcs.jj_repo_queries import set_workspace_config
+from sculptor.services.workspace_service.vcs.jj_repo_queries import snapshot_working_copy
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
 from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
+from sculptor.services.workspace_service.vcs.jj_revsets import is_full_commit_id
 from sculptor.services.workspace_service.vcs.jj_revsets import parse_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import revset_for_base
+from sculptor.services.workspace_service.vcs.jj_revsets import root_file_fileset
 from sculptor.services.workspace_service.vcs.jj_stack_projection import project_jj_stack
+from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
+from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
+from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
 
 # Fetches the origin remote if present, and succeeds silently when there is no
 # origin, so workspace startup is never blocked on it.
@@ -59,6 +82,21 @@ _STORE_LINK = Path(".jj") / "repo"
 _WORKING_COPY = JjRevset("@")
 # Far more revisions than any workspace's stack holds; it bounds a target that shares no history with the stack.
 _MAX_STACK_REVISIONS = 500
+_MAX_HISTORY_REVISIONS = 500
+_FINGERPRINT_TIMEOUT_SECONDS = 5.0
+_REFUSED_SNAPSHOT_ERROR_PREFIX = "jj did not snapshot this file: "
+_ORIGIN_REMOTE = "origin"
+_GH_REPO = "GH_REPO"
+_GIT_CEILING_DIRECTORIES = "GIT_CEILING_DIRECTORIES"
+# jj reports a copy as a file new to the revision; the seam's file changes have no copy status.
+_FILE_STATUS_BY_JJ_STATUS: Mapping[str, CommitFileStatus] = {
+    "modified": "M",
+    "added": "A",
+    "removed": "D",
+    "renamed": "R",
+    "copied": "A",
+}
+_FILE_PATH_TEMPLATE = 'json(path) ++ "\\n"'
 # One JSON array per line: commit id, change id, shortest unique change id prefix,
 # first line of the description, then the empty, conflict and divergent flags.
 _WORKING_COPY_TEMPLATE = (
@@ -70,6 +108,18 @@ _WORKING_COPY_TEMPLATE = (
 _STACK_REVISION_TEMPLATE = (
     '"[" ++ json(self) ++ ",[" ++ local_bookmarks.filter(|b| !b.conflict()).map(|b| json(b.name())).join(",")'
     + ' ++ "]]\\n"'
+)
+# One JSON array per line: the commit; its local bookmark names; each changed file as
+# [path, status, source path]; each changed file's line stats as [path, added, removed];
+# then the empty, conflict and divergent flags.
+_REVISION_RECORD_TEMPLATE = (
+    '"[" ++ json(self)'
+    + ' ++ ",[" ++ local_bookmarks.map(|b| json(b.name())).join(",") ++ "]"'
+    + ' ++ ",[" ++ self.diff().files().map(|f| "[" ++ json(f.path()) ++ "," ++ json(f.status())'
+    + ' ++ "," ++ json(f.source().path()) ++ "]").join(",") ++ "]"'
+    + ' ++ ",[" ++ self.diff().stat().files().map(|f| "[" ++ json(f.path()) ++ "," ++ json(f.lines_added())'
+    + ' ++ "," ++ json(f.lines_removed()) ++ "]").join(",") ++ "]"'
+    + ' ++ "," ++ json(empty) ++ "," ++ json(conflict) ++ "," ++ json(divergent) ++ "]\\n"'
 )
 
 
@@ -271,6 +321,209 @@ class JjWorkspaceVcs:
             )
         return revisions
 
+    def compute_diff_artifact(
+        self,
+        location: CheckoutLocation,
+        target_ref: str | None,
+        context_lines: int,
+    ) -> DiffArtifact:
+        """Snapshot once, then diff the working-copy commit `W` against its parents and, with a target, its fork point.
+
+        jj tracks every file it snapshots, so new files appear in both diffs
+        without an untracked-files pass. Files jj refuses to snapshot, such as
+        ones over the size limit, are reported in `file_errors`. The target diff
+        runs from `latest(fork_point(<target> | W))`, so it includes the
+        working copy's own changes.
+        """
+        if not isinstance(context_lines, int) or context_lines < 0:
+            raise ValueError(f"context_lines must be a non-negative integer, got {context_lines!r}")
+        checkout = location.checkout_path
+        working_copy = snapshot_working_copy(self._jj, checkout)
+        diff_options = ["--git", "--context", str(context_lines)]
+        uncommitted_diff = self._run_diff(checkout, ["-r", working_copy.commit_id, *diff_options])
+        target_commit_id = self._resolve_target_commit_id(checkout, target_ref)
+        fork_point = (
+            None
+            if target_commit_id is None
+            else self._find_fork_point(checkout, target_commit_id, working_copy.commit_id)
+        )
+        if fork_point is None:
+            target_branch_diff = ""
+        else:
+            target_branch_diff = self._run_diff(
+                checkout, ["--from", fork_point, "--to", working_copy.commit_id, *diff_options]
+            )
+        return DiffArtifact(
+            uncommitted_diff=uncommitted_diff.strip(),
+            uncommitted_diff_base=working_copy.sole_parent_commit_id or "",
+            target_branch_diff=target_branch_diff.strip(),
+            target_branch_merge_base=fork_point or "",
+            file_errors={
+                path: f"{_REFUSED_SNAPSHOT_ERROR_PREFIX}{reason}"
+                for path, reason in working_copy.refused_files.items()
+            },
+        )
+
+    def _run_diff(self, checkout: Path, options: Sequence[str]) -> str:
+        return self._jj.run(["diff", *options], checkout, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY).stdout
+
+    def _find_fork_point(self, repo_dir: Path, other_commit_id: str, working_copy_commit_id: str) -> str | None:
+        """The newest common ancestor of the working copy and `other_commit_id`."""
+        fork_point_revset = JjRevset(f"latest(fork_point({other_commit_id} | {working_copy_commit_id}))")
+        return resolve_commit_id(self._jj, repo_dir, fork_point_revset)
+
+    def get_revision_history(
+        self,
+        location: CheckoutLocation,
+        target_ref: str | None,
+        base_commit_id: str | None,
+    ) -> JjRevisionHistory:
+        """The revisions after the fork point with the target, up to and including the working copy, newest first.
+
+        `base_commit_id` stands in for a target that is unset or names no commit.
+        The working copy is snapshotted first, so its record shows the agent's
+        latest edits.
+        """
+        checkout = location.checkout_path
+        working_copy = snapshot_working_copy(self._jj, checkout)
+        fork_from = self._resolve_target_commit_id(checkout, target_ref) or self._resolve_target_commit_id(
+            checkout, base_commit_id
+        )
+        fork_point = None if fork_from is None else self._find_fork_point(checkout, fork_from, working_copy.commit_id)
+        if fork_point is None:
+            return JjRevisionHistory(revisions=(), fork_point=None)
+        result = self._jj.run(
+            [
+                "log",
+                "--no-graph",
+                "--limit",
+                str(_MAX_HISTORY_REVISIONS),
+                "-r",
+                f"{fork_point}..{working_copy.commit_id}",
+                "-T",
+                _REVISION_RECORD_TEMPLATE,
+            ],
+            checkout,
+            snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+        )
+        revisions = tuple(
+            _parse_revision_record(json.loads(line), working_copy.commit_id) for line in result.stdout.splitlines()
+        )
+        return JjRevisionHistory(revisions=revisions, fork_point=fork_point)
+
+    def get_revision_diff(self, location: CheckoutLocation, commit_id: str) -> RevisionDiff:
+        """The diff `jj diff -r` shows for one revision: a merge is diffed against its merged parents."""
+        checkout = location.checkout_path
+        if not is_full_commit_id(commit_id):
+            raise InvalidRevisionError(f"Not a full jj commit id: {commit_id!r}")
+        result = self._jj.run(
+            ["log", "--no-graph", "-r", f"present({commit_id})", "-T", "json(self)"],
+            checkout,
+            snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+        )
+        if not result.stdout:
+            raise InvalidRevisionError(f"Not a commit: {commit_id}")
+        parent_commit_ids = json.loads(result.stdout)["parents"]
+        try:
+            diff = self._run_diff(checkout, ["-r", commit_id, "--git"])
+        except VcsCommandError as e:
+            logger.debug("Cannot diff revision {}: {}", commit_id, e)
+            diff = ""
+        return RevisionDiff(
+            diff=diff,
+            commit_id=commit_id,
+            parent_commit_id=parent_commit_ids[0] if len(parent_commit_ids) == 1 else None,
+        )
+
+    def list_files(self, location: CheckoutLocation) -> list[str]:
+        """Every file in the snapshotted working copy; files jj refuses to snapshot are not in it."""
+        checkout = location.checkout_path
+        try:
+            working_copy = snapshot_working_copy(self._jj, checkout)
+            result = self._jj.run(
+                ["file", "list", "-r", working_copy.commit_id, "-T", _FILE_PATH_TEMPLATE],
+                checkout,
+                snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+            )
+        except VcsCommandError as e:
+            raise CheckoutFilesUnavailableError(checkout, str(e)) from e
+        return sorted(json.loads(line) for line in result.stdout.splitlines())
+
+    def read_file_at_revision(self, location: CheckoutLocation, file_path: str, revision: str) -> FileAtRefResult:
+        """The file at `revision`, which must be a full commit id; base64-encoded when it contains a NUL byte.
+
+        A revision is never evaluated as a revset, so anything else reads as a
+        file not found there.
+        """
+        if not is_full_commit_id(revision):
+            raise FileNotFoundAtRefError(file_path, revision, "not a full jj commit id")
+        result = self._jj.run(
+            ["file", "show", "-r", revision, root_file_fileset(file_path)],
+            location.checkout_path,
+            snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+            is_checked=False,
+        )
+        if result.returncode != 0:
+            raise FileNotFoundAtRefError(file_path, revision, result.stderr)
+        if "\0" in result.stdout:
+            encoded = base64.b64encode(result.stdout.encode("utf-8", errors="surrogateescape")).decode("ascii")
+            return FileAtRefResult(content=encoded, encoding="base64")
+        return FileAtRefResult(content=result.stdout, encoding="utf-8")
+
+    def discard_file_changes(self, location: CheckoutLocation, file_path: str) -> GitOperationResult:
+        """`jj restore` the file from the working copy's parents, which deletes a file the working copy added."""
+        checkout = location.checkout_path
+        validation_error = validate_checkout_relative_path(file_path, checkout)
+        if validation_error is not None:
+            return GitOperationResult(success=False, stdout="", stderr="", error_message=validation_error)
+        try:
+            result = self._jj.run(
+                ["restore", root_file_fileset(file_path)], checkout, snapshot=JjSnapshotPolicy.SNAPSHOT
+            )
+        except VcsCommandError as e:
+            return GitOperationResult(success=False, stdout=e.stdout, stderr=e.stderr, error_message=str(e))
+        return GitOperationResult(success=True, stdout=result.stdout, stderr=result.stderr)
+
+    def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:
+        """`GH_REPO` for a GitHub origin, since gh finds no `.git` to read it from, and a git ceiling above the checkout.
+
+        The ceiling makes a `git` run in the workspace fail instead of finding an
+        enclosing repository.
+        """
+        environment_variables = {_GIT_CEILING_DIRECTORIES: str(location.checkout_path.parent)}
+        gh_repo = self._read_gh_repo(location.repo_path)
+        if gh_repo is not None:
+            environment_variables[_GH_REPO] = gh_repo
+        return AgentVcsEnvironment(environment_variables=environment_variables)
+
+    def _read_gh_repo(self, repo_path: Path) -> str | None:
+        """`HOST/OWNER/REPO` for a GitHub `origin`; None for any other origin or none."""
+        try:
+            origin_url = read_remotes(self._jj, repo_path).get(_ORIGIN_REMOTE)
+        except VcsCommandError as e:
+            logger.debug("Cannot read the remotes of {}: {}", repo_path, e)
+            return None
+        if origin_url is None or not is_github_remote_url(origin_url):
+            return None
+        owner_and_name = parse_remote_owner_and_name(origin_url)
+        if owner_and_name is None:
+            return None
+        owner, name = owner_and_name
+        return f"{extract_remote_hostname(origin_url)}/{owner}/{name}"
+
+    def compute_change_fingerprint(self, location: CheckoutLocation) -> str | None:
+        """The working-copy commit id after a snapshot, which changes with every edit and history change.
+
+        None on failure, including a stale workspace, so a transient error just skips a poll.
+        """
+        try:
+            return snapshot_working_copy(
+                self._jj, location.checkout_path, timeout=_FINGERPRINT_TIMEOUT_SECONDS
+            ).commit_id
+        except VcsCommandError as e:
+            logger.debug("Change fingerprint failed in {}: {}", location.checkout_path, e)
+            return None
+
 
 def _stack_revset(working_copies: JjRevset, target_commit_id: str | None) -> JjRevset:
     """The working copies and their ancestors that are not the target's; without a target, their mutable ancestors."""
@@ -287,3 +540,34 @@ def _target_bookmark_name(target_ref: str | None) -> str | None:
         return parse_bookmark_symbol(target_ref).name
     except InvalidRevisionError:
         return None
+
+
+def _parse_revision_record(row: Sequence[Any], working_copy_commit_id: str) -> JjRevisionRecord:
+    commit, bookmarks, changes, stats, is_empty, has_conflict, is_divergent = row
+    lines_changed_by_path = {path: (added, removed) for path, added, removed in stats}
+    files = tuple(
+        CommitFileChange(
+            path=path,
+            status=_FILE_STATUS_BY_JJ_STATUS[status],
+            old_path=source_path if status == "renamed" else None,
+            additions=lines_changed_by_path.get(path, (0, 0))[0],
+            deletions=lines_changed_by_path.get(path, (0, 0))[1],
+        )
+        for path, status, source_path in sorted(changes)
+    )
+    author = commit["author"]
+    return JjRevisionRecord(
+        change_id=commit["change_id"],
+        commit_id=commit["commit_id"],
+        description=commit["description"].removesuffix("\n"),
+        author_name=author["name"],
+        author_email=author["email"],
+        timestamp=author["timestamp"],
+        parent_commit_ids=tuple(commit["parents"]),
+        bookmarks=tuple(bookmarks),
+        files=files,
+        is_empty=is_empty,
+        has_conflict=has_conflict,
+        is_divergent=is_divergent,
+        is_working_copy=commit["commit_id"] == working_copy_commit_id,
+    )

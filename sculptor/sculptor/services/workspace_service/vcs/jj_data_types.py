@@ -3,6 +3,7 @@ from pathlib import Path
 from pydantic import Field
 
 from sculptor.foundation.pydantic_serialization import FrozenModel
+from sculptor.services.workspace_service.vcs.data_types import CommitFileChange
 
 
 class JjBookmarkSymbol(FrozenModel):
@@ -87,3 +88,45 @@ class JjHeadIdentity(FrozenModel):
     )
     has_conflict: bool = Field(description="Whether the working copy has unresolved conflicts")
     is_divergent: bool = Field(description="Whether the working copy's change has more than one visible commit")
+
+
+class JjWorkingCopySnapshot(FrozenModel):
+    """A workspace's working-copy commit as a snapshot just left it."""
+
+    commit_id: str
+    parent_commit_ids: tuple[str, ...]
+    refused_files: dict[str, str] = Field(
+        description="Files jj refused to snapshot, relative to the workspace root, each mapped to jj's reason"
+    )
+
+    @property
+    def sole_parent_commit_id(self) -> str | None:
+        """The commit the working copy's own changes are measured from; None for a merge."""
+        if len(self.parent_commit_ids) != 1:
+            return None
+        return self.parent_commit_ids[0]
+
+
+class JjRevisionRecord(FrozenModel):
+    """One revision in a jj workspace's history."""
+
+    change_id: str
+    commit_id: str
+    description: str = Field(description="The whole description, without jj's trailing newline")
+    author_name: str
+    author_email: str
+    timestamp: str = Field(description="When the author made the change, in ISO 8601 with a UTC offset")
+    parent_commit_ids: tuple[str, ...]
+    bookmarks: tuple[str, ...] = Field(description="The local bookmarks on this revision")
+    files: tuple[CommitFileChange, ...]
+    is_empty: bool
+    has_conflict: bool
+    is_divergent: bool
+    is_working_copy: bool = Field(description="Whether this is the workspace's own working-copy commit")
+
+
+class JjRevisionHistory(FrozenModel):
+    """The revisions a jj workspace has made since it forked from its target."""
+
+    revisions: tuple[JjRevisionRecord, ...] = Field(description="Newest first, truncated to a fixed maximum")
+    fork_point: str | None = Field(description="The commit the history is measured from; None when there is none")

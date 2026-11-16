@@ -1,4 +1,7 @@
+import base64
+import os
 import shutil
+import subprocess
 from pathlib import Path
 from uuid import uuid4
 
@@ -6,18 +9,29 @@ import pytest
 
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
+from sculptor.services.workspace_service.api import FileNotFoundAtRefError
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
+from sculptor.services.workspace_service.vcs.data_types import CommitFileChange
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
+from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
 from sculptor.services.workspace_service.vcs.errors import InvalidCheckoutSpecError
+from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
+from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
+from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.jj_workspace_vcs import DEFAULT_JJ_WORKSPACE_SETUP_COMMAND
 from sculptor.services.workspace_service.vcs.jj_workspace_vcs import JjWorkspaceVcs
+from sculptor.testing.jj_repos import JJ_TEST_USER_EMAIL
+from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import colocate_with_jj
+from sculptor.testing.jj_repos import make_github_looking_origin
 from sculptor.testing.jj_repos import make_workspace_stale
 from sculptor.testing.jj_repos import run_jj
 
@@ -562,3 +576,429 @@ def test_get_pull_request_refs_has_no_head_when_the_checkout_is_gone(
     shutil.rmtree(checkout.checkout_path)
 
     assert jj_vcs.get_pull_request_refs(checkout, target_ref=_BASE, requested_ref_name=None).head_ref_names == ()
+
+
+def _advance_origin_main(jj_binary: JjBinary, repo: JjColocatedRepo, file_name: str) -> None:
+    """Commit `file_name` on `main` in the user's checkout, push it, and fetch, so `main@origin` moves on."""
+    (repo.path / file_name).write_text("on main\n")
+    run_blocking(["git", "add", file_name], cwd=repo.path)
+    run_blocking(["git", "commit", "-q", "-m", "main moves on"], cwd=repo.path)
+    run_blocking(["git", "push", "-q", "origin", "main"], cwd=repo.path)
+    _jj(jj_binary, repo.path, "git", "fetch")
+
+
+def _make_merge_working_copy(jj_binary: JjBinary, checkout: Path) -> None:
+    """Leave the working copy a new change on top of two siblings that touch different files."""
+    _commit_change(jj_binary, checkout, "one.txt", "one\n", "side one")
+    _jj(jj_binary, checkout, "new", "-m", "side two", "main@origin")
+    _commit_change(jj_binary, checkout, "two.txt", "two\n", "side two")
+    _jj(jj_binary, checkout, "new", 'description(exact:"side one\\n")', 'description(exact:"side two\\n")')
+
+
+def _refuse_large_files(jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, snapshot_limit: _SnapshotLimit) -> None:
+    """Lower the limit to 1 MiB and write a 2 MiB file, which jj then refuses to snapshot."""
+    snapshot_limit.mib = 1
+    jj_vcs.verify_checkout(checkout)
+    (checkout.checkout_path / "big.bin").write_bytes(b"x" * (2 * _MEBIBYTE))
+
+
+def test_compute_diff_artifact_diffs_the_working_copy_against_its_parent_including_new_files(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    (checkout.checkout_path / "README.md").write_text("changed\n")
+    (checkout.checkout_path / "new.txt").write_text("brand new\n")
+
+    artifact = jj_vcs.compute_diff_artifact(checkout, target_ref=None, context_lines=3)
+
+    assert "diff --git a/README.md b/README.md" in artifact.uncommitted_diff
+    assert "+changed" in artifact.uncommitted_diff
+    assert "diff --git a/new.txt b/new.txt" in artifact.uncommitted_diff
+    assert "+brand new" in artifact.uncommitted_diff
+    assert artifact.uncommitted_diff_base == _commit_id(jj_binary, checkout.checkout_path, "@-")
+    assert artifact.target_branch_diff == ""
+    assert artifact.target_branch_merge_base == ""
+    assert artifact.file_errors == {}
+
+
+@pytest.mark.parametrize("is_main_tracked", [True, False])
+def test_compute_diff_artifact_diffs_everything_since_the_fork_point_with_the_target(
+    jj_vcs: JjWorkspaceVcs,
+    checkout: CheckoutLocation,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    is_main_tracked: bool,
+) -> None:
+    if not is_main_tracked:
+        _untrack_main(jj_binary, jj_colocated_repo)
+    fork_point = _commit_id(jj_binary, jj_colocated_repo.path, "main@origin")
+    _advance_origin_main(jj_binary, jj_colocated_repo, "main_only.txt")
+    _commit_change(jj_binary, checkout.checkout_path, "committed.txt", "committed\n", "work")
+    (checkout.checkout_path / "README.md").write_text("uncommitted\n")
+
+    artifact = jj_vcs.compute_diff_artifact(checkout, target_ref=_BASE, context_lines=3)
+
+    assert artifact.target_branch_merge_base == fork_point
+    assert "+committed" in artifact.target_branch_diff
+    assert "+uncommitted" in artifact.target_branch_diff
+    assert "main_only.txt" not in artifact.target_branch_diff
+    assert "committed.txt" not in artifact.uncommitted_diff
+    assert "+uncommitted" in artifact.uncommitted_diff
+
+
+def test_compute_diff_artifact_shows_the_requested_lines_of_context(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    lines = [f"line {number}\n" for number in range(1, 11)]
+    _commit_change(jj_binary, checkout.checkout_path, "lines.txt", "".join(lines), "add lines")
+    lines[4] = "changed\n"
+    (checkout.checkout_path / "lines.txt").write_text("".join(lines))
+
+    narrow = jj_vcs.compute_diff_artifact(checkout, target_ref=None, context_lines=0)
+    wide = jj_vcs.compute_diff_artifact(checkout, target_ref=None, context_lines=2)
+
+    assert "\n line 4\n" not in narrow.uncommitted_diff
+    assert "\n line 3\n line 4\n-line 5\n+changed\n line 6\n line 7" in wide.uncommitted_diff
+    assert "\n line 2\n" not in wide.uncommitted_diff
+
+
+def test_compute_diff_artifact_reports_a_file_too_large_to_snapshot(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, snapshot_limit: _SnapshotLimit
+) -> None:
+    _refuse_large_files(jj_vcs, checkout, snapshot_limit)
+
+    artifact = jj_vcs.compute_diff_artifact(checkout, target_ref=_BASE, context_lines=3)
+
+    assert "big.bin" not in artifact.uncommitted_diff
+    assert "big.bin" not in artifact.target_branch_diff
+    assert list(artifact.file_errors) == ["big.bin"]
+    assert "(2097152 bytes)" in artifact.file_errors["big.bin"]
+
+
+@pytest.mark.parametrize("target_ref", ["missing@origin", "origin/main", "a" * 40])
+def test_compute_diff_artifact_leaves_the_target_diff_empty_for_a_target_that_names_no_commit(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, target_ref: str
+) -> None:
+    (checkout.checkout_path / "README.md").write_text("changed\n")
+
+    artifact = jj_vcs.compute_diff_artifact(checkout, target_ref=target_ref, context_lines=3)
+
+    assert "+changed" in artifact.uncommitted_diff
+    assert artifact.target_branch_diff == ""
+    assert artifact.target_branch_merge_base == ""
+
+
+def test_compute_diff_artifact_names_no_single_old_side_for_a_merge_working_copy(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _make_merge_working_copy(jj_binary, checkout.checkout_path)
+    (checkout.checkout_path / "README.md").write_text("changed on the merge\n")
+
+    artifact = jj_vcs.compute_diff_artifact(checkout, target_ref=None, context_lines=3)
+
+    assert artifact.uncommitted_diff_base == ""
+    assert "+changed on the merge" in artifact.uncommitted_diff
+    assert "one.txt" not in artifact.uncommitted_diff
+
+
+def test_compute_diff_artifact_raises_for_a_stale_workspace(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout.checkout_path)
+
+    with pytest.raises(JjWorkingCopyStaleError):
+        jj_vcs.compute_diff_artifact(checkout, target_ref=_BASE, context_lines=3)
+
+
+def test_get_revision_history_lists_the_revisions_since_the_fork_point_newest_first(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    fork_point = _commit_id(jj_binary, jj_colocated_repo.path, "main@origin")
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first\n\nwith a body")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", "feat")
+    (checkout.checkout_path / "README.md").write_text("edited\n")
+
+    history = jj_vcs.get_revision_history(checkout, target_ref=_BASE, base_commit_id=None)
+
+    assert history.fork_point == fork_point
+    working_copy, first = history.revisions
+    assert working_copy.is_working_copy
+    assert working_copy.description == ""
+    assert working_copy.parent_commit_ids == (first.commit_id,)
+    assert working_copy.files == (
+        CommitFileChange(path="README.md", status="M", old_path=None, additions=1, deletions=1),
+    )
+    assert not first.is_working_copy
+    assert first.description == "first\n\nwith a body"
+    assert first.bookmarks == ("feat",)
+    assert first.author_name == JJ_TEST_USER_NAME
+    assert first.author_email == JJ_TEST_USER_EMAIL
+    assert first.parent_commit_ids == (fork_point,)
+    assert first.files == (CommitFileChange(path="a.txt", status="A", old_path=None, additions=1, deletions=0),)
+    assert first.change_id == _jj(
+        jj_binary, checkout.checkout_path, "--ignore-working-copy", "log", "--no-graph", "-r", "@-", "-T", "change_id"
+    )
+    assert (first.is_empty, first.has_conflict, first.is_divergent) == (False, False, False)
+
+
+def test_get_revision_history_reports_a_rename_with_its_old_path(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    workspace = checkout.checkout_path
+    _commit_change(jj_binary, workspace, "orig.txt", "l1\nl2\nl3\n", "add orig")
+    (workspace / "orig.txt").rename(workspace / "renamed.txt")
+    _commit_change(jj_binary, workspace, "renamed.txt", "l1\nl2\nl3\nl4\n", "rename")
+
+    history = jj_vcs.get_revision_history(checkout, target_ref=_BASE, base_commit_id=None)
+
+    rename = history.revisions[1]
+    assert rename.files == (
+        CommitFileChange(path="renamed.txt", status="R", old_path="orig.txt", additions=1, deletions=0),
+    )
+
+
+@pytest.mark.parametrize("target_ref", [None, "missing@origin"])
+def test_get_revision_history_falls_back_to_the_base_commit_without_a_usable_target(
+    jj_vcs: JjWorkspaceVcs,
+    checkout: CheckoutLocation,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    target_ref: str | None,
+) -> None:
+    base = _commit_id(jj_binary, jj_colocated_repo.path, "main@origin")
+
+    history = jj_vcs.get_revision_history(checkout, target_ref=target_ref, base_commit_id=base)
+
+    assert history.fork_point == base
+    assert [revision.is_working_copy for revision in history.revisions] == [True]
+
+
+def test_get_revision_history_is_empty_without_any_fork_point(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+) -> None:
+    history = jj_vcs.get_revision_history(checkout, target_ref=None, base_commit_id=None)
+
+    assert history == JjRevisionHistory(revisions=(), fork_point=None)
+
+
+def test_get_revision_diff_diffs_a_revision_against_its_parent(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    commit_id = _commit_id(jj_binary, checkout.checkout_path, "@-")
+
+    revision_diff = jj_vcs.get_revision_diff(checkout, commit_id)
+
+    assert revision_diff.commit_id == commit_id
+    assert revision_diff.parent_commit_id == _commit_id(jj_binary, checkout.checkout_path, "@--")
+    assert "diff --git a/a.txt b/a.txt" in revision_diff.diff
+    assert "+a" in revision_diff.diff
+
+
+def test_get_revision_diff_names_no_single_parent_for_a_merge(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _make_merge_working_copy(jj_binary, checkout.checkout_path)
+
+    revision_diff = jj_vcs.get_revision_diff(checkout, _commit_id(jj_binary, checkout.checkout_path, "@"))
+
+    assert revision_diff.parent_commit_id is None
+    assert revision_diff.diff == ""
+
+
+@pytest.mark.parametrize("commit_id", ["@", "main", "abc123", "A" * 40, "a" * 40])
+def test_get_revision_diff_rejects_anything_but_the_full_id_of_an_existing_commit(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, commit_id: str
+) -> None:
+    with pytest.raises(InvalidRevisionError):
+        jj_vcs.get_revision_diff(checkout, commit_id)
+
+
+def test_list_files_lists_every_file_including_ones_not_yet_snapshotted(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+) -> None:
+    (checkout.checkout_path / "dir").mkdir()
+    (checkout.checkout_path / "dir" / "b c (1).txt").write_text("new\n")
+
+    assert jj_vcs.list_files(checkout) == ["README.md", "dir/b c (1).txt"]
+
+
+def test_list_files_leaves_out_a_file_too_large_to_snapshot(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, snapshot_limit: _SnapshotLimit
+) -> None:
+    _refuse_large_files(jj_vcs, checkout, snapshot_limit)
+
+    assert jj_vcs.list_files(checkout) == ["README.md"]
+
+
+def test_list_files_reports_a_stale_workspace_as_unavailable(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout.checkout_path)
+
+    with pytest.raises(CheckoutFilesUnavailableError):
+        jj_vcs.list_files(checkout)
+
+
+def test_read_file_at_revision_reads_a_file_as_a_commit_has_it(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    (checkout.checkout_path / "dir name").mkdir()
+    _commit_change(jj_binary, checkout.checkout_path, "dir name/a (1).txt", "first\n", "add")
+    commit_id = _commit_id(jj_binary, checkout.checkout_path, "@-")
+    (checkout.checkout_path / "dir name" / "a (1).txt").write_text("later\n")
+
+    result = jj_vcs.read_file_at_revision(checkout, "dir name/a (1).txt", commit_id)
+
+    assert result == FileAtRefResult(content="first\n", encoding="utf-8")
+
+
+def test_read_file_at_revision_base64_encodes_content_with_a_nul_byte(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    (checkout.checkout_path / "data.bin").write_bytes(b"a\x00b")
+    _jj(jj_binary, checkout.checkout_path, "commit", "-m", "binary")
+
+    result = jj_vcs.read_file_at_revision(checkout, "data.bin", _commit_id(jj_binary, checkout.checkout_path, "@-"))
+
+    assert result == FileAtRefResult(content=base64.b64encode(b"a\x00b").decode("ascii"), encoding="base64")
+
+
+def test_read_file_at_revision_reports_a_file_the_commit_does_not_have(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    with pytest.raises(FileNotFoundAtRefError):
+        jj_vcs.read_file_at_revision(checkout, "missing.txt", _commit_id(jj_binary, checkout.checkout_path, "@"))
+
+
+@pytest.mark.parametrize("revision", ["@", "HEAD", "main@origin", "all()", "abc123"])
+def test_read_file_at_revision_accepts_only_a_full_commit_id(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, revision: str
+) -> None:
+    with pytest.raises(FileNotFoundAtRefError):
+        jj_vcs.read_file_at_revision(checkout, "README.md", revision)
+
+
+def test_discard_file_changes_restores_a_modified_file_and_deletes_an_added_one(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+) -> None:
+    (checkout.checkout_path / "README.md").write_text("changed\n")
+    (checkout.checkout_path / "new file.txt").write_text("new\n")
+
+    results = [jj_vcs.discard_file_changes(checkout, path) for path in ("README.md", "new file.txt")]
+
+    assert [result.success for result in results] == [True, True]
+    assert (checkout.checkout_path / "README.md").read_text() == "# jj fixture repo\n"
+    assert not (checkout.checkout_path / "new file.txt").exists()
+    assert jj_vcs.compute_diff_artifact(checkout, target_ref=None, context_lines=3).uncommitted_diff == ""
+
+
+@pytest.mark.parametrize("file_path", ["/etc/passwd", "../outside.txt"])
+def test_discard_file_changes_refuses_a_path_outside_the_checkout(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, file_path: str
+) -> None:
+    result = jj_vcs.discard_file_changes(checkout, file_path)
+
+    assert not result.success
+    assert result.error_message
+
+
+def test_discard_file_changes_reports_a_stale_workspace_as_a_failure(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout.checkout_path)
+
+    result = jj_vcs.discard_file_changes(checkout, "README.md")
+
+    assert not result.success
+    assert "stale" in (result.error_message or "")
+
+
+def test_compute_change_fingerprint_changes_with_an_edit_and_is_stable_otherwise(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+) -> None:
+    first = jj_vcs.compute_change_fingerprint(checkout)
+    second = jj_vcs.compute_change_fingerprint(checkout)
+    (checkout.checkout_path / "README.md").write_text("changed\n")
+    after_edit = jj_vcs.compute_change_fingerprint(checkout)
+
+    assert first is not None
+    assert first == second
+    assert after_edit not in (None, first)
+
+
+def test_compute_change_fingerprint_is_none_when_jj_fails(jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation) -> None:
+    shutil.rmtree(checkout.checkout_path)
+
+    assert jj_vcs.compute_change_fingerprint(checkout) is None
+
+
+def test_agent_environment_points_gh_at_a_github_origin_and_stops_git_above_the_checkout(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+
+    environment = jj_vcs.agent_environment(checkout)
+
+    assert environment == AgentVcsEnvironment(
+        environment_variables={
+            "GH_REPO": "github.com/sculptor-tests/jj-fixture",
+            "GIT_CEILING_DIRECTORIES": str(checkout.checkout_path.parent),
+        }
+    )
+
+
+def test_agent_environment_sets_no_gh_repo_for_an_origin_off_github(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
+) -> None:
+    assert "GH_REPO" not in jj_vcs.agent_environment(checkout).environment_variables
+
+
+def test_git_finds_no_enclosing_repository_from_a_checkout_under_the_agent_environment(
+    jj_vcs: JjWorkspaceVcs, jj_colocated_repo: JjColocatedRepo, tmp_path: Path
+) -> None:
+    outer_repo = tmp_path / "outer"
+    outer_repo.mkdir()
+    run_blocking(["git", "init", "-q"], cwd=outer_repo)
+    location = jj_vcs.create_checkout(_spec(jj_colocated_repo, outer_repo / "env" / "code"))
+    show_toplevel = ["git", "rev-parse", "--show-toplevel"]
+    agent_env = {**os.environ, **jj_vcs.agent_environment(location).environment_variables}
+
+    without_ceiling = subprocess.run(show_toplevel, cwd=location.checkout_path, capture_output=True, text=True)
+    with_ceiling = subprocess.run(show_toplevel, cwd=location.checkout_path, env=agent_env, capture_output=True)
+
+    assert Path(without_ceiling.stdout.strip()).resolve() == outer_repo.resolve()
+    assert with_ceiling.returncode != 0
+
+
+def test_jj_still_fetches_under_the_agent_environment(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    agent_env = {**os.environ, **jj_vcs.agent_environment(checkout).environment_variables}
+
+    fetch = subprocess.run(
+        [str(jj_binary.path), "git", "fetch", "--remote", "origin"],
+        cwd=checkout.checkout_path,
+        env=agent_env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert fetch.returncode == 0, fetch.stderr
+
+
+def test_reads_of_an_unchanged_workspace_add_no_operation(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    commit_id = _commit_id(jj_binary, checkout.checkout_path, "@-")
+    operations_before = _count_operations(jj_binary, checkout.checkout_path)
+
+    jj_vcs.compute_diff_artifact(checkout, target_ref=_BASE, context_lines=3)
+    jj_vcs.get_revision_history(checkout, target_ref=_BASE, base_commit_id=None)
+    jj_vcs.get_revision_diff(checkout, commit_id)
+    jj_vcs.list_files(checkout)
+    jj_vcs.read_file_at_revision(checkout, "a.txt", commit_id)
+    jj_vcs.compute_change_fingerprint(checkout)
+    jj_vcs.agent_environment(checkout)
+
+    assert _count_operations(jj_binary, checkout.checkout_path) == operations_before

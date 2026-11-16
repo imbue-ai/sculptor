@@ -70,12 +70,17 @@ def format_bookmark_symbol(symbol: JjBookmarkSymbol) -> str:
     return f"{symbol.name}@{symbol.remote}"
 
 
+def is_full_commit_id(value: str) -> bool:
+    """Whether `value` is a full commit id, the only form of commit id jj never reads as a symbol."""
+    return _FULL_COMMIT_ID_PATTERN.fullmatch(value) is not None
+
+
 def revset_for_base(symbol_or_commit_id: str) -> JjRevset:
     """The revset for a workspace base given as a bookmark symbol or a full commit id.
 
     Raises `InvalidRevisionError` for anything else.
     """
-    if _FULL_COMMIT_ID_PATTERN.fullmatch(symbol_or_commit_id):
+    if is_full_commit_id(symbol_or_commit_id):
         return JjRevset(symbol_or_commit_id)
     symbol = parse_bookmark_symbol(symbol_or_commit_id)
     if symbol.remote is None:

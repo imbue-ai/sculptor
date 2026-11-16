@@ -13,6 +13,7 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.environment_manager.environments.clone_strategy import clone_repository
+from sculptor.services.workspace_service.vcs.checkout_paths import validate_checkout_relative_path
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
@@ -580,7 +581,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def discard_file_changes(self, location: CheckoutLocation, file_path: str) -> GitOperationResult:
         """Restore a tracked file from HEAD, or delete an untracked one."""
         checkout = location.checkout_path
-        validation_error = _validate_checkout_relative_path(file_path, checkout)
+        validation_error = validate_checkout_relative_path(file_path, checkout)
         if validation_error is not None:
             return GitOperationResult(success=False, stdout="", stderr="", error_message=validation_error)
 
@@ -681,12 +682,3 @@ def _build_commit_record(
         parent_hashes=parents.split() if parents else [],
         files=files,
     )
-
-
-def _validate_checkout_relative_path(file_path: str, checkout: Path) -> str | None:
-    """Why `file_path` may not be touched, or None when it stays inside `checkout`."""
-    if file_path.startswith("/"):
-        return "Absolute paths are not allowed"
-    if not (checkout / file_path).resolve().is_relative_to(checkout.resolve()):
-        return "Path traversal is not allowed"
-    return None
