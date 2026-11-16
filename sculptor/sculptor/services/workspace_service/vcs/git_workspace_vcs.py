@@ -335,6 +335,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
             target_branch_diff = self._run_diff(diff_options, checkout, merge_base, "target-branch") + untracked_diff
         return DiffArtifact(
             uncommitted_diff=(uncommitted_diff + untracked_diff).strip(),
+            uncommitted_diff_base=self._resolve_commit_id(checkout, "HEAD") or "",
             target_branch_diff=target_branch_diff.strip(),
             target_branch_merge_base=merge_base or "",
             file_errors=self._detect_file_errors(checkout),

@@ -457,6 +457,30 @@ def test_compute_diff_artifact_includes_modified_and_untracked_files(
     assert artifact.file_errors == {}
 
 
+def test_compute_diff_artifact_names_the_head_commit_as_the_uncommitted_diffs_old_side(
+    in_place_vcs: GitWorkspaceVcs, git_repo: Path
+) -> None:
+    (git_repo / "file.txt").write_text("changed\n")
+
+    artifact = in_place_vcs.compute_diff_artifact(_in_place(git_repo), target_ref=None, context_lines=3)
+
+    assert artifact.uncommitted_diff_base == _git(git_repo, ["rev-parse", "HEAD"])
+
+
+def test_compute_diff_artifact_has_no_uncommitted_diff_base_before_the_first_commit(
+    in_place_vcs: GitWorkspaceVcs, tmp_path: Path
+) -> None:
+    repo = tmp_path / "unborn"
+    repo.mkdir()
+    _git(repo, ["init", "-q", "-b", "main"])
+    (repo / "new.txt").write_text("new\n")
+
+    artifact = in_place_vcs.compute_diff_artifact(_in_place(repo), target_ref=None, context_lines=3)
+
+    assert "+new" in artifact.uncommitted_diff
+    assert artifact.uncommitted_diff_base == ""
+
+
 def test_compute_diff_artifact_skips_untracked_symlinks_and_directories(
     in_place_vcs: GitWorkspaceVcs, git_repo: Path
 ) -> None:
