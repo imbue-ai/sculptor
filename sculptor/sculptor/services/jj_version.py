@@ -1,14 +1,18 @@
-"""The single pinned jj version and its release digests, in a dependency-free module.
+"""The single pinned jj version, its release digests and the oldest git it accepts, in a dependency-free module.
 
 jj is pinned so every developer, CI job and offload sandbox runs the same jj, and the
-pin is also the minimum version Sculptor supports. ``just install-jj`` reads both
-constants, and ``.devcontainer/Dockerfile`` carries its own copy for the offload image
+pin is also the minimum version Sculptor supports. ``just install-jj`` reads the version
+and the digests, and ``.devcontainer/Dockerfile`` carries its own copy for the offload image
 (``jj_version_test.py`` keeps them equal). jj publishes no checksum file, so the digests
 are recorded here, keyed by the Rust target triple in the release asset names. Keep this
 module import-free.
 """
 
 JJ_PINNED_VERSION = "0.47.1"
+
+# jj runs git to fetch and push, and the pinned jj refuses a git older than this one.
+# `jj_version_test.py` reads it back from the pinned jj, so a bump that changes it fails there.
+JJ_MINIMUM_GIT_VERSION = "2.42.0"
 
 JJ_PINNED_SHA256_BY_TARGET_TRIPLE = {
     "aarch64-apple-darwin": "50129b527f7cd6aef82aebd4bb2b670bb56766adc509ef3279c4327aa3592255",
