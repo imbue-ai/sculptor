@@ -15,6 +15,7 @@ import pytest
 from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import RequestID
@@ -172,3 +173,31 @@ def test_reading_the_revisions_of_a_stale_workspace_marks_it_stale(
             unstarted_workspace_service.get_revision_history(workspace_id, transaction)
 
     assert _scan_for_state(unstarted_workspace_service, workspace_id).is_working_copy_stale
+
+
+def test_the_jj_poller_rests_quietly_while_the_published_jj_readiness_has_a_blocker(
+    unstarted_workspace_service: DefaultWorkspaceService,
+    test_service_collection: CompleteServiceCollection,
+    jj_workspace_row: Workspace,
+    jj_binary: JjBinary,
+    tmp_path: Path,
+) -> None:
+    poller = unstarted_workspace_service._jj_workspace_poller
+    dependency_management_service = test_service_collection.dependency_management_service
+    _point_jj_at(tmp_path / "missing" / "jj")
+    dependency_management_service.get_status()
+
+    with record_logged_error_levels() as levels:
+        poller._scan_once()
+    state_while_unavailable = unstarted_workspace_service.get_cached_jj_state(jj_workspace_row.object_id)
+    _point_jj_at(jj_binary.path)
+    dependency_management_service.get_status()
+
+    assert (state_while_unavailable, levels) == (None, [])
+    assert _scan_for_state(unstarted_workspace_service, jj_workspace_row.object_id).is_working_copy_empty
+
+
+def _point_jj_at(binary: Path) -> None:
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj=str(binary))})
+    )

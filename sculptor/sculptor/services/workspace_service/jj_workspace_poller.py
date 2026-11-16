@@ -17,11 +17,16 @@ operation records, such as a change to the user's jj config.
 The poller never snapshots, so it never finds a working copy stale itself:
 the workspace service marks one in the stale working-copy registry when a
 snapshot fails that way, and every cycle publishes the mark.
+
+While jj is unavailable a cycle does nothing at all. The poller does not
+check jj itself: it reads the readiness the dependency service last
+published.
 """
 
 import threading
 from collections.abc import Sequence
 from pathlib import Path
+from queue import Empty
 from queue import Queue
 from typing import Callable
 from typing import assert_never
@@ -45,6 +50,8 @@ from sculptor.services.workspace_service.vcs.jj_workspace_scan import list_scann
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import name_pull_request_base
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import project_jj_workspace_identity
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import scan_jj_workspaces
+from sculptor.web.data_types import DependenciesStatus
+from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.data_types import WorkspaceTargetBranchesInfo
@@ -59,6 +66,28 @@ _OPERATION_HEADS = Path("op_heads") / "heads"
 _RepositoryScanKey = tuple[frozenset[str], frozenset[tuple[str, str | None]]]
 
 
+class PublishedJjReadiness:
+    """The jj readiness the dependency service last published, read without running jj.
+
+    ``updates`` is registered as an observer of the dependency service, which
+    pushes its whole status every time it computes one: on each health check
+    from an open window, and around installs and settings changes.
+    """
+
+    def __init__(self) -> None:
+        self.updates: Queue[DependenciesStatus] = Queue()
+        self._latest: JjReadiness | None = None
+
+    def read_latest(self) -> JjReadiness | None:
+        """The most recently published readiness; None until the first status arrives."""
+        while True:
+            try:
+                status = self.updates.get_nowait()
+            except Empty:
+                return self._latest
+            self._latest = status.jj_readiness
+
+
 class JjWorkspacePoller:
     """Owns the jj scan loop and the subscriber fan-out for jj workspace state."""
 
@@ -71,6 +100,7 @@ class JjWorkspacePoller:
         resolve_working_dir: Callable[[Workspace], Path | None],
         refresh_diff_on_working_copy_change: Callable[[WorkspaceID], None],
         stale_working_copies: StaleWorkingCopyRegistry,
+        read_jj_readiness: Callable[[], JjReadiness | None],
     ) -> None:
         self._concurrency_group = concurrency_group
         self._read_workspaces = read_workspaces
@@ -78,6 +108,7 @@ class JjWorkspacePoller:
         self._resolve_working_dir = resolve_working_dir
         self._refresh_diff_on_working_copy_change = refresh_diff_on_working_copy_change
         self._stale_working_copies = stale_working_copies
+        self._read_jj_readiness = read_jj_readiness
 
         self._stop_event = threading.Event()
 
@@ -158,6 +189,10 @@ class JjWorkspacePoller:
     # -- Scan --------------------------------------------------------------
 
     def _scan_once(self) -> None:
+        # Until the dependency service publishes a readiness, the poller scans as usual.
+        readiness = self._read_jj_readiness()
+        if readiness is not None and readiness.blocker is not None:
+            return
         self._cycle += 1
         force_recompute = self._cycle % _FALLBACK_RECOMPUTE_EVERY_CYCLES == 0
 

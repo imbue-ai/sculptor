@@ -28,6 +28,11 @@ from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.workspace_vcs import make_test_git_cli
+from sculptor.web.data_types import JjAvailable
+from sculptor.web.data_types import JjBlocker
+from sculptor.web.data_types import JjIdentity
+from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.data_types import WorkspaceTargetBranchesInfo
@@ -65,6 +70,7 @@ class _Harness:
         self.checkout_by_workspace: dict[WorkspaceID, Path] = {}
         self.refreshed_diffs: list[WorkspaceID] = []
         self.stale_working_copies = StaleWorkingCopyRegistry()
+        self.jj_readiness: JjReadiness | None = None
         self._invocation_log = tmp_path / "jj-invocations.log"
         self._invocation_log.touch()
         wrapper = tmp_path / "counting-jj"
@@ -81,6 +87,7 @@ class _Harness:
             resolve_working_dir=self._resolve_working_dir,
             refresh_diff_on_working_copy_change=self.refreshed_diffs.append,
             stale_working_copies=self.stale_working_copies,
+            read_jj_readiness=lambda: self.jj_readiness,
         )
         self.queue: Queue[StreamingUpdateSourceTypes] = Queue()
         self.poller.add_observer(self.queue)
@@ -365,6 +372,21 @@ def test_a_workspace_whose_update_fails_is_logged_once_and_does_not_stop_the_oth
 
 class _UnexpectedRefreshError(Exception):
     """Raised by a diff refresh standing in for a failure no handler anticipates."""
+
+
+def test_a_cycle_while_jj_is_unavailable_runs_and_logs_nothing_and_the_next_one_with_jj_back_scans(
+    harness: _Harness,
+) -> None:
+    workspace, _ = harness.add_workspace()
+    harness.jj_readiness = JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
+
+    with record_logged_error_levels() as levels:
+        while_unavailable = harness.scan()
+    harness.jj_readiness = JjAvailable(blocker=None, identity=JjIdentity(name="Test", email="test@example.com"))
+    once_available = harness.scan()
+
+    assert (while_unavailable, levels, harness.count_jj_invocations() > 0) == ([], [], True)
+    assert [state.workspace_id for state in _states(once_available)] == [workspace.object_id]
 
 
 def test_a_git_workspace_is_not_scanned(harness: _Harness, tmp_path: Path) -> None:

@@ -69,6 +69,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.jj_orphan_sweep import forget_orphaned_jj_workspaces
 from sculptor.services.workspace_service.jj_workspace_poller import JjWorkspacePoller
+from sculptor.services.workspace_service.jj_workspace_poller import PublishedJjReadiness
 from sculptor.services.workspace_service.setup_command_runner import DefaultSetupStateProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
@@ -134,6 +135,7 @@ class DefaultWorkspaceService(WorkspaceService):
     _jj_workspace_poller_instance: JjWorkspacePoller | None = PrivateAttr(default=None)
     _jj_workspace_poller_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     _stale_working_copies: StaleWorkingCopyRegistry = PrivateAttr(default_factory=StaleWorkingCopyRegistry)
+    _published_jj_readiness: PublishedJjReadiness = PrivateAttr(default_factory=PublishedJjReadiness)
 
     @property
     def setup_runner(self) -> SetupCommandRunner:
@@ -167,6 +169,7 @@ class DefaultWorkspaceService(WorkspaceService):
         """The process-global jj-state scanner this service owns, built lazily like the branch poller."""
         with self._jj_workspace_poller_lock:
             if self._jj_workspace_poller_instance is None:
+                self.dependency_management_service.add_observer_queue(self._published_jj_readiness.updates)
                 self._jj_workspace_poller_instance = JjWorkspacePoller(
                     concurrency_group=self.concurrency_group,
                     read_workspaces=self._read_workspaces,
@@ -174,6 +177,7 @@ class DefaultWorkspaceService(WorkspaceService):
                     resolve_working_dir=self.get_workspace_working_directory,
                     refresh_diff_on_working_copy_change=self.maybe_refresh_workspace_diff,
                     stale_working_copies=self._stale_working_copies,
+                    read_jj_readiness=self._published_jj_readiness.read_latest,
                 )
             return self._jj_workspace_poller_instance
 
@@ -348,6 +352,7 @@ class DefaultWorkspaceService(WorkspaceService):
             self._branch_poller_instance.stop()
         if self._jj_workspace_poller_instance is not None:
             self._jj_workspace_poller_instance.stop()
+            self.dependency_management_service.remove_observer_queue(self._published_jj_readiness.updates)
         if self._setup_runner_instance is not None:
             self._setup_runner_instance.stop_all()
         stop_all_terminals()
