@@ -63,7 +63,7 @@ def list_bookmarks(jj: JjCli, repo_dir: Path) -> list[JjBookmark]:
         repo_dir,
         snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
     )
-    bookmarks = [_parse_bookmark(json.loads(line)) for line in result.stdout.splitlines() if line]
+    bookmarks = [_parse_bookmark(json.loads(line)) for line in result.stdout.splitlines()]
     return [bookmark for bookmark in bookmarks if bookmark.remote != _GIT_TRACKING_REMOTE]
 
 
@@ -87,7 +87,7 @@ def resolve_trunk_symbol(jj: JjCli, repo_dir: Path) -> str | None:
         return _find_local_trunk_fallback(jj, repo_dir)
     for line in bookmark_lines:
         bookmark = _parse_bookmark(json.loads(line))
-        if bookmark.remote is not None and bookmark.remote != _GIT_TRACKING_REMOTE:
+        if bookmark.remote != _GIT_TRACKING_REMOTE:
             return format_bookmark_symbol(JjBookmarkSymbol(name=bookmark.name, remote=bookmark.remote))
     return None
 
@@ -107,7 +107,7 @@ def resolve_commit_id(jj: JjCli, repo_dir: Path, revset: JjRevset) -> str | None
 
 def does_bookmark_exist(jj: JjCli, repo_dir: Path, name: str) -> bool:
     """Whether a bookmark called `name` exists locally or on any remote."""
-    revset = f"present({local_bookmark_revset(name)} | {any_remote_bookmark_revset(name)})"
+    revset = f"{local_bookmark_revset(name)} | {any_remote_bookmark_revset(name)}"
     result = jj.run(
         ["log", "--no-graph", "--limit", "1", "-r", revset, "-T", '"found"'],
         repo_dir,
