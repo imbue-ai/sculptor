@@ -108,6 +108,22 @@ class RevisionDiff(FrozenModel):
     parent_commit_id: str | None = Field(description="None for a root commit")
 
 
+class GitOperationResult(FrozenModel):
+    """Result of a git operation (commit, etc.)."""
+
+    success: bool
+    stdout: str
+    stderr: str
+    error_message: str | None = None
+
+
+class FileAtRefResult(FrozenModel):
+    """Result of reading a file at a specific git ref."""
+
+    content: str
+    encoding: Literal["utf-8", "base64"]
+
+
 class PullRequestRefs(FrozenModel):
     """What PR polling needs to find a workspace's pull request."""
 

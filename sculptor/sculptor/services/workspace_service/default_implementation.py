@@ -45,8 +45,6 @@ from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
-from sculptor.services.workspace_service.api import FileAtRefResult
-from sculptor.services.workspace_service.api import GitOperationResult
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceService
@@ -70,6 +68,8 @@ from sculptor.services.workspace_service.setup_command_runner import SetupStateP
 from sculptor.services.workspace_service.vcs.checkout_paths import workspace_checkout_path
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs

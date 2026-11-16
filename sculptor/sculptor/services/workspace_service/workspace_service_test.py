@@ -27,7 +27,6 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
-from sculptor.services.workspace_service.api import FileAtRefResult
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -51,6 +50,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
 from sculptor.testing.git_snapshot import FullLocalGitRepo
 from sculptor.testing.git_snapshot import GitCommitSnapshot

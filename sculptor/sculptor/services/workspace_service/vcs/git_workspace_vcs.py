@@ -11,9 +11,7 @@ from loguru import logger
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.artifacts import DiffArtifact
-from sculptor.services.workspace_service.api import FileAtRefResult
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
-from sculptor.services.workspace_service.api import GitOperationResult
 from sculptor.services.workspace_service.environment_manager.environments.clone_strategy import clone_repository
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
@@ -21,8 +19,10 @@ from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.data_types import CommitFileChange
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitCommitHistory
 from sculptor.services.workspace_service.vcs.data_types import GitHeadIdentity
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.data_types import PullRequestRefs
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.data_types import RefNameValidation

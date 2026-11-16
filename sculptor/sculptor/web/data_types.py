@@ -29,7 +29,7 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.task_service.api import TaskMessageContainer
 from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegistration
-from sculptor.services.workspace_service.api import GitOperationResult
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.messages import EffortLevel
 from sculptor.state.messages import LLMModel

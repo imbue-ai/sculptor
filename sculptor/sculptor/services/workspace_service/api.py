@@ -3,7 +3,6 @@ from abc import abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
-from typing import Literal
 from typing import TYPE_CHECKING
 
 from sculptor.database.models import Project
@@ -13,7 +12,6 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.errors import ExpectedError
 from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
-from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import TaskID
@@ -29,6 +27,8 @@ if TYPE_CHECKING:
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
+from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
+from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 
 # The default workspace setup command when a project has not configured one.
 # Fetches the origin remote if present; succeeds silently if origin is missing
@@ -49,22 +49,6 @@ def resolve_workspace_setup_command(stored_command: str | None) -> str | None:
     if stored_command == "":
         return None
     return stored_command
-
-
-class GitOperationResult(FrozenModel):
-    """Result of a git operation (commit, etc.)."""
-
-    success: bool
-    stdout: str
-    stderr: str
-    error_message: str | None = None
-
-
-class FileAtRefResult(FrozenModel):
-    """Result of reading a file at a specific git ref."""
-
-    content: str
-    encoding: Literal["utf-8", "base64"]
 
 
 class WorkspaceNotFoundError(ExpectedError):
