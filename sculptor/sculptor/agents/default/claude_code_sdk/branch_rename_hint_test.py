@@ -50,6 +50,7 @@ def _in_place_environment(repo: Path, concurrency_group: ConcurrencyGroup) -> Lo
         repo_host_path=repo,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     return _wrap(environment)
 

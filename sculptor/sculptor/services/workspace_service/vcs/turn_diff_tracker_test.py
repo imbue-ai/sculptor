@@ -36,6 +36,7 @@ def _in_place_environment(
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, concurrency_group),
         workspace_id=WorkspaceID(),
         sculptor_folder=workspace / "sculptor_folder",
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     dependency_management_service = DependencyManagementService(
         concurrency_group=concurrency_group.make_concurrency_group("dependency_management_service"),

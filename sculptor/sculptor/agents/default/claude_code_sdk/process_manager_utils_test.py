@@ -617,6 +617,7 @@ def _make_repo_with_file_ending_in_newline(
         repo_host_path=tmp_path,
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     dep_service = DependencyManagementService.model_construct(concurrency_group=MagicMock(spec=ConcurrencyGroup))
     environment = LocalAgentExecutionEnvironment(local_env, TaskID(), dep_service)

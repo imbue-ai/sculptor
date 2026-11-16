@@ -3885,6 +3885,7 @@ def test_prompt_turn_reports_a_jj_workspace_diff_baseline_as_a_turn_failure(
         vcs=make_test_git_workspace_vcs(WorkspaceInitializationStrategy.IN_PLACE, test_root_concurrency_group),
         workspace_id=WorkspaceID(),
         sculptor_folder=tmp_path / "sculptor_folder",
+        initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
     dependency_management_service = DependencyManagementService(
         concurrency_group=test_root_concurrency_group.make_concurrency_group("dependency_management_service"),

@@ -80,7 +80,7 @@ class LocalEnvironment(Environment):
     # The repo host path - points directly to the user's repository.
     # This is always set when creating or resuming an environment.
     repo_host_path: Path | None = None
-    initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE
+    initialization_strategy: WorkspaceInitializationStrategy
     _processes: list[RunningProcess] = PrivateAttr(default_factory=list)
     _is_closed: bool = PrivateAttr(default=False)
     _closing_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
@@ -182,7 +182,7 @@ class LocalEnvironment(Environment):
         repo_host_path: Path,
         vcs: WorkspaceVcs,
         workspace_id: WorkspaceID,
-        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE,
+        initialization_strategy: WorkspaceInitializationStrategy,
         source_branch: str | None = None,
         requested_branch_name: str | None = None,
         env_var_override: bool = False,
