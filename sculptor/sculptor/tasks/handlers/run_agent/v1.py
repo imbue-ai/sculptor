@@ -807,7 +807,7 @@ def _build_agent_secrets(
         agent_id=task.object_id,
     )
     executable_parent = Path(sys.executable).parent
-    agent_path = _build_agent_path(
+    secrets["PATH"] = _build_agent_path(
         is_packaged=is_packaged(),
         executable_parent=executable_parent,
         current_path=os.environ.get("PATH", ""),
@@ -820,12 +820,7 @@ def _build_agent_secrets(
             checkout_name=str(task_state.workspace_id),
         )
     )
-    return {
-        **secrets,
-        **vcs_environment.environment_variables,
-        **vcs_environment.chat_agent_environment_variables,
-        "PATH": vcs_environment.prefix_path(agent_path),
-    }
+    return {**vcs_environment.applied_to(secrets), **vcs_environment.chat_agent_environment_variables}
 
 
 def _eager_fetch_pi_models_into_state(
