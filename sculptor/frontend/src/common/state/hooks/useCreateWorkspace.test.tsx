@@ -9,7 +9,10 @@ import type * as NavigationModule from "~/common/hooks/navigation.ts";
 import { encodeRegisteredAgentType, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { createAgentErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { HTTPException } from "~/common/utils/errors.ts";
-import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import {
+  lastCreationSettingsByProjectIdAtom,
+  lastWorkspaceCreationSettingsAtom,
+} from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 import { useCreateWorkspace } from "./useCreateWorkspace.ts";
 
@@ -196,7 +199,25 @@ describe("useCreateWorkspace per-mode request fields", () => {
     const body = getWorkspaceRequestBody();
     expect(body.requestedBranchName).toBe(requestedBranchName);
     expect(body.sourceBranch).toBe(sourceBranch);
-    expect(store.get(lastWorkspaceCreationSettingsAtom)?.sourceBranch).toBe(sourceBranch);
+    expect(store.get(lastCreationSettingsByProjectIdAtom).p1).toEqual({ mode, sourceBranch });
+  });
+
+  it("remembers each repository's mode and source on its own, and the last repository and agent type for all", async () => {
+    const { store, result } = renderCreateWorkspaceHook();
+
+    await result.current.createWorkspace({
+      ...CREATE_ARGS,
+      projectId: "jj-repo",
+      mode: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+      sourceBranch: "main@origin",
+    });
+    await result.current.createWorkspace({ ...CREATE_ARGS, projectId: "git-repo", agentTypeValue: "pi" });
+
+    expect(store.get(lastCreationSettingsByProjectIdAtom)).toEqual({
+      "jj-repo": { mode: WorkspaceInitializationStrategy.JJ_WORKSPACE, sourceBranch: "main@origin" },
+      "git-repo": { mode: WorkspaceInitializationStrategy.WORKTREE, sourceBranch: "main" },
+    });
+    expect(store.get(lastWorkspaceCreationSettingsAtom)).toEqual({ projectId: "git-repo", agentType: "pi" });
   });
 
   it.each([

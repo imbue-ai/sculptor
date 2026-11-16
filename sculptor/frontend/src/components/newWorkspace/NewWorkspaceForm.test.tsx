@@ -13,6 +13,7 @@ import { SettingsSection } from "~/pages/settings/sections.ts";
 
 import {
   keepNewWorkspaceDialogOpenAtom,
+  lastCreationSettingsByProjectIdAtom,
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDraftAtom,
 } from "./newWorkspaceAtoms.ts";
@@ -148,11 +149,7 @@ const renderForm = (
 const renderPiForm = (props: Partial<FormProps> = {}): ReturnType<typeof renderWithProviders> => {
   const store = createStore();
   store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
-  store.set(lastWorkspaceCreationSettingsAtom, {
-    projectId: "p1",
-    agentType: "pi",
-    initStrategy: WorkspaceInitializationStrategy.WORKTREE,
-  });
+  store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "pi" });
   return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} {...props} />, { store });
 };
 
@@ -398,7 +395,8 @@ describe("NewWorkspaceForm", () => {
     const renderFormInMode = (mode: WorkspaceInitializationStrategy): void => {
       const store = createStore();
       store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
-      store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude", initStrategy: mode });
+      store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude" });
+      store.set(lastCreationSettingsByProjectIdAtom, { p1: { mode } });
       renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
     };
 
@@ -434,6 +432,50 @@ describe("NewWorkspaceForm", () => {
     });
   });
 
+  describe("the mode remembered per repository", () => {
+    const { CLONE, WORKTREE, JJ_WORKSPACE } = WorkspaceInitializationStrategy;
+
+    const renderFormRemembering = (
+      byProjectId: Readonly<Record<string, { mode: WorkspaceInitializationStrategy; sourceBranch?: string }>>,
+    ): void => {
+      const store = createStore();
+      store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+      store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude" });
+      store.set(lastCreationSettingsByProjectIdAtom, byProjectId);
+      renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    };
+
+    it("starts in the selected repository's last mode and source", async () => {
+      renderFormRemembering({ p1: { mode: CLONE, sourceBranch: "release" } });
+
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: "p1", mode: CLONE, sourceBranch: "release" }),
+      );
+    });
+
+    it("does not carry another repository's mode into this one", async () => {
+      renderFormRemembering({ p2: { mode: CLONE, sourceBranch: "release" } });
+
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: "p1", mode: WORKTREE, sourceBranch: "main" }),
+      );
+    });
+
+    it("creates a worktree from the current branch in a git repository last used for a jj workspace", async () => {
+      renderFormRemembering({ p1: { mode: JJ_WORKSPACE, sourceBranch: "main@origin" } });
+
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: "p1", mode: WORKTREE, sourceBranch: "main" }),
+      );
+    });
+  });
+
   it("dismisses the dialog when Install Pi routes to settings from the agent picker", async () => {
     // With no usable pi binary, the picker's pi entry reads "Install Pi" and
     // routes to Settings — which lands underneath the host dialog, so choosing
@@ -446,6 +488,8 @@ describe("NewWorkspaceForm", () => {
       claude: { installed: false },
       pi: { installed: false },
       gh: { installed: false },
+      jj: { installed: false },
+      jjReadiness: { blocker: "NOT_INSTALLED" },
     } as DependenciesStatus);
     renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={onDismiss} />, { store });
 
@@ -471,11 +515,7 @@ describe("NewWorkspaceForm", () => {
     mockUsePiModels.mockReturnValue(piModelsEmpty());
     const store = createStore();
     store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
-    store.set(lastWorkspaceCreationSettingsAtom, {
-      projectId: "p1",
-      agentType: "pi",
-      initStrategy: WorkspaceInitializationStrategy.WORKTREE,
-    });
+    store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "pi" });
     renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
 
     fireEvent.change(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT), {

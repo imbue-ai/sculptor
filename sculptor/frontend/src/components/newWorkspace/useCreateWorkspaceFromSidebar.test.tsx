@@ -13,7 +13,11 @@ import {
 } from "~/api";
 import type * as NavigationModule from "~/common/hooks/navigation.ts";
 
-import { lastWorkspaceCreationSettingsAtom, newWorkspaceDialogAtom } from "./newWorkspaceAtoms.ts";
+import {
+  lastCreationSettingsByProjectIdAtom,
+  lastWorkspaceCreationSettingsAtom,
+  newWorkspaceDialogAtom,
+} from "./newWorkspaceAtoms.ts";
 import { useCreateWorkspaceFromSidebar } from "./useCreateWorkspaceFromSidebar.ts";
 
 // The quick create looks branches up over the API and creates through
@@ -38,13 +42,14 @@ vi.mock("~/common/state/hooks/useTerminalAgentRegistrations.ts", () => ({
 
 vi.mock("posthog-js", () => ({ posthog: { capture: vi.fn() } }));
 
-const { IN_PLACE, CLONE, WORKTREE } = WorkspaceInitializationStrategy;
+const { IN_PLACE, CLONE, WORKTREE, JJ_WORKSPACE } = WorkspaceInitializationStrategy;
 
 const renderSidebarCreate = (
-  initStrategy: WorkspaceInitializationStrategy,
+  byProjectId: Readonly<Record<string, { mode: WorkspaceInitializationStrategy; sourceBranch?: string }>>,
 ): { store: ReturnType<typeof createStore>; createFromSidebar: (projectId: string) => Promise<void> } => {
   const store = createStore();
-  store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude", initStrategy });
+  store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude" });
+  store.set(lastCreationSettingsByProjectIdAtom, byProjectId);
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>{children}</Provider>
   );
@@ -86,7 +91,7 @@ describe("useCreateWorkspaceFromSidebar", () => {
 
   it("still rolls a fresh branch name for a clone when the current-branch lookup fails", async () => {
     vi.mocked(getCurrentBranch).mockRejectedValue(new Error("offline"));
-    const { store, createFromSidebar } = renderSidebarCreate(CLONE);
+    const { store, createFromSidebar } = renderSidebarCreate({ p1: { mode: CLONE } });
 
     await createFromSidebarFor(createFromSidebar);
 
@@ -99,7 +104,7 @@ describe("useCreateWorkspaceFromSidebar", () => {
 
   it("opens the dialog for a worktree when the current-branch lookup fails", async () => {
     vi.mocked(getCurrentBranch).mockRejectedValue(new Error("offline"));
-    const { store, createFromSidebar } = renderSidebarCreate(WORKTREE);
+    const { store, createFromSidebar } = renderSidebarCreate({ p1: { mode: WORKTREE } });
 
     await createFromSidebarFor(createFromSidebar);
 
@@ -107,8 +112,32 @@ describe("useCreateWorkspaceFromSidebar", () => {
     expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: true, presetProjectId: "p1" });
   });
 
+  it("uses the clicked repository's own last mode and source, not another repository's", async () => {
+    const { createFromSidebar } = renderSidebarCreate({
+      p1: { mode: CLONE, sourceBranch: "release" },
+      p2: { mode: IN_PLACE },
+    });
+
+    await createFromSidebarFor(createFromSidebar);
+
+    const body = getWorkspaceRequestBody();
+    expect(body.initializationStrategy).toBe(CLONE);
+    expect(body.sourceBranch).toBe("release");
+    expect(getCurrentBranch).not.toHaveBeenCalled();
+  });
+
+  it("creates a worktree from the current branch in a git repository last used for a jj workspace", async () => {
+    const { createFromSidebar } = renderSidebarCreate({ p1: { mode: JJ_WORKSPACE, sourceBranch: "main@origin" } });
+
+    await createFromSidebarFor(createFromSidebar);
+
+    const body = getWorkspaceRequestBody();
+    expect(body.initializationStrategy).toBe(WORKTREE);
+    expect(body.sourceBranch).toBe("main");
+  });
+
   it("creates an in-place workspace without looking up any branch", async () => {
-    const { createFromSidebar } = renderSidebarCreate(IN_PLACE);
+    const { createFromSidebar } = renderSidebarCreate({ p1: { mode: IN_PLACE } });
 
     await createFromSidebarFor(createFromSidebar);
 

@@ -1,15 +1,22 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useState } from "react";
 
-import { getCurrentBranch, previewBranchName, WorkspaceInitializationStrategy } from "~/api";
+import type { WorkspaceInitializationStrategy } from "~/api";
+import { getCurrentBranch, previewBranchName } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
+import { repositoryWorkspaceVcsAtomFamily } from "~/common/state/atoms/repositoryWorkspaceVcs.ts";
 import { createWorkspaceErrorToastAtom, ToastType } from "~/common/state/atoms/toasts.ts";
 import { defaultModelAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
-import { hasRequiredCreationFields, WORKSPACE_MODE_RULES } from "~/common/utils/workspaceModeRules.ts";
 import {
+  hasRequiredCreationFields,
+  resolveCreationMode,
+  WORKSPACE_MODE_RULES,
+} from "~/common/utils/workspaceModeRules.ts";
+import {
+  lastCreationSettingsByProjectIdAtom,
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDialogAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
@@ -20,10 +27,10 @@ type UseCreateWorkspaceFromSidebarReturn = {
   isCreating: boolean;
   /**
    * The repo group's "+": create a workspace in that repo immediately, with a
-   * freshly auto-generated unique branch name. Settings come from the last
-   * creation when it targeted the same repo; otherwise the repo's current
-   * branch is fetched and the last mode/agent type (or the defaults) are
-   * reused. Falls back to opening the dialog pre-selecting the repo when a
+   * freshly auto-generated unique branch name. The mode and source come from
+   * the repo's own last creation (the repo's current branch is fetched when
+   * none is remembered), and the agent type from the last creation anywhere.
+   * Falls back to opening the dialog pre-selecting the repo when a
    * field the mode requires can't be resolved or the create fails.
    */
   createFromSidebar: (projectId: string) => Promise<void>;
@@ -64,7 +71,9 @@ const fetchFreshBranchNameOrBlank = async (inputs: {
  */
 export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarReturn => {
   // State and hooks
+  const store = useStore();
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
+  const lastSettingsByProjectId = useAtomValue(lastCreationSettingsByProjectIdAtom);
   const isPiAvailable = useAtomValue(isPiAvailableAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
   const setModalState = useSetAtom(newWorkspaceDialogAtom);
@@ -76,10 +85,11 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
   // Functions and callbacks
   const createFromSidebar = useCallback(
     async (projectId: string): Promise<void> => {
-      // Last settings only transfer wholesale when they were made for THIS
-      // repo — a source branch remembered from another repo may not exist here.
-      const sameRepoSettings = lastSettings?.projectId === projectId ? lastSettings : null;
-      const mode = lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE;
+      const remembered = lastSettingsByProjectId[projectId];
+      const mode = resolveCreationMode({
+        remembered: remembered?.mode,
+        vcs: store.get(repositoryWorkspaceVcsAtomFamily(projectId)),
+      });
       // Normalize the remembered type, mirroring the dialog's seeding. A bare
       // "terminal" stays: it is a legitimate first-agent choice here. This
       // direct-create has no picker to steer to Settings, so a remembered "pi"
@@ -90,7 +100,8 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
         seedAgentType === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seedAgentType);
 
       const modeRules = WORKSPACE_MODE_RULES[mode];
-      const rememberedSourceBranch = sameRepoSettings?.sourceBranch ?? "";
+      // A remembered source belongs to the mode it was picked for.
+      const rememberedSourceBranch = (remembered?.mode === mode ? remembered.sourceBranch : undefined) ?? "";
       setIsPreparing(true);
       const doesSeedCurrentBranch =
         modeRules.sourceBranch.rule !== "unused" && modeRules.sourceBranch.seed === "current-branch";
@@ -133,7 +144,9 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
       }
     },
     [
+      store,
       lastSettings,
+      lastSettingsByProjectId,
       isPiAvailable,
       defaultModel,
       registrations,

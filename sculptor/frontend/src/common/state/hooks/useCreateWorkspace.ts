@@ -20,7 +20,10 @@ import { createAgentErrorToastAtom, ToastType } from "~/common/state/atoms/toast
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { HTTPException } from "~/common/utils/errors.ts";
 import { toCreateRequestFields } from "~/common/utils/workspaceModeRules.ts";
-import { lastWorkspaceCreationSettingsAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import {
+  lastCreationSettingsByProjectIdAtom,
+  lastWorkspaceCreationSettingsAtom,
+} from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
 /** Everything the create flow needs from its caller's form state. */
 type CreateWorkspaceArgs = {
@@ -87,6 +90,7 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
   // State and hooks
   const { navigateToAgent, navigateToWorkspace } = useImbueNavigate();
   const setLastWorkspaceCreationSettings = useSetAtom(lastWorkspaceCreationSettingsAtom);
+  const setLastCreationSettingsByProjectId = useSetAtom(lastCreationSettingsByProjectIdAtom);
   const setUserConfig = useSetAtom(userConfigAtom);
   const setCreateAgentErrorToast = useSetAtom(createAgentErrorToastAtom);
   const [isCreating, setIsCreating] = useState<boolean>(false);
@@ -131,12 +135,11 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
             ? encodeRegisteredAgentType(effectiveRegistrationId)
             : effectiveAgentType;
 
-        setLastWorkspaceCreationSettings({
-          projectId: args.projectId,
-          sourceBranch: requestFields.sourceBranch,
-          agentType: effectiveAgentTypeValue,
-          initStrategy: args.mode,
-        });
+        setLastWorkspaceCreationSettings({ projectId: args.projectId, agentType: effectiveAgentTypeValue });
+        setLastCreationSettingsByProjectId((previous) => ({
+          ...previous,
+          [args.projectId]: { mode: args.mode, sourceBranch: requestFields.sourceBranch },
+        }));
 
         // Land on the new workspace right away: its environment (worktree /
         // clone) is prepared asynchronously by the backend, so there is
@@ -230,7 +233,14 @@ export const useCreateWorkspace = (): UseCreateWorkspaceReturn => {
         setIsCreating(false);
       }
     },
-    [navigateToAgent, navigateToWorkspace, setCreateAgentErrorToast, setLastWorkspaceCreationSettings, setUserConfig],
+    [
+      navigateToAgent,
+      navigateToWorkspace,
+      setCreateAgentErrorToast,
+      setLastCreationSettingsByProjectId,
+      setLastWorkspaceCreationSettings,
+      setUserConfig,
+    ],
   );
 
   return { isCreating, createWorkspace };

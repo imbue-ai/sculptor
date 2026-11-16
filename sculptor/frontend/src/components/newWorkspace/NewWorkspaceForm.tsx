@@ -3,15 +3,8 @@ import { useAtom, useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { EffortLevel, ModelOption } from "~/api";
-import {
-  ElementIds,
-  getActiveProjects,
-  getMostRecentlyUsedProject,
-  type LlmModel,
-  ModelCatalogState,
-  WorkspaceInitializationStrategy,
-} from "~/api";
+import type { EffortLevel, ModelOption, WorkspaceInitializationStrategy } from "~/api";
+import { ElementIds, getActiveProjects, getMostRecentlyUsedProject, type LlmModel, ModelCatalogState } from "~/api";
 import {
   lastUsedAgentTypeAtom,
   resolveEffectiveAgentType,
@@ -19,6 +12,7 @@ import {
 } from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
+import { repositoryWorkspaceVcsAtomFamily } from "~/common/state/atoms/repositoryWorkspaceVcs.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
@@ -32,8 +26,10 @@ import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
 import {
   defaultSourceFor,
   hasRequiredCreationFields,
+  resolveCreationMode,
   WORKSPACE_MODE_RULES,
 } from "~/common/utils/workspaceModeRules.ts";
+import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
 import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
@@ -46,6 +42,7 @@ import { ModeSelect } from "~/components/newWorkspace/ModeSelect.tsx";
 import type { NewWorkspaceDraft } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import {
   keepNewWorkspaceDialogOpenAtom,
+  lastCreationSettingsByProjectIdAtom,
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDraftAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
@@ -106,7 +103,9 @@ type NewWorkspaceFormProps = {
  * values are LOCAL component state, seeded from the open request's explicit
  * seeds, then the session draft (`newWorkspaceDraftAtom`, stashed on every
  * dismissal and cleared by a successful create), then
- * `lastWorkspaceCreationSettingsAtom` and the preset repo. Reuses this
+ * `lastWorkspaceCreationSettingsAtom` and the preset repo. The mode and source
+ * fall back to the selected repository's own last create
+ * (`lastCreationSettingsByProjectIdAtom`). Reuses this
  * branch's RepoSelector / BranchSelector / BranchNameField and the factored
  * create hook.
  */
@@ -122,6 +121,7 @@ export const NewWorkspaceForm = ({
   // State and hooks — atoms
   const projects = useAtomValue(projectsArrayAtom);
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
+  const lastSettingsByProjectId = useAtomValue(lastCreationSettingsByProjectIdAtom);
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
   const isPiAvailable = useAtomValue(isPiAvailableAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
@@ -158,9 +158,9 @@ export const NewWorkspaceForm = ({
   );
   const [workspaceName, setWorkspaceName] = useState<string>(() => initialTitle ?? draft?.title ?? "");
   const [prompt, setPrompt] = useState<string>(() => initialPrompt ?? draft?.prompt ?? "");
-  const [mode, setMode] = useState<WorkspaceInitializationStrategy>(
-    () => draft?.mode ?? lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
-  );
+  // The mode the user picked in this open (or the draft's); unset falls back
+  // to the selected repository's last mode.
+  const [pickedMode, setPickedMode] = useState<WorkspaceInitializationStrategy | undefined>(() => draft?.mode);
   const [agentTypeValue, setAgentTypeValue] = useState<StoredAgentType>(() => {
     const seed = draft?.agentTypeValue ?? lastSettings?.agentType ?? lastUsedAgentType;
     // Normalize the remembered seed. A bare "terminal" stays: it is a
@@ -169,12 +169,9 @@ export const NewWorkspaceForm = ({
     // launch (the picker still lists pi as "Install Pi").
     return seed === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seed);
   });
-  // A draft replaces the MRU branch seed even when it holds no explicit pick —
-  // its `sourceBranch: undefined` means the user was on the repo's current
-  // branch, not that the field should fall back to another repo's memory.
-  const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() =>
-    draft !== undefined ? draft.sourceBranch : lastSettings?.sourceBranch,
-  );
+  // The source the user picked in this open (or the draft's); unset falls back
+  // to the selected repository's last source for the mode, then the mode's default.
+  const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => draft?.sourceBranch);
   // `null` means "use the auto-filled preview"; any string means the user has
   // taken over. Both the value and the manual flag collapse into one piece of
   // state so they can never disagree.
@@ -193,6 +190,11 @@ export const NewWorkspaceForm = ({
   // Claude agent) still shows Claude's controls.
   const effectiveAgentType = resolveEffectiveAgentType(agentTypeValue, registrations).agentType;
   const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId);
+  const repositoryVcs = useAtomValue(repositoryWorkspaceVcsAtomFamily(selectedProjectId ?? ""));
+  const rememberedSettings = selectedProjectId === null ? undefined : lastSettingsByProjectId[selectedProjectId];
+  const mode = resolveCreationMode({ remembered: pickedMode ?? rememberedSettings?.mode, vcs: repositoryVcs });
+  // A remembered source belongs to the mode it was picked for: a bookmark is no worktree's source.
+  const rememberedSourceBranch = rememberedSettings?.mode === mode ? rememberedSettings.sourceBranch : undefined;
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const openSettings = useOpenSettings();
   // Fetch pi's host-side catalog only while pi is the selected agent type, so the
@@ -218,8 +220,11 @@ export const NewWorkspaceForm = ({
   });
 
   const sourceBranch = useMemo(
-    () => userSelectedBranch ?? defaultSourceFor({ mode, currentBranch: repoInfo?.currentBranch }),
-    [userSelectedBranch, mode, repoInfo],
+    () =>
+      userSelectedBranch ??
+      rememberedSourceBranch ??
+      defaultSourceFor({ mode, currentBranch: repoInfo?.currentBranch }),
+    [userSelectedBranch, rememberedSourceBranch, mode, repoInfo],
   );
   const modeRules = WORKSPACE_MODE_RULES[mode];
 
@@ -342,10 +347,17 @@ export const NewWorkspaceForm = ({
     setUserSelectedBranch(undefined);
   }, []);
 
-  const handleModeChange = useCallback((nextMode: WorkspaceInitializationStrategy): void => {
-    setMode(nextMode);
-    setBranchNameOverride(null);
-  }, []);
+  const handleModeChange = useCallback(
+    (nextMode: WorkspaceInitializationStrategy): void => {
+      setPickedMode(nextMode);
+      setBranchNameOverride(null);
+      // A branch picked for git means nothing to jj, and a bookmark nothing to git.
+      if (workspaceVcsOf({ initializationStrategy: nextMode }) !== workspaceVcsOf({ initializationStrategy: mode })) {
+        setUserSelectedBranch(undefined);
+      }
+    },
+    [mode],
+  );
 
   const handleShuffle = useCallback((): void => {
     // Return to auto-fill mode and force a fresh preview fetch (re-rolls the
