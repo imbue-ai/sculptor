@@ -1,9 +1,14 @@
 import { Theme } from "@radix-ui/themes";
 import { cleanup, render, screen } from "@testing-library/react";
+import { createStore } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ElementIds } from "~/api";
+import type { UserConfig, Workspace } from "~/api";
+import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
+import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { POPOVER_FRIENDLY_MODAL_ATTRIBUTE, popoverFriendlyModalGuard } from "./popoverFriendlyModal";
@@ -22,6 +27,7 @@ describe("DeleteConfirmationDialog — popover-friendly marker", () => {
           isOpen
           onOpenChange={(): void => {}}
           entityType="workspace"
+          workspaceId="ws-1"
           entityName="ws-1"
           onConfirm={(): void => {}}
         />
@@ -39,6 +45,7 @@ describe("DeleteConfirmationDialog — popover-friendly marker", () => {
           isOpen={false}
           onOpenChange={(): void => {}}
           entityType="workspace"
+          workspaceId="ws-1"
           entityName="ws-1"
           onConfirm={(): void => {}}
         />
@@ -47,6 +54,53 @@ describe("DeleteConfirmationDialog — popover-friendly marker", () => {
 
     expect(screen.queryByTestId(ElementIds.DELETE_CONFIRMATION_DIALOG)).toBeNull();
     expect(document.querySelector(`[${POPOVER_FRIENDLY_MODAL_ATTRIBUTE}="true"]`)).toBeNull();
+  });
+});
+
+describe("DeleteConfirmationDialog — a workspace's bookmarks", () => {
+  const renderWorkspaceDialog = (inputs: {
+    strategy: WorkspaceInitializationStrategy;
+    policy: NonNullable<UserConfig["workspaceBranchDeletionPolicy"]>;
+  }): void => {
+    const store = createStore();
+    store.set(workspaceAtomFamily("ws-1"), {
+      objectId: "ws-1",
+      initializationStrategy: inputs.strategy,
+    } as Workspace);
+    store.set(userConfigAtom, { workspaceBranchDeletionPolicy: inputs.policy } as UserConfig);
+    renderWithProviders(
+      <DeleteConfirmationDialog
+        isOpen
+        onOpenChange={(): void => {}}
+        entityType="workspace"
+        workspaceId="ws-1"
+        entityName="Fix login"
+        onConfirm={(): void => {}}
+      />,
+      { store },
+    );
+  };
+
+  it.each([
+    { policy: "never", sentence: "Its jj bookmarks are kept." },
+    {
+      policy: "delete_if_safe",
+      sentence:
+        "Its jj bookmarks are removed locally if they are merged into the target or already on the remote, and kept otherwise.",
+    },
+    { policy: "always", sentence: "Its jj bookmarks are removed locally, even if they are not merged or pushed." },
+  ] as const)("says what the $policy policy does with a jj workspace's bookmarks", ({ policy, sentence }) => {
+    renderWorkspaceDialog({ strategy: WorkspaceInitializationStrategy.JJ_WORKSPACE, policy });
+
+    expect(screen.getByTestId(ElementIds.DELETE_CONFIRMATION_DIALOG)).toHaveTextContent(
+      `This will permanently delete the workspace "Fix login" and all of its agents. ${sentence}`,
+    );
+  });
+
+  it("says nothing of bookmarks for a git workspace", () => {
+    renderWorkspaceDialog({ strategy: WorkspaceInitializationStrategy.WORKTREE, policy: "always" });
+
+    expect(screen.getByTestId(ElementIds.DELETE_CONFIRMATION_DIALOG)).not.toHaveTextContent(/bookmark/);
   });
 });
 

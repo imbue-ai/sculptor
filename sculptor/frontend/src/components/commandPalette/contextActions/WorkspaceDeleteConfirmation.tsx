@@ -52,6 +52,7 @@ export const WorkspaceDeleteConfirmation = (): ReactElement => {
       isOpen={target !== null}
       onOpenChange={handleOpenChange}
       entityType="workspace"
+      workspaceId={target?.id}
       entityName={target?.name ?? ""}
       onConfirm={handleConfirm}
     />

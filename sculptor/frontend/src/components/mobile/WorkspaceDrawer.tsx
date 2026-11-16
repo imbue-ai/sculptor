@@ -332,6 +332,7 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
           if (!open) setDeleteTarget(null);
         }}
         entityType="workspace"
+        workspaceId={deleteTarget?.id}
         entityName={deleteTarget?.name ?? ""}
         onConfirm={handleDeleteConfirm}
       />

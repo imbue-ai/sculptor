@@ -32,7 +32,7 @@ const requestedBranchNameAtomFamily = atomFamily<string, Atom<string | null>>((w
   selectAtom(workspaceAtomFamily(workspaceId), (entry) => asLiveWorkspace(entry)?.requestedBranchName ?? null),
 );
 
-const workspaceVcsAtomFamily = atomFamily<string, Atom<WorkspaceVcs | null>>((workspaceId) =>
+export const workspaceVcsAtomFamily = atomFamily<string, Atom<WorkspaceVcs | null>>((workspaceId) =>
   selectAtom(workspaceAtomFamily(workspaceId), (entry) => {
     const workspace = asLiveWorkspace(entry);
     return workspace === null ? null : workspaceVcsOf(workspace);
