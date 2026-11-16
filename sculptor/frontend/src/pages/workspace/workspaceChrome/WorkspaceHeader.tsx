@@ -30,11 +30,12 @@ import styles from "./WorkspaceHeader.module.scss";
 
 // Per-mode badge label. Worktree is the product default and shows no badge; the
 // non-default modes are surfaced so the user knows a workspace edits files in place
-// (in-place) or in a clone.
+// (in-place), in a clone, or in a jj workspace with no git.
 const MODE_BADGE_LABEL: Record<WorkspaceInitializationStrategy, string> = {
   [WorkspaceInitializationStrategy.IN_PLACE]: "in-place",
   [WorkspaceInitializationStrategy.CLONE]: "clone",
   [WorkspaceInitializationStrategy.WORKTREE]: "worktree",
+  [WorkspaceInitializationStrategy.JJ_WORKSPACE]: "jj",
 };
 
 type SectionToggleProps = {

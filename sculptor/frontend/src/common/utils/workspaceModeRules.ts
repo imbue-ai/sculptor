@@ -25,6 +25,8 @@ export const WORKSPACE_MODE_RULES: Readonly<Record<WorkspaceInitializationStrate
   [WorkspaceInitializationStrategy.CLONE]: { branchName: "optional", sourceBranch: "optional" },
   // `git worktree add -b <branch name> <source branch>` needs both.
   [WorkspaceInitializationStrategy.WORKTREE]: { branchName: "required", sourceBranch: "required" },
+  // A jj workspace needs the name of the bookmark it will set; its base defaults to its target.
+  [WorkspaceInitializationStrategy.JJ_WORKSPACE]: { branchName: "required", sourceBranch: "optional" },
 };
 
 type CreationFields = {

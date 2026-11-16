@@ -20,7 +20,11 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
+from sculptor.services.workspace_service.vcs.jj_turn_diff_tracker import JjTurnDiffTracker
 from sculptor.services.workspace_service.vcs.turn_diff_tracker import make_turn_diff_tracker
+from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjColocatedRepo
+from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
 
@@ -187,3 +191,41 @@ def test_changed_file_paths_in_a_checkout_that_became_a_jj_workspace_raise_the_t
 
     with pytest.raises(GitCommandInJjWorkspaceError):
         tracker.get_changed_file_paths()
+
+
+def test_a_jj_workspace_gets_a_jj_tracker_measured_from_its_working_copy(
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    tmp_path: Path,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(
+            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
+        )
+    )
+    environment_dir = tmp_path / "environment"
+    environment_dir.mkdir()
+    checkout = environment_dir / "code"
+    run_jj(
+        jj_binary,
+        ("workspace", "add", "--no-colocate", "--name", "ws", "-r", jj_colocated_repo.default_bookmark, str(checkout)),
+        cwd=jj_colocated_repo.path,
+    )
+    local_environment = LocalEnvironment(
+        environment_id=LocalEnvironmentID(str(environment_dir)),
+        project_id=ProjectID(),
+        concurrency_group=test_root_concurrency_group,
+        repo_host_path=jj_colocated_repo.path,
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+    dependency_management_service = DependencyManagementService(
+        concurrency_group=test_root_concurrency_group.make_concurrency_group("dependency_management_service"),
+    )
+    environment = LocalAgentExecutionEnvironment(local_environment, TaskID(), dependency_management_service)
+
+    tracker = make_turn_diff_tracker(environment)
+    (checkout / "notes.txt").write_text("kept\n")
+
+    assert isinstance(tracker, JjTurnDiffTracker)
+    assert tracker.get_changed_file_paths() == ["notes.txt"]

@@ -365,6 +365,46 @@ def test_create_workspace_applies_the_branch_name_rules(
         assert expected_detail in response.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    ("source_branch", "requested_branch_name"),
+    [pytest.param(None, None, id="no-names"), pytest.param("main", "imbue/new-bookmark", id="with-names")],
+)
+def test_no_route_creates_a_jj_workspace(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    source_branch: str | None,
+    requested_branch_name: str | None,
+) -> None:
+    """`POST /api/v1/workspaces` is the only route that creates a workspace, and it refuses jj workspaces."""
+    response = _post_create_workspace(
+        client, test_project, WorkspaceInitializationStrategy.JJ_WORKSPACE, source_branch, requested_branch_name
+    )
+
+    assert response.status_code == 400, response.text
+    assert "jj workspaces cannot be created yet" in response.json()["detail"]
+    with test_services.data_model_service.open_transaction(RequestID()) as transaction:
+        strategies = {workspace.initialization_strategy for workspace in transaction.get_workspaces()}
+    assert WorkspaceInitializationStrategy.JJ_WORKSPACE not in strategies
+
+
+def test_preview_branch_name_names_a_jj_bookmark_as_it_names_a_worktree_branch(
+    client: TestClient, test_project: Project
+) -> None:
+    previews = {
+        mode: client.get(
+            "/api/v1/workspaces/preview-branch-name",
+            params={"project_id": str(test_project.object_id), "mode": mode, "workspace_name": "Fix the parser"},
+        )
+        for mode in ("WORKTREE", "JJ_WORKSPACE")
+    }
+
+    assert all(response.status_code == 200 for response in previews.values()), previews
+    jj_name = previews["JJ_WORKSPACE"].json()["branchName"]
+    assert jj_name.endswith("fix-the-parser")
+    assert jj_name == previews["WORKTREE"].json()["branchName"]
+
+
 def test_create_workspace_conflicts_when_the_repository_cannot_be_read(
     client: TestClient, test_project: Project, tmp_path: Path
 ) -> None:
@@ -404,6 +444,10 @@ def test_workspace_working_directory_resolves_per_strategy() -> None:
     assert _workspace_working_directory(WorkspaceInitializationStrategy.CLONE, "/tmp/ws1", "/repo") == "/tmp/ws1/code"
     assert (
         _workspace_working_directory(WorkspaceInitializationStrategy.WORKTREE, "/tmp/ws2", "/repo") == "/tmp/ws2/code"
+    )
+    assert (
+        _workspace_working_directory(WorkspaceInitializationStrategy.JJ_WORKSPACE, "/tmp/ws3", "/repo")
+        == "/tmp/ws3/code"
     )
     # In-place workspaces work directly in the project's local repo.
     assert _workspace_working_directory(WorkspaceInitializationStrategy.IN_PLACE, None, "/repo") == "/repo"

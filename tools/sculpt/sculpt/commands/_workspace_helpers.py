@@ -21,6 +21,8 @@ def _strategy_option_name(strategy: WorkspaceInitializationStrategy) -> str:
             return "in-place"
         case WorkspaceInitializationStrategy.WORKTREE:
             return "worktree"
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            return "jj"
         case _ as unreachable:
             assert_never(unreachable)
 

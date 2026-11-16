@@ -40,12 +40,18 @@ from sculptor.web.data_types import WorkspaceTargetBranchesInfo
 
 
 class _FakeWorkspace:
-    def __init__(self, object_id: WorkspaceID, project_id: ProjectID, target_branch: str | None = None) -> None:
+    def __init__(
+        self,
+        object_id: WorkspaceID,
+        project_id: ProjectID,
+        target_branch: str | None = None,
+        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
+    ) -> None:
         self.object_id = object_id
         self.project_id = project_id
         self.target_branch = target_branch
         self.is_deleted = False
-        self.initialization_strategy = WorkspaceInitializationStrategy.WORKTREE
+        self.initialization_strategy = initialization_strategy
 
 
 class _FakeTransaction:
@@ -562,3 +568,23 @@ def test_git_run_in_a_jj_workspace_by_the_target_scan_is_logged_once_at_error(
     assert levels == ["ERROR"]
     branch_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceBranchInfo)]
     assert [info.current_branch for info in branch_infos] == ["wsbranch"]
+
+
+def test_a_jj_workspace_gets_neither_a_branch_nor_target_branches(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli, git_invocation_log: Path
+) -> None:
+    checkout = tmp_path / "ws"
+    (checkout / ".jj").mkdir(parents=True)
+    workspace = _FakeWorkspace(
+        WorkspaceID(), ProjectID(), initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE
+    )
+    poller = _build_poller([workspace], {workspace.object_id: checkout}, test_root_concurrency_group, git_cli)
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    poller.add_observer(queue)
+
+    with record_logged_error_levels() as levels:
+        poller._scan_once()
+
+    assert levels == []
+    assert _drain(queue) == []
+    assert _read_git_invocations(git_invocation_log) == []

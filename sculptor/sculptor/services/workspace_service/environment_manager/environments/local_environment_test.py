@@ -472,6 +472,13 @@ def test_get_system_prompt_dispatches_on_initialization_strategy(local_environme
     assert "local` remote" in worktree_prompt
     assert "NEVER" in worktree_prompt
 
+    local_environment.initialization_strategy = WorkspaceInitializationStrategy.JJ_WORKSPACE
+    jj_prompt = local_environment.get_system_prompt()
+    assert jj_prompt is not None
+    assert "jj workspace" in jj_prompt
+    assert "no `.git`" in jj_prompt
+    assert "worktree" not in jj_prompt
+
 
 def test_create_worktree_happy_path(tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup) -> None:
     """LocalEnvironment.create with WORKTREE mode runs git worktree add and returns the environment."""

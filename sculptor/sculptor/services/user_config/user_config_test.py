@@ -318,3 +318,14 @@ def test_night_mode_defaults_to_off_for_configs_written_before_it_existed(tmp_pa
     config_path.write_text('userEmail = "alice@example.com"\nuserId = "u"\norganizationId = "o"\ninstanceId = "i"\n')
 
     assert load_config(config_path).night_mode == "off"
+
+
+def test_the_jj_snapshot_size_limit_is_read_from_the_current_config() -> None:
+    base = user_config_module.get_default_user_config_instance()
+    user_config_module.set_user_config_instance(base.model_copy(update={"jj_snapshot_max_new_file_size_mib": 3}))
+    try:
+        assert user_config_module.read_jj_snapshot_max_new_file_size_mib() == 3
+        user_config_module.set_user_config_instance(base.model_copy(update={"jj_snapshot_max_new_file_size_mib": 7}))
+        assert user_config_module.read_jj_snapshot_max_new_file_size_mib() == 7
+    finally:
+        user_config_module.set_user_config_instance(None)

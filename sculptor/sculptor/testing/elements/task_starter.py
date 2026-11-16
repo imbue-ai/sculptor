@@ -86,8 +86,10 @@ def select_task_mode(task_starter: PlaywrightTaskStarterElement, mode_option_id:
 
     # Map mode option test IDs to their display labels
     mode_labels = {
+        ElementIDs.MODE_OPTION_WORKTREE: "Worktree",
         ElementIDs.MODE_OPTION_IN_PLACE: "In-place",
         ElementIDs.MODE_OPTION_CLONE: "Clone",
+        ElementIDs.MODE_OPTION_JJ_WORKSPACE: "jj workspace",
         ElementIDs.MODE_OPTION_EXISTING: "Existing",
     }
     target_label = mode_labels.get(mode_option_id)

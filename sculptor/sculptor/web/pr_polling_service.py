@@ -37,6 +37,7 @@ from sculptor.primitives.service import Service
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
@@ -826,7 +827,12 @@ class PrPollingService(Service):
         target_branch = state.target_branch
         if target_branch is None:
             return no_pr_status
-        vcs = make_workspace_vcs(state.initialization_strategy, self._runners, self.concurrency_group)
+        vcs = make_workspace_vcs(
+            state.initialization_strategy,
+            self._runners,
+            self.concurrency_group,
+            read_jj_snapshot_max_new_file_size_mib,
+        )
         head_ref_names = vcs.get_pull_request_refs(
             location, target_ref=target_branch, requested_ref_name=state.requested_branch_name
         ).head_ref_names

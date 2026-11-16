@@ -45,6 +45,7 @@ from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
 from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -260,7 +261,9 @@ class DefaultWorkspaceService(WorkspaceService):
         )
 
     def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
-        return make_workspace_vcs(initialization_strategy, self.vcs_runners, self.concurrency_group)
+        return make_workspace_vcs(
+            initialization_strategy, self.vcs_runners, self.concurrency_group, read_jj_snapshot_max_new_file_size_mib
+        )
 
     def _get_diff_lock(self, workspace_id: WorkspaceID) -> threading.Lock:
         """Get a per-workspace lock for diff generation, creating one lazily if needed."""

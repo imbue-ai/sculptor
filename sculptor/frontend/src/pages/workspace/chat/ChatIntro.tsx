@@ -12,6 +12,14 @@ import { SetupStatusCard } from "./SetupStatusCard";
 
 const DETAIL_ICON_SIZE_PX = 14;
 
+// How the intro's first line opens; the source branch and repository follow.
+const ORIGIN_PHRASE: Record<WorkspaceInitializationStrategy, string> = {
+  [WorkspaceInitializationStrategy.IN_PLACE]: "Working directly in",
+  [WorkspaceInitializationStrategy.CLONE]: "Cloned",
+  [WorkspaceInitializationStrategy.WORKTREE]: "Branched off",
+  [WorkspaceInitializationStrategy.JJ_WORKSPACE]: "jj workspace on",
+};
+
 const formatTimestamp = (isoString: string): string => {
   const date = new Date(isoString);
   return date.toLocaleString(undefined, {
@@ -32,7 +40,6 @@ export const ChatIntro = (): ReactElement => {
   const agent = useAgent(agentId);
 
   const isInPlace = workspace?.initializationStrategy === WorkspaceInitializationStrategy.IN_PLACE;
-  const isWorktree = workspace?.initializationStrategy === WorkspaceInitializationStrategy.WORKTREE;
   const projectName = project?.name ?? "";
   const sourceBranch = workspace?.sourceBranch;
   const createdAt = workspace?.createdAt;
@@ -44,7 +51,7 @@ export const ChatIntro = (): ReactElement => {
       <div className={styles.detailRow}>
         <GitBranchIcon size={DETAIL_ICON_SIZE_PX} className={styles.detailIcon} />
         <span>
-          {isInPlace ? "Working directly in" : isWorktree ? "Branched off" : "Cloned"}
+          {workspace && ORIGIN_PHRASE[workspace.initializationStrategy]}
           {!isInPlace && sourceBranch && (
             <>
               {" "}

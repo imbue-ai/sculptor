@@ -17,6 +17,7 @@ const MODE_LABELS: Record<WorkspaceInitializationStrategy, string> = {
   [Strategy.WORKTREE]: "Worktree",
   [Strategy.CLONE]: "Clone",
   [Strategy.IN_PLACE]: "In-place",
+  [Strategy.JJ_WORKSPACE]: "jj workspace",
 };
 
 /**

@@ -125,3 +125,13 @@ Because the `.git` is shared, the remotes you see (e.g. `origin`) are the user's
 You can push changes normally with `git push`, but NEVER do so without explicit permission from the user.
 </Environment mode>
 """
+
+JJ_WORKSPACE_MODE_PROMPT: Final[str] = """
+<Environment mode>
+You are working in a jj workspace of the user's local repository (jj workspace mode).
+
+This directory has a `.jj` directory and no `.git`, so git does not work here. Use `jj` for all version control.
+
+NEVER push without explicit permission from the user.
+</Environment mode>
+"""

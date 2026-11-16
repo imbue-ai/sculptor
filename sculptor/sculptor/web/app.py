@@ -673,6 +673,9 @@ def _validate_workspace_creation_request(
                 )
             if source_branch is None:
                 raise HTTPException(status_code=400, detail="source_branch is required for WORKTREE workspaces")
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            # TODO(SCU-1878): accept jj workspaces in repositories that create them.
+            raise HTTPException(status_code=400, detail="jj workspaces cannot be created yet")
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -949,15 +952,20 @@ def preview_branch_name(
 ) -> PreviewBranchNameResponse:
     """Resolve the auto-filled branch-name preview for the Add Workspace form.
 
-    In-place mode returns an empty string since the field is hidden. Clone and
-    worktree modes resolve the project's or user-global naming pattern against
-    a `<slug>` derived from the workspace name (random if empty) and a `<user>`
-    slug derived from the repo's `git config user.name`.
+    In-place mode returns an empty string since the field is hidden. Every other
+    mode resolves the project's or user-global naming pattern against a `<slug>`
+    derived from the workspace name (random if empty) and a `<user>` slug derived
+    from the repo's `git config user.name`; for a jj workspace the name is its
+    bookmark's.
     """
     match mode:
         case WorkspaceInitializationStrategy.IN_PLACE:
             return PreviewBranchNameResponse(branch_name="")
-        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
+        case (
+            WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+            | WorkspaceInitializationStrategy.JJ_WORKSPACE
+        ):
             pass
         case _ as unreachable:
             assert_never(unreachable)

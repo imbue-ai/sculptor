@@ -55,6 +55,7 @@ from sculptor.services.git_repo_service.git_ref_scanning import StatSignature
 from sculptor.services.git_repo_service.git_ref_scanning import remote_refs_signature
 from sculptor.services.git_repo_service.git_ref_scanning import resolve_git_dirs
 from sculptor.services.git_repo_service.git_ref_scanning import stat_signature
+from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
@@ -265,6 +266,9 @@ class WorkspaceBranchPoller:
                 git_dir, common_dir = git_dirs
                 self._update_branch(workspace, working_dir, git_dir, force_recompute)
                 return common_dir
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                # A jj workspace has bookmarks, not a branch, and no git to read.
+                return None
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -347,7 +351,12 @@ class WorkspaceBranchPoller:
         if not force_recompute and already_scanned and unchanged:
             return  # Stat fast-path: remote refs unchanged since last scan — no fork.
 
-        vcs = make_workspace_vcs(workspace.initialization_strategy, self._runners, self._concurrency_group)
+        vcs = make_workspace_vcs(
+            workspace.initialization_strategy,
+            self._runners,
+            self._concurrency_group,
+            read_jj_snapshot_max_new_file_size_mib,
+        )
         try:
             main_repo_path = resolve_main_repo_path(self._runners.git, working_dir)
             target_candidates = tuple(vcs.list_target_candidates(main_repo_path))

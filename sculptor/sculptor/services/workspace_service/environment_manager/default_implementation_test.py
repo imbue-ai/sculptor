@@ -6,6 +6,7 @@ from typing import cast
 import pytest
 
 from sculptor.config.settings import SculptorSettings
+from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import GitInitializationStrategy
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
@@ -17,13 +18,18 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.data_model_service.api import TaskDataModelService
+from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager.api import EnvironmentManager
 from sculptor.services.workspace_service.environment_manager.default_implementation import DefaultEnvironmentManager
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.workspace_vcs import make_test_git_cli
 from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
+from sculptor.testing.workspace_vcs import make_test_jj_workspace_vcs
 
 
 @pytest.fixture
@@ -333,3 +339,54 @@ def test_resume_environment_fails_when_the_vcs_finds_the_checkout_unusable(
             repo_path=project_path, checkout_path=Path(environment_id) / "code", checkout_name=str(workspace_id)
         )
     ]
+
+
+def test_resuming_a_jj_workspace_verifies_it_and_keeps_the_env_file_it_was_created_with(
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    test_root_concurrency_group: ConcurrencyGroup,
+    environment_manager: EnvironmentManager,
+    test_project: Project,
+) -> None:
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(
+            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
+        )
+    )
+    project_path = jj_colocated_repo.path
+    source_env_file = project_path / ".sculptor" / ".env"
+    source_env_file.parent.mkdir()
+    source_env_file.write_text("RESUME_VAR=original\n")
+    vcs = make_test_jj_workspace_vcs(test_root_concurrency_group)
+    workspace_id = WorkspaceID()
+    environment = environment_manager.create_environment(
+        project_path=project_path,
+        project_id=test_project.object_id,
+        concurrency_group=test_root_concurrency_group,
+        vcs=vcs,
+        workspace_id=workspace_id,
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+        source_branch=jj_colocated_repo.default_bookmark,
+    )
+    environment_id = environment.environment_id
+    environment.close()
+    source_env_file.write_text("RESUME_VAR=updated\n")
+
+    resumed = environment_manager.resume_environment(
+        environment_id=environment_id,
+        project_path=project_path,
+        project_id=test_project.object_id,
+        concurrency_group=test_root_concurrency_group,
+        vcs=vcs,
+        workspace_id=workspace_id,
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+        sculptor_folder=project_path / "fake_sculptor",
+    )
+
+    try:
+        assert isinstance(resumed, LocalEnvironment)
+        assert (resumed.get_working_directory() / ".jj" / "repo").is_file()
+        assert resumed._project_env_vars == {"RESUME_VAR": "original"}
+    finally:
+        resumed.destroy()
+        set_user_config_instance(None)
