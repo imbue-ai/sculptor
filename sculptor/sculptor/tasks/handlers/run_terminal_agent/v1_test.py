@@ -55,6 +55,7 @@ from sculptor.tasks.handlers.run_terminal_agent.v1 import launch_command_for_sta
 from sculptor.tasks.handlers.run_terminal_agent.v1 import run_terminal_agent_task_v1
 from sculptor.testing.jj_launch_environment import JjLaunchEnvironment
 from sculptor.testing.jj_launch_environment import jj_environment_nested_in_git_repository  # noqa: F401
+from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
 from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
@@ -243,6 +244,82 @@ def test_a_terminal_agent_in_a_jj_workspace_gets_jj_first_on_path_and_not_the_ch
     assert manager._extra_env["PATH"].split(os.pathsep)[0] == str(vcs_environment.path_prefixes[0])
     assert manager._extra_env["GIT_CEILING_DIRECTORIES"] == str(launch.location.checkout_path.parent)
     assert "JJ_EDITOR" not in manager._extra_env
+
+
+def test_a_terminal_agent_in_a_jj_workspace_runs_sculptors_jj_when_the_login_profile_puts_another_first(
+    terminal_task: Task,
+    services: ServiceCollectionForTask,
+    jj_environment_nested_in_git_repository: JjLaunchEnvironment,  # noqa: F811
+    jj_binary: JjBinary,
+    test_settings: SculptorSettings,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launch = jj_environment_nested_in_git_repository
+    other_jj_dir = tmp_path / "other_jj"
+    other_jj_dir.mkdir()
+    other_jj = other_jj_dir / "jj"
+    other_jj.write_text("#!/bin/sh\necho 'jj 0.28.2 from the login profile'\n")
+    other_jj.chmod(0o755)
+    (Path(os.environ["HOME"]) / ".bash_profile").write_text(f'export PATH="{other_jj_dir}:$PATH"\n')
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    jj_project = Project(
+        object_id=launch.environment.project_id,
+        name="jj project",
+        organization_reference=terminal_task.organization_reference,
+        user_git_repo_url=f"file://{launch.location.repo_path}",
+    )
+    # The shell echoes the typed command, so only the program's own output reads "finished-2".
+    registered_task = terminal_task.model_copy(
+        update={
+            "input_data": AgentTaskInputsV2(
+                agent_config=RegisteredTerminalAgentConfig(
+                    registration_id="jj-reporter",
+                    display_name="jj reporter",
+                    launch_command="jj --version; echo finished-$((1 + 1))",
+                ),
+                git_hash="initialhash",
+                system_prompt=None,
+            )
+        }
+    )
+    task_state = AgentTaskStateV2(workspace_id=WorkspaceID(launch.location.checkout_name))
+    _set_task_state(terminal_task, task_state, services)
+    shutdown_event = threading.Event()
+    output = bytearray()
+    has_finished = threading.Event()
+
+    def read_the_launch_output_then_shut_down() -> None:
+        manager = get_terminal_manager(make_agent_terminal_id(terminal_task.object_id))
+        assert manager is not None
+
+        def record(data: bytes) -> None:
+            output.extend(data)
+            if b"finished-2" in output:
+                has_finished.set()
+
+        record(manager.subscribe(record))
+        has_finished.wait(timeout=30.0)
+        shutdown_event.set()
+
+    with pytest.raises(UserPausedTaskError):
+        _run_terminal_agent_in_environment(
+            task=registered_task,
+            task_state=task_state,
+            project=jj_project,
+            underlying_env=launch.environment,
+            environment_concurrency_group=test_root_concurrency_group,
+            services=services,
+            settings=test_settings,
+            shutdown_event=shutdown_event,
+            on_started=read_the_launch_output_then_shut_down,
+        )
+
+    text = output.decode(errors="replace")
+    assert has_finished.is_set(), text
+    assert f"jj {jj_binary.version}" in text
+    assert "from the login profile" not in text
 
 
 def test_outer_handler_emits_acquired_and_released_messages(

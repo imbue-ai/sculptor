@@ -58,6 +58,7 @@ from sculptor.tasks.handlers.run_terminal_agent.terminal_session import register
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import render_terminal_command
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import stop_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import unregister_agent_terminal_config
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import with_path_prefixes_first
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import write_launch_command
 from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
@@ -233,6 +234,7 @@ def _run_terminal_agent_in_environment(
         checkout_path=underlying_env.get_working_directory(),
         checkout_name=str(task_state.workspace_id),
     )
+    vcs_environment = vcs.agent_environment(checkout)
     register_agent_terminal_config(
         task.object_id,
         AgentTerminalConfig(
@@ -242,7 +244,7 @@ def _run_terminal_agent_in_environment(
             # The environment group, NOT the server-lifetime group workspace
             # terminals use: the agent PTY must not outlive this handler.
             concurrency_group=environment_concurrency_group,
-            vcs_environment=vcs.agent_environment(checkout),
+            vcs_environment=vcs_environment,
             extra_env=extra_env,
             # Private LocalEnvironment attrs, matching what its own
             # start_terminal_manager reads for workspace terminals.
@@ -274,7 +276,7 @@ def _run_terminal_agent_in_environment(
             assert isinstance(input_data, AgentTaskInputsV2)
             launch_command = launch_command_for_start(input_data, task_state)
             if launch_command is not None:
-                write_launch_command(manager, launch_command)
+                write_launch_command(manager, with_path_prefixes_first(launch_command, vcs_environment.path_prefixes))
 
         if on_started is not None:
             on_started()
