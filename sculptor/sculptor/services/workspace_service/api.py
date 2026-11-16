@@ -86,6 +86,14 @@ class WorkspaceRevisionHistoryUnavailableError(ExpectedError):
         super().__init__(f"Workspace {workspace_id} has git commits, not revisions")
 
 
+class WorkspaceWorkingCopyUpdateUnavailableError(ExpectedError):
+    """Raised when asked to update the working copy of a workspace that has no jj working copy, as a git workspace."""
+
+    def __init__(self, workspace_id: WorkspaceID) -> None:
+        self.workspace_id = workspace_id
+        super().__init__(f"Workspace {workspace_id} is a git workspace, which has no jj working copy to update")
+
+
 class WorkspaceFilesUnavailableError(ExpectedError):
     """Raised when the workspace file list cannot be produced right now.
 
@@ -512,6 +520,19 @@ class WorkspaceService(Service, ABC):
         Raises:
             WorkspaceNotFoundError: If the workspace does not exist or has no checkout yet.
             WorkspaceRevisionHistoryUnavailableError: If the workspace is a git workspace.
+        """
+
+    @abstractmethod
+    def update_stale_working_copy(self, workspace_id: WorkspaceID, transaction: DataModelTransaction) -> None:
+        """Bring a jj workspace's stale working copy up to date with its repository, then refresh its diff.
+
+        Runs only on the user's request, never on its own: updating a working
+        copy whose latest edits jj never snapshotted can lose them.
+
+        Raises:
+            WorkspaceNotFoundError: If the workspace does not exist or has no checkout yet.
+            WorkspaceWorkingCopyUpdateUnavailableError: If the workspace is a git workspace.
+            VcsCommandError: If jj cannot update the working copy.
         """
 
     # Workspace File Operations

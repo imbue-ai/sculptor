@@ -6,6 +6,8 @@ from fastapi import Request
 
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceRevisionHistoryUnavailableError
+from sculptor.services.workspace_service.api import WorkspaceWorkingCopyUpdateUnavailableError
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionRecord
 from sculptor.web.auth import UserSession
 from sculptor.web.data_types import CommitFileInfo
@@ -74,3 +76,28 @@ def _to_revision_info(record: JjRevisionRecord) -> RevisionInfo:
         has_conflict=record.has_conflict,
         is_divergent=record.is_divergent,
     )
+
+
+@workspace_jj_router.post("/api/v1/workspaces/{workspace_id}/jj/update-stale", status_code=204)
+def update_stale_working_copy(
+    workspace_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> None:
+    """Bring a jj workspace's stale working copy up to date with its repository, on the user's request.
+
+    Answers 409 for a git workspace, and when jj cannot update the working copy.
+    """
+    validated_workspace_id = validate_workspace_id(workspace_id)
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        workspace = transaction.get_workspace(validated_workspace_id)
+        if workspace is None or workspace.is_deleted:
+            raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
+        try:
+            services.workspace_service.update_stale_working_copy(validated_workspace_id, transaction)
+        except WorkspaceNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except (WorkspaceWorkingCopyUpdateUnavailableError, VcsCommandError) as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e

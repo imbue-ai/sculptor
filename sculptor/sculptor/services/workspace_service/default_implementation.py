@@ -53,6 +53,7 @@ from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableErr
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceRevisionHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.services.workspace_service.api import WorkspaceWorkingCopyUpdateUnavailableError
 from sculptor.services.workspace_service.api import resolve_workspace_setup_command
 from sculptor.services.workspace_service.branch_poller import WorkspaceBranchPoller
 from sculptor.services.workspace_service.environment_manager.api import EnvironmentManager
@@ -86,6 +87,7 @@ from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
+from sculptor.services.workspace_service.vcs.jj_repo_queries import update_stale
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
@@ -1090,6 +1092,27 @@ class DefaultWorkspaceService(WorkspaceService):
             return vcs.get_revision_history(
                 location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
             )
+
+    def update_stale_working_copy(self, workspace_id: WorkspaceID, transaction: DataModelTransaction) -> None:
+        workspace = transaction.get_workspace(workspace_id)
+        if workspace is None:
+            raise WorkspaceNotFoundError(workspace_id)
+
+        location = self._get_checkout_location(workspace, transaction)
+        match workspace.initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                raise WorkspaceWorkingCopyUpdateUnavailableError(workspace_id)
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                logger.debug("Updating the stale working copy of workspace {}", workspace_id)
+                update_stale(self.vcs_runners.jj, location.checkout_path)
+            case _ as unreachable:
+                assert_never(unreachable)
+        self._stale_working_copies.mark_fresh(workspace_id)
+        self.maybe_refresh_workspace_diff(workspace_id)
 
     # Workspace File Operations
 
