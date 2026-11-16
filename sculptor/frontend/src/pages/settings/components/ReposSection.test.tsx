@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "~/api";
 import { ElementIds } from "~/api";
+import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { updateProjectJjStatesAtom } from "~/common/state/atoms/projectJjState.ts";
 import { projectAtomFamily, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { ToastType } from "~/common/state/atoms/toasts.ts";
@@ -23,6 +24,7 @@ const apiHarness = vi.hoisted(() => ({
   updateNamingPattern: vi.fn(),
   deleteProject: vi.fn(),
   getWorkspaceSetupCommandDefaults: vi.fn(),
+  getDependenciesStatus: vi.fn(),
 }));
 
 vi.mock("~/api", async (importOriginal) => {
@@ -33,6 +35,7 @@ vi.mock("~/api", async (importOriginal) => {
     updateNamingPattern: apiHarness.updateNamingPattern,
     deleteProject: apiHarness.deleteProject,
     getWorkspaceSetupCommandDefaults: apiHarness.getWorkspaceSetupCommandDefaults,
+    getDependenciesStatus: apiHarness.getDependenciesStatus,
   };
 });
 
@@ -132,6 +135,7 @@ const setCreatesJjWorkspaces = (createsJjWorkspaces: boolean): void => {
 beforeEach(() => {
   store = createStore();
   store.set(updateProjectsAtom, [PROJECT]);
+  apiHarness.getDependenciesStatus.mockResolvedValue({ data: { jjReadiness: { blocker: "NOT_INSTALLED" } } });
   apiHarness.getWorkspaceSetupCommandDefaults.mockResolvedValue({
     data: {
       defaultSetupCommandByInitializationStrategy: {
@@ -148,6 +152,17 @@ afterEach(() => {
   cleanup();
   queryClient.clear();
   vi.clearAllMocks();
+});
+
+describe("the Repositories section", () => {
+  it("refreshes the dependency status when it mounts, and leaves the status to the stream", async () => {
+    renderReposSection();
+
+    await waitFor(() => expect(apiHarness.getDependenciesStatus).toHaveBeenCalledOnce());
+    expect(apiHarness.getDependenciesStatus).toHaveBeenCalledWith({ meta: { skipWsAck: true } });
+    await act(flushMicrotasks);
+    expect(store.get(dependenciesStatusAtom)).toBeNull();
+  });
 });
 
 describe("a repository that creates jj workspaces", () => {

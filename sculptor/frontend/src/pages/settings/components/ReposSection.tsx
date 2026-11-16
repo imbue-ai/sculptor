@@ -2,11 +2,12 @@ import { Box, Button, Separator, Text } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { PlusIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { deleteProject, ElementIds, type Project } from "~/api";
 import { agentsArrayAtom } from "~/common/state/atoms/agents.ts";
+import { refreshDependenciesStatus } from "~/common/state/atoms/dependenciesStatus.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { useProjects } from "~/common/state/hooks/useProjects.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
@@ -40,6 +41,13 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
     }
     return counts;
   }, [projects, allAgents]);
+
+  // The repositories' jj controls depend on jj's readiness, and changes to jj's
+  // identity or PATH made outside Sculptor send no event. The re-checked status
+  // arrives on the stream.
+  useEffect(() => {
+    void refreshDependenciesStatus();
+  }, []);
 
   const handleRemoveClick = useCallback(
     (project: Project) => {
