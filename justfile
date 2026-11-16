@@ -1370,12 +1370,16 @@ refresh-assets: clean build-frontend sidecar sculpt-binary electron-assets
 [macos]
 build-desktop-app:
     #! /usr/bin/env bash
+    set -euo pipefail
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
     # Set up the environment variables for the correct version. Defaults to
     # "dev" so `just refresh app` works locally without ceremony; CI sets
     # MODE=production explicitly when packaging release artifacts.
-    eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && pnpm run electron:package
+    # Assign, then eval: a bare `eval "$(...)"` returns 0 even when the builder fails.
+    build_vars="$(uv run --project "{{justfile_directory()}}/sculptor" builder setup-build-vars "${MODE:-dev}")"
+    eval "$build_vars"
+    pnpm run electron:package
     mkdir -p "{{justfile_directory()}}/dist/darwin-arm64"
     cp -r out/Sculptor-darwin-arm64/ "{{justfile_directory()}}/dist/darwin-arm64"
 
@@ -1384,6 +1388,7 @@ build-desktop-app:
 [linux]
 build-desktop-app:
     #! /usr/bin/env bash
+    set -euo pipefail
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
     # Detect the host architecture (electron-forge builds for the host by default)
@@ -1394,7 +1399,10 @@ build-desktop-app:
     # Set up the environment variables for the correct version. Defaults to
     # "dev" so `just refresh app` works locally without ceremony; CI sets
     # MODE=production explicitly when packaging release artifacts.
-    eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && pnpm run electron:package
+    # Assign, then eval: a bare `eval "$(...)"` returns 0 even when the builder fails.
+    build_vars="$(uv run --project "{{justfile_directory()}}/sculptor" builder setup-build-vars "${MODE:-dev}")"
+    eval "$build_vars"
+    pnpm run electron:package
     mkdir -p "{{justfile_directory()}}/dist/linux-${ELECTRON_ARCH}"
     cp -r "out/Sculptor-linux-${ELECTRON_ARCH}/" "{{justfile_directory()}}/dist/linux-${ELECTRON_ARCH}"
 
@@ -1416,17 +1424,21 @@ You do NOT need to run `just app` before this, but might need to run `just refre
 [macos]
 package-desktop-installer:
     #! /usr/bin/env bash
+    set -euo pipefail
     just unmount-dmg
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
     # Telemetry env baked into the installer. Defaults to production so a bare
     # `just pkg` never ships a dev DSN; CI sets SCULPTOR_BUILD_ENV=dev for
     # non-release builds.
-    eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")" && pnpm run electron:make
+    # Assign, then eval: a bare `eval "$(...)"` returns 0 even when the builder fails.
+    build_vars="$(uv run --project "{{justfile_directory()}}/sculptor" builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")"
+    eval "$build_vars"
+    pnpm run electron:make
     mkdir -p "{{justfile_directory()}}/dist"
     cp -r out/make/zip "{{justfile_directory()}}/dist"
     cp out/make/Sculptor.dmg "{{justfile_directory()}}/dist"
-    cp out/make/Sculptor.dmg "{{justfile_directory()}}/dist/Sculptor-`uv run --project sculptor builder version | head -n 1 | cut -f2 -d" "`.dmg"
+    cp out/make/Sculptor.dmg "{{justfile_directory()}}/dist/Sculptor-`uv run --project "{{justfile_directory()}}/sculptor" builder version | head -n 1 | cut -f2 -d" "`.dmg"
     bash "{{justfile_directory()}}/sculptor/builder/validate_sculptor_dmg.sh" "{{justfile_directory()}}/dist/Sculptor.dmg" arm64
 
 
@@ -1453,8 +1465,10 @@ pkg-dev:
     cd "$ROOT/sculptor/frontend"
     # Use the "dev" sentry/posthog environment so daily-driver telemetry stays
     # out of the production buckets.
-    eval $(uv run --project sculptor builder setup-build-vars dev) && \
-        SKIP_NOTARIZE_AND_SIGN=1 pnpm run electron:make
+    # Assign, then eval: a bare `eval "$(...)"` returns 0 even when the builder fails.
+    build_vars="$(uv run --project "{{justfile_directory()}}/sculptor" builder setup-build-vars dev)"
+    eval "$build_vars"
+    SKIP_NOTARIZE_AND_SIGN=1 pnpm run electron:make
     mkdir -p "$ROOT/dist"
     cp out/make/Sculptor.dmg "$ROOT/dist"
     echo "Built: $ROOT/dist/Sculptor.dmg"
@@ -1544,6 +1558,7 @@ You do NOT need to run `just app` before this, but might need to run `just refre
 [linux]
 package-desktop-installer:
     #! /usr/bin/env bash
+    set -euo pipefail
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
     # Detect the host architecture
@@ -1554,7 +1569,10 @@ package-desktop-installer:
     # Inject the telemetry env before packaging, like the macOS recipe; without
     # it the renderer bakes an empty DSN. Defaults to production; CI sets
     # SCULPTOR_BUILD_ENV=dev for non-release builds.
-    eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")" && pnpm run electron:make
+    # Assign, then eval: a bare `eval "$(...)"` returns 0 even when the builder fails.
+    build_vars="$(uv run --project "{{justfile_directory()}}/sculptor" builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")"
+    eval "$build_vars"
+    pnpm run electron:make
 
     # The AppImage maker includes the version in the filename.
     # Rename the file to remove the version for consistent filenames.
