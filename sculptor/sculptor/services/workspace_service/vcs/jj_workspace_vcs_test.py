@@ -20,6 +20,7 @@ from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavaila
 from sculptor.services.workspace_service.vcs.errors import InvalidCheckoutSpecError
 from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
@@ -586,12 +587,13 @@ def test_get_pull_request_refs_names_the_targets_bookmark_as_the_base(
     assert read_base(None) is None
 
 
-def test_get_pull_request_refs_has_no_head_when_the_checkout_is_gone(
+def test_get_pull_request_refs_raises_when_the_checkout_is_gone(
     jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation
 ) -> None:
     shutil.rmtree(checkout.checkout_path)
 
-    assert jj_vcs.get_pull_request_refs(checkout, target_ref=_BASE, requested_ref_name=None).head_ref_names == ()
+    with pytest.raises(VcsCommandError):
+        jj_vcs.get_pull_request_refs(checkout, target_ref=_BASE, requested_ref_name=None)
 
 
 def _advance_origin_main(jj_binary: JjBinary, repo: JjColocatedRepo, file_name: str) -> None:

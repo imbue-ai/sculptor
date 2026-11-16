@@ -670,6 +670,31 @@ def test_a_jj_workspace_without_bookmarks_reports_no_pull_request_without_runnin
     assert not (tmp_path / "gh-args").exists()
 
 
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_the_round_logs_once_that_it_cannot_read_a_jj_workspaces_bookmarks(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    _make_jj_workspace_with_bookmarks(jj_binary, jj_colocated_repo, checkout, ("feat-1",))
+    shutil.rmtree(checkout)
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None), jj_binary.path
+    )
+    workspace_id, _ = _register_jj_workspace(svc, jj_colocated_repo, checkout)
+
+    with expect_exact_logged_errors([_ROUND_SKIP_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+            svc._run_round(_make_user_config())
+
+    assert levels == ["LOW_PRIORITY"]
+    assert workspace_id not in svc._cache
+
+
 # ---------------------------------------------------------------------------
 # on_workspace_created does NOT enqueue
 # ---------------------------------------------------------------------------

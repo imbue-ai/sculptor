@@ -400,17 +400,14 @@ class JjWorkspaceVcs(WorkspaceVcs):
     ) -> PullRequestRefs:
         """The stack's bookmarks, most likely PR head first, never the target's own name, with that name as the base.
 
-        No heads when jj fails.
+        Raises `VcsCommandError` when jj cannot read the stack, so PR polling sees the failure.
         """
         checkout = location.checkout_path
-        base_ref_name = _target_bookmark_name(target_ref)
-        try:
-            commit_id = self._read_working_copy_commit_id(checkout)
-            projection = self._project_stack(checkout, commit_id, target_ref, requested_ref_name)
-        except VcsCommandError as e:
-            logger.debug("Cannot read the bookmarks of {}: {}", checkout, e)
-            return PullRequestRefs(head_ref_names=(), base_ref_name=base_ref_name)
-        return PullRequestRefs(head_ref_names=projection.pr_head_candidates, base_ref_name=base_ref_name)
+        commit_id = self._read_working_copy_commit_id(checkout)
+        projection = self._project_stack(checkout, commit_id, target_ref, requested_ref_name)
+        return PullRequestRefs(
+            head_ref_names=projection.pr_head_candidates, base_ref_name=_target_bookmark_name(target_ref)
+        )
 
     def _read_working_copy_commit_id(self, checkout: Path) -> str:
         """The working-copy commit as last snapshotted."""
