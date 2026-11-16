@@ -1,15 +1,14 @@
-import { Badge, Flex, Skeleton, Text, Tooltip } from "@radix-ui/themes";
+import { Badge, Flex, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 
 import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/api";
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/hooks/navigation";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
-import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
 import { toPrBaseRefName, toRemoteRefName } from "~/common/utils/refNames.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
@@ -25,6 +24,7 @@ import { primaryOf } from "~/pages/workspace/layout/types/section.ts";
 import { DiffSummary } from "../../../components/diffSummary/DiffSummary";
 import { PrButton } from "../../../components/prButton/PrButton";
 import { useWorkspaceTargetBranches } from "./hooks/useWorkspaceTargetBranches";
+import { WorkspaceIdentityPill } from "./identityPill/WorkspaceIdentityPill.tsx";
 import { TargetBranchSelector } from "./TargetBranchSelector";
 import styles from "./WorkspaceHeader.module.scss";
 
@@ -35,6 +35,14 @@ const MODE_BADGE_LABEL: Record<WorkspaceInitializationStrategy, string> = {
   [WorkspaceInitializationStrategy.CLONE]: "clone",
   [WorkspaceInitializationStrategy.WORKTREE]: "worktree",
   [WorkspaceInitializationStrategy.JJ_WORKSPACE]: "jj",
+};
+
+// Only a jj workspace's badge explains itself: nothing git-based works inside it.
+const MODE_BADGE_TOOLTIP: Record<WorkspaceInitializationStrategy, string | null> = {
+  [WorkspaceInitializationStrategy.IN_PLACE]: null,
+  [WorkspaceInitializationStrategy.CLONE]: null,
+  [WorkspaceInitializationStrategy.WORKTREE]: null,
+  [WorkspaceInitializationStrategy.JJ_WORKSPACE]: "jj workspace — no git inside. Agents use jj here.",
 };
 
 type SectionToggleProps = {
@@ -93,44 +101,15 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const { workspaceID } = useWorkspacePageParams();
   const projectID = useActiveProjectID();
   const workspace = useWorkspace(workspaceID);
-  const identityLabel = useWorkspaceIdentityLabel({ workspaceId: workspaceID });
   const gitProvider = useGitProvider(projectID ?? "");
   const currentTargetBranch = useWorkspaceTarget(workspaceID);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
   const targetBranches = useWorkspaceTargetBranches(workspaceID);
 
   // Internal state
-  const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isTargetBranchOpen, setIsTargetBranchOpen] = useState<boolean>(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const branchCopyText = identityLabel.status === "READY" ? identityLabel.copyText : null;
-
-  // Effects
-  // Prevent setState-on-unmount from the "Copied!" timer.
-  useEffect(() => {
-    return (): void => {
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    };
-  }, []);
 
   // Functions and callbacks
-  const handleCopyBranch = useCallback((): void => {
-    if (branchCopyText === null) {
-      return;
-    }
-    navigator.clipboard
-      .writeText(branchCopyText)
-      .then(() => {
-        setIsCopied(true);
-        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
-      })
-      .catch((error) => {
-        console.warn("Failed to copy branch name to clipboard.", error);
-      });
-  }, [branchCopyText]);
-
   const handleTargetBranchChange = useCallback(
     async (branch: string): Promise<void> => {
       try {
@@ -205,6 +184,12 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   // non-default strategies (worktree is the default and stays unlabeled).
   const modeStrategy = workspace.initializationStrategy;
   const shouldShowModeBadge = modeStrategy !== WorkspaceInitializationStrategy.WORKTREE;
+  const modeBadgeTooltip = MODE_BADGE_TOOLTIP[modeStrategy];
+  const modeBadge = (
+    <Badge size="1" color="gray" variant="solid" data-testid={ElementIds.TASK_MODE_BADGE}>
+      {MODE_BADGE_LABEL[modeStrategy]}
+    </Badge>
+  );
 
   return (
     <div
@@ -240,36 +225,17 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
         </Text>
       )}
 
-      {/* Branch pill: a real button so it is focusable and Enter/Space-activatable
-          for free; the visible label is the branch name, so the aria-label spells
-          out what pressing it does. */}
-      {identityLabel.status === "READY" ? (
-        <Tooltip
-          content={isCopied ? "Copied!" : "Workspace branch — click to copy"}
-          open={isCopied || undefined}
-          side="bottom"
-        >
-          <button
-            type="button"
-            className={styles.branchSection}
-            onClick={handleCopyBranch}
-            aria-label={`Copy branch name ${identityLabel.text}`}
-            data-testid={ElementIds.BRANCH_NAME}
-          >
-            <identityLabel.icon size={12} className={styles.branchIcon} />
-            <span className={styles.branchName}>{identityLabel.text}</span>
-          </button>
-        </Tooltip>
-      ) : identityLabel.status === "LOADING" ? (
-        <Skeleton width="160px" height="16px" />
-      ) : null}
+      <WorkspaceIdentityPill workspaceId={workspaceID} />
 
       {/* Workspace init-mode badge (non-default modes only). */}
-      {shouldShowModeBadge && (
-        <Badge size="1" color="gray" variant="solid" data-testid={ElementIds.TASK_MODE_BADGE}>
-          {MODE_BADGE_LABEL[modeStrategy]}
-        </Badge>
-      )}
+      {shouldShowModeBadge &&
+        (modeBadgeTooltip === null ? (
+          modeBadge
+        ) : (
+          <Tooltip content={modeBadgeTooltip} side="bottom">
+            {modeBadge}
+          </Tooltip>
+        ))}
 
       {/* Arrow + target branch */}
       <span className={styles.arrowSeparator}>&rarr;</span>
