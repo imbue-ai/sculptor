@@ -43,3 +43,31 @@ class JjWorkspaceEntry(FrozenModel):
 
     name: str
     root: Path = Field(description="Absolute")
+
+
+class JjStackRevision(FrozenModel):
+    """One revision of a workspace's stack, as the stack projection needs it."""
+
+    commit_id: str
+    parent_commit_ids: tuple[str, ...]
+    bookmarks: tuple[str, ...] = Field(description="The local bookmarks on this revision; conflicted ones excluded")
+    is_described: bool = Field(description="Whether the revision has a non-empty description")
+
+
+class JjStackProjection(FrozenModel):
+    """What a workspace's stack says about its bookmarks."""
+
+    bookmarks: tuple[str, ...] = Field(description="Every local bookmark on the stack, nearest the working copy first")
+    pr_head_candidates: tuple[str, ...] = Field(
+        description="The bookmarks a pull request may be headed by, most likely first; never the target's own name"
+    )
+    unbookmarked_revision_count: int = Field(
+        description="Described revisions above the primary bookmark; every described revision when there is none"
+    )
+
+    @property
+    def primary_bookmark(self) -> str | None:
+        """The bookmark that names the workspace's work, or None when the stack has none."""
+        if not self.pr_head_candidates:
+            return None
+        return self.pr_head_candidates[0]
