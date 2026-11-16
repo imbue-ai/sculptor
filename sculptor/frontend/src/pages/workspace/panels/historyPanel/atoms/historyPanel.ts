@@ -1,7 +1,7 @@
 import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 
-/** Stores the set of expanded commit hashes per workspace. */
+/** Stores the set of expanded commits per workspace: commit hashes, or change ids in a jj workspace. */
 export const expandedCommitsAtomFamily = atomFamily((_workspaceId: string) => atom<Set<string>>(new Set<string>()));
 
 /** The Commits panel's selected commit-scoped file (stamped for recency
@@ -11,6 +11,14 @@ export const expandedCommitsAtomFamily = atomFamily((_workspaceId: string) => at
 export type CommitsPanelSelection = { commitHash: string; filePath: string; at: number };
 export const commitsPanelSelectionAtomFamily = atomFamily((_workspaceId: string) =>
   atom<CommitsPanelSelection | null>(null),
+);
+
+/** The Revisions panel's selected file within a revision of a jj workspace, stamped
+ *  like the Commits panel's selection. `commitId` is the commit it was selected at;
+ *  `changeId` lets the selection follow the revision as jj rewrites its commit. */
+export type RevisionsPanelSelection = { changeId: string; commitId: string; filePath: string; at: number };
+export const revisionsPanelSelectionAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<RevisionsPanelSelection | null>(null),
 );
 
 /** Collapse all expanded commits. */
