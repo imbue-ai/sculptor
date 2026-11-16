@@ -84,15 +84,23 @@ describe("defaultSourceFor", () => {
 
 describe("repositoryWorkspaceVcs", () => {
   it.each([
-    { createsJjWorkspaces: true, usesJjForNewWorkspaces: true, isJjAvailable: true, expected: "jj" },
+    { createsJjWorkspaces: true, usesJjForNewWorkspaces: true, jjAvailability: "available", expected: "jj" },
     // creates_jj_workspaces folds in jj's availability, so the flag tells a jj repository whose jj is gone.
-    { createsJjWorkspaces: false, usesJjForNewWorkspaces: true, isJjAvailable: false, expected: "jj-unavailable" },
-    { createsJjWorkspaces: false, usesJjForNewWorkspaces: false, isJjAvailable: false, expected: "git" },
-    { createsJjWorkspaces: false, usesJjForNewWorkspaces: false, isJjAvailable: true, expected: "git" },
+    {
+      createsJjWorkspaces: false,
+      usesJjForNewWorkspaces: true,
+      jjAvailability: "unavailable",
+      expected: "jj-unavailable",
+    },
+    // Before the dependency status arrives nothing says whether jj works.
+    { createsJjWorkspaces: false, usesJjForNewWorkspaces: true, jjAvailability: "unknown", expected: "jj-checking" },
+    { createsJjWorkspaces: false, usesJjForNewWorkspaces: false, jjAvailability: "unavailable", expected: "git" },
+    { createsJjWorkspaces: false, usesJjForNewWorkspaces: false, jjAvailability: "unknown", expected: "git" },
+    { createsJjWorkspaces: false, usesJjForNewWorkspaces: false, jjAvailability: "available", expected: "git" },
     // The repository state has not arrived, or the colocation is gone and the backend is clearing the flag.
-    { createsJjWorkspaces: false, usesJjForNewWorkspaces: true, isJjAvailable: true, expected: "git" },
-  ])(
-    "is $expected when it creates jj workspaces: $createsJjWorkspaces, its flag is $usesJjForNewWorkspaces and jj is available: $isJjAvailable",
+    { createsJjWorkspaces: false, usesJjForNewWorkspaces: true, jjAvailability: "available", expected: "git" },
+  ] as const)(
+    "is $expected when it creates jj workspaces: $createsJjWorkspaces, its flag is $usesJjForNewWorkspaces and jj is $jjAvailability",
     ({ expected, ...facts }) => {
       expect(repositoryWorkspaceVcs(facts)).toBe(expected);
     },
@@ -108,6 +116,7 @@ describe("resolveCreationMode", () => {
     { remembered: WORKTREE, vcs: "jj", expected: JJ_WORKSPACE },
     { remembered: JJ_WORKSPACE, vcs: "git", expected: WORKTREE },
     { remembered: JJ_WORKSPACE, vcs: "jj-unavailable", expected: JJ_WORKSPACE },
+    { remembered: WORKTREE, vcs: "jj-checking", expected: JJ_WORKSPACE },
     // Clone and in-place stay git whatever the repository's jj setting.
     { remembered: CLONE, vcs: "jj", expected: CLONE },
     { remembered: IN_PLACE, vcs: "jj", expected: IN_PLACE },

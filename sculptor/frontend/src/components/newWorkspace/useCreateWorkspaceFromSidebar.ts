@@ -87,8 +87,12 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
       const remembered = lastSettingsByProjectId[projectId];
       const vcs = store.get(repositoryWorkspaceVcsAtomFamily(projectId));
       const mode = resolveCreationMode({ remembered: remembered?.mode, vcs });
-      // The dialog says why a jj workspace cannot be created now, and links to where it can be fixed.
-      if (vcs === "jj-unavailable" && mode === WorkspaceInitializationStrategy.JJ_WORKSPACE) {
+      // The dialog waits for jj's availability, says why a jj workspace cannot
+      // be created now, and links to where it can be fixed.
+      if (
+        (vcs === "jj-unavailable" || vcs === "jj-checking") &&
+        mode === WorkspaceInitializationStrategy.JJ_WORKSPACE
+      ) {
         setModalState({ open: true, presetProjectId: projectId });
         return;
       }

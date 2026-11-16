@@ -189,6 +189,18 @@ describe("useCreateWorkspaceFromSidebar", () => {
       expect(body.sourceBranch).toBeUndefined();
     });
 
+    it("opens the dialog instead of creating while it is not yet known whether jj is available", async () => {
+      const { store, createFromSidebar } = renderSidebarCreate({}, (preparedStore) => {
+        useJjRepository(false)(preparedStore);
+        preparedStore.set(dependenciesStatusAtom, null);
+      });
+
+      await createFromSidebarFor(createFromSidebar);
+
+      expect(createWorkspaceV2).not.toHaveBeenCalled();
+      expect(store.get(newWorkspaceDialogAtom)).toEqual({ open: true, presetProjectId: "p1" });
+    });
+
     it("opens the dialog, which says why, instead of creating while jj is unavailable", async () => {
       const { store, createFromSidebar } = renderSidebarCreate({}, useJjRepository(false));
 

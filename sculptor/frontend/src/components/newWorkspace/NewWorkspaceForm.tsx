@@ -199,11 +199,14 @@ export const NewWorkspaceForm = ({
   // A remembered source belongs to the mode it was picked for: a bookmark is no worktree's source.
   const rememberedSourceBranch = rememberedSettings?.mode === mode ? rememberedSettings.sourceBranch : undefined;
   const isJjMode = workspaceVcsOf({ initializationStrategy: mode }) === "jj";
-  // A repository that uses jj for new workspaces creates none while jj is unavailable.
-  const isBlockedByJjUnavailable = isJjMode && repositoryVcs === "jj-unavailable";
+  // A repository that uses jj for new workspaces creates none while jj is
+  // unavailable, or while it is not yet known whether jj is; the callout below
+  // says why only once jj is known to be unavailable.
+  const isBlockedOnJj = isJjMode && (repositoryVcs === "jj-unavailable" || repositoryVcs === "jj-checking");
+  const isJjKnownUnavailable = isJjMode && repositoryVcs === "jj-unavailable";
   const jjBookmarks = useJjBookmarkChoices({
     projectId: selectedProjectId,
-    isEnabled: isJjMode && !isBlockedByJjUnavailable,
+    isEnabled: isJjMode && !isBlockedOnJj,
   });
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const openSettings = useOpenSettings();
@@ -458,7 +461,7 @@ export const NewWorkspaceForm = ({
     branchNameStatus === "exists" ||
     branchNameStatus === "invalid" ||
     isPiPromptBlocked ||
-    isBlockedByJjUnavailable;
+    isBlockedOnJj;
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmitDisabled || selectedProjectId === null) return;
@@ -771,7 +774,7 @@ export const NewWorkspaceForm = ({
             ) : null}
           </div>
 
-          {isBlockedByJjUnavailable ? (
+          {isJjKnownUnavailable ? (
             <Callout.Root color="amber" size="1" data-testid={ElementIds.NEW_WORKSPACE_JJ_UNAVAILABLE_CALLOUT}>
               <Callout.Text>
                 This repository creates jj workspaces, and jj is unavailable.{" "}

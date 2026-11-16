@@ -100,22 +100,35 @@ export const defaultSourceFor = (inputs: {
   return source.rule === "unused" || source.seed === "current-branch" ? inputs.currentBranch : undefined;
 };
 
+/** Whether jj can be used, from the dependency status; unknown until the status has arrived. */
+export type JjAvailability = "available" | "unavailable" | "unknown";
+
 /**
  * Which version control a repository's new isolated workspaces use. A
  * repository that uses jj for its new workspaces while jj is unavailable
- * creates none: there is no falling back to a git worktree.
+ * creates none: there is no falling back to a git worktree. Until the
+ * dependency status says whether jj works, such a repository is still being
+ * checked, and creates nothing yet either.
  */
-export type RepositoryWorkspaceVcs = "git" | "jj" | "jj-unavailable";
+export type RepositoryWorkspaceVcs = "git" | "jj" | "jj-checking" | "jj-unavailable";
 
 export const repositoryWorkspaceVcs = (facts: {
   /** `ProjectJjState.createsJjWorkspaces`: the flag is on, the repository is colocated and jj is available. */
   createsJjWorkspaces: boolean;
   /** The project's stored `useJjForNewWorkspaces` flag. */
   usesJjForNewWorkspaces: boolean;
-  isJjAvailable: boolean;
+  jjAvailability: JjAvailability;
 }): RepositoryWorkspaceVcs => {
   if (facts.createsJjWorkspaces) return "jj";
-  return facts.usesJjForNewWorkspaces && !facts.isJjAvailable ? "jj-unavailable" : "git";
+  if (!facts.usesJjForNewWorkspaces) return "git";
+  switch (facts.jjAvailability) {
+    case "available":
+      return "git";
+    case "unavailable":
+      return "jj-unavailable";
+    case "unknown":
+      return "jj-checking";
+  }
 };
 
 /** A mode that gives the workspace a checkout of its own: a git worktree or a jj workspace. */
