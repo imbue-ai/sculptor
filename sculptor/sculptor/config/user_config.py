@@ -151,6 +151,14 @@ class CIBabysitterConfig(SerializableModel):
         default="This PR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.",
         description="Prompt sent to the CI Babysitter agent when a PR develops a merge conflict with its base branch.",
     )
+    jj_pipeline_failed_prompt: str | None = Field(
+        default=None,
+        description="Prompt sent instead of pipeline_failed_prompt when the PR comes from a jj workspace. None means pipeline_failed_prompt is used.",
+    )
+    jj_merge_conflict_prompt: str | None = Field(
+        default=None,
+        description="Prompt sent instead of merge_conflict_prompt when the PR comes from a jj workspace. None means merge_conflict_prompt is used.",
+    )
     agent: BabysitterAgentChoice = Field(
         default_factory=BabysitterAgentMRU,
         description="Which agent the CI Babysitter uses: most-recently-used (the default — inherits the workspace's most recent driveable agent type), or a pinned harness (Claude, Pi, or a specific registered terminal agent).",
@@ -226,6 +234,10 @@ class UserConfig(SerializableModel):
         default="Push my changes to origin and create a pull request using the GitHub CLI (gh). Write a clear description summarizing the changes.",
         description="Default prompt sent to the agent when Create PR is clicked",
     )
+    jj_pr_creation_prompt: str | None = Field(
+        default=None,
+        description="Prompt sent instead of pr_creation_prompt when Create PR is clicked in a jj workspace. None means pr_creation_prompt is used.",
+    )
     pr_polling_enabled: bool = Field(
         default=True,
         description="Whether to poll for PR status at all. When disabled, the workspace banner shows the last cached status and stops issuing gh calls.",
@@ -257,6 +269,10 @@ class UserConfig(SerializableModel):
     commit_prompt: str = Field(
         default="Stage every changed and untracked file, then commit with a comprehensive commit message. Do not leave any files unstaged.",
         description="Default prompt sent to the agent when Commit Changes is clicked",
+    )
+    jj_commit_prompt: str | None = Field(
+        default=None,
+        description="Prompt sent instead of commit_prompt when Commit Changes is clicked in a jj workspace. None means commit_prompt is used.",
     )
     ci_babysitter: CIBabysitterConfig = Field(
         default_factory=CIBabysitterConfig,

@@ -111,6 +111,44 @@ def test_pi_config_round_trips_through_serialization() -> None:
     assert restored.api_key_env_var_names == ("ANTHROPIC_API_KEY", "PI_API_KEY")
 
 
+def test_jj_prompts_are_unset_by_default_so_the_git_prompts_apply() -> None:
+    config = UserConfig(
+        user_email="test@example.com",
+        user_id="user123",
+        organization_id="org123",
+        instance_id="inst123",
+    )
+    assert config.jj_commit_prompt is None
+    assert config.jj_pr_creation_prompt is None
+    assert config.ci_babysitter.jj_pipeline_failed_prompt is None
+    assert config.ci_babysitter.jj_merge_conflict_prompt is None
+
+
+def test_jj_prompts_round_trip_through_serialization() -> None:
+    original = UserConfig(
+        user_email="test@example.com",
+        user_id="user123",
+        organization_id="org123",
+        instance_id="inst123",
+        jj_commit_prompt="Describe the working copy and start a new change.",
+        jj_pr_creation_prompt="Push the bookmark and open a pull request.",
+        ci_babysitter=CIBabysitterConfig(
+            jj_pipeline_failed_prompt="Fix the failing pipeline and push the bookmark.",
+            jj_merge_conflict_prompt="Rebase the stack onto the target bookmark and resolve the conflicts.",
+        ),
+    )
+
+    restored = UserConfig.model_validate_json(original.model_dump_json())
+
+    assert restored.jj_commit_prompt == "Describe the working copy and start a new change."
+    assert restored.jj_pr_creation_prompt == "Push the bookmark and open a pull request."
+    assert restored.ci_babysitter.jj_pipeline_failed_prompt == "Fix the failing pipeline and push the bookmark."
+    assert (
+        restored.ci_babysitter.jj_merge_conflict_prompt
+        == "Rebase the stack onto the target bookmark and resolve the conflicts."
+    )
+
+
 def test_user_config_silently_ignores_removed_chat_view_legacy_field() -> None:
     """Regression for the delete-classic-chat removal.
 
