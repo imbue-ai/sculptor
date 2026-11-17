@@ -5,9 +5,7 @@ use, how identity flows from anonymous to identified, and where to add new
 events.
 
 > **Phase 1 (current):** PostHog is wired up on the frontend only. Backend
-> telemetry is dormant. The email-confirmation event
-> (`onboarding.email_confirmation`) fires from the frontend, so it does not
-> depend on backend telemetry.
+> telemetry is dormant.
 >
 > **Phase 2 (planned, [SCU-764]):** Backend re-enable with synced identity,
 > alias call for pre-email backend events, and full lifecycle documentation.
@@ -84,6 +82,14 @@ permanently. The namespace constant lives in
 
 Steps 3–4 are skipped when the user unchecked the telemetry checkbox.
 
+> **Tombstone: mailing-list signup, retired November 2026.**
+> `onboarding.email_confirmation` used to carry a `did_opt_in_to_marketing`
+> property, set by a "Receive product update emails" checkbox on the welcome
+> step, and it triggered mailing-list signup. The mailing list was retired in
+> November 2026: the checkbox and the property were removed, and mailing-list
+> signup was decommissioned. Older app versions still send the property; it
+> no longer triggers anything. The old flow is in the git history.
+
 ### Skipping account setup
 
 The welcome step's "Continue without an account" link posts to
@@ -152,10 +158,9 @@ network exhaust), the merge never happens server-side and posthog-js will not
 retry on the next page load — pre-identify events orphan. There's no
 client-side way to verify the merge succeeded.
 
-For the email-confirmation event specifically, this isn't load-bearing: the
-`onboarding.email_confirmation` event is captured *after* identify, so it
-always fires under the canonical user. The orphaning only affects the
-loading-screen and pageload events emitted before identify.
+The orphaning only affects the loading-screen and pageload events emitted
+before identify. Events captured after identify always fire under the
+canonical user.
 
 Phase 2 (SCU-764) closes this gap by having the backend issue a server-side
 alias call from the email-submit endpoint, with retry-until-confirmed
