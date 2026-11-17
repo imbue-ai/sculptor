@@ -42,7 +42,6 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState<string | null>(null);
-  const [didOptInToMarketing, setDidOptInToMarketing] = useState(false);
   const [isTelemetryEnabled, setIsTelemetryEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +54,6 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
   const handleEmailSubmit = async (
     email: string,
     fullName: string | null,
-    didOptInToMarketing: boolean,
     isTelemetryEnabled: boolean,
   ): Promise<void> => {
     setIsLoading(true);
@@ -64,12 +62,11 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
     try {
       // Console output ends up in Sentry breadcrumbs (and potentially in
       // diagnostics), so never log the actual email/name.
-      console.log("Saving user email. Marketing opt-in:", didOptInToMarketing);
+      console.log("Saving user email.");
       const { data: updatedTelemetryInfo } = await saveUserEmail({
         body: {
           userEmail: email,
           fullName: fullName,
-          didOptInToMarketing: didOptInToMarketing,
           isTelemetryEnabled: isTelemetryEnabled,
         },
         meta: { skipWsAck: true },
@@ -81,18 +78,14 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
       }
 
       // Identify the user in PostHog and fire the email-confirmation event.
-      // The Clay webhook subscribes to this event for mailing-list signup.
       // The frontend owns PostHog identification.
       if (isTelemetryEnabled) {
         identifyAnalyticsUser(email, fullName ? { full_name: fullName } : {});
-        posthog.capture("onboarding.email_confirmation", {
-          did_opt_in_to_marketing: didOptInToMarketing,
-        });
+        posthog.capture("onboarding.email_confirmation");
       }
 
       setEmail(email);
       setFullName(fullName);
-      setDidOptInToMarketing(didOptInToMarketing);
       setIsTelemetryEnabled(isTelemetryEnabled);
       goToStep(OnboardingStep.INSTALLATION);
     } catch (err) {
@@ -204,7 +197,6 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
           error={error}
           initialEmail={email}
           initialFullName={fullName}
-          initialDidOptInToMarketing={didOptInToMarketing}
           initialIsTelemetryEnabled={isTelemetryEnabled}
         />
       );

@@ -17,10 +17,6 @@ class PlaywrightWelcomeStepElement(PlaywrightIntegrationTestElement):
         """Get the email input field."""
         return self.get_by_test_id(ElementIDs.ONBOARDING_EMAIL_INPUT)
 
-    def get_marketing_checkbox(self) -> Locator:
-        """Get the marketing opt-in checkbox."""
-        return self.get_by_test_id(ElementIDs.ONBOARDING_MARKETING_CHECKBOX)
-
     def get_telemetry_checkbox(self) -> Locator:
         """Get the telemetry consent checkbox (checked by default)."""
         return self.get_by_test_id(ElementIDs.ONBOARDING_TELEMETRY_CHECKBOX)
@@ -43,14 +39,6 @@ class PlaywrightWelcomeStepElement(PlaywrightIntegrationTestElement):
         email_input.click()
         email_input.type(email)
 
-    def set_marketing_opt_in(self, opt_in: bool) -> None:
-        """Set the marketing opt-in checkbox state."""
-        checkbox = self.get_marketing_checkbox()
-        if opt_in:
-            checkbox.check()
-        else:
-            checkbox.uncheck()
-
     def set_telemetry_opt_in(self, opt_in: bool) -> None:
         """Set the telemetry consent checkbox state."""
         checkbox = self.get_telemetry_checkbox()
@@ -67,10 +55,9 @@ class PlaywrightWelcomeStepElement(PlaywrightIntegrationTestElement):
         """Submit the email form."""
         self.get_submit_button().click()
 
-    def complete_step(self, email: str, opt_in_to_marketing: bool = False) -> None:
+    def complete_step(self, email: str) -> None:
         """Complete the entire email step."""
         self.enter_email(email)
-        self.set_marketing_opt_in(opt_in_to_marketing)
         self.submit()
 
 

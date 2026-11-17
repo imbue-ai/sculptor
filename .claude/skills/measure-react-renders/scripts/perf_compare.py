@@ -86,7 +86,7 @@ def start_backend(repo_dir, port, data_dir):
 
 def setup_instance(port):
     """Complete onboarding and create a task. Returns (workspace_id, task_id)."""
-    api(port, "POST", "/config/email", {"userEmail": "test@example.com", "fullName": "Test", "didOptInToMarketing": False})
+    api(port, "POST", "/config/email", {"userEmail": "test@example.com", "fullName": "Test"})
     api(port, "POST", "/config/complete")
     projects = api(port, "GET", "/projects")
     project_id = projects[0]["objectId"]

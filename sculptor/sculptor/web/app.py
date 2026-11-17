@@ -3226,11 +3226,7 @@ def save_user_email(
 
     # The server log is bundled into bug-report diagnostics uploads, so never
     # write the actual email/name into it.
-    logger.info(
-        "Saved user profile (has_full_name={}, did_opt_in_to_marketing={})",
-        email_config_request.full_name is not None,
-        email_config_request.did_opt_in_to_marketing,
-    )
+    logger.info("Saved user profile (has_full_name={})", email_config_request.full_name is not None)
     replace_config(user_config)
 
     return get_logged_in_or_anonymous_telemetry_info()

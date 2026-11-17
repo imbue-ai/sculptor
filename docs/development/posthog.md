@@ -5,9 +5,9 @@ use, how identity flows from anonymous to identified, and where to add new
 events.
 
 > **Phase 1 (current):** PostHog is wired up on the frontend only. Backend
-> telemetry is dormant. The mailing-list signup event
-> (`onboarding.email_confirmation`) fires from the frontend so downstream
-> consumers of that event keep working without backend telemetry.
+> telemetry is dormant. The email-confirmation event
+> (`onboarding.email_confirmation`) fires from the frontend, so it does not
+> depend on backend telemetry.
 >
 > **Phase 2 (planned, [SCU-764]):** Backend re-enable with synced identity,
 > alias call for pre-email backend events, and full lifecycle documentation.
@@ -79,8 +79,8 @@ permanently. The namespace constant lives in
    `posthog.identify(analytics_user_id, {email})`. posthog-js's implicit
    alias-on-identify merges the previously-anonymous events into the new
    identified person.
-4. `posthog.capture('onboarding.email_confirmation', {did_opt_in_to_marketing})`
-   fires the mailing-list signup event under the identified user.
+4. `posthog.capture('onboarding.email_confirmation')` fires the
+   email-confirmation event under the identified user.
 
 Steps 3–4 are skipped when the user unchecked the telemetry checkbox.
 
@@ -152,7 +152,7 @@ network exhaust), the merge never happens server-side and posthog-js will not
 retry on the next page load — pre-identify events orphan. There's no
 client-side way to verify the merge succeeded.
 
-For the mailing-list signup event specifically, this isn't load-bearing: the
+For the email-confirmation event specifically, this isn't load-bearing: the
 `onboarding.email_confirmation` event is captured *after* identify, so it
 always fires under the canonical user. The orphaning only affects the
 loading-screen and pageload events emitted before identify.
