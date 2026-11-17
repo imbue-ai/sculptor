@@ -463,7 +463,7 @@ def test_read_identity_leaves_out_a_conflicted_bookmark(
     _jj(jj_binary, workspace, "--ignore-working-copy", "new", "--no-edit", "-m", "off the stack", "@--")
     _set_bookmarks(jj_binary, workspace, "@--", "kept", "split")
     operation = _latest_operation(jj_binary, workspace)
-    # Concurrent moves to two siblings, neither descending from the other, leave the bookmark conflicted.
+    # jj resolves concurrent moves itself when one target descends from the other, so the moves go to siblings.
     _set_bookmarks(jj_binary, workspace, "@-", "split")
     _jj(
         jj_binary,

@@ -78,8 +78,7 @@ from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hos
 from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
 from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
 
-# Fetches the origin remote if present, and succeeds silently when there is no
-# origin, so workspace startup is never blocked on it.
+# `|| true` keeps a missing or unreachable origin from blocking workspace startup.
 DEFAULT_JJ_WORKSPACE_SETUP_COMMAND = "jj git fetch --remote origin 2>/dev/null || true"
 
 # Returns the user's configured limit, in MiB, on the size of a new file jj snapshots.
@@ -97,7 +96,7 @@ _REFUSED_SNAPSHOT_ERROR_PREFIX = "jj did not snapshot this file: "
 _ORIGIN_REMOTE = "origin"
 _GH_REPO = "GH_REPO"
 _GIT_CEILING_DIRECTORIES = "GIT_CEILING_DIRECTORIES"
-# jj reports a copy as a file new to the revision; the seam's file changes have no copy status.
+# The seam's file changes have no copy status, so a copy counts as an added file.
 _FILE_STATUS_BY_JJ_STATUS: Mapping[str, CommitFileStatus] = {
     "modified": "M",
     "added": "A",
@@ -105,22 +104,18 @@ _FILE_STATUS_BY_JJ_STATUS: Mapping[str, CommitFileStatus] = {
     "renamed": "R",
     "copied": "A",
 }
+# Each template prints one JSON value per line: `json()` escapes every field, so a
+# description or path containing a newline or tab cannot break the parse.
 _FILE_PATH_TEMPLATE = 'json(path) ++ "\\n"'
-# One JSON array per line: commit id, change id, shortest unique change id prefix,
-# first line of the description, then the empty, conflict and divergent flags.
 _WORKING_COPY_TEMPLATE = (
     '"[" ++ json(commit_id) ++ "," ++ json(change_id) ++ "," ++ json(change_id.shortest().prefix())'
     + ' ++ "," ++ json(description.first_line()) ++ "," ++ json(empty) ++ "," ++ json(conflict)'
     + ' ++ "," ++ json(divergent) ++ "]\\n"'
 )
-# One JSON array per line: the commit, then the names of its unconflicted local bookmarks.
 _STACK_REVISION_TEMPLATE = (
     '"[" ++ json(self) ++ ",[" ++ local_bookmarks.filter(|b| !b.conflict()).map(|b| json(b.name())).join(",")'
     + ' ++ "]]\\n"'
 )
-# One JSON array per line: the commit; its local bookmark names; each changed file as
-# [path, status, source path]; each changed file's line stats as [path, added, removed];
-# then the empty, conflict and divergent flags.
 _REVISION_RECORD_TEMPLATE = (
     '"[" ++ json(self)'
     + ' ++ ",[" ++ local_bookmarks.map(|b| json(b.name())).join(",") ++ "]"'
@@ -135,8 +130,8 @@ _REVISION_RECORD_TEMPLATE = (
 class JjWorkspaceVcs(WorkspaceVcs):
     """Version control for workspaces that are jj workspaces of the user's colocated repository.
 
-    The jj workspace is named by the checkout name. git is used only in the
-    user's colocated repository, to check branch names as git does.
+    The jj workspace is named by the checkout name. git runs only in the user's
+    colocated repository, never in the jj workspace.
     """
 
     def __init__(self, jj: JjCli, git: GitCli, read_snapshot_max_new_file_size_mib: SnapshotSizeLimitReader) -> None:
@@ -147,9 +142,9 @@ class JjWorkspaceVcs(WorkspaceVcs):
     def create_checkout(self, spec: CheckoutSpec) -> CheckoutLocation:
         """`jj workspace add` from `spec.base_ref`, then the workspace's own config.
 
-        A jj workspace starts without a bookmark: Sculptor sets `spec.new_ref_name`
-        later, once the agent has described a revision. A workspace of the same
-        name left behind by a lost environment is forgotten first.
+        A jj workspace starts without a bookmark, so `spec.new_ref_name` is not
+        created here. A workspace of the same name left behind by a lost
+        environment is forgotten first.
         """
         if spec.base_ref is None:
             raise InvalidCheckoutSpecError("base_ref is required for a jj workspace")
@@ -261,7 +256,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
     def _find_own_bookmarks(
         self, location: CheckoutLocation, target_ref: str | None, created_ref_name: str | None
     ) -> set[str]:
-        """The bookmarks `remove_checkout` may forget; empty when the repository no longer has the workspace."""
+        """The workspace's own bookmarks; empty when the repository no longer has the workspace."""
         repo_path = location.repo_path
         working_copy_commit_id = resolve_commit_id(self._jj, repo_path, working_copy_revset(location.checkout_name))
         if working_copy_commit_id is None:
@@ -376,11 +371,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
     def read_identity(
         self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
     ) -> JjHeadIdentity:
-        """The working copy as last snapshotted, and the bookmarks on the workspace's stack.
-
-        The stack is the working copy's ancestors that are not the target's; with
-        no resolvable target, its mutable ancestors.
-        """
+        """The working copy as last snapshotted, and the bookmarks on the workspace's stack."""
         checkout = location.checkout_path
         result = self._jj.run(
             ["log", "--no-graph", "-r", _WORKING_COPY, "-T", _WORKING_COPY_TEMPLATE],
@@ -406,11 +397,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
     def get_pull_request_refs(
         self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
     ) -> PullRequestRefs:
-        """The stack's bookmarks, most likely PR head first, never the target's own name.
-
-        Failures read as "nothing to look up", so PR polling reports no pull
-        request rather than erroring.
-        """
+        """The stack's bookmarks, most likely PR head first, never the target's own name; none when jj fails."""
         checkout = location.checkout_path
         try:
             commit_id = self._read_working_copy_commit_id(checkout)
@@ -481,11 +468,9 @@ class JjWorkspaceVcs(WorkspaceVcs):
     ) -> DiffArtifact:
         """Snapshot once, then diff the working-copy commit `W` against its parents and, with a target, its fork point.
 
-        jj tracks every file it snapshots, so new files appear in both diffs
-        without an untracked-files pass. Files jj refuses to snapshot, such as
-        ones over the size limit, are reported in `file_errors`. The target diff
-        runs from `latest(fork_point(<target> | W))`, so it includes the
-        working copy's own changes.
+        jj tracks every file it snapshots, so new files appear in both diffs.
+        Files jj refuses to snapshot, such as ones over the size limit, are
+        reported in `file_errors`.
         """
         if not isinstance(context_lines, int) or context_lines < 0:
             raise ValueError(f"context_lines must be a non-negative integer, got {context_lines!r}")
@@ -666,7 +651,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
     def compute_change_fingerprint(self, location: CheckoutLocation) -> str | None:
         """The working-copy commit id after a snapshot, which changes with every edit and history change.
 
-        None on failure, including a stale workspace, so a transient error just skips a poll.
+        None on failure, including in a stale workspace.
         """
         try:
             return snapshot_working_copy(

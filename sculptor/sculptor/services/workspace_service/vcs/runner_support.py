@@ -1,10 +1,4 @@
-"""What every VCS command runner shares: how it finds its binary, how its environment is built, and its default timeout.
-
-Binaries come from a resolver callable: Sculptor's own calls pass the
-dependency service's `resolve_binary_path` and agent-side calls pass their
-execution environment's `get_tool_binary_path`, so no runner looks a tool up on
-PATH itself.
-"""
+"""What every VCS command runner shares."""
 
 import os
 from typing import Callable
@@ -15,8 +9,8 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 
 DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS = 30.0
 
-# Both `DependencyManagementService.resolve_binary_path` and
-# `AgentExecutionEnvironment.get_tool_binary_path` have this shape.
+# Runners find each tool's binary through this, never on PATH, so a binary the
+# user configured is the one that runs.
 BinaryResolver = Callable[[Dependency], str | None]
 
 # Variables laid over the process environment for every command, read again as

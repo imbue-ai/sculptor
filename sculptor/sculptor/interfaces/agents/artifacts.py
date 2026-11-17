@@ -46,9 +46,9 @@ class DiffArtifact(SerializableModel):
 
     object_type: str = "DiffArtifact"
     uncommitted_diff: str = ""
-    # Commit id the uncommitted_diff's old side is: HEAD in git, the working
-    # copy's parent in jj. The frontend fetches "old" file content for hunk
-    # expansion at this commit. Empty when there is no such single commit.
+    # Commit id of the uncommitted_diff's old side; the frontend fetches "old"
+    # file content for hunk expansion at this commit. Empty when the old side
+    # is not a single commit.
     uncommitted_diff_base: str = ""
     target_branch_diff: str = ""  # Diff from merge-base(target, HEAD) to HEAD
     # Commit SHA of merge-base(target, HEAD) — the ref the target_branch_diff's

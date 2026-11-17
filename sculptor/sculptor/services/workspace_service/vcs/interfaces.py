@@ -78,8 +78,7 @@ class WorkspaceVcs(ABC):
     ) -> GitHeadIdentity | JjHeadIdentity:
         """What the checkout currently has checked out.
 
-        jj measures the workspace's stack from `target_ref` and prefers
-        `requested_ref_name` among bookmarks on one revision.
+        jj needs `target_ref` and `requested_ref_name` to rank the bookmarks on the workspace's stack.
         """
 
     @abstractmethod
@@ -134,8 +133,7 @@ class WorkspaceVcs(ABC):
     ) -> PullRequestRefs:
         """What PR polling needs to look up the workspace's pull request.
 
-        jj ranks the bookmarks on the stack measured from `target_ref`,
-        preferring `requested_ref_name` among bookmarks on one revision.
+        jj needs `target_ref` and `requested_ref_name` to rank the bookmarks on the workspace's stack.
         """
 
     @abstractmethod
