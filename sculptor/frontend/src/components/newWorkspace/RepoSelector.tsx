@@ -1,5 +1,4 @@
 import { Flex, Select, Text } from "@radix-ui/themes";
-import { useSetAtom } from "jotai";
 import { FolderOpenIcon, PlusIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useState } from "react";
@@ -7,8 +6,8 @@ import { useCallback, useState } from "react";
 import type { ToastContent } from "~/common/state/atoms/toasts.ts";
 
 import type { Project } from "../../api";
-import { ElementIds, getDependenciesStatus } from "../../api";
-import { dependenciesStatusAtom } from "../../common/state/atoms/dependenciesStatus.ts";
+import { ElementIds } from "../../api";
+import { refreshDependenciesStatus } from "../../common/state/atoms/dependenciesStatus.ts";
 import { AddRepoDialog } from "../addRepo/AddRepoDialog.tsx";
 import { prefetchInitialRemoteRepos } from "../addRepo/hooks/useRemoteRepos.ts";
 import { Toast } from "../Toast.tsx";
@@ -58,7 +57,6 @@ export const RepoSelector = ({
 }: RepoSelectorProps): ReactElement => {
   const [toast, setToast] = useState<ToastContent | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
 
   const handleValueChange = (value: string): void => {
     if (value === _NEW_REPO_SELECT_VALUE) {
@@ -76,27 +74,18 @@ export const RepoSelector = ({
 
   // Warm caches when the user pops open the repo dropdown so the Add
   // Repository dialog paints with real data on first frame:
-  //   1. Dependencies status → skips the NotConfiguredSection flash while the
-  //      dialog's own first poll is in flight.
+  //   1. Dependencies status → the backend re-checks and publishes it on the
+  //      stream, so the dialog skips the NotConfiguredSection flash while its
+  //      own re-check is in flight.
   //   2. The github initial repo list → the search combobox paints with
   //      results instead of a spinner. 412 (unconfigured CLI) is harmless
   //      since the combobox doesn't mount in that case.
   // All best-effort; on failure the dialog falls back to its own fetches.
-  const handleSelectOpenChange = useCallback(
-    (isOpen: boolean): void => {
-      if (!isOpen) return;
-      void (async (): Promise<void> => {
-        try {
-          const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-          if (data) setDependenciesStatus(data);
-        } catch {
-          // Dialog's own poll will retry on open.
-        }
-      })();
-      void prefetchInitialRemoteRepos("github");
-    },
-    [setDependenciesStatus],
-  );
+  const handleSelectOpenChange = useCallback((isOpen: boolean): void => {
+    if (!isOpen) return;
+    void refreshDependenciesStatus();
+    void prefetchInitialRemoteRepos("github");
+  }, []);
 
   const currentProject = projects.find((p) => p.objectId === selectedProjectId);
   const displayName = currentProject?.name ?? "Select repo";

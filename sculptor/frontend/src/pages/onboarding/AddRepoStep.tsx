@@ -1,10 +1,10 @@
 import { Box, Button, Flex, Spinner, Text } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ElementIds, getDependenciesStatus } from "~/api";
-import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
+import type { DependenciesStatus } from "~/api";
+import { ElementIds } from "~/api";
+import { refreshDependenciesStatus } from "~/common/state/atoms/dependenciesStatus.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { AddRepoForm } from "~/components/addRepo/AddRepoForm.tsx";
 import { CloneProgressBody, CloneTitleContent } from "~/components/addRepo/CloneProgressView.tsx";
@@ -47,10 +47,10 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
   // on NotConfiguredSection.
   const [mode, setMode] = useState<AddRepoSource>("local");
   const [remoteState, setRemoteState] = useState<Record<RemoteProvider, PerProviderState>>(INITIAL_REMOTE_STATE);
-  // Onboarding runs outside of PageLayout, so the unified stream isn't
-  // populating this atom yet — we refresh manually on mount below.
-  const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
-  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
+  // Onboarding renders before the unified stream connects, so nothing feeds the
+  // shared dependencies status here. This step keeps the snapshot it fetches
+  // for its own form instead.
+  const [dependenciesStatus, setDependenciesStatus] = useState<DependenciesStatus | null>(null);
   const [isRefreshingDeps, setIsRefreshingDeps] = useState(false);
   const { fetchDirectories } = useDirectoryListing();
 
@@ -70,22 +70,13 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
     onSuccess: onComplete,
   });
 
-  // Re-fetch dependency status into the shared atom.
-  // skipWsAck: the dependencies endpoint doesn't open a data-model
-  // transaction, so it never produces the WS ack the SDK waits on by default.
-  // Without this the call would time out at 10s and the GitHub form
-  // would flash NotConfiguredSection.
+  // On failure the last snapshot stays, and the form falls back to
+  // NotConfiguredSection while there is none.
   const refreshDependencies = useCallback(async (): Promise<void> => {
-    try {
-      const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-      if (data) setDependenciesStatus(data);
-    } catch {
-      // Best-effort; the form falls back to NotConfiguredSection.
-    }
-  }, [setDependenciesStatus]);
+    const status = await refreshDependenciesStatus();
+    if (status) setDependenciesStatus(status);
+  }, []);
 
-  // Onboarding runs outside of PageLayout, so the unified stream isn't
-  // populating the atom yet — refresh manually on mount.
   useEffect(() => {
     let isCancelled = false;
     // Genuine mount-time fetch from the backend; the synchronous setState is

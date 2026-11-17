@@ -1,11 +1,11 @@
 import { Box, Button, Dialog, Flex, Spinner, Text } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { ElementIds, getDependenciesStatus } from "~/api";
-import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
+import { ElementIds } from "~/api";
+import { dependenciesStatusAtom, refreshDependenciesStatus } from "~/common/state/atoms/dependenciesStatus.ts";
 import type { ToastContent } from "~/common/state/atoms/toasts.ts";
 import { useDirectoryListing } from "~/components/pathAutocomplete/hooks/useDirectoryListing.ts";
 
@@ -52,7 +52,6 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   // before the dialog opens, so we render the configured state on first paint
   // instead of flashing NotConfiguredSection while our first poll is in flight.
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
-  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
   // Per-provider form state so switching radio cards preserves each form's
   // submit payload and "search" / "url" view. Owned here so the dialog footer
   // can derive the "Configure …" CTA without the form pushing notifications up.
@@ -83,29 +82,10 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   // opened before the WS stream / dropdown prefetch populated the atom.
   const [isRefreshingDeps, setIsRefreshingDeps] = useState(false);
 
-  // Prime the WS-pushed dependenciesStatus atom via a one-shot HTTP GET. This
-  // deliberately departs from the usual "HTTP → TanStack, WS → atom" split:
-  // the dialog opens during onboarding and before the unified stream is
-  // connected, so there's no WS frame yet to populate the atom. We GET-then-
-  // write so the real CLI state shows on first paint; the WS reconciles the
-  // authoritative value once the stream is live.
-  // skipWsAck: the dependencies endpoint doesn't open a data-model
-  // transaction, so it never produces the WS acknowledgment the SDK
-  // waits on by default. Without this the call times out at 10s and
-  // dependenciesStatus stays null, leaving every provider stuck on
-  // the NotConfiguredSection.
-  const refreshDependencies = useCallback(async (): Promise<void> => {
-    try {
-      const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-      if (data) setDependenciesStatus(data);
-    } catch {
-      // Best-effort; the form falls back to NotConfiguredSection.
-    }
-  }, [setDependenciesStatus]);
-
   // effects
-  // Refresh dependency status when the dialog opens so the radio cards
-  // reflect the current CLI install/auth state on first paint.
+  // Ask the backend to re-check dependency status when the dialog opens, so the
+  // radio cards reflect CLI install/auth changes made outside Sculptor. The
+  // re-checked status arrives on the stream.
   useEffect(() => {
     if (!open) return;
     let isCancelled = false;
@@ -113,14 +93,14 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
     // the loading-flag flip on an external-system sync, not derived state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsRefreshingDeps(true);
-    void refreshDependencies().finally(() => {
+    void refreshDependenciesStatus().finally(() => {
       if (!isCancelled) setIsRefreshingDeps(false);
     });
 
     return (): void => {
       isCancelled = true;
     };
-  }, [open, refreshDependencies]);
+  }, [open]);
 
   // callbacks
   const currentRemoteSubmit = useMemo(
@@ -227,7 +207,7 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
                   view={remoteState.github.view}
                   onViewChange={handleGithubViewChange}
                   onSubmittableChange={handleGithubSubmittableChange}
-                  onNotConfigured={refreshDependencies}
+                  onNotConfigured={refreshDependenciesStatus}
                 />
               </Box>
             </Flex>

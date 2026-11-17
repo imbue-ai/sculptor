@@ -1,8 +1,7 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { useCallback, useEffect } from "react";
 
-import { getDependenciesStatus } from "~/api";
-import { dependenciesStatusAtom, isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus";
+import { isPiAvailableAtom, refreshDependenciesStatus } from "~/common/state/atoms/dependenciesStatus";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings";
 
 /** Label every agent-type picker shows in place of its pi entry while no usable
@@ -19,12 +18,11 @@ export const INSTALL_PI_LABEL = "Install Pi";
  * Availability can go stale in the picker's favor: pi becomes available
  * mid-session (installed outside Sculptor onto PATH), and the stream only
  * re-pushes dependencies status when something else happens to recompute it.
- * So the hook re-checks with a one-shot GET (the AddRepoDialog pattern) on
- * mount, and exposes `refreshPiAvailability` for pickers whose host outlives
- * the install (the new-workspace select re-checks on every dropdown open; the
- * tab bar's + menu mounts its items per open, so mount alone covers it).
- * skipWsAck: the dependencies endpoint opens no data-model transaction, so no
- * WS acknowledgment ever follows.
+ * So the hook asks the backend to re-check on mount, and exposes
+ * `refreshPiAvailability` for pickers whose host outlives the install (the
+ * new-workspace select re-checks on every dropdown open; the tab bar's + menu
+ * mounts its items per open, so mount alone covers it). The re-checked status
+ * arrives on the stream.
  */
 export const usePiAgentOption = (): {
   isPiAvailable: boolean;
@@ -32,21 +30,12 @@ export const usePiAgentOption = (): {
   refreshPiAvailability: () => void;
 } => {
   const isPiAvailable = useAtomValue(isPiAvailableAtom);
-  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
   const openSettings = useOpenSettings();
   const openPiSettings = useCallback((): void => openSettings("PI"), [openSettings]);
 
   const refreshPiAvailability = useCallback((): void => {
-    const refresh = async (): Promise<void> => {
-      try {
-        const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-        if (data) setDependenciesStatus(data);
-      } catch {
-        // Best-effort; the atom keeps its last (fail-open) value.
-      }
-    };
-    void refresh();
-  }, [setDependenciesStatus]);
+    void refreshDependenciesStatus();
+  }, []);
 
   useEffect(() => {
     refreshPiAvailability();

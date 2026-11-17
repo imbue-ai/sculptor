@@ -1,10 +1,10 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useState } from "react";
 
 import type { DependenciesStatus, DependencyInfo, InstallProgress } from "~/api";
-import { getDependenciesStatus, installDependency, UserConfigField } from "~/api";
+import { installDependency, UserConfigField } from "~/api";
 import { usePollingInterval } from "~/common/hooks/usePollingInterval";
-import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
+import { dependenciesStatusAtom, refreshDependenciesStatus } from "~/common/state/atoms/dependenciesStatus";
 
 type ManagedDependencyTool = "CLAUDE" | "PI" | "JJ";
 
@@ -68,7 +68,6 @@ export const useManagedDependency = ({
 }: UseManagedDependencyParams): UseManagedDependencyResult => {
   const configKey = DEPENDENCY_CONFIG_KEY[tool];
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
-  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
   const info = selectInfo(dependenciesStatus, tool);
   const mode = info?.mode ?? "MANAGED";
 
@@ -116,38 +115,30 @@ export const useManagedDependency = ({
         setInstallError(result?.error ?? "Installation failed");
         setIsInstalling(false);
       }
-      // Poll for status until the backend confirms install completed. The WebSocket
-      // push from notify_observers() is not always reliable, so poll as a fallback.
+      // Poll until the backend reports the install finished. Each poll also makes
+      // the backend publish the status on the stream, which renders it; the
+      // response only decides when to stop.
       startPolling(async () => {
-        try {
-          const { data: deps } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-          if (deps) {
-            setDependenciesStatus(deps);
-          }
+        const depInfo = selectInfo(await refreshDependenciesStatus(), tool);
+        // A failed download surfaces install_error while leaving the stale binary
+        // in place, so stop polling and let the error render rather than spinning
+        // forever.
+        if (depInfo?.installError) {
+          stopPolling();
+          setIsInstalling(false);
+          return;
+        }
 
-          const depInfo = selectInfo(deps, tool);
-          // A failed download surfaces install_error while leaving the stale binary
-          // in place, so stop polling and let the error render rather than spinning
-          // forever.
-          if (depInfo?.installError) {
-            stopPolling();
-            setIsInstalling(false);
-            return;
-          }
-
-          if (depInfo?.installed && !depInfo?.installProgress) {
-            stopPolling();
-            setIsInstalling(false);
-          }
-        } catch {
-          // Continue polling on error
+        if (depInfo?.installed && !depInfo?.installProgress) {
+          stopPolling();
+          setIsInstalling(false);
         }
       });
     } catch (error) {
       setInstallError(error instanceof Error ? error.message : "Installation failed");
       setIsInstalling(false);
     }
-  }, [tool, setDependenciesStatus, startPolling, stopPolling]);
+  }, [tool, startPolling, stopPolling]);
 
   // In CUSTOM mode the path field reflects the resolved binary path, so it shows the
   // active path rather than the raw "MANAGED"/"CUSTOM" mode keyword stored in config.

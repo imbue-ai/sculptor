@@ -188,8 +188,7 @@ export const useUnifiedStream = (): void => {
         }
 
         if (userUpdate.projects && userUpdate.projects.length > 0) {
-          const activeProjects = userUpdate.projects.filter((p) => !p.isDeleted);
-          updateProjects(activeProjects);
+          updateProjects(userUpdate.projects);
         }
 
         if (userUpdate.workspaces) {

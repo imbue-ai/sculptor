@@ -23,13 +23,25 @@ vi.mock("~/api", async (importOriginal) => {
 });
 
 // The poll loop has its own tests (usePollingInterval.test.ts); stub it so these
-// tests stay timer-free and assert only the hook's own state handling.
+// tests stay timer-free and assert only the hook's own state handling. A test
+// runs one poll tick by calling the function handed to startPolling.
+const { mockStartPolling, mockStopPolling } = vi.hoisted(() => ({
+  mockStartPolling: vi.fn(),
+  mockStopPolling: vi.fn(),
+}));
 vi.mock("~/common/hooks/usePollingInterval", () => ({
   usePollingInterval: (): { startPolling: () => void; stopPolling: () => void } => ({
-    startPolling: vi.fn(),
-    stopPolling: vi.fn(),
+    startPolling: mockStartPolling,
+    stopPolling: mockStopPolling,
   }),
 }));
+
+const runPollTick = async (): Promise<void> => {
+  const pollFn = mockStartPolling.mock.lastCall?.[0] as () => Promise<void>;
+  await act(async () => {
+    await pollFn();
+  });
+};
 
 const makeInfo = (overrides: Partial<DependencyInfo>): DependencyInfo => ({ installed: false, ...overrides });
 
@@ -211,5 +223,64 @@ describe("useManagedDependency", () => {
     expect(mockInstallDependency).toHaveBeenCalledWith({ query: { tool: "CLAUDE" }, meta: { skipWsAck: true } });
     expect(result.current.isInstalling).toBe(false);
     expect(result.current.effectiveInstallError).toBe("no network");
+  });
+
+  describe("the install poll", () => {
+    const INSTALLING = makeStatus({
+      jj: makeInfo({
+        installed: false,
+        mode: "MANAGED",
+        installProgress: { tool: "JJ", bytesDownloaded: 1, totalBytes: 10 },
+      }),
+    });
+    const INSTALLED = makeStatus({
+      jj: makeInfo({ installed: true, mode: "MANAGED", source: "MANAGED", isVersionInRange: true }),
+    });
+
+    const startInstall = async (): Promise<{ current: ReturnType<typeof useManagedDependency> }> => {
+      store.set(dependenciesStatusAtom, INSTALLING);
+      mockInstallDependency.mockResolvedValue({ data: { success: true } });
+      const { result } = renderHook(() => useManagedDependency({ tool: "JJ", onSettingChange }), { wrapper });
+      await act(async () => {
+        await result.current.handleInstall();
+      });
+      return result;
+    };
+
+    it("keeps a newer stream frame when a poll response lands after it", async () => {
+      await startInstall();
+      let resolvePoll: (status: DependenciesStatus) => void = () => {};
+      mockGetDependenciesStatus.mockReturnValue(
+        new Promise((resolve) => {
+          resolvePoll = (status): void => resolve({ data: status });
+        }),
+      );
+
+      const pollFn = mockStartPolling.mock.lastCall?.[0] as () => Promise<void>;
+      let tick: Promise<void> = Promise.resolve();
+      act(() => {
+        tick = pollFn();
+      });
+      act(() => {
+        store.set(dependenciesStatusAtom, INSTALLED);
+      });
+      await act(async () => {
+        resolvePoll(INSTALLING);
+        await tick;
+      });
+
+      expect(store.get(dependenciesStatusAtom)).toBe(INSTALLED);
+    });
+
+    it("stops once a poll response reports the install finished, leaving the status to the stream", async () => {
+      const result = await startInstall();
+      mockGetDependenciesStatus.mockResolvedValue({ data: INSTALLED });
+
+      await runPollTick();
+
+      expect(mockStopPolling).toHaveBeenCalled();
+      expect(store.get(dependenciesStatusAtom)).toBe(INSTALLING);
+      expect(result.current.isInstalling).toBe(false);
+    });
   });
 });

@@ -25,33 +25,24 @@ export const projectsArrayAtom = atom<ReadonlyArray<Project>>((get) => {
   });
 });
 
+/** Apply the projects in a stream frame: upsert the live ones and drop the ones
+ * marked deleted. Only the unified stream writes project state. */
 export const updateProjectsAtom = atom(null, (get, set, projects: ReadonlyArray<Project>) => {
-  const deltaProjectIds = projects.map((project) => project.objectId);
   const currentProjectIds = get(projectIdsAtom);
+  const existingIdSet = new Set(currentProjectIds);
+  const deletedIdSet = new Set(projects.filter((project) => project.isDeleted).map((project) => project.objectId));
+  const liveProjects = projects.filter((project) => !project.isDeleted);
 
-  projects.forEach((project) => {
+  liveProjects.forEach((project) => {
     set(projectAtomFamily(project.objectId), project);
   });
+  deletedIdSet.forEach((projectId) => {
+    set(projectAtomFamily(projectId), null);
+  });
 
-  // Merge delta IDs with existing IDs (add any new ones, keep all existing ones)
-  const existingIdSet = new Set(currentProjectIds);
-  const newIds = deltaProjectIds.filter((id) => !existingIdSet.has(id));
-
-  // Only update the IDs array if there are new projects
-  if (newIds.length > 0) {
-    set(projectIdsAtom, [...currentProjectIds, ...newIds]);
+  const keptIds = currentProjectIds.filter((id) => !deletedIdSet.has(id));
+  const newIds = liveProjects.map((project) => project.objectId).filter((id) => !existingIdSet.has(id));
+  if (newIds.length > 0 || keptIds.length !== currentProjectIds.length) {
+    set(projectIdsAtom, [...keptIds, ...newIds]);
   }
-});
-
-export const removeProjectAtom = atom(null, (get, set, projectId: string) => {
-  const currentProjectIds = get(projectIdsAtom);
-  if (!currentProjectIds.includes(projectId)) {
-    return;
-  }
-
-  set(projectAtomFamily(projectId), null);
-  set(
-    projectIdsAtom,
-    currentProjectIds.filter((id) => id !== projectId),
-  );
 });
