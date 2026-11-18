@@ -4,10 +4,11 @@ Each test spawns its own instance, so a test that colocates its repository with 
 leaves no `.jj` behind for another.
 
 jj is given to the backend as a CUSTOM path to the pinned binary, so nothing is
-downloaded. The `jj_isolated_env` fixture gives the test process an empty jj user
-config and a test identity; the backend inherits that environment when it is spawned,
-so neither the test's jj nor the backend's reads or writes the developer's own jj
-config, and JJ_AVAILABLE does not depend on the machine running the tests.
+downloaded. A test that needs jj available takes the `jj_isolated_env` fixture, which
+gives the test process an empty jj user config and a test identity. The backend
+inherits that environment when it is spawned, so neither the test's jj nor the
+backend's reads or writes the developer's own jj config, and JJ_AVAILABLE does not
+depend on the machine running the tests.
 """
 
 from pathlib import Path

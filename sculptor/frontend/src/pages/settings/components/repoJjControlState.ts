@@ -9,12 +9,8 @@ export type ColocationSwitchState =
   | { kind: "OFF" };
 
 /**
- * The colocation switch, from the streamed state, whether a colocation request
- * is still settling, and JJ_AVAILABLE.
- *
- * A request settles once the stream reports the colocation it started; until
- * then the switch shows it initializing. While jj is unavailable the backend
- * cannot read colocation and reports ABSENT, so availability comes first.
+ * While jj is unavailable the backend cannot read colocation and reports every
+ * repository ABSENT, so availability decides first.
  */
 export const getColocationSwitchState = (inputs: {
   isJjAvailable: boolean;
@@ -47,12 +43,9 @@ export type UseJjSwitchState =
   | { kind: "ENABLED"; isChecked: boolean };
 
 /**
- * The "use jj for new workspaces" switch, from JJ_AVAILABLE, the streamed
- * colocation, the project's stored flag, and the value of a pending request.
- *
- * While a request is pending it shows the requested value and takes no other
- * request; otherwise it shows the stored value. Nothing is written ahead of
- * the server.
+ * Nothing is written ahead of the server: while a request is pending the
+ * switch shows the requested value and takes no other request, and otherwise
+ * it shows the stored value.
  */
 export const getUseJjSwitchState = (inputs: {
   isJjAvailable: boolean;

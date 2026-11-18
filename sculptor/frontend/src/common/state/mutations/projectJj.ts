@@ -1,11 +1,10 @@
 /**
  * TanStack Query mutation hooks for a repository's jj controls.
  *
- * Neither hook writes a store. The stream is the only writer of the project
- * row and of the repository's jj state: a colocation reports its progress and
- * outcome there, and the "use jj" request resolves only after the frame that
- * carries the updated project. A failed request leaves both untouched, so
- * there is nothing to roll back; `onError` reports it.
+ * Neither hook writes a store: the stream is the only writer of the project
+ * row and of the repository's jj state, so a failed request leaves nothing to
+ * roll back, and `onError` reports it. The "use jj" request resolves only
+ * after the stream frame that carries the updated project.
  */
 
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";

@@ -45,7 +45,6 @@ type RepoJjControlsProps = {
   setToast: (toast: ToastContent | null) => void;
 };
 
-/** A repository's two jj switches: colocate it with jj, and use jj for its new workspaces. */
 export const RepoJjControls = ({ projectId, projectPath, setToast }: RepoJjControlsProps): ReactElement => {
   const isJjAvailable = useAtomValue(isJjAvailableAtom);
   const jjState = useAtomValue(projectJjStateAtomFamily(projectId));
