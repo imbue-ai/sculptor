@@ -4,7 +4,6 @@ from typing import cast
 import pytest
 
 from sculptor.config.settings import SculptorSettings
-from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.service_collections.service_collection import CompleteServiceCollection
@@ -29,6 +28,7 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.web.pr_polling_service import PrPollingService
 
 
@@ -41,13 +41,16 @@ def silly_global_config() -> Generator[UserConfig, None, None]:
 
 
 @pytest.fixture
-def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary) -> Generator[None, None, None]:
-    """Make Sculptor's own dependency resolution find the pinned jj, whatever else is installed."""
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(
-            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
-        )
-    )
+def jj_resolved_to_the_pinned_binary(
+    jj_binary: JjBinary, jj_isolated_env: JjIsolatedEnv, silly_global_config: UserConfig
+) -> Generator[None, None, None]:
+    """Make Sculptor's own dependency resolution find the pinned jj, with the test identity, whatever the machine has.
+
+    It builds on `silly_global_config`, so any fixture that installs that config is set up
+    first and cannot replace the pinned path.
+    """
+    dependency_paths = silly_global_config.dependency_paths.model_copy(update={"jj": str(jj_binary.path)})
+    set_user_config_instance(silly_global_config.model_copy(update={"dependency_paths": dependency_paths}))
     yield
     set_user_config_instance(None)
 

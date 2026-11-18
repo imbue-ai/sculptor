@@ -4,13 +4,18 @@ The resolver tests use fake ``jj`` scripts that only answer ``--version``; every
 test runs the jj that ``jj_binary`` resolves.
 """
 
+import os
 import re
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.jj_version import JJ_PINNED_VERSION
+from sculptor.testing.jj_repos import JJ_TEST_USER_EMAIL
+from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import JjIsolatedEnv
@@ -21,6 +26,8 @@ from sculptor.testing.jj_repos import make_workspace_stale
 from sculptor.testing.jj_repos import require_jj_binary
 from sculptor.testing.jj_repos import resolve_jj_binary
 from sculptor.testing.jj_repos import run_jj
+from sculptor.web.data_types import JjAvailable
+from sculptor.web.data_types import JjIdentity
 
 _OLD_JJ_VERSION_OUTPUT = "jj 0.28.2-b9ebe2f03c976515d2a155a411a368ae773c5493"
 _PINNED_JJ_VERSION_OUTPUT = f"jj {JJ_PINNED_VERSION}-7d382314f9420b4b8d932245b49c99492c812b9f"
@@ -186,3 +193,33 @@ def test_make_workspace_stale_leaves_the_workspace_reporting_a_stale_working_cop
 
     assert status.returncode != 0
     assert "The working copy is stale" in status.stderr
+
+
+@pytest.fixture
+def decoy_jj_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A different jj first on PATH, where Sculptor's default resolution would find it."""
+    decoy = _write_fake_jj(tmp_path / "decoy-bin" / "jj", _PINNED_JJ_VERSION_OUTPUT)
+    monkeypatch.setenv("PATH", f"{decoy.parent}:{os.environ['PATH']}")
+
+
+def _assert_sculptor_resolves_the_pinned_jj_with_the_test_identity(
+    services: CompleteServiceCollection, jj_binary: JjBinary
+) -> None:
+    assert services.dependency_management_service.resolve_binary_path(Dependency.JJ) == str(jj_binary.path)
+    assert services.dependency_management_service.get_jj_readiness() == JjAvailable(
+        blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL)
+    )
+
+
+@pytest.mark.usefixtures("decoy_jj_on_path")
+def test_the_pinned_jj_survives_a_service_collection_set_up_after_it(
+    jj_resolved_to_the_pinned_binary: None, test_service_collection: CompleteServiceCollection, jj_binary: JjBinary
+) -> None:
+    _assert_sculptor_resolves_the_pinned_jj_with_the_test_identity(test_service_collection, jj_binary)
+
+
+@pytest.mark.usefixtures("decoy_jj_on_path")
+def test_the_pinned_jj_survives_a_service_collection_set_up_before_it(
+    test_service_collection: CompleteServiceCollection, jj_resolved_to_the_pinned_binary: None, jj_binary: JjBinary
+) -> None:
+    _assert_sculptor_resolves_the_pinned_jj_with_the_test_identity(test_service_collection, jj_binary)
