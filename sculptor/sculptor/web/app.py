@@ -328,6 +328,7 @@ from sculptor.web.open_with import open_path_in_external_app
 from sculptor.web.path_id_validation import validate_project_id
 from sculptor.web.path_id_validation import validate_task_id
 from sculptor.web.path_id_validation import validate_workspace_id
+from sculptor.web.project_jj_routes import project_jj_router
 from sculptor.web.remote_repos import remote_repos_router
 from sculptor.web.skills import discover_skills
 from sculptor.web.streams import Scope
@@ -341,6 +342,7 @@ from sculptor.web.ui_actions import publish_ui_action
 from sculptor.web.ui_actions import subscriber_count
 from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload_diagnostics
 from sculptor.web.workspace_jj_routes import workspace_jj_router
+from sculptor.web.workspace_setup_command_routes import workspace_setup_command_router
 
 UpdateT = TypeVar("UpdateT", bound=StreamingUpdate)
 
@@ -5504,6 +5506,8 @@ def _element_tags() -> ElementIDs:
 APP.include_router(router)
 APP.include_router(remote_repos_router)
 APP.include_router(workspace_jj_router)
+APP.include_router(project_jj_router)
+APP.include_router(workspace_setup_command_router)
 
 APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 

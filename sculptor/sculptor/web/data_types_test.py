@@ -8,6 +8,8 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.state.messages import LLMModel
 from sculptor.web.data_types import CreateWorkspaceRequestV2
+from sculptor.web.data_types import JjColocationBlocker
+from sculptor.web.data_types import JjColocationPreflight
 from sculptor.web.data_types import JjColocationState
 from sculptor.web.data_types import ProjectJjState
 from sculptor.web.data_types import SendMessageRequest
@@ -94,4 +96,28 @@ def test_a_failed_colocation_carries_its_error() -> None:
             colocation=JjColocationState.FAILED,
             colocation_error=None,
             creates_jj_workspaces=False,
+        )
+
+
+def test_a_preflight_gives_a_reason_exactly_when_jj_unavailable_is_a_blocker() -> None:
+    preflight = JjColocationPreflight(
+        blockers=(JjColocationBlocker.JJ_UNAVAILABLE,),
+        warnings=(),
+        has_uncommitted_changes=False,
+        jj_unavailable_reason="jj is not installed",
+    )
+    assert preflight.jj_unavailable_reason == "jj is not installed"
+    with pytest.raises(ValidationError):
+        JjColocationPreflight(
+            blockers=(JjColocationBlocker.JJ_UNAVAILABLE,),
+            warnings=(),
+            has_uncommitted_changes=False,
+            jj_unavailable_reason=None,
+        )
+    with pytest.raises(ValidationError):
+        JjColocationPreflight(
+            blockers=(JjColocationBlocker.LFS,),
+            warnings=(),
+            has_uncommitted_changes=False,
+            jj_unavailable_reason="jj is not installed",
         )

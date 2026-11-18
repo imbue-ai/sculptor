@@ -239,3 +239,18 @@ def test_unified_stream_emits_notifications_and_finished_requests(
         assert any(entry.get("message") == notification.message for entry in notifications)
 
         assert len(finished_request_ids) > 0, "Should receive finished request IDs in the stream"
+
+
+def test_unified_stream_carries_the_jj_state_of_each_repository(server_url: str, test_project: Project) -> None:
+    project_key = str(test_project.object_id)
+
+    stream_url = server_url + "/api/v1/stream/ws"
+    with stream_response(stream_url) as queue:
+        update = _poll_for_update(queue, predicate=lambda u: project_key in u.get("projectJjStateByProjectId", {}))
+
+    jj_state = update["projectJjStateByProjectId"][project_key]
+    assert (jj_state["colocation"], jj_state["colocationError"], jj_state["createsJjWorkspaces"]) == (
+        "ABSENT",
+        None,
+        False,
+    )

@@ -1013,6 +1013,74 @@ class ProjectJjState(SerializableModel):
         return self
 
 
+class JjColocationBlocker(UpperCaseStrEnum):
+    """Something about a repository that stops Sculptor making it a jj colocation."""
+
+    JJ_UNAVAILABLE = auto()
+    # A `.jj` whose git store is not this repository's `.git`.
+    JJ_REPOSITORY_NOT_COLOCATED = auto()
+    # jj workspaces cannot hold submodules or LFS files.
+    SUBMODULES = auto()
+    LFS = auto()
+    # An operation, such as a merge or a rebase, that git has stopped partway through.
+    GIT_OPERATION_IN_PROGRESS = auto()
+
+
+class JjColocationWarning(UpperCaseStrEnum):
+    """Something about a repository that works differently once its workspaces are jj workspaces."""
+
+    # Git hooks never run in a jj workspace.
+    HOOKS = auto()
+    SPARSE_CHECKOUT = auto()
+
+
+class JjColocationPreflight(SerializableModel):
+    """What colocating a repository with jj would run into; reading it changes nothing."""
+
+    blockers: tuple[JjColocationBlocker, ...]
+    warnings: tuple[JjColocationWarning, ...]
+    has_uncommitted_changes: bool = Field(
+        description="The repository has uncommitted changes, which become jj's working-copy commit"
+    )
+    jj_unavailable_reason: str | None = Field(
+        description="Why jj cannot be used, worded for the user; set exactly when JJ_UNAVAILABLE is a blocker"
+    )
+
+    @model_validator(mode="after")
+    def _require_reason_exactly_when_jj_is_unavailable(self) -> "JjColocationPreflight":
+        is_jj_unavailable = JjColocationBlocker.JJ_UNAVAILABLE in self.blockers
+        if is_jj_unavailable != (self.jj_unavailable_reason is not None):
+            raise ValueError("jj_unavailable_reason must be set exactly when JJ_UNAVAILABLE is a blocker")
+        return self
+
+
+class UseJjForNewWorkspacesRequest(RequestModel):
+    use_jj_for_new_workspaces: bool
+
+
+class JjBookmarkChoice(SerializableModel):
+    """A bookmark a new jj workspace can start from or target."""
+
+    symbol: str = Field(description="How jj names the bookmark: `main` locally, `main@origin` on a remote")
+    name: str
+    remote: str | None = Field(description="None for a local bookmark")
+    commit_id: str
+
+
+class JjBookmarkChoicesResponse(SerializableModel):
+    """A colocated repository's bookmarks that point at exactly one commit, in jj's order."""
+
+    bookmarks: list[JjBookmarkChoice]
+
+
+class WorkspaceSetupCommandDefaults(SerializableModel):
+    """The setup command each workspace kind runs when its project configures none."""
+
+    default_setup_command_by_initialization_strategy: dict[WorkspaceInitializationStrategy, str | None] = Field(
+        description="Every workspace kind; None for a kind that runs no setup command"
+    )
+
+
 class DependenciesStatus(SerializableModel):
     """Status of required dependencies with path/version info."""
 
