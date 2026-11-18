@@ -27,8 +27,7 @@ COLOCATION_INIT_TIMEOUT_SECONDS = 600.0
 # jj mirrors the colocated git repository's own branches as bookmarks on this remote.
 _GIT_TRACKING_REMOTE = "git"
 _JSON_LINES_BOOKMARK_TEMPLATE = 'json(self) ++ "\\n"'
-# The first line says whether the commit is the root commit; each later line is one of its remote bookmarks.
-_ROOT_AND_REMOTE_BOOKMARKS_TEMPLATE = 'json(root) ++ "\\n" ++ remote_bookmarks.map(|b| json(b) ++ "\\n").join("")'
+_REMOTE_BOOKMARKS_TEMPLATE = 'remote_bookmarks.map(|b| json(b) ++ "\\n").join("")'
 _TRUNK_FALLBACK_BOOKMARK_NAMES = ("main", "master")
 # The `name` keyword prints jj's quoted display form for names that need quoting; `json(name)` is the raw name.
 _WORKSPACE_LIST_TEMPLATE = 'json(name) ++ "\\t" ++ json(root) ++ "\\n"'
@@ -74,21 +73,16 @@ def resolve_trunk_symbol(jj: JjCli, repo_dir: Path) -> str | None:
     (no remote has a trunk), local `main`, then `master`. None otherwise.
     """
     result = jj.run(
-        ["log", "--no-graph", "--limit", "1", "-r", "trunk()", "-T", _ROOT_AND_REMOTE_BOOKMARKS_TEMPLATE],
+        ["log", "--no-graph", "--limit", "1", "-r", "trunk()", "-T", _REMOTE_BOOKMARKS_TEMPLATE],
         repo_dir,
         snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
     )
-    lines = result.stdout.splitlines()
-    # A user's own `trunk()` alias can name no commit.
-    if not lines:
-        return None
-    is_root_line, *bookmark_lines = lines
-    if json.loads(is_root_line):
-        return _find_local_trunk_fallback(jj, repo_dir)
-    for line in bookmark_lines:
+    for line in result.stdout.splitlines():
         bookmark = _parse_bookmark(json.loads(line))
         if bookmark.remote != _GIT_TRACKING_REMOTE:
             return format_bookmark_symbol(JjBookmarkSymbol(name=bookmark.name, remote=bookmark.remote))
+    if _matches_any_commit(jj, repo_dir, "trunk() & root()"):
+        return _find_local_trunk_fallback(jj, repo_dir)
     return None
 
 
@@ -107,13 +101,7 @@ def resolve_commit_id(jj: JjCli, repo_dir: Path, revset: JjRevset) -> str | None
 
 def does_bookmark_exist(jj: JjCli, repo_dir: Path, name: str) -> bool:
     """Whether a bookmark called `name` exists locally or on any remote."""
-    revset = f"{local_bookmark_revset(name)} | {any_remote_bookmark_revset(name)}"
-    result = jj.run(
-        ["log", "--no-graph", "--limit", "1", "-r", revset, "-T", '"found"'],
-        repo_dir,
-        snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
-    )
-    return result.stdout != ""
+    return _matches_any_commit(jj, repo_dir, f"{local_bookmark_revset(name)} | {any_remote_bookmark_revset(name)}")
 
 
 def read_remotes(jj: JjCli, repo_dir: Path) -> dict[str, str]:
@@ -211,6 +199,15 @@ def read_workspace_config_path(jj: JjCli, workspace_root: Path) -> Path | None:
 def update_stale(jj: JjCli, workspace_root: Path) -> None:
     """Bring a stale workspace's working copy up to date with the repository."""
     jj.run(["workspace", "update-stale"], workspace_root, snapshot=JjSnapshotPolicy.SNAPSHOT)
+
+
+def _matches_any_commit(jj: JjCli, repo_dir: Path, revset: str) -> bool:
+    result = jj.run(
+        ["log", "--no-graph", "--limit", "1", "-r", revset, "-T", '"found"'],
+        repo_dir,
+        snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+    )
+    return result.stdout != ""
 
 
 def _find_local_trunk_fallback(jj: JjCli, repo_dir: Path) -> str | None:
