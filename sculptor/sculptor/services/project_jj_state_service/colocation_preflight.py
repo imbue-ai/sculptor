@@ -13,7 +13,7 @@ from sculptor.web.data_types import JjColocationPreflight
 from sculptor.web.data_types import JjColocationWarning
 from sculptor.web.data_types import JjReadiness
 
-# What git leaves in its directory while a merge, rebase, cherry-pick or revert is stopped.
+# Paths in the git directory that exist only while git is stopped partway through an operation.
 _OPERATION_IN_PROGRESS_MARKERS = ("MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", "REVERT_HEAD")
 _SUBMODULE_INDEX_MODE = "160000"
 _SAMPLE_HOOK_SUFFIX = ".sample"

@@ -1022,7 +1022,7 @@ class JjColocationBlocker(UpperCaseStrEnum):
     # jj workspaces cannot hold submodules or LFS files.
     SUBMODULES = auto()
     LFS = auto()
-    # A merge, rebase, cherry-pick or revert that git has stopped in.
+    # An operation, such as a merge or a rebase, that git has stopped partway through.
     GIT_OPERATION_IN_PROGRESS = auto()
 
 
@@ -1043,7 +1043,7 @@ class JjColocationPreflight(SerializableModel):
         description="The repository has uncommitted changes, which become jj's working-copy commit"
     )
     jj_unavailable_reason: str | None = Field(
-        description="Why jj cannot be used, worded as the routes that need jj word it; set exactly when JJ_UNAVAILABLE is a blocker"
+        description="Why jj cannot be used, worded for the user; set exactly when JJ_UNAVAILABLE is a blocker"
     )
 
     @model_validator(mode="after")

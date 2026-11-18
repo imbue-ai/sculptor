@@ -75,7 +75,6 @@ class _StopWorker(FrozenModel):
     """Wakes the worker thread so it sees that the service has stopped."""
 
 
-# A project to recompute, or the dependency status, whose jj readiness may have changed.
 _WorkItem = Project | DependenciesStatus | _StopWorker
 
 
@@ -101,7 +100,7 @@ def derive_project_jj_state(
 
 
 def is_colocation_gone(facts: JjWorkspaceCreationFacts, *, is_repository_present: bool) -> bool:
-    """The repository wants jj workspaces, is on disk, and jj can see it is not colocated.
+    """Whether the repository asks for jj workspaces but jj finds no colocation, so the flag should be turned off.
 
     Without jj, colocation cannot be read; without the repository, as on a
     drive that is not mounted, there is nothing to read. Neither counts as gone.
@@ -208,10 +207,10 @@ class ProjectJjStateService(Service):
 
         On success the repository's `use_jj_for_new_workspaces` is turned on,
         so the outcome does not depend on anyone watching. A repository that is
-        already colocated is not initialized again. Raises
-        `JjUnavailableError`, `ColocationBlockedError` (the
-        pre-flight found blockers) or `ColocationAlreadyRunningError`; raises
-        `VcsCommandError` when git cannot read the repository.
+        already colocated is not initialized again. Raises `JjUnavailableError`,
+        `ColocationBlockedError` (the pre-flight found blockers) or
+        `ColocationAlreadyRunningError`; raises `VcsCommandError` when git
+        cannot read the repository.
         """
         jj_readiness = self.dependency_management_service.get_jj_readiness()
         require_jj_available(jj_readiness)

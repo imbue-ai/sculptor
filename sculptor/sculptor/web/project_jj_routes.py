@@ -1,7 +1,7 @@
-"""Routes for a repository's jj configuration: colocation, its pre-flight, the jj flag and the bookmarks.
+"""Routes for a repository's jj configuration.
 
 The repository's jj state itself reaches the frontend on the stream, under
-`project_jj_state_by_project_id`; app.py includes the router.
+`project_jj_state_by_project_id`.
 """
 
 from fastapi import Depends

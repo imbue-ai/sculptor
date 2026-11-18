@@ -1,4 +1,4 @@
-"""The default setup command of each workspace kind; app.py includes the router."""
+"""The default setup command of each workspace kind."""
 
 from fastapi import Depends
 from fastapi import Request
