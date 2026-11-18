@@ -245,9 +245,8 @@ create an account (the button stays disabled until you've entered a valid-lookin
 one containing an `@`). If you'd rather
 not sign up, **Continue without an account** skips straight ahead. This step is also where you make
 your **telemetry** choice — a checkbox (on by default) governs whether Sculptor shares crash reports
-and usage data — alongside an optional marketing opt-in and a reminder that your code stays yours:
-Imbue does not store your repositories or train on your code. Your account email later lives under
-**Settings › Privacy**.
+and usage data — alongside a reminder that your code stays yours: Imbue does not store your
+repositories or train on your code. Your account email later lives under **Settings › Privacy**.
 
 Next, Sculptor checks the **dependencies** it needs — chiefly the Claude CLI and Git. Each shows up
 as a card: a green check with the detected path and version when it's ready, or a warning with an

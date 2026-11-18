@@ -693,7 +693,6 @@ class EmailConfigRequest(RequestModel):
 
     user_email: EmailStr
     full_name: str | None = None
-    did_opt_in_to_marketing: bool = False
     is_telemetry_enabled: bool = True
 
 

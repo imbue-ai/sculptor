@@ -9,13 +9,12 @@ import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import styles from "./OnboardingWizard.module.scss";
 
 type WelcomeStepProps = {
-  onNext: (email: string, fullName: string | null, didOptInToMarketing: boolean, isTelemetryEnabled: boolean) => void;
+  onNext: (email: string, fullName: string | null, isTelemetryEnabled: boolean) => void;
   onSkip: (isTelemetryEnabled: boolean) => void;
   isLoading: boolean;
   error: string | null;
   initialEmail: string;
   initialFullName: string | null;
-  initialDidOptInToMarketing: boolean;
   initialIsTelemetryEnabled: boolean;
 };
 
@@ -26,18 +25,16 @@ export const WelcomeStep = ({
   error,
   initialEmail,
   initialFullName,
-  initialDidOptInToMarketing,
   initialIsTelemetryEnabled,
 }: WelcomeStepProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
   const [email, setEmail] = useState(initialEmail);
   const [fullName, setFullName] = useState(initialFullName);
-  const [didOptInToMarketing, setDidOptInToMarketing] = useState(initialDidOptInToMarketing);
   const [isTelemetryEnabled, setIsTelemetryEnabled] = useState(initialIsTelemetryEnabled);
 
   const handleSubmit = (): void => {
     if (email && email.includes("@")) {
-      onNext(email, fullName || null, didOptInToMarketing, isTelemetryEnabled);
+      onNext(email, fullName || null, isTelemetryEnabled);
     }
   };
 
@@ -105,32 +102,18 @@ export const WelcomeStep = ({
         >
           {isLoading ? <Spinner /> : "Get Started"}
         </Button>
-        <Flex direction="column" gap="2" mt="1">
-          <Text as="label" size="2">
-            <Flex gap="2" align="center">
-              <Checkbox
-                checked={didOptInToMarketing}
-                onCheckedChange={(checked) => setDidOptInToMarketing(checked === true)}
-                data-testid={ElementIds.ONBOARDING_MARKETING_CHECKBOX}
-              />
-              <Text size="2" color="gray">
-                Receive product update emails
-              </Text>
-            </Flex>
-          </Text>
-          <Text as="label" size="2">
-            <Flex gap="2" align="center">
-              <Checkbox
-                checked={isTelemetryEnabled}
-                onCheckedChange={(checked) => setIsTelemetryEnabled(checked === true)}
-                data-testid={ElementIds.ONBOARDING_TELEMETRY_CHECKBOX}
-              />
-              <Text size="2" color="gray">
-                Share crash reports and usage data to help improve Sculptor
-              </Text>
-            </Flex>
-          </Text>
-        </Flex>
+        <Text as="label" size="2" mt="1">
+          <Flex gap="2" align="center">
+            <Checkbox
+              checked={isTelemetryEnabled}
+              onCheckedChange={(checked) => setIsTelemetryEnabled(checked === true)}
+              data-testid={ElementIds.ONBOARDING_TELEMETRY_CHECKBOX}
+            />
+            <Text size="2" color="gray">
+              Share crash reports and usage data to help improve Sculptor
+            </Text>
+          </Flex>
+        </Text>
         <Button
           type="button"
           variant="ghost"

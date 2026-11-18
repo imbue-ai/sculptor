@@ -153,11 +153,11 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 |----------|--------|------------------------------|--------------------------|
 | ONB-001 | Missing | — | Assert the step indicator renders 3 dots, current distinct, past clickable, future disabled. |
 | ONB-003 | Missing | — | From the Email step, click the Installation/Add-Repo dots; assert the wizard does NOT advance. |
-| ONB-004 | Partial | test_telemetry_opt_out.py::test_onboarding_email_with_telemetry_opt_out | Assert full-name autofocus, marketing checkbox unchecked, terms/privacy links, and the "Your code is yours…" message. |
+| ONB-004 | Partial | test_telemetry_opt_out.py::test_onboarding_email_with_telemetry_opt_out | Assert full-name autofocus, terms/privacy links, and the "Your code is yours…" message. |
 | ONB-005 | Missing | — | Type empty / no-`@` email; assert Get Started disabled. |
 | ONB-006 | Partial | test_onboarding.py::test_full_onboarding_flow (implicitly) | Explicit test: typing an email with `@` flips Get Started to enabled. |
 | ONB-007 | Partial | test_onboarding.py::test_full_onboarding_flow | Assert the button shows a spinner / is disabled while the email request is in flight. |
-| ONB-010 | Partial | test_telemetry_opt_out.py::test_onboarding_email_with_telemetry_opt_out (asserts persisted flags) | Add a direct UI assertion that clicking the marketing/telemetry checkboxes toggles their checked state. |
+| ONB-010 | Partial | test_telemetry_opt_out.py::test_onboarding_email_with_telemetry_opt_out (asserts persisted flags) | Add a direct UI assertion that clicking the telemetry checkbox toggles its checked state. |
 | ONB-011 | Missing | — | Assert "Let's get you set up" / "The following are required to use Sculptor" headers. |
 | ONB-012 | Missing | — | Drive a `loading` dependency state; assert spinner + "—" path/version. |
 | ONB-015 | Missing | — | Stub a wrong version; assert red error + (expanded) current/required versions. |

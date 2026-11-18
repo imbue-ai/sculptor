@@ -495,7 +495,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **ONB-004 — Email step fields**
   - Given: the Email step is shown.
   - When: viewing the form.
-  - Then: a "Full name" input (autofocused), an "Email address" input, a marketing opt-in checkbox (unchecked), a telemetry checkbox (checked), and terms/privacy links are visible, along with the message "Your code is yours — Imbue does not store your repositories or train on your code".
+  - Then: a "Full name" input (autofocused), an "Email address" input, a telemetry checkbox (checked), and terms/privacy links are visible, along with the message "Your code is yours — Imbue does not store your repositories or train on your code".
 
 - **ONB-005 — Get Started disabled without valid email**
   - Given: the Email step is shown.
@@ -522,10 +522,10 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks "Continue without an account".
   - Then: the link/button disables while in flight and the wizard advances to the Installation step.
 
-- **ONB-010 — Toggle marketing / telemetry checkboxes**
+- **ONB-010 — Toggle telemetry checkbox**
   - Given: the Email step is shown.
-  - When: the user clicks the marketing or telemetry checkbox.
-  - Then: that checkbox toggles checked/unchecked.
+  - When: the user clicks the telemetry checkbox.
+  - Then: the checkbox toggles checked/unchecked.
 
 ## Installation step
 
