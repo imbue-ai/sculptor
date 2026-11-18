@@ -42,7 +42,6 @@ from sculptor.foundation.errors import ExpectedError
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.stale_working_copy_registry import StaleWorkingCopyRegistry
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
-from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import JjRepositoryScan
@@ -291,8 +290,6 @@ class JjWorkspacePoller:
             self._refresh_diff_on_working_copy_change(workspace_id)
         except GitCommandInJjWorkspaceError as e:
             log_exception(e, f"Refreshing the diff of jj workspace {workspace_id} ran git in it")
-        except JjWorkingCopyStaleError as e:
-            logger.debug("Cannot refresh the diff of workspace {}: its working copy is stale: {}", workspace_id, e)
         except ExpectedError as e:
             # The user sees the previous diff until the next refresh.
             logger.debug("Failed to refresh the diff of workspace {} on a new working copy: {}", workspace_id, e)

@@ -21,6 +21,7 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.jj_workspace_poller import JjWorkspacePoller
 from sculptor.services.workspace_service.stale_working_copy_registry import StaleWorkingCopyRegistry
+from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_workspace_vcs import JjWorkspaceVcs
 from sculptor.testing.jj_repos import JjBinary
@@ -368,6 +369,25 @@ def test_a_workspace_whose_update_fails_is_logged_once_and_does_not_stop_the_oth
     assert [state.workspace_id for state in first_states] == [healthy.object_id]
     assert second_states == []
     assert harness.poller.get_jj_state(failing.object_id) is not None
+
+
+def test_a_diff_refresh_that_finds_the_working_copy_stale_does_not_stop_the_new_state_being_published(
+    harness: _Harness,
+) -> None:
+    workspace, checkout = harness.add_workspace()
+    harness.scan()
+
+    def refresh_diff(workspace_id: WorkspaceID) -> None:
+        raise JjWorkingCopyStaleError("stale", command=("jj",), returncode=1, stdout="", stderr="")
+
+    harness.poller._refresh_diff_on_working_copy_change = refresh_diff
+    harness.jj(checkout, "new")
+
+    with record_logged_error_levels() as levels:
+        states = _states(harness.scan())
+
+    assert levels == []
+    assert [state.workspace_id for state in states] == [workspace.object_id]
 
 
 class _UnexpectedRefreshError(Exception):
