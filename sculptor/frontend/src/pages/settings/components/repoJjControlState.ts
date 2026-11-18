@@ -43,14 +43,16 @@ export const getColocationSwitchState = (inputs: {
 export type UseJjSwitchState =
   | { kind: "UNAVAILABLE"; isChecked: boolean }
   | { kind: "NOT_COLOCATED"; isChecked: boolean }
+  | { kind: "SAVING"; isChecked: boolean }
   | { kind: "ENABLED"; isChecked: boolean };
 
 /**
  * The "use jj for new workspaces" switch, from JJ_AVAILABLE, the streamed
  * colocation, the project's stored flag, and the value of a pending request.
  *
- * It shows the requested value while a request is pending and the stored
- * value otherwise; nothing is written ahead of the server.
+ * While a request is pending it shows the requested value and takes no other
+ * request; otherwise it shows the stored value. Nothing is written ahead of
+ * the server.
  */
 export const getUseJjSwitchState = (inputs: {
   isJjAvailable: boolean;
@@ -65,6 +67,10 @@ export const getUseJjSwitchState = (inputs: {
 
   if (inputs.colocation !== "COLOCATED") {
     return { kind: "NOT_COLOCATED", isChecked };
+  }
+
+  if (inputs.requestedValue !== undefined) {
+    return { kind: "SAVING", isChecked };
   }
   return { kind: "ENABLED", isChecked };
 };

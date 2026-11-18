@@ -128,7 +128,7 @@ export const RepoJjControls = ({
             <Switch
               size="1"
               checked={useJjState.isChecked}
-              disabled={useJjState.kind !== "ENABLED" || isUseJjPending}
+              disabled={useJjState.kind !== "ENABLED"}
               onCheckedChange={handleUseJjCheckedChange}
               aria-label="Use jj for new workspaces created in this repository"
               data-testid={ElementIds.REPO_JJ_USE_FOR_NEW_WORKSPACES_SWITCH}
@@ -265,6 +265,7 @@ const newWorkspacesSwitchTooltip = (state: UseJjSwitchState): string | undefined
       return JJ_UNAVAILABLE_TOOLTIP;
     case "NOT_COLOCATED":
       return NOT_COLOCATED_TOOLTIP;
+    case "SAVING":
     case "ENABLED":
       return undefined;
   }

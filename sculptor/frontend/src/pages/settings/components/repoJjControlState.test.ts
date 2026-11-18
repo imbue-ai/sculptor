@@ -107,9 +107,9 @@ describe("getUseJjSwitchState", () => {
     ).toEqual({ kind: "ENABLED", isChecked: true });
   });
 
-  it("shows the requested value while the request is pending", () => {
+  it("is saving while a request is pending, showing the requested value", () => {
     expect(
       getUseJjSwitchState({ isJjAvailable: true, colocation: "COLOCATED", storedValue: true, requestedValue: false }),
-    ).toEqual({ kind: "ENABLED", isChecked: false });
+    ).toEqual({ kind: "SAVING", isChecked: false });
   });
 });
