@@ -28,7 +28,6 @@ type RepoRowProps = {
   // Any other string: user's custom command.
   workspaceSetupCommand: string | null;
   namingPattern: string;
-  useJjForNewWorkspaces: boolean;
   setToast: (toast: ToastContent | null) => void;
 };
 
@@ -56,7 +55,6 @@ export const RepoRow = ({
   shouldAutoFocusSetupCommand = false,
   workspaceSetupCommand,
   namingPattern,
-  useJjForNewWorkspaces,
   setToast,
 }: RepoRowProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
@@ -210,12 +208,7 @@ export const RepoRow = ({
             />
             <Text className={styles.namingPatternHint}>Leave empty to use the global default.</Text>
           </Box>
-          <RepoJjControls
-            projectId={projectId}
-            projectPath={projectPath}
-            useJjForNewWorkspaces={useJjForNewWorkspaces}
-            setToast={setToast}
-          />
+          <RepoJjControls projectId={projectId} projectPath={projectPath} setToast={setToast} />
         </Box>
       )}
     </Box>

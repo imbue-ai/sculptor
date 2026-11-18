@@ -12,6 +12,7 @@ import type { DependenciesStatus, DependencyInfo, JjColocationState, JjReadiness
 import { ElementIds } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { updateProjectJjStatesAtom } from "~/common/state/atoms/projectJjState.ts";
+import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { ToastType } from "~/common/state/atoms/toasts.ts";
 import { queryClient } from "~/common/state/queryClient.ts";
 import { HTTPException } from "~/common/utils/errors.ts";
@@ -77,26 +78,34 @@ const LocationProbe = (): ReactElement => {
   return <div data-testid="location">{location.search}</div>;
 };
 
-const controlsTree = (useJjForNewWorkspaces: boolean): ReactElement => (
-  <QueryClientProvider client={queryClient}>
-    <Provider store={store}>
-      <MemoryRouter initialEntries={["/settings?section=REPOSITORIES"]}>
-        <Theme>
-          <RepoJjControls
-            projectId={PROJECT_ID}
-            projectPath="/home/dev/code/sculptor"
-            useJjForNewWorkspaces={useJjForNewWorkspaces}
-            setToast={setToast}
-          />
-          <LocationProbe />
-        </Theme>
-      </MemoryRouter>
-    </Provider>
-  </QueryClientProvider>
-);
+// The project row as the stream delivers it, with its stored use_jj_for_new_workspaces flag.
+const streamProject = (useJjForNewWorkspaces: boolean): void => {
+  store.set(updateProjectsAtom, [
+    {
+      objectId: PROJECT_ID,
+      organizationReference: "org-1",
+      name: "sculptor",
+      userGitRepoUrl: "file:///home/dev/code/sculptor",
+      useJjForNewWorkspaces,
+    },
+  ]);
+};
 
-const renderControls = (useJjForNewWorkspaces: boolean = false): RenderResult =>
-  render(controlsTree(useJjForNewWorkspaces));
+const renderControls = (useJjForNewWorkspaces: boolean = false): RenderResult => {
+  streamProject(useJjForNewWorkspaces);
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/settings?section=REPOSITORIES"]}>
+          <Theme>
+            <RepoJjControls projectId={PROJECT_ID} projectPath="/home/dev/code/sculptor" setToast={setToast} />
+            <LocationProbe />
+          </Theme>
+        </MemoryRouter>
+      </Provider>
+    </QueryClientProvider>,
+  );
+};
 
 const streamJjState = (state: ProjectJjState): void => {
   act(() => {
@@ -400,14 +409,16 @@ describe("the use jj for new workspaces switch", () => {
   it("shows the stored value the stream delivers once the request succeeds", async () => {
     store.set(updateProjectJjStatesAtom, { [PROJECT_ID]: jjState("COLOCATED") });
     const request = holdNextRequest(apiHarness.updateUseJjForNewWorkspaces);
-    const { rerender } = renderControls(false);
+    renderControls(false);
 
     fireEvent.click(getUseJjSwitch());
     await waitFor(() => expect(getUseJjSwitch()).toBeChecked());
 
     expect(getUseJjSwitch()).toBeDisabled();
 
-    rerender(controlsTree(true));
+    act(() => {
+      streamProject(true);
+    });
     await request.resolve();
 
     await waitFor(() => expect(getUseJjSwitch()).toBeEnabled());

@@ -14,6 +14,7 @@ import {
 } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectJjStateAtomFamily } from "~/common/state/atoms/projectJjState.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useColocateProjectMutation, useUseJjForNewWorkspacesMutation } from "~/common/state/mutations/projectJj.ts";
 import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/state/queryClient.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
@@ -41,20 +42,14 @@ const COLOCATION_SETTLE_TIMEOUT_MS = 10_000;
 type RepoJjControlsProps = {
   projectId: string;
   projectPath: string;
-  // The project row's stored flag, as the stream delivered it.
-  useJjForNewWorkspaces: boolean;
   setToast: (toast: ToastContent | null) => void;
 };
 
 /** A repository's two jj switches: colocate it with jj, and use jj for its new workspaces. */
-export const RepoJjControls = ({
-  projectId,
-  projectPath,
-  useJjForNewWorkspaces,
-  setToast,
-}: RepoJjControlsProps): ReactElement => {
+export const RepoJjControls = ({ projectId, projectPath, setToast }: RepoJjControlsProps): ReactElement => {
   const isJjAvailable = useAtomValue(isJjAvailableAtom);
   const jjState = useAtomValue(projectJjStateAtomFamily(projectId));
+  const project = useProject(projectId);
   const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
   const { isColocationRequested, requestColocation } = useColocationRequest({ projectId, jjState, setToast });
   const {
@@ -71,7 +66,7 @@ export const RepoJjControls = ({
   const useJjState = getUseJjSwitchState({
     isJjAvailable,
     colocation: jjState?.colocation,
-    storedValue: useJjForNewWorkspaces,
+    storedValue: project?.useJjForNewWorkspaces ?? false,
     requestedValue: isUseJjPending ? useJjVariables?.useJjForNewWorkspaces : undefined,
   });
 
