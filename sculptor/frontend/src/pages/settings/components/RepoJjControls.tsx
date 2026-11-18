@@ -124,7 +124,7 @@ export const RepoJjControls = ({
           </Flex>
         )}
         <Flex align="center" gap="2">
-          <SwitchTooltip content={useJjTooltip(useJjState)}>
+          <SwitchTooltip content={newWorkspacesSwitchTooltip(useJjState)}>
             <Switch
               size="1"
               checked={useJjState.isChecked}
@@ -264,7 +264,7 @@ const colocationTooltip = (state: ColocationSwitchState): string | undefined => 
   }
 };
 
-const useJjTooltip = (state: UseJjSwitchState): string | undefined => {
+const newWorkspacesSwitchTooltip = (state: UseJjSwitchState): string | undefined => {
   switch (state.kind) {
     case "UNAVAILABLE":
       return JJ_UNAVAILABLE_TOOLTIP;
