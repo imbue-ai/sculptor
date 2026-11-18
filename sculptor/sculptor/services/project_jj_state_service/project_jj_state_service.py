@@ -100,12 +100,18 @@ def derive_project_jj_state(
     )
 
 
-def is_colocation_gone(facts: JjWorkspaceCreationFacts) -> bool:
-    """The repository wants jj workspaces, and jj can see it is not colocated.
+def is_colocation_gone(facts: JjWorkspaceCreationFacts, *, is_repository_present: bool) -> bool:
+    """The repository wants jj workspaces, is on disk, and jj can see it is not colocated.
 
-    Without jj, colocation cannot be read, so it is never taken to be gone.
+    Without jj, colocation cannot be read; without the repository, as on a
+    drive that is not mounted, there is nothing to read. Neither counts as gone.
     """
-    return facts.use_jj_for_new_workspaces and facts.jj_readiness.blocker is None and not facts.is_colocated
+    return (
+        is_repository_present
+        and facts.use_jj_for_new_workspaces
+        and facts.jj_readiness.blocker is None
+        and not facts.is_colocated
+    )
 
 
 class ProjectJjStateService(Service):
@@ -304,7 +310,7 @@ class ProjectJjStateService(Service):
         except VcsCommandError as e:
             logger.debug("Cannot read the jj colocation of {}: {}", project.object_id, e)
             return
-        if is_colocation_gone(facts) and _is_repository_present(project.get_local_user_path()):
+        if is_colocation_gone(facts, is_repository_present=_is_repository_present(project.get_local_user_path())):
             logger.debug(
                 "Turning use_jj_for_new_workspaces off for {}, which is no longer colocated", project.object_id
             )
@@ -331,5 +337,4 @@ class ProjectJjStateService(Service):
 
 
 def _is_repository_present(repo_path: Path) -> bool:
-    """Whether the repository is on disk at all, as opposed to on a drive that is not mounted."""
     return (repo_path / ".git").exists()

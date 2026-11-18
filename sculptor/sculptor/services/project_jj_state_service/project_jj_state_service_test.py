@@ -85,19 +85,20 @@ def test_a_failed_colocation_keeps_its_error_while_the_repository_is_not_colocat
 
 
 @pytest.mark.parametrize(
-    ("facts", "is_gone"),
+    ("facts", "is_repository_present", "is_gone"),
     [
-        (_facts(use_jj_for_new_workspaces=True, is_colocated=False), True),
-        (_facts(use_jj_for_new_workspaces=True, is_colocated=True), False),
-        (_facts(use_jj_for_new_workspaces=False, is_colocated=False), False),
-        (_facts(use_jj_for_new_workspaces=True, is_colocated=False, jj_readiness=_JJ_NOT_INSTALLED), False),
+        (_facts(use_jj_for_new_workspaces=True, is_colocated=False), True, True),
+        (_facts(use_jj_for_new_workspaces=True, is_colocated=True), True, False),
+        (_facts(use_jj_for_new_workspaces=False, is_colocated=False), True, False),
+        (_facts(use_jj_for_new_workspaces=True, is_colocated=False, jj_readiness=_JJ_NOT_INSTALLED), True, False),
+        (_facts(use_jj_for_new_workspaces=True, is_colocated=False), False, False),
     ],
-    ids=["flag_on_and_not_colocated", "colocated", "flag_off", "jj_unavailable"],
+    ids=["flag_on_and_not_colocated", "colocated", "flag_off", "jj_unavailable", "repository_missing"],
 )
-def test_a_colocation_is_gone_only_when_the_flag_is_on_and_jj_reads_no_colocation(
-    facts: JjWorkspaceCreationFacts, is_gone: bool
+def test_a_colocation_is_gone_only_when_the_flag_is_on_and_jj_reads_no_colocation_in_a_present_repository(
+    facts: JjWorkspaceCreationFacts, is_repository_present: bool, is_gone: bool
 ) -> None:
-    assert is_colocation_gone(facts) is is_gone
+    assert is_colocation_gone(facts, is_repository_present=is_repository_present) is is_gone
 
 
 @pytest.fixture
