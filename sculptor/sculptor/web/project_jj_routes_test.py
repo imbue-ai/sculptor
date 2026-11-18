@@ -369,20 +369,38 @@ def test_the_bookmarks_without_jj_are_a_failed_precondition(
     assert response.json()["detail"] == _JJ_NOT_INSTALLED_REASON
 
 
-@pytest.fixture
-def jj_that_cannot_list_bookmarks(jj_binary: JjBinary, tmp_path: Path) -> Iterator[None]:
-    """A jj that fails `jj bookmark list` as it would on a repository it cannot read, and is the pinned jj otherwise."""
-    wrapper = tmp_path / "jj"
-    wrapper.write_text(
+def _resolve_jj_to_a_stub_that_fails(
+    jj_binary: JjBinary, stub_path: Path, command_words: tuple[str, ...], error: str
+) -> None:
+    """Resolve jj to a stub that fails each command naming all of `command_words` with `error`, and is the pinned jj otherwise."""
+    stub_path.write_text(
         f"#!{sys.executable} -I\n"
         + "import os, sys\n"
-        + 'if "bookmark" in sys.argv and "list" in sys.argv:\n'
-        + '    sys.stderr.write("Error: Failed to read the repository\\n")\n'
+        + f"if all(word in sys.argv for word in {command_words!r}):\n"
+        + f"    sys.stderr.write({error + chr(10)!r})\n"
         + "    sys.exit(1)\n"
         + f"os.execv({str(jj_binary.path)!r}, [{str(jj_binary.path)!r}, *sys.argv[1:]])\n"
     )
-    wrapper.chmod(0o755)
-    _resolve_jj_to(str(wrapper))
+    stub_path.chmod(0o755)
+    _resolve_jj_to(str(stub_path))
+
+
+@pytest.fixture
+def jj_that_cannot_list_bookmarks(jj_binary: JjBinary, tmp_path: Path) -> Iterator[None]:
+    """A jj that fails `jj bookmark list` as it would on a repository it cannot read."""
+    _resolve_jj_to_a_stub_that_fails(
+        jj_binary, tmp_path / "jj", ("bookmark", "list"), "Error: Failed to read the repository"
+    )
+    yield
+    set_user_config_instance(None)
+
+
+@pytest.fixture
+def jj_that_fails_checking_colocation(jj_binary: JjBinary, tmp_path: Path) -> Iterator[None]:
+    """A jj whose `jj git root` fails as on a stale working copy, which the runner raises on even when unchecked."""
+    _resolve_jj_to_a_stub_that_fails(
+        jj_binary, tmp_path / "jj", ("git", "root"), "Error: The working copy is stale (not updated since operation 0)"
+    )
     yield
     set_user_config_instance(None)
 
@@ -401,3 +419,31 @@ def test_the_bookmarks_of_a_repository_jj_cannot_read_conflict(
     detail = response.json()["detail"]
     assert detail.startswith("Cannot read the repository: ")
     assert "Error: Failed to read the repository" in detail
+
+
+@pytest.mark.parametrize(
+    ("method", "path_suffix", "body"),
+    [
+        ("GET", "jj", None),
+        ("POST", "jj/colocate", None),
+        ("PUT", "use_jj_for_new_workspaces", {"useJjForNewWorkspaces": True}),
+        ("GET", "jj/bookmarks", None),
+    ],
+    ids=["preflight", "colocate", "use_jj_for_new_workspaces", "bookmarks"],
+)
+def test_every_repository_jj_route_conflicts_when_jj_fails_checking_colocation(
+    jj_that_fails_checking_colocation: None,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    jj_colocated_repo: JjColocatedRepo,
+    method: str,
+    path_suffix: str,
+    body: dict[str, object] | None,
+) -> None:
+    project = _register_project(test_services, jj_colocated_repo.path)
+
+    response = client.request(method, f"/api/v1/projects/{project.object_id}/{path_suffix}", json=body)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"].startswith("Cannot read the repository: ")
+    assert _read_use_jj_for_new_workspaces(test_services, project) is False

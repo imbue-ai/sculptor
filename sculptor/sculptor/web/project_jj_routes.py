@@ -4,6 +4,9 @@ The repository's jj state itself reaches the frontend on the stream, under
 `project_jj_state_by_project_id`.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
@@ -42,10 +45,8 @@ def get_project_jj_preflight(
     services = get_services_from_request_or_websocket(request)
     project = _get_project(services, user_session, validate_project_id(project_id))
     services.project_jj_state_service.refresh_project(project)
-    try:
+    with _refusals_as_http_errors():
         return services.project_jj_state_service.read_preflight(project)
-    except VcsCommandError as e:
-        raise HTTPException(status_code=409, detail=f"Cannot read the repository: {e}") from e
 
 
 @project_jj_router.post("/api/v1/projects/{project_id}/jj/colocate", status_code=202)
@@ -57,19 +58,13 @@ def colocate_project_with_jj(
     """Start making the repository a jj colocation; its progress and outcome arrive on the stream.
 
     On success `use_jj_for_new_workspaces` is turned on. Answers 412 when jj is
-    unavailable, and 409 when the pre-flight finds a blocker or a colocation
-    is already running.
+    unavailable, and 409 when the pre-flight finds a blocker, a colocation is
+    already running, or the repository cannot be read.
     """
     services = get_services_from_request_or_websocket(request)
     project = _get_project(services, user_session, validate_project_id(project_id))
-    try:
+    with _refusals_as_http_errors():
         services.project_jj_state_service.start_colocation(project)
-    except JjUnavailableError as e:
-        raise HTTPException(status_code=412, detail=str(e)) from e
-    except (ColocationBlockedError, ColocationAlreadyRunningError) as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except VcsCommandError as e:
-        raise HTTPException(status_code=409, detail=f"Cannot read the repository: {e}") from e
 
 
 @project_jj_router.put("/api/v1/projects/{project_id}/use_jj_for_new_workspaces")
@@ -81,13 +76,15 @@ def update_use_jj_for_new_workspaces(
 ) -> bool:
     """Turn jj workspaces on or off for the repository's new workspaces; existing workspaces keep their kind.
 
-    Turning it on answers 412 when jj is unavailable and 409 when the repository is not colocated.
+    Turning it on answers 412 when jj is unavailable, and 409 when the
+    repository is not colocated or cannot be read.
     """
     validated_project_id = validate_project_id(project_id)
     services = get_services_from_request_or_websocket(request)
     project = _get_project(services, user_session, validated_project_id)
     if use_jj_request.use_jj_for_new_workspaces:
-        _require_colocation(services, project)
+        with _refusals_as_http_errors():
+            services.project_jj_state_service.require_colocation(project)
     with user_session.open_transaction(services) as transaction:
         updated_project = transaction.update_project_fields(
             validated_project_id, use_jj_for_new_workspaces=use_jj_request.use_jj_for_new_workspaces
@@ -107,18 +104,12 @@ def list_project_jj_bookmarks(
     """The bookmarks a new jj workspace can start from or target: local and remote, without conflicted ones.
 
     Answers 412 when jj is unavailable, and 409 when the repository is not
-    colocated or jj cannot read it.
+    colocated or cannot be read.
     """
     services = get_services_from_request_or_websocket(request)
     project = _get_project(services, user_session, validate_project_id(project_id))
-    try:
+    with _refusals_as_http_errors():
         bookmarks = services.project_jj_state_service.list_bookmark_choices(project)
-    except JjUnavailableError as e:
-        raise HTTPException(status_code=412, detail=str(e)) from e
-    except RepositoryNotColocatedError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except VcsCommandError as e:
-        raise HTTPException(status_code=409, detail=f"Cannot read the repository: {e}") from e
     return JjBookmarkChoicesResponse(bookmarks=bookmarks)
 
 
@@ -130,10 +121,14 @@ def _get_project(services: CompleteServiceCollection, user_session: UserSession,
     return project
 
 
-def _require_colocation(services: CompleteServiceCollection, project: Project) -> None:
+@contextmanager
+def _refusals_as_http_errors() -> Iterator[None]:
+    """Answer each way the repository jj service refuses with the status every route here gives it."""
     try:
-        services.project_jj_state_service.require_colocation(project)
+        yield
     except JjUnavailableError as e:
         raise HTTPException(status_code=412, detail=str(e)) from e
-    except RepositoryNotColocatedError as e:
+    except (RepositoryNotColocatedError, ColocationBlockedError, ColocationAlreadyRunningError) as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+    except VcsCommandError as e:
+        raise HTTPException(status_code=409, detail=f"Cannot read the repository: {e}") from e
