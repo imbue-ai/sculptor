@@ -20,10 +20,13 @@ from uvicorn import Config
 from uvicorn import Server
 
 from sculptor import version as sculptor_version
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.log_utils import ensure_core_log_levels_configured
+from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.project_service.jj_workspace_refusal import ProjectInJjWorkspaceError
-from sculptor.services.project_service.jj_workspace_refusal import refuse_project_in_jj_workspace
+from sculptor.services.project_service.jj_workspace_refusal import resolve_project_in_jj_workspace
 from sculptor.services.user_config.user_config import initialize_from_file
+from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.utils.errors import setup_irrecoverable_exception_handler
 from sculptor.utils.logs import setup_loggers
 from sculptor.utils.tracing import get_trace_to_path
@@ -78,15 +81,23 @@ def cmd_version(value: bool) -> None:
         raise typer.Exit()
 
 
-def _refuse_project_in_jj_workspace(project: Path | None) -> Path | None:
-    """Reject a project directory inside a jj workspace while parsing arguments, before the server starts."""
+def _resolve_project_in_jj_workspace(project: Path | None) -> Path | None:
+    """Resolve a project directory inside a jj workspace to its repository, or reject it, while parsing arguments.
+
+    This runs before the server starts and before the user config is loaded,
+    so jj is the managed copy or the one on PATH, and a custom jj path set in
+    the user config is ignored here.
+    """
     if project is None:
         return None
-    try:
-        refuse_project_in_jj_workspace(project)
-    except ProjectInJjWorkspaceError as e:
-        raise typer.BadParameter(str(e)) from e
-    return project
+    with ConcurrencyGroup(name="resolve_project_in_jj_workspace") as concurrency_group:
+        dependency_management_service = DependencyManagementService(concurrency_group=concurrency_group)
+        jj = build_vcs_runners(concurrency_group, dependency_management_service.resolve_binary_path).jj
+        try:
+            return resolve_project_in_jj_workspace(project, jj, dependency_management_service)
+        except ProjectInJjWorkspaceError as e:
+            refusal = e
+    raise typer.BadParameter(str(refusal)) from refusal
 
 
 @typer_cli.callback()
@@ -96,7 +107,7 @@ def main(
         exists=False,
         help="Path to the project repository. If not provided, current directory is used.",
         resolve_path=True,
-        callback=_refuse_project_in_jj_workspace,
+        callback=_resolve_project_in_jj_workspace,
     ),
     version: Annotated[bool | None, typer.Option("--version", callback=cmd_version)] = None,
     open_browser: bool = typer.Option(
