@@ -1,16 +1,19 @@
-import { Box, Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
+import { Badge, Box, Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
+import { useAtomValue } from "jotai";
 import { AlertTriangle, Terminal } from "lucide-react";
 import type { FocusEvent, ReactElement } from "react";
 import { useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useOnMountIf } from "~/common/hooks/useOnMountIf";
+import { projectJjStateAtomFamily } from "~/common/state/atoms/projectJjState.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
+import { useDefaultSetupCommand } from "~/common/state/hooks/useDefaultSetupCommand.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useNamingPatternMutation, useWorkspaceSetupCommandMutation } from "~/common/state/mutations/projects.ts";
 import { getErrorMessage } from "~/common/utils/errors.ts";
-import { DEFAULT_WORKSPACE_SETUP_COMMAND } from "~/common/utils/setupDefaults";
 
+import { RepoJjControls } from "./RepoJjControls.tsx";
 import styles from "./RepoRow.module.scss";
 
 type RepoRowProps = {
@@ -55,8 +58,12 @@ export const RepoRow = ({
   setToast,
 }: RepoRowProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
+  const doesCreateJjWorkspaces = useAtomValue(projectJjStateAtomFamily(projectId))?.createsJjWorkspaces ?? false;
+  const defaultSetupCommand = useDefaultSetupCommand(doesCreateJjWorkspaces ? "JJ_WORKSPACE" : "WORKTREE");
   const isTrackingDefault = workspaceSetupCommand === null;
-  const displayValue = workspaceSetupCommand ?? DEFAULT_WORKSPACE_SETUP_COMMAND;
+  // While the row tracks a default the backend has not yet named, there is nothing to show or edit.
+  const isSetupCommandKnown = !isTrackingDefault || defaultSetupCommand !== undefined;
+  const displayValue = workspaceSetupCommand ?? defaultSetupCommand ?? "";
   const [isExpanded, setIsExpanded] = useState<boolean>(() => shouldAutoFocusSetupCommand);
   const setupCommandTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const { mutate: saveSetupCommand } = useWorkspaceSetupCommandMutation({
@@ -82,7 +89,7 @@ export const RepoRow = ({
     const trimmed = e.target.value.trim();
     if (isTrackingDefault) {
       // Unchanged default text → remain tracking default. Otherwise freeze the edit.
-      if (trimmed !== DEFAULT_WORKSPACE_SETUP_COMMAND) {
+      if (trimmed !== defaultSetupCommand) {
         handleSetupCommandSave(trimmed, e.target);
       }
     } else if (trimmed !== workspaceSetupCommand) {
@@ -107,6 +114,13 @@ export const RepoRow = ({
         <Flex direction="column" className={styles.repoInfo}>
           <Flex align="center" className={styles.repoName}>
             <Text weight="medium">{projectName}</Text>
+            {doesCreateJjWorkspaces && (
+              <Tooltip content="New workspaces in this repository are jj workspaces">
+                <Badge size="1" color="gray" variant="soft" data-testid={ElementIds.REPO_JJ_BADGE}>
+                  jj
+                </Badge>
+              </Tooltip>
+            )}
             {!isPathAccessible && (
               <Tooltip content="This repository path cannot be found">
                 <AlertTriangle size={16} className={styles.warningIcon} />
@@ -169,7 +183,8 @@ export const RepoRow = ({
               }`}
               defaultValue={displayValue}
               onBlur={handleSetupCommandBlur}
-              placeholder="Leave blank to run nothing"
+              disabled={!isSetupCommandKnown}
+              placeholder={isSetupCommandKnown ? "Leave blank to run nothing" : "Loading the default setup command…"}
               rows={3}
               spellCheck={false}
               data-testid={ElementIds.SETTINGS_WORKSPACE_SETUP_COMMAND_INPUT}
@@ -192,6 +207,7 @@ export const RepoRow = ({
             />
             <Text className={styles.namingPatternHint}>Leave empty to use the global default.</Text>
           </Box>
+          <RepoJjControls projectId={projectId} projectPath={projectPath} setToast={setToast} />
         </Box>
       )}
     </Box>
