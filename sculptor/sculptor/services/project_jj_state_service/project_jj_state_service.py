@@ -163,11 +163,10 @@ class ProjectJjStateService(Service):
         self._work_queue.put(project)
 
     def read_preflight(self, project: Project) -> JjColocationPreflight:
-        """What colocating `project`'s repository would run into; its published state is refreshed too.
+        """What colocating `project`'s repository would run into.
 
         Raises `VcsCommandError` when git cannot read the repository.
         """
-        self.refresh_project(project)
         return read_colocation_preflight(
             self.vcs_runners.git,
             self.vcs_runners.jj,

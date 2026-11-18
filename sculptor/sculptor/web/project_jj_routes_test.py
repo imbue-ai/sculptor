@@ -1,5 +1,6 @@
 """The routes for a repository's jj configuration, against real git and jj repositories and no network."""
 
+import shutil
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -159,6 +160,33 @@ def test_the_preflight_while_jj_is_unavailable_gives_the_reason_the_colocate_ref
     assert refusal.status_code == 412, refusal.text
     assert preflight["blockers"] == ["JJ_UNAVAILABLE"]
     assert preflight["jjUnavailableReason"] == refusal.json()["detail"] == _JJ_NOT_INSTALLED_REASON
+
+
+def test_reading_the_preflight_derives_the_repository_s_streamed_state_from_disk_again(
+    jj_available: None,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    published_states: Queue[StreamingUpdateSourceTypes],
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    project = _register_project(test_services, jj_colocated_repo.path)
+    assert _put_use_jj_for_new_workspaces(client, project.object_id, True).status_code == 200
+    _wait_for_state(published_states, _colocated_state(project, creates_jj_workspaces=True))
+    shutil.rmtree(jj_colocated_repo.path / ".jj")
+
+    response = client.get(f"/api/v1/projects/{project.object_id}/jj")
+
+    assert response.status_code == 200, response.text
+    _wait_for_state(
+        published_states,
+        ProjectJjState(
+            project_id=project.object_id,
+            colocation=JjColocationState.ABSENT,
+            colocation_error=None,
+            creates_jj_workspaces=False,
+        ),
+    )
+    assert _read_use_jj_for_new_workspaces(test_services, project) is False
 
 
 def test_the_preflight_of_an_unknown_project_is_not_found(client: TestClient) -> None:

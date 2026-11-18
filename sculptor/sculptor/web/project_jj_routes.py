@@ -46,6 +46,7 @@ def get_project_jj_preflight(
     """
     services = get_services_from_request_or_websocket(request)
     project = _get_project(services, user_session, validate_project_id(project_id))
+    services.project_jj_state_service.refresh_project(project)
     try:
         return services.project_jj_state_service.read_preflight(project)
     except VcsCommandError as e:
