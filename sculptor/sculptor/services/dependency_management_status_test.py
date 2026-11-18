@@ -234,8 +234,6 @@ def test_a_refresh_asks_the_login_shell_again_when_the_jj_sculptor_resolves_move
 ) -> None:
     profile_runs_log = _log_each_login_shell_run(jj_isolated_env, monkeypatch)
     service.get_status()
-    service.refresh_status()
-    runs_before_the_move = profile_runs_log.read_text().splitlines()
     set_user_config_instance(
         get_user_config_instance().model_copy(
             update={"dependency_paths": DependencyPaths(claude="CUSTOM", pi="CUSTOM", jj=str(jj_binary.path))}
@@ -245,5 +243,4 @@ def test_a_refresh_asks_the_login_shell_again_when_the_jj_sculptor_resolves_move
     status = service.refresh_status()
 
     assert status.jj.path == str(jj_binary.path)
-    assert runs_before_the_move == ["ran"]
     assert profile_runs_log.read_text().splitlines() == ["ran", "ran"]

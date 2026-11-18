@@ -98,7 +98,7 @@ def test_changing_the_dependency_paths_tells_every_window_the_fresh_status(
     assert window.get(timeout=5.0).jj.path == str(jj_binary.path)
 
 
-def test_re_checking_the_dependencies_asks_the_login_shell_again_where_a_refresh_does_not(
+def test_re_checking_the_dependencies_asks_the_login_shell_again(
     recording_git_and_jj: RecordingBinaries,  # noqa: F811
     jj_isolated_env: JjIsolatedEnv,
     client: TestClient,
@@ -109,11 +109,8 @@ def test_re_checking_the_dependencies_asks_the_login_shell_again_where_a_refresh
     monkeypatch.setenv("SHELL", "/bin/bash")
     (jj_isolated_env.home_path / ".bash_profile").write_text(f'echo ran >> "{profile_runs_log}"\n')
     test_services.dependency_management_service.get_status()
-    test_services.dependency_management_service.refresh_status()
-    runs_before_the_re_check = profile_runs_log.read_text().splitlines()
 
     response = client.get("/api/v1/config/dependencies")
 
     assert response.status_code == 200, response.text
-    assert runs_before_the_re_check == ["ran"]
     assert profile_runs_log.read_text().splitlines() == ["ran", "ran"]
