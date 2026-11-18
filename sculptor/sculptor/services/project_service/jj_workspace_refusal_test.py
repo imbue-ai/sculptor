@@ -3,33 +3,33 @@ from pathlib import Path
 
 import pytest
 
-from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.project_service.jj_workspace_refusal import JjUnusableForProjectError
 from sculptor.services.project_service.jj_workspace_refusal import ProjectInJjWorkspaceError
 from sculptor.services.project_service.jj_workspace_refusal import resolve_project_in_jj_workspace
-from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
-from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import JjWorkspace
 from sculptor.testing.jj_repos import run_jj
-
-
-def _use_jj(jj_value: str) -> None:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj=jj_value)})
-    )
 
 
 @pytest.fixture
 def dependency_management_service() -> Iterator[DependencyManagementService]:
     with ConcurrencyGroup(name="dependency_management_service") as concurrency_group:
         yield DependencyManagementService(concurrency_group=concurrency_group)
+
+
+@pytest.fixture
+def jj_found_nowhere(silly_global_config: UserConfig) -> Iterator[None]:
+    """Make Sculptor's own dependency resolution find no jj."""
+    dependency_paths = silly_global_config.dependency_paths.model_copy(update={"jj": "CUSTOM"})
+    set_user_config_instance(silly_global_config.model_copy(update={"dependency_paths": dependency_paths}))
+    yield
     set_user_config_instance(None)
 
 
@@ -41,11 +41,9 @@ def _make_jj(concurrency_group: ConcurrencyGroup, dependency_management_service:
 def jj(
     test_root_concurrency_group: ConcurrencyGroup,
     dependency_management_service: DependencyManagementService,
-    jj_binary: JjBinary,
-    jj_isolated_env: JjIsolatedEnv,
+    jj_resolved_to_the_pinned_binary: None,
 ) -> JjCli:
     """A runner for the pinned jj, which the dependency service also resolves."""
-    _use_jj(str(jj_binary.path))
     return _make_jj(test_root_concurrency_group, dependency_management_service)
 
 
@@ -156,8 +154,8 @@ def test_a_jj_workspace_of_a_colocated_repository_is_refused_as_needing_jj_while
     test_root_concurrency_group: ConcurrencyGroup,
     dependency_management_service: DependencyManagementService,
     jj_workspace: JjWorkspace,
+    jj_found_nowhere: None,
 ) -> None:
-    _use_jj("CUSTOM")
     jj_not_installed = _make_jj(test_root_concurrency_group, dependency_management_service)
 
     with pytest.raises(JjUnusableForProjectError) as refusal:

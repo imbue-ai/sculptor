@@ -6,14 +6,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.database.models import Project
 from sculptor.foundation.processes.local_process import run_blocking
-from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
-from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import JjWorkspace
 from sculptor.testing.jj_repos import run_jj
 
@@ -25,21 +23,10 @@ _PROJECT_ROUTES = (
 
 
 @pytest.fixture
-def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary, jj_isolated_env: JjIsolatedEnv) -> Iterator[None]:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(
-            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
-        )
-    )
-    yield
-    set_user_config_instance(None)
-
-
-@pytest.fixture
-def jj_found_nowhere(jj_isolated_env: JjIsolatedEnv) -> Iterator[None]:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj="CUSTOM")})
-    )
+def jj_found_nowhere(silly_global_config: UserConfig) -> Iterator[None]:
+    """Make Sculptor's own dependency resolution find no jj."""
+    dependency_paths = silly_global_config.dependency_paths.model_copy(update={"jj": "CUSTOM"})
+    set_user_config_instance(silly_global_config.model_copy(update={"dependency_paths": dependency_paths}))
     yield
     set_user_config_instance(None)
 

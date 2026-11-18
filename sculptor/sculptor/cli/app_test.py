@@ -10,12 +10,10 @@ import typer
 from sculptor.cli.app import resolve_and_publish_backend_port
 from sculptor.cli.app import typer_cli
 from sculptor.config.settings import DEFAULT_BACKEND_PORT
-from sculptor.config.user_config import DependencyPaths
-from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
-from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import JjWorkspace
 from sculptor.testing.jj_repos import run_jj
 from sculptor.web.middleware import get_settings
@@ -31,26 +29,14 @@ def fresh_settings_cache() -> Iterator[None]:
 
 
 @pytest.fixture
-def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary, jj_isolated_env: JjIsolatedEnv) -> Iterator[None]:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(
-            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
-        )
-    )
-    yield
-    set_user_config_instance(None)
-
-
-@pytest.fixture
-def jj_too_old(tmp_path: Path, jj_isolated_env: JjIsolatedEnv) -> Iterator[Path]:
-    """A jj that reports a version older than the one Sculptor supports."""
+def jj_too_old(tmp_path: Path, silly_global_config: UserConfig) -> Iterator[Path]:
+    """Make Sculptor's own dependency resolution find a jj older than the one Sculptor supports."""
     old_jj = tmp_path / "old-jj" / "jj"
     old_jj.parent.mkdir()
     old_jj.write_text("#!/bin/sh\necho 'jj 0.28.2-b9ebe2f03c976515d2a155a411a368ae773c5493'\n")
     old_jj.chmod(0o755)
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj=str(old_jj))})
-    )
+    dependency_paths = silly_global_config.dependency_paths.model_copy(update={"jj": str(old_jj)})
+    set_user_config_instance(silly_global_config.model_copy(update={"dependency_paths": dependency_paths}))
     yield old_jj
     set_user_config_instance(None)
 
