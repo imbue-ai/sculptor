@@ -1,7 +1,8 @@
 """Routes that serve a jj workspace's own data, and the git routes that refuse one.
 
-jj workspaces cannot be created through any route yet, so the workspace row is
-written through the workspace service and its checkout built with jj directly.
+The fixture writes the workspace row through the workspace service and builds
+its checkout with jj directly, so these tests do not depend on how jj
+workspaces are created.
 """
 
 from pathlib import Path

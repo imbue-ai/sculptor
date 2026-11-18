@@ -9,7 +9,7 @@ from sculptor.web.data_types import JjReadiness
 
 
 class JjWorkspaceCreationFacts(SerializableModel):
-    """The three facts that decide whether a repository's new workspaces are jj workspaces."""
+    """The facts that decide whether a repository's new workspaces are jj workspaces."""
 
     use_jj_for_new_workspaces: bool
     is_colocated: bool

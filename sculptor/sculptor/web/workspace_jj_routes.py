@@ -1,4 +1,4 @@
-"""Routes that serve a jj workspace's own data, which has no git equivalent; app.py includes the router."""
+"""Routes that serve a jj workspace's own data, which has no git equivalent."""
 
 from fastapi import Depends
 from fastapi import HTTPException

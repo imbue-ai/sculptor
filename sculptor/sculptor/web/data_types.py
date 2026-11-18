@@ -1004,9 +1004,7 @@ class ProjectJjState(SerializableModel):
     project_id: ProjectID
     colocation: JjColocationState
     colocation_error: str | None = Field(description="Why colocating failed; set exactly when colocation is FAILED")
-    creates_jj_workspaces: bool = Field(
-        description="New workspaces are jj workspaces: use_jj_for_new_workspaces is on, the repository is colocated and jj is available"
-    )
+    creates_jj_workspaces: bool = Field(description="Whether the repository's new workspaces are jj workspaces")
 
     @model_validator(mode="after")
     def _require_error_exactly_when_failed(self) -> "ProjectJjState":
