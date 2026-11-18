@@ -1,9 +1,7 @@
 """Routes for a repository's jj configuration: colocation, its pre-flight, the jj flag and the bookmarks.
 
 The repository's jj state itself reaches the frontend on the stream, under
-`project_jj_state_by_project_id`. One route here is not jj's own: each
-workspace kind's default setup command, which differs for jj and which the
-repository settings show. app.py includes the router.
+`project_jj_state_by_project_id`; app.py includes the router.
 """
 
 from fastapi import Depends
@@ -11,20 +9,17 @@ from fastapi import HTTPException
 from fastapi import Request
 
 from sculptor.database.models import Project
-from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import ProjectID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.project_jj_state_service.project_jj_state_service import ColocationAlreadyRunningError
 from sculptor.services.project_jj_state_service.project_jj_state_service import ColocationBlockedError
 from sculptor.services.project_jj_state_service.project_jj_state_service import RepositoryNotColocatedError
-from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.web.auth import UserSession
 from sculptor.web.data_types import JjBookmarkChoicesResponse
 from sculptor.web.data_types import JjColocationPreflight
 from sculptor.web.data_types import UseJjForNewWorkspacesRequest
-from sculptor.web.data_types import WorkspaceSetupCommandDefaults
 from sculptor.web.middleware import DecoratedAPIRouter
 from sculptor.web.middleware import add_logging_context
 from sculptor.web.middleware import get_services_from_request_or_websocket
@@ -122,25 +117,6 @@ def list_project_jj_bookmarks(
     except RepositoryNotColocatedError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     return JjBookmarkChoicesResponse(bookmarks=bookmarks)
-
-
-@project_jj_router.get("/api/v1/workspace_setup_command_defaults")
-def get_workspace_setup_command_defaults(
-    request: Request,
-    user_session: UserSession = Depends(get_user_session),
-) -> WorkspaceSetupCommandDefaults:
-    """The setup command each workspace kind runs when its project configures none, from that kind's VCS."""
-    workspace_service = get_services_from_request_or_websocket(request).workspace_service
-    return WorkspaceSetupCommandDefaults(
-        default_setup_command_by_initialization_strategy={
-            initialization_strategy: workspace_service.get_workspace_vcs(
-                initialization_strategy
-            ).default_setup_command()
-            if is_isolated_checkout(initialization_strategy)
-            else None
-            for initialization_strategy in WorkspaceInitializationStrategy
-        }
-    )
 
 
 def _get_project(services: CompleteServiceCollection, user_session: UserSession, project_id: ProjectID) -> Project:

@@ -342,6 +342,7 @@ from sculptor.web.ui_actions import publish_ui_action
 from sculptor.web.ui_actions import subscriber_count
 from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload_diagnostics
 from sculptor.web.workspace_jj_routes import workspace_jj_router
+from sculptor.web.workspace_setup_command_routes import workspace_setup_command_router
 
 UpdateT = TypeVar("UpdateT", bound=StreamingUpdate)
 
@@ -5506,6 +5507,7 @@ APP.include_router(router)
 APP.include_router(remote_repos_router)
 APP.include_router(workspace_jj_router)
 APP.include_router(project_jj_router)
+APP.include_router(workspace_setup_command_router)
 
 APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 

@@ -20,8 +20,6 @@ from sculptor.service_collections.service_collection import CompleteServiceColle
 from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
-from sculptor.services.workspace_service.vcs.git_workspace_vcs import DEFAULT_GIT_WORKSPACE_SETUP_COMMAND
-from sculptor.services.workspace_service.vcs.jj_workspace_vcs import DEFAULT_JJ_WORKSPACE_SETUP_COMMAND
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import JjIsolatedEnv
@@ -368,17 +366,3 @@ def test_the_bookmarks_without_jj_are_a_failed_precondition(
 
     assert response.status_code == 412, response.text
     assert response.json()["detail"] == _JJ_NOT_INSTALLED_REASON
-
-
-def test_each_workspace_kind_s_default_setup_command_comes_from_its_version_control(client: TestClient) -> None:
-    response = client.get("/api/v1/workspace_setup_command_defaults")
-
-    assert response.status_code == 200, response.text
-    assert response.json() == {
-        "defaultSetupCommandByInitializationStrategy": {
-            "IN_PLACE": None,
-            "CLONE": DEFAULT_GIT_WORKSPACE_SETUP_COMMAND,
-            "WORKTREE": DEFAULT_GIT_WORKSPACE_SETUP_COMMAND,
-            "JJ_WORKSPACE": DEFAULT_JJ_WORKSPACE_SETUP_COMMAND,
-        }
-    }
