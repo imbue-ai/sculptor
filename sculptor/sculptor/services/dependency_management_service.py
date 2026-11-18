@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import tempfile
@@ -110,8 +111,6 @@ _DEFAULT_RETENTION_KEEP = 2
 _DEPENDENCY_STATUS_REFRESH_INTERVAL_SECONDS = 60.0
 # A login shell runs the user's whole profile; one slower than this is not waited for.
 _LOGIN_SHELL_PROBE_TIMEOUT_SECONDS = 10.0
-# Printed just before PATH, so lines the profile prints are not read as PATH.
-_LOGIN_SHELL_PATH_MARKER = "sculptor-login-shell-path:"
 
 
 def _is_valid_custom_binary(value: str) -> bool:
@@ -597,23 +596,6 @@ def _await_gh_device_code(process: RunningProcess) -> tuple[str | None, str | No
         if time.monotonic() >= deadline:
             return None, None
         time.sleep(0.2)
-
-
-def _read_path_after_marker(output: str) -> str | None:
-    """The line after `_LOGIN_SHELL_PATH_MARKER` in a login shell's output, or None when there is none.
-
-    >>> _read_path_after_marker("Welcome back!\\nsculptor-login-shell-path:\\n/usr/bin:/bin\\n")
-    '/usr/bin:/bin'
-    >>> _read_path_after_marker("bash: no job control in this shell\\n") is None
-    True
-    """
-    lines = [line.strip() for line in output.splitlines()]
-    try:
-        marker_index = lines.index(_LOGIN_SHELL_PATH_MARKER)
-    except ValueError:
-        return None
-    following_lines = lines[marker_index + 1 : marker_index + 2]
-    return following_lines[0] if following_lines else None
 
 
 def _with_login_shell_jj(readiness: JjReadiness, login_shell_jj: LoginShellJj | None) -> JjReadiness:
@@ -1450,16 +1432,26 @@ class DependencyManagementService(Service):
         shell = os.environ.get("SHELL", "/bin/bash")
         base_env = self._build_agent_probe_env() or os.environ
         with tempfile.TemporaryDirectory(prefix="sculptor-jj-probe-") as probe_directory:
-            (Path(probe_directory) / "jj").symlink_to(sculptor_jj)
+            sculptor_jj_directory = Path(probe_directory) / "bin"
+            sculptor_jj_directory.mkdir()
+            (sculptor_jj_directory / "jj").symlink_to(sculptor_jj)
+            # A file of its own rather than stdout, which the profile prints to as well.
+            login_shell_path_file = Path(probe_directory) / "login-shell-path"
             probe_env = {
                 **base_env,
-                "PATH": os.pathsep.join([probe_directory, base_env.get("PATH", "")]),
+                "PATH": os.pathsep.join([str(sculptor_jj_directory), base_env.get("PATH", "")]),
                 "TERM": TERMINAL_TYPE,
             }
             try:
                 process = self.concurrency_group.start_background_process_from_factory(
                     lambda: run_background(
-                        [shell, "-l", "-i", "-c", f"echo {_LOGIN_SHELL_PATH_MARKER}; /usr/bin/printenv PATH"],
+                        [
+                            shell,
+                            "-l",
+                            "-i",
+                            "-c",
+                            f"/usr/bin/printenv PATH > {shlex.quote(str(login_shell_path_file))}",
+                        ],
                         timeout=_LOGIN_SHELL_PROBE_TIMEOUT_SECONDS,
                         cwd=Path(tempfile.gettempdir()),
                         env=probe_env,
@@ -1475,9 +1467,10 @@ class DependencyManagementService(Service):
             if process.get_timed_out():
                 logger.debug("The login shell {} did not finish within {}s", shell, _LOGIN_SHELL_PROBE_TIMEOUT_SECONDS)
                 return None
-            login_shell_path = _read_path_after_marker(process.read_stdout())
-            if login_shell_path is None:
-                logger.debug("The login shell {} printed no PATH", shell)
+            try:
+                login_shell_path = login_shell_path_file.read_text().strip()
+            except FileNotFoundError:
+                logger.debug("The login shell {} wrote no PATH", shell)
                 return None
             found = shutil.which("jj", path=login_shell_path)
             # Inside the probe directory's lifetime, so its link still resolves to `sculptor_jj`.

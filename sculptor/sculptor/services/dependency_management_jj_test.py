@@ -407,11 +407,14 @@ def _jj_stub_in(directory: Path, version_output: str) -> Path:
 def _make_login_profile_put_first(
     directory: Path, jj_isolated_env: JjIsolatedEnv, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
-    """Make the user's login shell bash, with a profile that puts `directory` first on PATH and logs each run to the returned file."""
+    """Make the user's login shell bash, with a profile that puts `directory` first on PATH and logs each run to the returned file.
+
+    The profile also prints a greeting, as many do.
+    """
     runs_log = jj_isolated_env.home_path / "profile_runs.log"
     monkeypatch.setenv("SHELL", "/bin/bash")
     (jj_isolated_env.home_path / ".bash_profile").write_text(
-        f'echo ran >> "{runs_log}"\nexport PATH="{directory}:$PATH"\n'
+        f'echo "Welcome back!"\necho ran >> "{runs_log}"\nexport PATH="{directory}:$PATH"\n'
     )
     return runs_log
 
