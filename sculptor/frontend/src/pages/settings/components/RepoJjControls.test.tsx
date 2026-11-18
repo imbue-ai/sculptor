@@ -387,24 +387,28 @@ describe("the use jj for new workspaces switch", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the requested value while the request is pending, and the stored value after it fails", async () => {
-    store.set(updateProjectJjStatesAtom, { [PROJECT_ID]: jjState("COLOCATED") });
-    const request = holdNextRequest(apiHarness.updateUseJjForNewWorkspaces);
-    renderControls(true);
-    expect(getUseJjSwitch()).toBeChecked();
+  it.each(["Project prj-1 is not a jj colocation", "Cannot read the repository: jj exited with status 1"])(
+    "shows the requested value while the request is pending, and the stored value after a 409: %s",
+    async (detail) => {
+      store.set(updateProjectJjStatesAtom, { [PROJECT_ID]: jjState("COLOCATED") });
+      const request = holdNextRequest(apiHarness.updateUseJjForNewWorkspaces);
+      renderControls(true);
+      expect(getUseJjSwitch()).toBeChecked();
 
-    fireEvent.click(getUseJjSwitch());
+      fireEvent.click(getUseJjSwitch());
 
-    await waitFor(() => expect(getUseJjSwitch()).not.toBeChecked());
-    expect(apiHarness.updateUseJjForNewWorkspaces).toHaveBeenCalledWith(
-      expect.objectContaining({ path: { project_id: PROJECT_ID }, body: { useJjForNewWorkspaces: false } }),
-    );
+      await waitFor(() => expect(getUseJjSwitch()).not.toBeChecked());
+      expect(apiHarness.updateUseJjForNewWorkspaces).toHaveBeenCalledWith(
+        expect.objectContaining({ path: { project_id: PROJECT_ID }, body: { useJjForNewWorkspaces: false } }),
+      );
 
-    await request.reject(new HTTPException(409, "Project prj-1 is not a jj colocation"));
+      await request.reject(new HTTPException(409, detail));
 
-    await waitFor(() => expect(getUseJjSwitch()).toBeChecked());
-    expect(setToast).toHaveBeenCalledWith({ type: ToastType.ERROR, title: "Project prj-1 is not a jj colocation" });
-  });
+      await waitFor(() => expect(getUseJjSwitch()).toBeChecked());
+      expect(getUseJjSwitch()).toBeEnabled();
+      expect(setToast).toHaveBeenCalledWith({ type: ToastType.ERROR, title: detail });
+    },
+  );
 
   it("shows the stored value the stream delivers once the request succeeds", async () => {
     store.set(updateProjectJjStatesAtom, { [PROJECT_ID]: jjState("COLOCATED") });
