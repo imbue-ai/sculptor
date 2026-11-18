@@ -35,6 +35,7 @@ from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_workspace_without_agent
 from sculptor.testing.playwright_utils import request_with_retry
 from sculptor.testing.playwright_utils import resolve_backend_api_url
+from sculptor.testing.playwright_utils import settle_first_run_offer
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -79,7 +80,14 @@ def _describe_then_new_prompt(jj_path: Path) -> str:
 
 
 def _open_jj_workspace_agent(page: Page) -> PlaywrightTaskPage:
-    """Create a jj workspace and its first agent through the API, and open the agent's chat."""
+    """Create a jj workspace and its first agent through the API, and open the agent's chat.
+
+    A freshly spawned instance boots onto Home with no workspaces, so Home opens
+    the new-workspace dialog once the first workspace snapshot arrives. Created
+    before that snapshot, the workspace would race it, and a dialog that won
+    the race would stay open over the workspace; so the offer is settled first.
+    """
+    settle_first_run_offer(page)
     base_url = resolve_backend_api_url(page)
     projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
     assert projects_response.ok, f"list active projects failed: {projects_response.status} {projects_response.text()}"
