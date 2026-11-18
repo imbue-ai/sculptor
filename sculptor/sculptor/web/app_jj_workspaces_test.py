@@ -46,7 +46,7 @@ from sculptor.web.data_types import UpdateWorkspaceRequest
 
 @pytest.fixture(autouse=True)
 def _redirect_workspace_checkouts_to_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Create environments under `tmp_path`; both environment-manager modules read the directory at import time."""
+    """Create environments under `tmp_path`; the environment-manager modules read the directory at import time."""
     workspaces_dir = tmp_path / "workspaces"
     workspaces_dir.mkdir()
     monkeypatch.setattr(environment_manager_default_implementation, "LOCAL_WORKSPACE_DIR", workspaces_dir)
@@ -92,7 +92,6 @@ def jj_project(
     jj_colocated_repo: JjColocatedRepo,
     test_services: CompleteServiceCollection,
 ) -> Project:
-    """A project for `jj_colocated_repo` that creates jj workspaces."""
     return _register_project(test_services, jj_colocated_repo.path, use_jj_for_new_workspaces=True)
 
 
@@ -267,7 +266,6 @@ def test_a_jj_workspace_is_created_on_the_trunk_bookmark_by_default(
     assert body["initializationStrategy"] == "JJ_WORKSPACE"
     assert (body["sourceBranch"], body["targetBranch"]) == (trunk, trunk)
     assert body["requestedBranchName"] == "feature"
-    # Creating the row creates no jj workspace: the checkout comes with the first agent.
     workspace_names = run_jj(jj_binary, ("workspace", "list", "-T", 'name ++ "\\n"'), cwd=jj_colocated_repo.path)
     assert workspace_names.split() == ["default"]
 

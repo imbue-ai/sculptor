@@ -144,10 +144,7 @@ class WorkspaceService(Service, ABC):
 
     @abstractmethod
     def forget_orphaned_jj_workspaces(self) -> None:
-        """Forget, in each colocated repository, the jj workspaces whose Sculptor workspace and directory are both gone.
-
-        Run at startup. A jj workspace whose directory exists is never forgotten.
-        """
+        """In each colocated repository, forget the jj workspaces whose Sculptor workspace and directory are gone."""
 
     # Workspace Operations
 

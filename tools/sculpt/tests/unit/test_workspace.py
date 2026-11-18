@@ -260,7 +260,7 @@ class TestWorkspaceCreate:
 
     @respx.mock
     def test_create_surfaces_why_the_server_refused_a_jj_workspace(self, runner: CliRunner) -> None:
-        """The server answers 412 when jj is unavailable; the CLI shows its reason rather than claiming no response."""
+        """The server answers 412 when jj is unavailable, and the CLI shows its reason."""
         _mock_session()
         _mock_initialize_project()
         respx.post("http://localhost:5050/api/v1/workspaces").mock(

@@ -206,7 +206,7 @@ def set_workspace_config(jj: JjCli, workspace_root: Path, key: str, value: str) 
 def read_config_value(
     jj: JjCli, repo_dir: Path, key: str, *, timeout: float = DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
 ) -> str | None:
-    """The value jj resolves for the config option `key` in `repo_dir`, environment variables included; None when unset."""
+    """The value jj resolves for `key` in `repo_dir`, environment variables included; None when it has none."""
     result = jj.run(
         ["config", "get", key],
         repo_dir,

@@ -1,8 +1,7 @@
 """Forgetting the jj workspaces Sculptor created whose Sculptor workspace and directory are both gone.
 
-An environment's own teardown and the stale-environment cleanup delete a jj
-workspace's directory without telling the repository, which then keeps
-recording the workspace and its working-copy commit.
+A jj workspace's directory can be deleted without its repository being told,
+and the repository then keeps recording the workspace and its working-copy commit.
 """
 
 from collections.abc import Set as AbstractSet
@@ -21,10 +20,8 @@ from sculptor.services.workspace_service.vcs.jj_repo_queries import list_workspa
 def forget_orphaned_jj_workspaces(jj: JjCli, repo_path: Path, live_workspace_ids: AbstractSet[str]) -> list[str]:
     """Forget each workspace of the repository named by a Sculptor workspace id that is not live and has no directory.
 
-    A workspace whose directory exists is never forgotten, because it may belong
-    to another Sculptor instance on the same repository; neither is one whose
-    name is not a Sculptor workspace id, such as the user's own `default`.
-    Returns the names forgotten.
+    A workspace whose directory exists is never forgotten: it may belong to
+    another Sculptor instance on the same repository. Returns the names forgotten.
     """
     orphaned_names = [
         entry.name

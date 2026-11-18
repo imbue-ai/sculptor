@@ -30,7 +30,6 @@ def test_only_a_sculptor_workspace_with_no_directory_and_no_live_owner_is_forgot
     test_root_concurrency_group: ConcurrencyGroup,
     tmp_path: Path,
 ) -> None:
-    """A workspace whose directory exists may belong to another Sculptor instance on the same repository."""
     jj = JjCli(test_root_concurrency_group, lambda tool: str(jj_binary.path) if tool is Dependency.JJ else None)
     orphan = str(WorkspaceID())
     live_without_directory = str(WorkspaceID())

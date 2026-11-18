@@ -338,8 +338,7 @@ class DefaultWorkspaceService(WorkspaceService):
 
         # Record the commit the workspace starts from: its source branch's, or
         # when it has none, the user's checked-out commit for git. jj has no
-        # checked-out commit, so a jj workspace starts from its target instead,
-        # and cannot be created when that base names no commit.
+        # checked-out commit, so a jj workspace starts from its target instead.
         match initialization_strategy:
             case (
                 WorkspaceInitializationStrategy.IN_PLACE
@@ -530,10 +529,7 @@ class DefaultWorkspaceService(WorkspaceService):
             yield
 
     def _require_vcs_available(self, initialization_strategy: WorkspaceInitializationStrategy) -> None:
-        """Raise `JjUnavailableError` before a jj workspace's environment runs any jj, so the agent says why it stopped.
-
-        Nothing about the workspace is touched, so its next start works once jj is fixed.
-        """
+        """Raise `JjUnavailableError` before a jj workspace's environment runs jj, so the agent says why it stopped."""
         match initialization_strategy:
             case (
                 WorkspaceInitializationStrategy.IN_PLACE

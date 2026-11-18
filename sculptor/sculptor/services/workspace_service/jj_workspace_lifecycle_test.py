@@ -51,7 +51,7 @@ def test_settings(database_url: str, tmp_path: Path) -> SculptorSettings:
 
 @pytest.fixture(autouse=True)
 def _redirect_workspace_checkouts_to_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Create environments under `tmp_path`; both environment-manager modules read the directory at import time."""
+    """Create environments under `tmp_path`; the environment-manager modules read the directory at import time."""
     workspaces_dir = tmp_path / "workspaces"
     workspaces_dir.mkdir()
     monkeypatch.setattr(environment_manager_default_implementation, "LOCAL_WORKSPACE_DIR", workspaces_dir)
@@ -127,7 +127,6 @@ def test_a_jj_workspace_given_no_source_starts_from_its_default_target(
     jj_project: Project,
     test_service_collection: CompleteServiceCollection,
 ) -> None:
-    """jj has no checked-out commit to fall back on, so the base is the target, and its commit is recorded."""
     workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
 
     trunk = f"{jj_colocated_repo.default_bookmark}@origin"

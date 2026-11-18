@@ -675,7 +675,6 @@ def _validate_jj_workspace_creation_request(
     project: Project,
     requested_branch_name: str | None,
 ) -> None:
-    """A jj workspace needs jj, a repository that creates jj workspaces, and a bookmark name."""
     project_path = project.get_local_user_path()
     jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
     try:
@@ -963,8 +962,7 @@ def preview_branch_name(
     In-place mode returns an empty string since the field is hidden. Every other
     mode resolves the project's or user-global naming pattern against a `<slug>`
     derived from the workspace name (random if empty) and a `<user>` slug derived
-    from the repo's `user.name`: git's, or for a jj workspace, whose name is its
-    bookmark's, jj's.
+    from the `user.name` of the VCS that names the new ref.
     """
     match mode:
         case WorkspaceInitializationStrategy.IN_PLACE:

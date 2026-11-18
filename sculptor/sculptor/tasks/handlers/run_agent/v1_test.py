@@ -2485,7 +2485,6 @@ def test_crash_before_any_output_with_empty_queue_synthesizes_settlement(
 def test_running_git_in_a_jj_workspace_fails_the_agent_with_an_error_log(
     local_task: Task, services: ServiceCollectionForTask
 ) -> None:
-    """The tripwire marks a dispatch bug, so it is logged at ERROR, which fails any test that trips it."""
     checkout = Path("/environments/environment/code")
     with pytest.raises(GitCommandInJjWorkspaceError) as raised:
         raise GitCommandInJjWorkspaceError(("git", "status"), checkout, checkout)
