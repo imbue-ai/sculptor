@@ -37,13 +37,18 @@ const CardRow = ({ label, children }: { label: string; children: ReactNode }): R
   </Flex>
 );
 
+// Described revisions above the primary bookmark; only a workspace with a bookmark has any.
+type RevisionsAhead = { count: number; bookmark: string };
+
 const JjIdentityCard = ({
   jjState,
+  ahead,
   requestedBookmark,
   target,
   copyHint,
 }: {
   jjState: WorkspaceJjStateInfo | null;
+  ahead: RevisionsAhead | null;
   requestedBookmark: string | null;
   target: string | null;
   copyHint: string;
@@ -74,11 +79,11 @@ const JjIdentityCard = ({
           "None"
         )}
       </CardRow>
-      {primaryBookmark !== null && jjState !== null && jjState.unbookmarkedRevisionCount > 0 && (
+      {ahead !== null && (
         <CardRow label="Ahead">
-          {pluralize(jjState.unbookmarkedRevisionCount, "described revision")} above{" "}
+          {pluralize(ahead.count, "described revision")} above{" "}
           <Code size="1" color="gray">
-            {primaryBookmark}
+            {ahead.bookmark}
           </Code>
         </CardRow>
       )}
@@ -139,7 +144,10 @@ export const JjIdentityPill = ({ workspaceId }: { workspaceId: string }): ReactE
 
   const primaryBookmark = jjState?.primaryBookmark ?? null;
   const otherBookmarkCount = (jjState?.bookmarks.length ?? 0) - (primaryBookmark === null ? 0 : 1);
-  const unbookmarkedRevisionCount = primaryBookmark === null ? 0 : (jjState?.unbookmarkedRevisionCount ?? 0);
+  const ahead: RevisionsAhead | null =
+    primaryBookmark !== null && jjState !== null && jjState.unbookmarkedRevisionCount > 0
+      ? { count: jjState.unbookmarkedRevisionCount, bookmark: primaryBookmark }
+      : null;
   const changeId =
     jjState === null
       ? null
@@ -189,9 +197,9 @@ export const JjIdentityPill = ({ workspaceId }: { workspaceId: string }): ReactE
               +{otherBookmarkCount}
             </span>
           )}
-          {unbookmarkedRevisionCount > 0 && (
+          {ahead !== null && (
             <span className={styles.unbookmarked} data-testid={ElementIds.JJ_UNBOOKMARKED_MARKER}>
-              ↑{unbookmarkedRevisionCount}
+              ↑{ahead.count}
             </span>
           )}
           {jjState?.hasConflict && (
@@ -204,6 +212,7 @@ export const JjIdentityPill = ({ workspaceId }: { workspaceId: string }): ReactE
       content={
         <JjIdentityCard
           jjState={jjState}
+          ahead={ahead}
           requestedBookmark={workspace?.requestedBranchName ?? null}
           target={workspace?.targetBranch ?? null}
           copyHint={isCopied ? "Copied!" : `Click to copy the ${copiedThing.noun}`}

@@ -177,4 +177,30 @@ describe("JjIdentityPill", () => {
     expect(card.textContent).toContain("dev/requested");
     expect(card.textContent).toContain("(no description set)");
   });
+
+  it("says in its card how many described revisions sit above the primary bookmark", async () => {
+    const user = userEvent.setup();
+    renderPill(
+      makeStore({
+        requestedBookmark: null,
+        jjState: { bookmarks: ["dev/feature"], primaryBookmark: "dev/feature", unbookmarkedRevisionCount: 3 },
+      }),
+    );
+
+    await user.tab();
+    const card = await screen.findByTestId(ElementIds.JJ_IDENTITY_CARD);
+
+    expect(card.textContent).toContain("3 described revisions above dev/feature");
+  });
+
+  it("counts no revisions above a bookmark the workspace does not have", async () => {
+    const user = userEvent.setup();
+    renderPill(makeStore({ requestedBookmark: "dev/requested", jjState: { unbookmarkedRevisionCount: 2 } }));
+
+    await user.tab();
+    const card = await screen.findByTestId(ElementIds.JJ_IDENTITY_CARD);
+
+    expect(card.textContent).not.toContain("Ahead");
+    expect(screen.queryByTestId(ElementIds.JJ_UNBOOKMARKED_MARKER)).toBeNull();
+  });
 });
