@@ -2751,11 +2751,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   entity mentions, rich markdown rendering, clone/in-place workspaces, Review-all,
   Pi agent, image upload, CI babysitter, and the dev/devtools panels. Tests should set
   the relevant flag (or assert the gated UI is absent when off).
-- The jj scenarios (ADDWS-026…029, WS-080…086, PANEL-058…063, SET-042…053, and the jj
-  parts of ADDWS-023, WS-036 and CHAT-002) mostly need a usable jj — the pinned release,
-  with an author identity — and a repository colocated with jj that has "Use jj for new
-  workspaces created in this repository" on. SET-042, ADDWS-028 and WS-084 instead need jj
-  made unusable after that setup.
+- Scenarios about jj (a jj workspace, the Jujutsu settings section, or a repository's jj
+  switches, including the jj parts of otherwise git scenarios) need a usable jj — the
+  pinned release, with an author identity — and a repository colocated with jj that has
+  "Use jj for new workspaces created in this repository" on, except where their Given says
+  otherwise, such as that jj is not usable or the repository is not yet colocated.
 - The home-page rows and the workspace banner reuse the same PR button component, so
   the WS-PR scenarios (WS-022…WS-032) also describe the home-row PR behavior (HOME-020).
 - Status dots (running / waiting / error / ready / read / unread, plus the two-dot mixed
