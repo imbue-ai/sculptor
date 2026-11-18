@@ -5,9 +5,13 @@ import pytest
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.jj_cli import JjCli
+from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjIsolatedEnv
 
 
 @pytest.fixture(autouse=True)
@@ -32,6 +36,14 @@ def git_cli(test_root_concurrency_group: ConcurrencyGroup) -> GitCli:
         concurrency_group=test_root_concurrency_group.make_concurrency_group("dependency_management_service"),
     )
     return GitCli(test_root_concurrency_group, dependency_management_service.resolve_binary_path)
+
+
+@pytest.fixture
+def jj_cli(
+    test_root_concurrency_group: ConcurrencyGroup, jj_binary: JjBinary, jj_isolated_env: JjIsolatedEnv
+) -> JjCli:
+    """A runner for the pinned jj, with the developer's own jj and git config kept out."""
+    return JjCli(test_root_concurrency_group, lambda tool: str(jj_binary.path) if tool is Dependency.JJ else None)
 
 
 @pytest.fixture
