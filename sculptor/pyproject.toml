@@ -26,7 +26,7 @@ dependencies = [
     "coolname>=2.2.0",
     "email-validator",
     "fastapi",
-    "filelock>=3.8.0",
+    "filelock>=4.2.4",
     "httpx",
     "loguru",
     "psutil>=5.9.0",
@@ -97,7 +97,7 @@ dev = [
     # packaged CLI (SCU-1360). Excluded from production via `uv sync --no-dev`.
     "sculpt",
     "boto3-stubs>=1.40.49",
-    "filelock>=3.18.0",
+    "filelock>=4.2.4",
     # inline-snapshot, pytest-asyncio and pytest-mock were absorbed from the former
     # imbue_core library (now sculptor.foundation) — its tests need them.
     "inline-snapshot",
