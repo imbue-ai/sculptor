@@ -4629,7 +4629,7 @@ def _raise_if_inside_jj_workspace(project_path: Path) -> None:
 
 
 def _resolve_project_in_jj_workspace(request: Request, project_path: Path) -> Path:
-    """The directory to register for `project_path`, answering 400 for a jj workspace whose repository is not colocated with git."""
+    """The directory to register for `project_path`, answering 400 when a jj workspace there cannot be registered."""
     services = get_services_from_request_or_websocket(request)
     root_concurrency_group = get_root_concurrency_group(request)
     with root_concurrency_group.make_concurrency_group(name="resolve_project_in_jj_workspace") as concurrency_group:

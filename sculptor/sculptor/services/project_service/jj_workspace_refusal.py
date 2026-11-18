@@ -71,11 +71,10 @@ def resolve_project_in_jj_workspace(
     Inside a jj workspace whose repository is colocated with git, that is the
     repository's root, as a git worktree's project is its main repository.
     Outside any jj workspace it is `project_path` itself. Any other jj
-    workspace raises `ProjectInJjWorkspaceError`: registering it would leave
-    every workspace creation failing. Telling whether the repository is
-    colocated runs jj, so a jj that is missing, does not run or is too old
-    raises `JjUnusableForProjectError`. The path is resolved first, so a
-    symlink into a jj workspace is treated as the workspace.
+    workspace raises `ProjectInJjWorkspaceError`. Telling whether the
+    repository is colocated runs jj, so a jj that is missing, does not run or
+    is too old raises `JjUnusableForProjectError`. The path is resolved first,
+    so a symlink into a jj workspace is treated as the workspace.
     """
     jj_workspace_root = find_jj_workspace_root(project_path.resolve())
     if jj_workspace_root is None:
