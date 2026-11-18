@@ -218,7 +218,7 @@ def _find_local_trunk_fallback(jj: JjCli, repo_dir: Path) -> str | None:
 
 
 def _parse_bookmark(row: Mapping[str, Any]) -> JjBookmark:
-    """The bookmark one `json(self)` row describes.
+    """The bookmark one row of jj's bookmark JSON describes.
 
     Local rows hold `name` and `target`; remote rows add `remote`, and
     `tracking_target` when a local bookmark tracks them.
