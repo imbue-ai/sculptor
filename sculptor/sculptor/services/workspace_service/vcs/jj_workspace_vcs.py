@@ -624,12 +624,12 @@ class JjWorkspaceVcs(WorkspaceVcs):
     def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:
         """jj-bin first on PATH, `GH_REPO` for a GitHub origin, a git ceiling above the checkout, and no editor.
 
-        A description only: it touches no file and checks no readiness. jj-bin's
-        link is kept by the workspace service when it lets a process launch.
-        gh finds no `.git` to read the repository from, so it needs `GH_REPO`. The
-        ceiling makes a `git` run in the workspace fail instead of finding an
-        enclosing repository. `JJ_EDITOR=false` makes a jj command that would open
-        an editor fail at once instead of waiting on a terminal no one is at.
+        It touches no file and checks no readiness, so any caller may ask for it;
+        jj-bin's link is kept where a process launches. gh finds no `.git` to read
+        the repository from, so it needs `GH_REPO`. The ceiling makes a `git` run
+        in the workspace fail instead of finding an enclosing repository.
+        `JJ_EDITOR=false` makes a jj command that would open an editor fail at
+        once instead of waiting on a terminal no one is at.
         """
         environment_variables = {_GIT_CEILING_DIRECTORIES: str(location.checkout_path.parent)}
         gh_repo = self._read_gh_repo(location.repo_path)

@@ -577,12 +577,9 @@ class DefaultWorkspaceService(WorkspaceService):
             yield
 
     def _prepare_vcs_for_launch(self, initialization_strategy: WorkspaceInitializationStrategy) -> None:
-        """Before a process launches in a jj workspace, refuse an unusable jj, or else point jj-bin at the jj readiness accepted.
+        """Raise `JjUnavailableError` before a jj workspace's environment runs jj, so the agent says why it stopped.
 
-        Raising `JjUnavailableError` leaves the workspace and jj-bin as they were, so the
-        agent says why it stopped and its next start works once jj is fixed. Call it
-        only right before a launch, never from a poller or a read, so nothing else can
-        change which jj a running agent finds.
+        Otherwise, for jj, point jj-bin at the ready jj through `prepare_jj_for_launch`.
         """
         match initialization_strategy:
             case (
@@ -597,11 +594,10 @@ class DefaultWorkspaceService(WorkspaceService):
                 assert_never(unreachable)
 
     def resume_workspace_environment(self, project: Project, workspace: Workspace) -> Environment:
-        """Resume the workspace's existing environment, for a caller that is not an agent.
+        """Resume the workspace's existing environment behind the same gate as an agent's start.
 
-        Passes the same gate as an agent's start, so it raises `JjUnavailableError`
-        for a jj workspace while jj cannot be used, and `EnvironmentNotFoundError`
-        when the workspace has no environment to resume.
+        Raises `JjUnavailableError` for a jj workspace while jj cannot be used, and
+        `EnvironmentNotFoundError` when the workspace has no environment to resume.
         """
         self._prepare_vcs_for_launch(workspace.initialization_strategy)
         if workspace.environment_id is None:

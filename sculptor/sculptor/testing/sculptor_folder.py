@@ -13,8 +13,8 @@ from sculptor.utils.build import get_sculptor_folder
 def isolated_sculptor_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """Point the Sculptor data folder, and so the internal folder, at a fresh directory for one test.
 
-    Tests that run a binary through a link Sculptor keeps in its internal folder
-    use this, so a concurrent test cannot replace or remove the link under them.
+    A test that runs a binary through a link Sculptor keeps in its internal
+    folder needs this, so a concurrent test cannot replace the link under it.
     """
     sculptor_folder = tmp_path / "sculptor_folder"
     monkeypatch.setenv(SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG, str(sculptor_folder))

@@ -51,10 +51,10 @@ def require_jj_available(readiness: JjReadiness) -> None:
 
 
 def prepare_jj_for_launch(dependency_management_service: DependencyManagementService) -> None:
-    """Refuse to launch a process in a jj workspace while jj is unusable; otherwise point jj-bin at the jj readiness accepted.
+    """Raise `JjUnavailableError` while jj is unusable, leaving jj-bin as it was; otherwise point jj-bin at the ready jj.
 
-    Raises `JjUnavailableError` and leaves jj-bin as it was when the resolved jj
-    fails readiness, so this must run, and only run, right before such a launch.
+    Run it only right before launching a process in a jj workspace, never from a
+    poller or a read, so nothing else can change which jj a running agent finds.
     """
     require_jj_available(dependency_management_service.get_jj_readiness())
     binary = dependency_management_service.resolve_binary_path(Dependency.JJ)

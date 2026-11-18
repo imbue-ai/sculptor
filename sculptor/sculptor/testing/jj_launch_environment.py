@@ -1,12 +1,11 @@
 """A pytest fixture for tests of processes Sculptor launches in a jj workspace.
 
 The backend has no jj on its PATH and resolves jj only through a managed copy
-staged in the test's own Sculptor folder, which jj-bin links to as the launch
-gate links it, so a process that finds jj found it through what Sculptor put on
-its PATH. HOME is a fresh directory, so a login
-shell reads no developer profile that puts another jj on PATH. The workspace's
-environment directory sits inside a git repository, as workspaces do when
-Sculptor runs from source.
+staged in the test's own Sculptor folder, and jj-bin is linked to it as the
+launch gate links it, so a process that finds jj found it through what Sculptor
+put on its PATH. HOME is a fresh directory, so a login shell reads no developer
+profile that puts another jj on PATH. The workspace's environment directory
+sits inside a git repository, as workspaces do when Sculptor runs from source.
 
 A test module requesting the fixture also imports `isolated_sculptor_folder`
 from `sculptor.testing.sculptor_folder`, which it depends on.
