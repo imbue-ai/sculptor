@@ -1,6 +1,7 @@
 """The routes for a repository's jj configuration, against real git and jj repositories and no network."""
 
 import shutil
+import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -366,3 +367,37 @@ def test_the_bookmarks_without_jj_are_a_failed_precondition(
 
     assert response.status_code == 412, response.text
     assert response.json()["detail"] == _JJ_NOT_INSTALLED_REASON
+
+
+@pytest.fixture
+def jj_that_cannot_list_bookmarks(jj_binary: JjBinary, tmp_path: Path) -> Iterator[None]:
+    """A jj that fails `jj bookmark list` as it would on a repository it cannot read, and is the pinned jj otherwise."""
+    wrapper = tmp_path / "jj"
+    wrapper.write_text(
+        f"#!{sys.executable} -I\n"
+        + "import os, sys\n"
+        + 'if "bookmark" in sys.argv and "list" in sys.argv:\n'
+        + '    sys.stderr.write("Error: Failed to read the repository\\n")\n'
+        + "    sys.exit(1)\n"
+        + f"os.execv({str(jj_binary.path)!r}, [{str(jj_binary.path)!r}, *sys.argv[1:]])\n"
+    )
+    wrapper.chmod(0o755)
+    _resolve_jj_to(str(wrapper))
+    yield
+    set_user_config_instance(None)
+
+
+def test_the_bookmarks_of_a_repository_jj_cannot_read_conflict(
+    jj_that_cannot_list_bookmarks: None,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    project = _register_project(test_services, jj_colocated_repo.path)
+
+    response = client.get(f"/api/v1/projects/{project.object_id}/jj/bookmarks")
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail.startswith("Cannot read the repository: ")
+    assert "Error: Failed to read the repository" in detail

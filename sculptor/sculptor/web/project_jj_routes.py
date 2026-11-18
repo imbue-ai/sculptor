@@ -106,7 +106,8 @@ def list_project_jj_bookmarks(
 ) -> JjBookmarkChoicesResponse:
     """The bookmarks a new jj workspace can start from or target: local and remote, without conflicted ones.
 
-    Answers 412 when jj is unavailable and 409 when the repository is not colocated.
+    Answers 412 when jj is unavailable, and 409 when the repository is not
+    colocated or jj cannot read it.
     """
     services = get_services_from_request_or_websocket(request)
     project = _get_project(services, user_session, validate_project_id(project_id))
@@ -116,6 +117,8 @@ def list_project_jj_bookmarks(
         raise HTTPException(status_code=412, detail=str(e)) from e
     except RepositoryNotColocatedError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+    except VcsCommandError as e:
+        raise HTTPException(status_code=409, detail=f"Cannot read the repository: {e}") from e
     return JjBookmarkChoicesResponse(bookmarks=bookmarks)
 
 
