@@ -39,6 +39,7 @@ from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.stale_working_copy_registry import StaleWorkingCopyRegistry
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
@@ -61,8 +62,13 @@ _FALLBACK_RECOMPUTE_EVERY_CYCLES = 20
 _STORE_LINK = Path(".jj") / "repo"
 _OPERATION_HEADS = Path("op_heads") / "heads"
 
-# What a repository was last read for: its operation heads, and each workspace's name and target.
-_RepositoryScanKey = tuple[frozenset[str], frozenset[tuple[str, str | None]]]
+
+class _StoreScan(FrozenModel):
+    """A repository's scan, as read at one set of operation heads for one set of workspaces and targets."""
+
+    operation_heads: frozenset[str]
+    target_ref_by_workspace: frozenset[tuple[str, str | None]]
+    scan: JjRepositoryScan
 
 
 class PublishedJjReadiness:
@@ -120,8 +126,7 @@ class JjWorkspacePoller:
         self._target_info_by_workspace: dict[WorkspaceID, WorkspaceTargetBranchesInfo] = {}
 
         # Scan-thread-only, so they need no lock.
-        self._scan_by_store: dict[Path, JjRepositoryScan] = {}
-        self._scan_key_by_store: dict[Path, _RepositoryScanKey] = {}
+        self._scan_by_store: dict[Path, _StoreScan] = {}
         # Workspaces and stores whose last scan failed, so a lasting failure is logged once.
         self._failed_scan_keys: set[WorkspaceID | Path] = set()
 
@@ -251,15 +256,21 @@ class JjWorkspacePoller:
         """The repository's scan, read again only when an operation, a member or a member's target has changed."""
         operation_heads = frozenset(path.name for path in (store / _OPERATION_HEADS).iterdir())
         target_ref_by_workspace = {str(workspace.object_id): workspace.target_branch for workspace, _ in members}
-        scan_key = (operation_heads, frozenset(target_ref_by_workspace.items()))
-        cached_scan = self._scan_by_store.get(store)
-        if cached_scan is not None and not force_recompute and self._scan_key_by_store.get(store) == scan_key:
-            return cached_scan
+        targets = frozenset(target_ref_by_workspace.items())
+        previous = self._scan_by_store.get(store)
+        if (
+            previous is not None
+            and not force_recompute
+            and previous.operation_heads == operation_heads
+            and previous.target_ref_by_workspace == targets
+        ):
+            return previous.scan
 
         _, representative_checkout = members[0]
         scan = scan_jj_workspaces(self._jj, representative_checkout, target_ref_by_workspace)
-        self._scan_by_store[store] = scan
-        self._scan_key_by_store[store] = scan_key
+        self._scan_by_store[store] = _StoreScan(
+            operation_heads=operation_heads, target_ref_by_workspace=targets, scan=scan
+        )
         return scan
 
     def _update_workspace(self, workspace: Workspace, scan: JjRepositoryScan) -> bool:
@@ -311,8 +322,7 @@ class JjWorkspacePoller:
             for workspace_id in set(self._target_info_by_workspace) - kept_workspace_ids:
                 self._target_info_by_workspace.pop(workspace_id)
         for store in set(self._scan_by_store) - live_stores:
-            self._scan_by_store.pop(store)
-            self._scan_key_by_store.pop(store, None)
+            del self._scan_by_store[store]
 
 
 def _is_jj_workspace(initialization_strategy: WorkspaceInitializationStrategy) -> bool:
