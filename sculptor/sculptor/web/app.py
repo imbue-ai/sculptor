@@ -51,6 +51,7 @@ from fastapi.websockets import WebSocketDisconnect
 from loguru import logger
 from pydantic import ValidationError
 from pydantic.alias_generators import to_camel
+from uvicorn.protocols.utils import ClientDisconnected
 
 from sculptor import version
 from sculptor.agents.attachments import resolve_attachment_source
@@ -4359,6 +4360,12 @@ async def to_websocket_stream(
 ) -> None:
     try:
         await websocket.accept()
+    except ClientDisconnected:
+        # Starlette converts a send to a departed client into WebSocketDisconnect only after
+        # the handshake, so a client that leaves during accept surfaces as uvicorn's own error.
+        with logger.contextualize(**user_session.logger_kwargs):
+            logger.debug("WebSocket client disconnected before the stream was accepted")
+        return
     except RuntimeError as e:
         # suppressing this when we are shutting down, doesn't seem to matter
         if (
