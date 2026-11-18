@@ -5,10 +5,14 @@ from typing import assert_never
 import httpx
 
 from sculpt.client import Client
+from sculpt.client.api.default import create_workspace_v2
 from sculpt.client.api.default import preview_branch_name
+from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.workspace_initialization_strategy import WorkspaceInitializationStrategy
+from sculpt.client.models.workspace_response import WorkspaceResponse
 from sculpt.formatting import cli_error
+from sculpt.formatting import extract_error_detail
 from sculpt.formatting import handle_connection_error
 
 
@@ -101,3 +105,26 @@ def _preview_branch_name(
     if isinstance(preview, HTTPValidationError):
         cli_error("Validation error resolving branch name", detail=str(preview), json_output=json_output)
     return preview.branch_name
+
+
+def create_workspace_or_exit(
+    *, client: Client, request: CreateWorkspaceRequestV2, json_output: bool
+) -> WorkspaceResponse:
+    """Create the workspace `request` describes, or exit with the reason the server gave for refusing it."""
+    try:
+        response = create_workspace_v2.sync_detailed(client=client, body=request)  # type: ignore[arg-type]
+    except httpx.ConnectError:
+        handle_connection_error(json_output)
+
+    result = response.parsed
+    if isinstance(result, HTTPValidationError):
+        cli_error("Validation error", detail=str(result), json_output=json_output)
+
+    if result is None:
+        cli_error(
+            "Failed to create workspace",
+            detail=extract_error_detail(response.content)
+            or f"Unexpected response from server (status {response.status_code})",
+            json_output=json_output,
+        )
+    return result
