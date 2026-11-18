@@ -668,8 +668,7 @@ class DependencyManagementService(Service):
     # Set to have the status refresher recompute the status now rather than at its next timed refresh.
     _status_refresh_requested: threading.Event = PrivateAttr(default_factory=threading.Event)
     _status_refresher_thread: ObservableThread | None = PrivateAttr(default=None)
-    # The login shell's last answer, which every status computation reuses until a re-check or a
-    # move of Sculptor's jj. Guarded by _status_computation_lock.
+    # The login shell's last answer, and the jj it was asked about. Guarded by _status_computation_lock.
     _login_shell_answer: _LoginShellAnswer | None = PrivateAttr(default=None)
     _observer_queues: set[Queue[Any]] = PrivateAttr(default_factory=set)
     # Cooperative cancellation: set by stop() so the background install thread
@@ -836,7 +835,7 @@ class DependencyManagementService(Service):
             status = self._status
             if status is not None:
                 return status
-            return self._compute_and_publish_status(is_login_shell_asked_again=False)
+            return self._compute_and_publish_status()
 
     def refresh_status(self) -> DependenciesStatus:
         """Compute every dependency's status now, keep it for reads, and push it to every observer.
@@ -847,12 +846,13 @@ class DependencyManagementService(Service):
         user's shell profile is therefore seen on `recheck_status` or at restart.
         """
         with self._status_computation_lock:
-            return self._compute_and_publish_status(is_login_shell_asked_again=False)
+            return self._compute_and_publish_status()
 
     def recheck_status(self) -> DependenciesStatus:
         """`refresh_status` for the user's explicit re-check, which also asks the user's login shell again."""
         with self._status_computation_lock:
-            return self._compute_and_publish_status(is_login_shell_asked_again=True)
+            self._login_shell_answer = None
+            return self._compute_and_publish_status()
 
     def _run_status_refresher(self) -> None:
         """Recompute the status on a slow timer, and soon after a refresh is requested, until the service stops."""
@@ -876,13 +876,13 @@ class DependencyManagementService(Service):
                     logger.opt(exception=True).warning("Dependency status refresh failed")
                     has_warned_refresh_failure = True
 
-    def _compute_and_publish_status(self, is_login_shell_asked_again: bool) -> DependenciesStatus:
+    def _compute_and_publish_status(self) -> DependenciesStatus:
         """Compute, store and push the status; call only while holding ``_status_computation_lock``.
 
         Delta detection is handled by the stream layer (``stream_everything``),
         so the status is pushed whether or not it changed.
         """
-        status = self._get_status(is_login_shell_asked_again)
+        status = self._get_status()
         with self._observer_lock:
             self._status = status
             for queue in self._observer_queues:
@@ -1268,7 +1268,7 @@ class DependencyManagementService(Service):
         if process is None or process is self._gh_auth_session:
             self._gh_auth_session = None
 
-    def _get_status(self, is_login_shell_asked_again: bool) -> DependenciesStatus:
+    def _get_status(self) -> DependenciesStatus:
         """Compute the current status of all dependencies; call only while holding ``_status_computation_lock``.
 
         Its one side effect is keeping the login shell's answer, when it asks the shell.
@@ -1329,7 +1329,7 @@ class DependencyManagementService(Service):
 
         jj_readiness = self._jj_readiness_from_check(jj_check)
         login_shell_jj = (
-            self._read_login_shell_jj(jj_check.path, is_login_shell_asked_again)
+            self._read_login_shell_jj(jj_check.path)
             if isinstance(jj_readiness, JjAvailable) and jj_check.path is not None
             else None
         )
@@ -1434,13 +1434,10 @@ class DependencyManagementService(Service):
             ),
         )
 
-    def _read_login_shell_jj(self, sculptor_jj: str, is_asked_again: bool) -> LoginShellJj | None:
-        """The login shell's answer for `sculptor_jj`, asking the shell only when told to or when it has not been asked about `sculptor_jj`.
-
-        Gates never come here: they combine their own jj probe with the last status's answer.
-        """
+    def _read_login_shell_jj(self, sculptor_jj: str) -> LoginShellJj | None:
+        """The login shell's last answer for `sculptor_jj`, asking the shell when there is none."""
         answer = self._login_shell_answer
-        if is_asked_again or answer is None or answer.sculptor_jj != sculptor_jj:
+        if answer is None or answer.sculptor_jj != sculptor_jj:
             answer = _LoginShellAnswer(sculptor_jj=sculptor_jj, login_shell_jj=self._find_login_shell_jj(sculptor_jj))
             self._login_shell_answer = answer
         return answer.login_shell_jj
