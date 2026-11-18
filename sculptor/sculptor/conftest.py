@@ -4,6 +4,7 @@ from typing import cast
 import pytest
 
 from sculptor.config.settings import SculptorSettings
+from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.service_collections.service_collection import CompleteServiceCollection
@@ -27,6 +28,7 @@ from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
+from sculptor.testing.jj_repos import JjBinary
 from sculptor.web.pr_polling_service import PrPollingService
 
 
@@ -35,6 +37,18 @@ def silly_global_config() -> Generator[UserConfig, None, None]:
     config = get_default_user_config_instance()
     set_user_config_instance(config)
     yield config
+    set_user_config_instance(None)
+
+
+@pytest.fixture
+def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary) -> Generator[None, None, None]:
+    """Make Sculptor's own dependency resolution find the pinned jj, whatever else is installed."""
+    set_user_config_instance(
+        get_default_user_config_instance().model_copy(
+            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
+        )
+    )
+    yield
     set_user_config_instance(None)
 
 

@@ -193,17 +193,13 @@ def test_changed_file_paths_in_a_checkout_that_became_a_jj_workspace_raise_the_t
         tracker.get_changed_file_paths()
 
 
+@pytest.mark.usefixtures("jj_resolved_to_the_pinned_binary")
 def test_a_jj_workspace_gets_a_jj_tracker_measured_from_its_working_copy(
     jj_binary: JjBinary,
     jj_colocated_repo: JjColocatedRepo,
     tmp_path: Path,
     test_root_concurrency_group: ConcurrencyGroup,
 ) -> None:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(
-            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
-        )
-    )
     environment_dir = tmp_path / "environment"
     environment_dir.mkdir()
     checkout = environment_dir / "code"

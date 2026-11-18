@@ -4,37 +4,22 @@ jj workspaces cannot be created through any route yet, so the workspace row is
 written through the workspace service and its checkout built with jj directly.
 """
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Project
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
-from sculptor.services.user_config.user_config import get_default_user_config_instance
-from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import run_jj
 from sculptor.web.auth import authenticate_anonymous
-
-
-@pytest.fixture
-def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary) -> Iterator[None]:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(
-            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
-        )
-    )
-    yield
-    set_user_config_instance(None)
 
 
 @pytest.fixture
