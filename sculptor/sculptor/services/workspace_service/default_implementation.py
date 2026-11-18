@@ -946,15 +946,7 @@ class DefaultWorkspaceService(WorkspaceService):
         transaction: DataModelTransaction,
     ) -> tuple[list[CommitRecord], str | None]:
         """Get the commit history for the workspace branch."""
-        workspace = transaction.get_workspace(workspace_id)
-        if workspace is None:
-            raise WorkspaceNotFoundError(workspace_id)
-
-        location = self._get_checkout_location(workspace, transaction)
-        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
-        history = vcs.get_revision_history(
-            location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
-        )
+        history = self._read_history(workspace_id, transaction)
         match history:
             case GitCommitHistory():
                 return (history.commits, history.fork_point)
@@ -968,15 +960,7 @@ class DefaultWorkspaceService(WorkspaceService):
         workspace_id: WorkspaceID,
         transaction: DataModelTransaction,
     ) -> JjRevisionHistory:
-        workspace = transaction.get_workspace(workspace_id)
-        if workspace is None:
-            raise WorkspaceNotFoundError(workspace_id)
-
-        location = self._get_checkout_location(workspace, transaction)
-        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
-        history = vcs.get_revision_history(
-            location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
-        )
+        history = self._read_history(workspace_id, transaction)
         match history:
             case JjRevisionHistory():
                 return history
@@ -984,6 +968,20 @@ class DefaultWorkspaceService(WorkspaceService):
                 raise WorkspaceRevisionHistoryUnavailableError(workspace_id)
             case _ as unreachable:
                 assert_never(unreachable)
+
+    def _read_history(
+        self, workspace_id: WorkspaceID, transaction: DataModelTransaction
+    ) -> GitCommitHistory | JjRevisionHistory:
+        """The workspace's history back to where it forks from its target, or from its starting commit without one."""
+        workspace = transaction.get_workspace(workspace_id)
+        if workspace is None:
+            raise WorkspaceNotFoundError(workspace_id)
+
+        location = self._get_checkout_location(workspace, transaction)
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
+        return vcs.get_revision_history(
+            location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
+        )
 
     # Workspace File Operations
 
