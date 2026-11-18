@@ -141,8 +141,7 @@ def test_cmd_enter_submits_path(
 
     Verifies:
     1. Typing ~/ triggers the autocomplete dropdown
-    2. Pressing Cmd+Enter fires onSubmit (which triggers repo validation)
-    3. The Add button shows a spinner, indicating validation is in progress
+    2. Pressing Cmd+Enter sends the typed path, without its trailing slash, for validation
     """
     page = sculptor_instance_.page
 
@@ -157,13 +156,14 @@ def test_cmd_enter_submits_path(
     items = add_repo_dialog.get_path_autocomplete_items()
     expect(items.first).to_be_visible()
 
-    # Press Cmd+Enter — should submit the path (triggering validation)
-    path_input.press(f"{_MOD_KEY}+Enter")
+    # The Add button is disabled only until the server answers, which can be too
+    # brief to observe, so assert on the validation request itself.
+    with page.expect_request(
+        lambda request: request.method == "POST" and "/api/v1/projects/initialize" in request.url
+    ) as validation_request:
+        path_input.press(f"{_MOD_KEY}+Enter")
 
-    # When onSubmit fires, the Add Repository button shows a spinner while
-    # validation is in progress. This proves the submit happened.
-    submit_button = add_repo_dialog.get_submit_button()
-    expect(submit_button).to_be_disabled()
+    assert validation_request.value.post_data_json == {"projectPath": "~"}
 
 
 @user_story("to see the correct repo name after selecting a folder from autocomplete")
