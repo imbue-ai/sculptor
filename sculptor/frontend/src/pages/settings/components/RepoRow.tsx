@@ -62,7 +62,7 @@ export const RepoRow = ({
   const dangerColor = useThemeDangerColor();
   const doesCreateJjWorkspaces = useAtomValue(projectJjStateAtomFamily(projectId))?.createsJjWorkspaces ?? false;
   // The kind of workspace this repository creates decides which default it runs.
-  const defaultSetupCommand = useDefaultSetupCommand(doesCreateJjWorkspaces ? "JJ_WORKSPACE" : "WORKTREE") ?? undefined;
+  const defaultSetupCommand = useDefaultSetupCommand(doesCreateJjWorkspaces ? "JJ_WORKSPACE" : "WORKTREE");
   const isTrackingDefault = workspaceSetupCommand === null;
   // While the row tracks a default the backend has not yet named, there is nothing to show or edit.
   const isSetupCommandKnown = !isTrackingDefault || defaultSetupCommand !== undefined;
