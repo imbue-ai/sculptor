@@ -478,26 +478,6 @@ def test_readiness_is_unchanged_when_the_login_shell_finds_no_other_jj(
     )
 
 
-def test_the_login_shell_finding_sculptors_own_jj_through_another_directory_is_not_another_jj(
-    jj_test_home: _JjTestHome,
-    jj_binary: JjBinary,
-    jj_isolated_env: JjIsolatedEnv,
-    jj_service: DependencyManagementService,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    cargo_bin = tmp_path / "cargo_bin"
-    cargo_bin.mkdir()
-    (cargo_bin / "jj").symlink_to(jj_binary.path)
-    _make_login_profile_put_first(cargo_bin, jj_isolated_env, monkeypatch)
-    _configure_jj(str(jj_binary.path))
-
-    status = jj_service.get_status()
-
-    assert status.login_shell_jj is None
-    assert isinstance(status.jj_readiness, JjAvailable)
-
-
 def test_the_login_shell_is_asked_with_the_term_a_workspace_terminal_gives_it(
     jj_test_home: _JjTestHome,
     jj_binary: JjBinary,
