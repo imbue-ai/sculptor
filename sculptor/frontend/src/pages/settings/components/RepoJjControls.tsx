@@ -200,7 +200,7 @@ const useJjUnavailableReason = (projectId: string, jjReadiness: JjReadiness | un
     enabled: isJjBlocked,
     retry: false,
   });
-  return isJjBlocked ? (data ?? undefined) : undefined;
+  return data ?? undefined;
 };
 
 /**
