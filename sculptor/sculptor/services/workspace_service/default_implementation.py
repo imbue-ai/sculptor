@@ -47,6 +47,7 @@ from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
+from sculptor.services.workspace_service.api import WorkspaceBaseNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -337,20 +338,29 @@ class DefaultWorkspaceService(WorkspaceService):
 
         # Record the commit the workspace starts from: its source branch's, or
         # when it has none, the user's checked-out commit for git. jj has no
-        # checked-out commit, so a jj workspace starts from its target instead.
+        # checked-out commit, so a jj workspace starts from its target instead,
+        # and cannot be created when that base names no commit.
         match initialization_strategy:
             case (
                 WorkspaceInitializationStrategy.IN_PLACE
                 | WorkspaceInitializationStrategy.CLONE
                 | WorkspaceInitializationStrategy.WORKTREE
             ):
-                base_ref = source_branch or "HEAD"
+                source_git_hash = vcs.resolve_base_commit_id(project_path, source_branch or "HEAD")
             case WorkspaceInitializationStrategy.JJ_WORKSPACE:
                 source_branch = source_branch or target_branch
-                base_ref = source_branch
+                if source_branch is None:
+                    raise WorkspaceBaseNotFoundError(
+                        f"The repository at {project_path} has no trunk bookmark to start from; name a source_branch"
+                    )
+                source_git_hash = vcs.resolve_base_commit_id(project_path, source_branch)
+                if source_git_hash is None:
+                    raise WorkspaceBaseNotFoundError(
+                        f"'{source_branch}' names no bookmark or commit;"
+                        + " name a bookmark such as main@origin, or a full commit id"
+                    )
             case _ as unreachable:
                 assert_never(unreachable)
-        source_git_hash = None if base_ref is None else vcs.resolve_base_commit_id(project_path, base_ref)
 
         # Resolve through the project's tri-state default helper: `None` means
         # "use the current default", `""` means "user cleared", and any other

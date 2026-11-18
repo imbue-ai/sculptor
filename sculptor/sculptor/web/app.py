@@ -155,6 +155,7 @@ from sculptor.services.user_config.user_config import replace_config
 from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
 from sculptor.services.voice_models import find_voice_model_file
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
+from sculptor.services.workspace_service.api import WorkspaceBaseNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -616,7 +617,6 @@ def _validate_workspace_creation_request(
     project: Project,
     initialization_strategy: WorkspaceInitializationStrategy,
     source_branch: str | None,
-    target_branch: str | None,
     requested_branch_name: str | None,
 ) -> None:
     """Raise an HTTPException when a request to create a workspace breaks its mode's rules.
@@ -641,9 +641,7 @@ def _validate_workspace_creation_request(
             if source_branch is None:
                 raise HTTPException(status_code=400, detail="source_branch is required for WORKTREE workspaces")
         case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-            _validate_jj_workspace_creation_request(
-                services, concurrency_group, project, source_branch, target_branch, requested_branch_name
-            )
+            _validate_jj_workspace_creation_request(services, concurrency_group, project, requested_branch_name)
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -675,43 +673,22 @@ def _validate_jj_workspace_creation_request(
     services: CompleteServiceCollection,
     concurrency_group: ConcurrencyGroup,
     project: Project,
-    source_branch: str | None,
-    target_branch: str | None,
     requested_branch_name: str | None,
 ) -> None:
-    """A jj workspace needs jj, a repository that creates jj workspaces, a bookmark name, and a base jj can resolve.
-
-    The base is the source branch, else the target, else the repository's default target, as `create_workspace` picks it.
-    """
+    """A jj workspace needs jj, a repository that creates jj workspaces, and a bookmark name."""
     project_path = project.get_local_user_path()
     jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
-    vcs = services.workspace_service.get_workspace_vcs(WorkspaceInitializationStrategy.JJ_WORKSPACE)
     try:
         facts = gather_jj_workspace_creation_facts(project, jj, services.dependency_management_service)
-        jj_unavailability = describe_jj_unavailability(facts.jj_readiness)
-        if jj_unavailability is not None:
-            raise HTTPException(status_code=412, detail=jj_unavailability)
-        if not creates_jj_workspaces(facts):
-            raise HTTPException(
-                status_code=400, detail=f"The repository at {project_path} does not create jj workspaces"
-            )
-        if requested_branch_name is None or not requested_branch_name.strip():
-            raise HTTPException(
-                status_code=400, detail="requested_branch_name is required for JJ_WORKSPACE workspaces"
-            )
-        base_ref = source_branch or target_branch or vcs.resolve_default_target(project_path)
-        if base_ref is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"The repository at {project_path} has no trunk bookmark to start from; name a source_branch",
-            )
-        if vcs.resolve_base_commit_id(project_path, base_ref) is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"'{base_ref}' names no bookmark or commit; name a bookmark such as main@origin, or a full commit id",
-            )
     except VcsCommandError as e:
         raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
+    jj_unavailability = describe_jj_unavailability(facts.jj_readiness)
+    if jj_unavailability is not None:
+        raise HTTPException(status_code=412, detail=jj_unavailability)
+    if not creates_jj_workspaces(facts):
+        raise HTTPException(status_code=400, detail=f"The repository at {project_path} does not create jj workspaces")
+    if requested_branch_name is None or not requested_branch_name.strip():
+        raise HTTPException(status_code=400, detail="requested_branch_name is required for JJ_WORKSPACE workspaces")
 
 
 def _new_ref_noun(initialization_strategy: WorkspaceInitializationStrategy) -> str:
@@ -936,18 +913,20 @@ def create_workspace_v2(
             project,
             workspace_request.initialization_strategy,
             workspace_request.source_branch,
-            workspace_request.target_branch,
             workspace_request.requested_branch_name,
         )
-        workspace = services.workspace_service.create_workspace(
-            project=project,
-            initialization_strategy=workspace_request.initialization_strategy,
-            source_branch=workspace_request.source_branch,
-            requested_branch_name=workspace_request.requested_branch_name,
-            description=workspace_request.description,
-            transaction=transaction,
-            target_branch=workspace_request.target_branch,
-        )
+        try:
+            workspace = services.workspace_service.create_workspace(
+                project=project,
+                initialization_strategy=workspace_request.initialization_strategy,
+                source_branch=workspace_request.source_branch,
+                requested_branch_name=workspace_request.requested_branch_name,
+                description=workspace_request.description,
+                transaction=transaction,
+                target_branch=workspace_request.target_branch,
+            )
+        except WorkspaceBaseNotFoundError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         update_most_recently_used_project(project_id=validated_project_id)
         logger.info("Created workspace {} for project {}", workspace.object_id, workspace_request.project_id)
         setup_command = (

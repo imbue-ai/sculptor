@@ -66,6 +66,10 @@ class FileNotFoundAtRefError(ExpectedError):
         super().__init__(f"File {file_path} not found at ref {git_ref}: {detail}")
 
 
+class WorkspaceBaseNotFoundError(ExpectedError):
+    """Raised when the base a new workspace would start from names no commit."""
+
+
 class WorkspaceCommitHistoryUnavailableError(ExpectedError):
     """Raised when a workspace's history is not a list of git commits, as in a jj workspace."""
 
@@ -174,6 +178,9 @@ class WorkspaceService(Service, ABC):
 
         Returns:
             The created Workspace.
+
+        Raises:
+            WorkspaceBaseNotFoundError: If a jj workspace's base, its source branch or else its target, names no commit.
         """
 
     @abstractmethod
