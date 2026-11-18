@@ -154,9 +154,6 @@ class PlaywrightRepositoriesSettingsElement(PlaywrightIntegrationTestElement):
         """Get the loading text the colocation switch shows while a colocation runs."""
         return self.get_by_text("Initializing jujutsu colocation").first
 
-    def get_jj_colocation_error(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.JJ_COLOCATION_ERROR).first
-
     def get_use_jj_for_new_workspaces_switch(self) -> Locator:
         """Get the "use jj for new workspaces" switch of the first (expanded) repo."""
         return self.get_by_test_id(ElementIDs.REPO_JJ_USE_FOR_NEW_WORKSPACES_SWITCH).first
