@@ -7,7 +7,6 @@ import typer
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
 from sculpt.client import Client
-from sculpt.client.api.default import create_workspace_v2
 from sculpt.client.api.default import delete_workspace
 from sculpt.client.api.default import list_recent_workspaces
 from sculpt.client.api.default import list_workspaces
@@ -18,6 +17,7 @@ from sculpt.client.models.recent_workspace_response import RecentWorkspaceRespon
 from sculpt.client.models.update_workspace_request import UpdateWorkspaceRequest
 from sculpt.client.types import Unset
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
+from sculpt.commands._workspace_helpers import create_workspace_or_exit
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
 from sculpt.commands._workspace_helpers import resolve_strategy
 from sculpt.commands.data_types import WorkspaceCreateOutput
@@ -68,11 +68,15 @@ def create(
         "--strategy",
         help=f"Initialization strategy ({', '.join(STRATEGY_MAPPING)})",
     ),
-    branch: str | None = typer.Option(None, "--branch", help="Source branch"),
+    branch: str | None = typer.Option(
+        None,
+        "--branch",
+        help="Source branch; for jj, a bookmark such as main@origin or a full commit id (default: the target)",
+    ),
     branch_name: str | None = typer.Option(
         None,
         "--branch-name",
-        help="New branch name (required for worktree; auto-generated if omitted)",
+        help="New branch name, or bookmark name for jj (required for worktree and jj; auto-generated if omitted)",
     ),
     target_branch: str | None = typer.Option(
         None,
@@ -108,16 +112,7 @@ def create(
         target_branch=target_branch,
     )
 
-    try:
-        result = create_workspace_v2.sync(client=client, body=request)  # type: ignore[arg-type]
-    except httpx.ConnectError:
-        handle_connection_error(json_output)
-
-    if result is None:
-        cli_error("Failed to create workspace", detail="No response from server", json_output=json_output)
-
-    if isinstance(result, HTTPValidationError):
-        cli_error("Validation error", detail=str(result), json_output=json_output)
+    result = create_workspace_or_exit(client=client, request=request, json_output=json_output)
 
     if json_output:
         output = WorkspaceCreateOutput(

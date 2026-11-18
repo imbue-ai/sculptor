@@ -43,9 +43,11 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
+from sculptor.services.workspace_service.api import WorkspaceBaseNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -64,6 +66,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
+from sculptor.services.workspace_service.jj_orphan_sweep import forget_orphaned_jj_workspaces
 from sculptor.services.workspace_service.setup_command_runner import DefaultSetupStateProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
@@ -76,8 +79,10 @@ from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitCommitHistory
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
+from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
+from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
@@ -266,6 +271,21 @@ class DefaultWorkspaceService(WorkspaceService):
             initialization_strategy, self.vcs_runners, self.concurrency_group, read_jj_snapshot_max_new_file_size_mib
         )
 
+    def forget_orphaned_jj_workspaces(self) -> None:
+        with self.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+            projects = transaction.get_projects()
+            live_workspace_ids = {str(workspace.object_id) for workspace in transaction.get_workspaces()}
+        jj = self.vcs_runners.jj
+        for project in projects:
+            if project.user_git_repo_url is None or not project.is_path_accessible:
+                continue
+            repo_path = project.get_local_user_path()
+            try:
+                if is_jj_colocated(jj, repo_path):
+                    forget_orphaned_jj_workspaces(jj, repo_path, live_workspace_ids)
+            except VcsCommandError as e:
+                logger.debug("Cannot forget the orphaned jj workspaces of {}: {}", repo_path, e)
+
     def _get_diff_lock(self, workspace_id: WorkspaceID) -> threading.Lock:
         """Get a per-workspace lock for diff generation, creating one lazily if needed."""
         with self._diff_lock_map_lock:
@@ -308,16 +328,38 @@ class DefaultWorkspaceService(WorkspaceService):
         if description is None:
             description = uuid.uuid4().hex[:8]
 
-        # Record the commit the workspace starts from: its source branch's, or
-        # the user's checked-out commit when it has none.
         project_path = project.get_local_user_path()
         vcs = self.get_workspace_vcs(initialization_strategy)
-        source_git_hash = vcs.resolve_base_commit_id(project_path, source_branch or "HEAD")
 
         # Use the caller-provided target branch if given, otherwise resolve a
         # sensible default from the user's repo.
         if target_branch is None:
             target_branch = vcs.resolve_default_target(project_path)
+
+        # Record the commit the workspace starts from: its source branch's, or
+        # when it has none, the user's checked-out commit for git. jj has no
+        # checked-out commit, so a jj workspace starts from its target instead.
+        match initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                source_git_hash = vcs.resolve_base_commit_id(project_path, source_branch or "HEAD")
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                source_branch = source_branch or target_branch
+                if source_branch is None:
+                    raise WorkspaceBaseNotFoundError(
+                        f"The repository at {project_path} has no trunk bookmark to start from; name a source_branch"
+                    )
+                source_git_hash = vcs.resolve_base_commit_id(project_path, source_branch)
+                if source_git_hash is None:
+                    raise WorkspaceBaseNotFoundError(
+                        f"'{source_branch}' names no bookmark or commit;"
+                        + " name a bookmark such as main@origin, or a full commit id"
+                    )
+            case _ as unreachable:
+                assert_never(unreachable)
 
         # Resolve through the project's tri-state default helper: `None` means
         # "use the current default", `""` means "user cleared", and any other
@@ -486,6 +528,20 @@ class DefaultWorkspaceService(WorkspaceService):
         with lock:
             yield
 
+    def _require_vcs_available(self, initialization_strategy: WorkspaceInitializationStrategy) -> None:
+        """Raise `JjUnavailableError` before a jj workspace's environment runs jj, so the agent says why it stopped."""
+        match initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                return
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                require_jj_available(self.dependency_management_service.get_jj_readiness())
+            case _ as unreachable:
+                assert_never(unreachable)
+
     def _create_or_resume_environment(
         self,
         project: Project,
@@ -508,6 +564,7 @@ class DefaultWorkspaceService(WorkspaceService):
 
             if workspace is None:
                 raise WorkspaceNotFoundError(workspace_id)
+            self._require_vcs_available(workspace.initialization_strategy)
 
             environment_id_to_resume = workspace.environment_id
             environment: Environment | None = None

@@ -4,7 +4,6 @@ import typer
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
 from sculpt.client.api.default import create_workspace_agent
-from sculpt.client.api.default import create_workspace_v2
 from sculpt.client.models.agent_type_name import AgentTypeName
 from sculpt.client.models.create_agent_request import CreateAgentRequest
 from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
@@ -15,6 +14,7 @@ from sculpt.commands._harness_helpers import MODEL_HELP
 from sculpt.commands._harness_helpers import resolve_harness_selection
 from sculpt.commands._harness_helpers import resolve_prompt_models
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
+from sculpt.commands._workspace_helpers import create_workspace_or_exit
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
 from sculpt.commands._workspace_helpers import resolve_strategy
 from sculpt.commands.data_types import RunOutput
@@ -46,11 +46,15 @@ def run_cmd(
         "--strategy",
         help=f"Initialization strategy ({', '.join(STRATEGY_MAPPING)})",
     ),
-    branch: str | None = typer.Option(None, "--branch", help="Source branch"),
+    branch: str | None = typer.Option(
+        None,
+        "--branch",
+        help="Source branch; for jj, a bookmark such as main@origin or a full commit id (default: the target)",
+    ),
     branch_name: str | None = typer.Option(
         None,
         "--branch-name",
-        help="New branch name (required for worktree; auto-generated if omitted)",
+        help="New branch name, or bookmark name for jj (required for worktree and jj; auto-generated if omitted)",
     ),
     target_branch: str | None = typer.Option(
         None,
@@ -115,22 +119,7 @@ def run_cmd(
         target_branch=target_branch,
     )
 
-    try:
-        ws_response = create_workspace_v2.sync_detailed(client=client, body=ws_request)  # type: ignore[arg-type]
-    except httpx.ConnectError:
-        handle_connection_error(json_output)
-
-    ws_result = ws_response.parsed
-    if isinstance(ws_result, HTTPValidationError):
-        cli_error("Validation error", detail=str(ws_result), json_output=json_output)
-
-    if ws_result is None:
-        detail = extract_error_detail(ws_response.content)
-        cli_error(
-            "Failed to create workspace",
-            detail=detail or f"Unexpected response from server (status {ws_response.status_code})",
-            json_output=json_output,
-        )
+    ws_result = create_workspace_or_exit(client=client, request=ws_request, json_output=json_output)
 
     workspace_id = ws_result.object_id
 

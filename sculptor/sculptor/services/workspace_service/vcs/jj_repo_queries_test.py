@@ -19,6 +19,7 @@ from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_coloca
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_tracked_bookmark_names
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_workspaces
+from sculptor.services.workspace_service.vcs.jj_repo_queries import read_config_value
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_remotes
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_workspace_config_path
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_commit_id
@@ -471,6 +472,18 @@ def test_forget_workspace_leaves_the_workspace_config_file_behind(
     forget_workspace(jj_cli, jj_colocated_repo.path, jj_workspace.name)
 
     assert config_path.is_file()
+
+
+def test_read_config_value_reads_the_value_jj_resolves_including_from_the_environment(
+    jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("JJ_USER", "Jordan Bookmarker")
+
+    assert read_config_value(jj_cli, jj_colocated_repo.path, "user.name") == "Jordan Bookmarker"
+
+
+def test_read_config_value_is_none_for_an_unset_option(jj_cli: JjCli, jj_colocated_repo: JjColocatedRepo) -> None:
+    assert read_config_value(jj_cli, jj_colocated_repo.path, "sculptor-test.unset-option") is None
 
 
 def test_update_stale_brings_a_stale_workspace_back_into_use(

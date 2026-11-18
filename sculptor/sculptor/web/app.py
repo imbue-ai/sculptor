@@ -82,6 +82,7 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.event_utils import MutableEvent
 from sculptor.foundation.git import is_path_in_git_repo
@@ -131,6 +132,7 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.pi_login_service import PiLoginMode
 from sculptor.services.pi_login_service import broadcast_pi_models_refresh
 from sculptor.services.pi_login_service import pi_login_terminal_id
@@ -153,6 +155,7 @@ from sculptor.services.user_config.user_config import replace_config
 from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
 from sculptor.services.voice_models import find_voice_model_file
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
+from sculptor.services.workspace_service.api import WorkspaceBaseNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
@@ -179,10 +182,14 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.services.workspace_service.jj_workspace_creation import creates_jj_workspaces
+from sculptor.services.workspace_service.jj_workspace_creation import gather_jj_workspace_creation_facts
 from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.data_types import RefNameStatus
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
+from sculptor.services.workspace_service.vcs.jj_repo_queries import read_config_value
+from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
@@ -606,6 +613,7 @@ def _validate_prompt_model_selection(
 
 def _validate_workspace_creation_request(
     services: CompleteServiceCollection,
+    concurrency_group: ConcurrencyGroup,
     project: Project,
     initialization_strategy: WorkspaceInitializationStrategy,
     source_branch: str | None,
@@ -633,8 +641,7 @@ def _validate_workspace_creation_request(
             if source_branch is None:
                 raise HTTPException(status_code=400, detail="source_branch is required for WORKTREE workspaces")
         case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-            # TODO(SCU-1878): accept jj workspaces in repositories that create them.
-            raise HTTPException(status_code=400, detail="jj workspaces cannot be created yet")
+            _validate_jj_workspace_creation_request(services, concurrency_group, project, requested_branch_name)
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -646,6 +653,7 @@ def _validate_workspace_creation_request(
         validation = vcs.validate_new_ref_name(project_path, requested_branch_name)
     except VcsCommandError as e:
         raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
+    ref_noun = _new_ref_noun(initialization_strategy)
     match validation.status:
         case RefNameStatus.AVAILABLE:
             return
@@ -654,9 +662,45 @@ def _validate_workspace_creation_request(
             # error at creation, rather than an opaque failure later when the
             # checkout is created during async environment setup (and is
             # surfaced only in the agent panel).
-            raise HTTPException(status_code=400, detail=f"'{requested_branch_name}' is not a valid git branch name")
+            raise HTTPException(status_code=400, detail=f"'{requested_branch_name}' is not a valid {ref_noun} name")
         case RefNameStatus.ALREADY_EXISTS:
-            raise HTTPException(status_code=409, detail=f"Branch '{requested_branch_name}' already exists")
+            raise HTTPException(status_code=409, detail=f"A {ref_noun} named '{requested_branch_name}' already exists")
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _validate_jj_workspace_creation_request(
+    services: CompleteServiceCollection,
+    concurrency_group: ConcurrencyGroup,
+    project: Project,
+    requested_branch_name: str | None,
+) -> None:
+    project_path = project.get_local_user_path()
+    jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
+    try:
+        facts = gather_jj_workspace_creation_facts(project, jj, services.dependency_management_service)
+    except VcsCommandError as e:
+        raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
+    jj_unavailability = describe_jj_unavailability(facts.jj_readiness)
+    if jj_unavailability is not None:
+        raise HTTPException(status_code=412, detail=jj_unavailability)
+    if not creates_jj_workspaces(facts):
+        raise HTTPException(status_code=400, detail=f"The repository at {project_path} does not create jj workspaces")
+    if requested_branch_name is None or not requested_branch_name.strip():
+        raise HTTPException(status_code=400, detail="requested_branch_name is required for JJ_WORKSPACE workspaces")
+
+
+def _new_ref_noun(initialization_strategy: WorkspaceInitializationStrategy) -> str:
+    """What creation errors call the ref a new workspace of this kind creates."""
+    match initialization_strategy:
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            return "git branch"
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            return "bookmark"
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -864,20 +908,24 @@ def create_workspace_v2(
 
         _validate_workspace_creation_request(
             services,
+            get_root_concurrency_group(request),
             project,
             workspace_request.initialization_strategy,
             workspace_request.source_branch,
             workspace_request.requested_branch_name,
         )
-        workspace = services.workspace_service.create_workspace(
-            project=project,
-            initialization_strategy=workspace_request.initialization_strategy,
-            source_branch=workspace_request.source_branch,
-            requested_branch_name=workspace_request.requested_branch_name,
-            description=workspace_request.description,
-            transaction=transaction,
-            target_branch=workspace_request.target_branch,
-        )
+        try:
+            workspace = services.workspace_service.create_workspace(
+                project=project,
+                initialization_strategy=workspace_request.initialization_strategy,
+                source_branch=workspace_request.source_branch,
+                requested_branch_name=workspace_request.requested_branch_name,
+                description=workspace_request.description,
+                transaction=transaction,
+                target_branch=workspace_request.target_branch,
+            )
+        except WorkspaceBaseNotFoundError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         update_most_recently_used_project(project_id=validated_project_id)
         logger.info("Created workspace {} for project {}", workspace.object_id, workspace_request.project_id)
         setup_command = (
@@ -898,7 +946,7 @@ def create_workspace_v2(
         )
 
 
-_PREVIEW_BRANCH_NAME_GIT_TIMEOUT = 5.0
+_PREVIEW_BRANCH_NAME_VCS_TIMEOUT = 5.0
 
 
 @router.get("/api/v1/workspaces/preview-branch-name")
@@ -914,8 +962,7 @@ def preview_branch_name(
     In-place mode returns an empty string since the field is hidden. Every other
     mode resolves the project's or user-global naming pattern against a `<slug>`
     derived from the workspace name (random if empty) and a `<user>` slug derived
-    from the repo's `git config user.name`; for a jj workspace the name is its
-    bookmark's.
+    from the `user.name` of the VCS that names the new ref.
     """
     match mode:
         case WorkspaceInitializationStrategy.IN_PLACE:
@@ -945,24 +992,48 @@ def preview_branch_name(
     if not name_slug:
         name_slug = generate_random_slug()
 
-    full_name = ""
     root_concurrency_group = get_root_concurrency_group(request)
     with root_concurrency_group.make_concurrency_group(name="preview_branch_name") as cg:
-        try:
-            returncode, stdout, _ = run_git_command_local(
-                cg,
-                ["git", "config", "user.name"],
-                cwd=project.get_local_user_path(),
-                check_output=False,
-                timeout=_PREVIEW_BRANCH_NAME_GIT_TIMEOUT,
-                is_retry_safe=True,
-            )
-            if returncode == 0:
-                full_name = stdout.strip()
-        except Exception:
-            full_name = ""
+        full_name = _read_user_name(services, cg, mode, project.get_local_user_path())
     resolved = resolve_pattern(pattern, user_slug=user_slug_from_full_name(full_name), name_slug=name_slug)
     return PreviewBranchNameResponse(branch_name=resolved)
+
+
+def _read_user_name(
+    services: CompleteServiceCollection,
+    concurrency_group: ConcurrencyGroup,
+    initialization_strategy: WorkspaceInitializationStrategy,
+    project_path: Path,
+) -> str:
+    """The `user.name` of the VCS that names a new workspace's ref, or empty when it cannot be read."""
+    match initialization_strategy:
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            try:
+                returncode, stdout, _ = run_git_command_local(
+                    concurrency_group,
+                    ["git", "config", "user.name"],
+                    cwd=project_path,
+                    check_output=False,
+                    timeout=_PREVIEW_BRANCH_NAME_VCS_TIMEOUT,
+                    is_retry_safe=True,
+                )
+            except Exception:
+                return ""
+            return stdout.strip() if returncode == 0 else ""
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
+            try:
+                user_name = read_config_value(jj, project_path, "user.name", timeout=_PREVIEW_BRANCH_NAME_VCS_TIMEOUT)
+            except VcsCommandError as e:
+                logger.debug("Cannot read jj's user.name in {}: {}", project_path, e)
+                return ""
+            return user_name or ""
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _build_setup_snapshot(workspace: Workspace) -> WorkspaceSetupSnapshot:
@@ -1112,6 +1183,8 @@ def update_workspace(
     services = get_services_from_request_or_websocket(request)
 
     with user_session.open_transaction(services) as transaction:
+        if update_request.target_branch is not None:
+            _validate_target_change(services, transaction, validated_workspace_id, update_request.target_branch)
         try:
             updated_workspace = services.workspace_service.update_workspace(
                 workspace_id=validated_workspace_id,
@@ -1135,6 +1208,47 @@ def update_workspace(
         project_path=_project_path_from_git_repo_url(project.user_git_repo_url) if project is not None else None,
         current_branch=services.workspace_service.get_cached_current_branch(updated_workspace.object_id),
     )
+
+
+def _validate_target_change(
+    services: CompleteServiceCollection,
+    transaction: DataModelTransaction,
+    workspace_id: WorkspaceID,
+    target_branch: str,
+) -> None:
+    """Raise an HTTPException when a jj workspace's new target is not one of its repository's target candidates.
+
+    git workspaces accept any target: switching to an open PR's base can name a
+    remote branch that has not been fetched yet.
+    """
+    workspace = transaction.get_workspace(workspace_id)
+    if workspace is None:
+        return
+    project = transaction.get_project(workspace.project_id)
+    if project is None:
+        return
+    match workspace.initialization_strategy:
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            return
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)
+    project_path = project.get_local_user_path()
+    vcs = services.workspace_service.get_workspace_vcs(workspace.initialization_strategy)
+    try:
+        candidates = vcs.list_target_candidates(project_path)
+    except VcsCommandError as e:
+        raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
+    if target_branch not in candidates:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{target_branch}' is not a bookmark this workspace can target; choose one such as main@origin",
+        )
 
 
 @router.post("/api/v1/workspaces/batch-update-open-state")

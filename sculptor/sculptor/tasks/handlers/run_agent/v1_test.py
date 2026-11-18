@@ -16,7 +16,10 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.common import generate_id
+from sculptor.foundation.event_utils import ShutdownEvent
 from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import MessageTypes
@@ -37,12 +40,16 @@ from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import ToolUseID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.jj_availability import JjUnavailableError
+from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ErrorBlock
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
@@ -58,11 +65,16 @@ from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_mess
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
+from sculptor.tasks.handlers.run_agent.v1 import AgentTaskFailure
 from sculptor.tasks.handlers.run_agent.v1 import _build_agent_path
 from sculptor.tasks.handlers.run_agent.v1 import _eager_fetch_pi_models_into_state
 from sculptor.tasks.handlers.run_agent.v1 import _run_agent_in_environment
 from sculptor.tasks.handlers.run_agent.v1 import _save_messages
 from sculptor.tasks.handlers.run_agent.v1 import _send_user_input_message
+from sculptor.tasks.handlers.run_agent.v1 import on_exception
+from sculptor.web.data_types import JjBlocker
+from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 
 
 def test_drop_already_processed_messages_with_processed_id() -> None:
@@ -2468,3 +2480,47 @@ def test_crash_before_any_output_with_empty_queue_synthesizes_settlement(
 
     post_scan = _scan_history(local_task, services)
     assert post_scan.dangling_chat_message_id is None, "the settlement terminalizes the dangling request"
+
+
+def test_running_git_in_a_jj_workspace_fails_the_agent_with_an_error_log(
+    local_task: Task, services: ServiceCollectionForTask
+) -> None:
+    checkout = Path("/environments/environment/code")
+    with pytest.raises(GitCommandInJjWorkspaceError) as raised:
+        raise GitCommandInJjWorkspaceError(("git", "status"), checkout, checkout)
+
+    with expect_exact_logged_errors(["ran git in a jj workspace"]):
+        with record_logged_error_levels() as levels:
+            with pytest.raises(AgentTaskFailure):
+                on_exception(
+                    raised.value, local_task.object_id, local_task.user_reference, services, ShutdownEvent.build_root()
+                )
+
+    assert levels == ["ERROR"]
+
+
+def test_an_agent_stopped_because_jj_is_unavailable_shows_the_reason_in_its_chat(
+    local_task: Task, services: ServiceCollectionForTask
+) -> None:
+    with pytest.raises(JjUnavailableError) as raised:
+        require_jj_available(JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED))
+
+    with pytest.raises(AgentTaskFailure) as failure:
+        on_exception(
+            raised.value, local_task.object_id, local_task.user_reference, services, ShutdownEvent.build_root()
+        )
+    transaction_callback = failure.value.transaction_callback
+    assert transaction_callback is not None
+    with services.data_model_service.open_task_transaction() as transaction:
+        transaction_callback(transaction)
+        saved_messages = services.task_service.get_saved_messages_for_task(local_task.object_id, transaction)
+    task_update = convert_agent_messages_to_task_update(
+        list(saved_messages), task_id=local_task.object_id, completed_message_by_id={}, harness=CLAUDE_CODE_HARNESS
+    )
+
+    chat_messages = [*task_update.chat_messages, *filter(None, [task_update.in_progress_chat_message])]
+    error_blocks = [block for message in chat_messages for block in message.content if isinstance(block, ErrorBlock)]
+    assert [(block.message, block.error_type.rsplit(".", 1)[-1]) for block in error_blocks] == [
+        (str(raised.value), "JjUnavailableError")
+    ]
+    assert str(raised.value).startswith("jj is not installed")

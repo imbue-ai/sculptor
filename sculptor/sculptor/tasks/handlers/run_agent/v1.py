@@ -86,6 +86,7 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
+from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
 from sculptor.state.messages import ModelOption
@@ -701,7 +702,10 @@ def on_exception(
 
     # if the agent has failed, we should notify the user
     is_expected = isinstance(e, ExpectedError)
-    if is_expected:
+    if isinstance(e, GitCommandInJjWorkspaceError):
+        # A dispatch bug, logged at ERROR so that a test whose agent trips it fails on the log.
+        log_exception(exc=e, message="Agent runner ran git in a jj workspace")
+    elif is_expected:
         log_exception(
             exc=e,
             message="Agent runner failed with expected error",

@@ -66,6 +66,10 @@ class FileNotFoundAtRefError(ExpectedError):
         super().__init__(f"File {file_path} not found at ref {git_ref}: {detail}")
 
 
+class WorkspaceBaseNotFoundError(ExpectedError):
+    """Raised when the base a new workspace would start from names no commit."""
+
+
 class WorkspaceCommitHistoryUnavailableError(ExpectedError):
     """Raised when a workspace's history is not a list of git commits, as in a jj workspace."""
 
@@ -138,6 +142,10 @@ class WorkspaceService(Service, ABC):
     def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
         """The version control for workspaces of the given kind."""
 
+    @abstractmethod
+    def forget_orphaned_jj_workspaces(self) -> None:
+        """In each colocated repository, forget the jj workspaces whose Sculptor workspace and directory are gone."""
+
     # Workspace Operations
 
     @abstractmethod
@@ -167,6 +175,9 @@ class WorkspaceService(Service, ABC):
 
         Returns:
             The created Workspace.
+
+        Raises:
+            WorkspaceBaseNotFoundError: If a jj workspace's base, its source branch or else its target, names no commit.
         """
 
     @abstractmethod
