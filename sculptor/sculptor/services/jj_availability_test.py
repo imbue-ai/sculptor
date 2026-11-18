@@ -51,7 +51,6 @@ def test_an_unavailable_jj_is_described_from_its_readiness_and_refused(
     with pytest.raises(JjUnavailableError) as raised:
         require_jj_available(readiness)
     assert str(raised.value) == expected_reason
-    assert raised.value.readiness == readiness
 
 
 def test_an_available_jj_has_no_unavailability_to_describe() -> None:

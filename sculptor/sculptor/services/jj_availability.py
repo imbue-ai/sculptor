@@ -13,11 +13,7 @@ from sculptor.web.data_types import JjUnsupportedVersion
 
 
 class JjUnavailableError(EnvironmentFailure):
-    """jj cannot be used right now; the message says why, and `readiness` is the check that failed."""
-
-    def __init__(self, reason: str, readiness: JjReadiness) -> None:
-        self.readiness = readiness
-        super().__init__(reason)
+    """jj cannot be used right now; the message says why."""
 
 
 def describe_jj_unavailability(readiness: JjReadiness) -> str | None:
@@ -44,4 +40,4 @@ def require_jj_available(readiness: JjReadiness) -> None:
     """Raise `JjUnavailableError` unless `readiness` says jj can be used."""
     reason = describe_jj_unavailability(readiness)
     if reason is not None:
-        raise JjUnavailableError(reason, readiness)
+        raise JjUnavailableError(reason)
