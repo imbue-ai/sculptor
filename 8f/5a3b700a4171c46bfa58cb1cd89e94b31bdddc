@@ -46,7 +46,7 @@
     "built_at": "2026-11-13T10:04:37Z"
   },
   "recipe:0cb89c92e62de680": {
-    "image_id": "im-v35lfBnsLJDrHA8dfOTSSD",
+    "image_id": "im-bkt1hQuv1NjVJiEJ4Xf8Y5",
     "recipe": {
       "builder": {
         "modal": {
@@ -68,6 +68,6 @@
     },
     "config_path": "offload-perf.toml",
     "offload_version": "0.10.0",
-    "built_at": "2026-11-13T10:25:05Z"
+    "built_at": "2026-11-18T04:26:19Z"
   }
 }
