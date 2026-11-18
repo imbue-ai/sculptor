@@ -129,16 +129,6 @@ def _resolve_jj_to(silly_global_config: UserConfig, jj_value: str) -> None:
     set_user_config_instance(silly_global_config.model_copy(update={"dependency_paths": DependencyPaths(jj=jj_value)}))
 
 
-@pytest.fixture
-def jj_available(silly_global_config: UserConfig, jj_binary: JjBinary) -> None:
-    """Resolve jj to the pinned binary on top of the service collection's config.
-
-    `jj_resolved_to_the_pinned_binary` does not fit here: `test_service_collection`
-    installs `silly_global_config`, which can replace the config it sets.
-    """
-    _resolve_jj_to(silly_global_config, str(jj_binary.path))
-
-
 def _register_project(services: CompleteServiceCollection, repo_path: Path) -> Project:
     user_session = authenticate_anonymous(services, RequestID())
     with user_session.open_transaction(services) as transaction:
@@ -212,7 +202,7 @@ def test_a_registered_git_repository_is_published_as_not_colocated(
 
 
 def test_a_colocated_repository_creates_jj_workspaces_exactly_while_the_flag_is_on(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
     jj_colocated_repo: JjColocatedRepo,
@@ -262,7 +252,7 @@ def test_jj_becoming_available_republishes_a_repository_that_creates_jj_workspac
 
 def test_jj_becoming_unavailable_stops_a_repository_creating_jj_workspaces_but_keeps_its_flag(
     silly_global_config: UserConfig,
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
     jj_colocated_repo: JjColocatedRepo,
@@ -279,7 +269,7 @@ def test_jj_becoming_unavailable_stops_a_repository_creating_jj_workspaces_but_k
 
 
 def test_a_colocation_deleted_from_disk_turns_the_flag_off_when_next_read(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
     jj_colocated_repo: JjColocatedRepo,
@@ -296,7 +286,7 @@ def test_a_colocation_deleted_from_disk_turns_the_flag_off_when_next_read(
 
 
 def test_a_repository_missing_from_disk_keeps_its_flag(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
     jj_colocated_repo: JjColocatedRepo,
@@ -330,7 +320,7 @@ def _read_git(repo: Path, args: tuple[str, ...]) -> str:
 
 
 def test_colocating_a_git_repository_keeps_its_branch_and_files_and_turns_the_flag_on(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
     git_repo: Path,
@@ -352,7 +342,7 @@ def test_colocating_a_git_repository_keeps_its_branch_and_files_and_turns_the_fl
 
 
 def test_colocating_an_already_colocated_repository_only_turns_the_flag_on(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     jj_binary: JjBinary,
     services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
@@ -384,7 +374,7 @@ def test_colocating_is_refused_while_jj_is_unavailable(
 
 
 def test_colocating_a_repository_with_a_blocker_is_refused_with_the_blockers(
-    jj_available: None, services: CompleteServiceCollection, git_repo: Path
+    jj_resolved_to_the_pinned_binary: None, services: CompleteServiceCollection, git_repo: Path
 ) -> None:
     (git_repo / ".gitmodules").write_text('[submodule "vendor"]\n\tpath = vendor\n\turl = ../vendor\n')
     project = _register_project(services, git_repo)
