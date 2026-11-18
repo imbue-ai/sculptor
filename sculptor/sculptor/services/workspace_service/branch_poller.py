@@ -47,6 +47,7 @@ from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import DataModelService
@@ -76,6 +77,14 @@ _BRANCH_POLL_INTERVAL_IN_SECONDS = 3.0
 _FALLBACK_RECOMPUTE_EVERY_CYCLES = 20
 # What clients receive as the current branch of a checkout with a detached HEAD.
 _DETACHED_HEAD_LABEL = "HEAD"
+
+
+class _RepoTargetScan(FrozenModel):
+    """A repository's merge-target candidates and remote names, as read at one remote-ref signature."""
+
+    remote_refs_signature: RemoteRefsSignature
+    target_candidates: tuple[str, ...]
+    remote_names: frozenset[str]
 
 
 class WorkspaceBranchPoller:
@@ -114,13 +123,11 @@ class WorkspaceBranchPoller:
         # Scan-thread-only (never read by add_observer), so it needs no lock.
         self._head_signature_by_workspace: dict[WorkspaceID, StatSignature | None] = {}
 
-        # Repo-level merge-target candidates, keyed by common git dir and computed
+        # Repo-level merge-target scans, keyed by common git dir and computed
         # once per repo per change. Touched only by the single scan thread, so no
         # lock — the backfill never reads these (it reads the per-workspace
         # projection in ``_target_info_by_workspace``).
-        self._remote_signature_by_common_dir: dict[Path, RemoteRefsSignature] = {}
-        self._target_candidates_by_common_dir: dict[Path, tuple[str, ...]] = {}
-        self._remote_names_by_common_dir: dict[Path, frozenset[str]] = {}
+        self._target_scan_by_common_dir: dict[Path, _RepoTargetScan] = {}
         # Workspaces and repositories whose last scan failed, so a lasting failure is logged once.
         self._failed_scan_keys: set[WorkspaceID | Path] = set()
 
@@ -346,9 +353,8 @@ class WorkspaceBranchPoller:
         once per common dir per cycle and reused for every workspace on that repo.
         """
         signature = remote_refs_signature(common_dir)
-        already_scanned = common_dir in self._target_candidates_by_common_dir
-        unchanged = self._remote_signature_by_common_dir.get(common_dir) == signature
-        if not force_recompute and already_scanned and unchanged:
+        previous_scan = self._target_scan_by_common_dir.get(common_dir)
+        if not force_recompute and previous_scan is not None and previous_scan.remote_refs_signature == signature:
             return  # Stat fast-path: remote refs unchanged since last scan — no fork.
 
         vcs = make_workspace_vcs(
@@ -365,27 +371,26 @@ class WorkspaceBranchPoller:
             logger.warning("Failed to list target candidates for {}: {}", common_dir, e)
             return
 
-        self._remote_signature_by_common_dir[common_dir] = signature
-        self._target_candidates_by_common_dir[common_dir] = target_candidates
-        self._remote_names_by_common_dir[common_dir] = remote_names
+        self._target_scan_by_common_dir[common_dir] = _RepoTargetScan(
+            remote_refs_signature=signature, target_candidates=target_candidates, remote_names=remote_names
+        )
 
     def _update_target_branches(self, workspace: Workspace, common_dir: Path) -> None:
-        target_candidates = self._target_candidates_by_common_dir.get(common_dir)
-        if target_candidates is None:
+        scan = self._target_scan_by_common_dir.get(common_dir)
+        if scan is None:
             return  # Repo not scanned yet (transient git error); a later cycle emits.
 
         current = self._branch_info_by_workspace.get(workspace.object_id)
         current_branch = current.current_branch if current is not None else None
         # Exclude the workspace's own branch — diffing a branch against itself is a no-op.
-        target_branches = tuple(branch for branch in target_candidates if branch != current_branch)
-        remote_names = self._remote_names_by_common_dir[common_dir]
+        target_branches = tuple(branch for branch in scan.target_candidates if branch != current_branch)
         named_refs = (
             target_branches if workspace.target_branch is None else (*target_branches, workspace.target_branch)
         )
         target_info = WorkspaceTargetBranchesInfo(
             workspace_id=workspace.object_id,
             target_branches=target_branches,
-            pr_base_names={ref: strip_remote_prefix(ref, remote_names) for ref in named_refs},
+            pr_base_names={ref: strip_remote_prefix(ref, scan.remote_names) for ref in named_refs},
         )
 
         if self._target_info_by_workspace.get(workspace.object_id) == target_info:
@@ -421,8 +426,5 @@ class WorkspaceBranchPoller:
                 self._target_info_by_workspace.pop(workspace_id, None)
         for workspace_id in set(self._head_signature_by_workspace) - git_workspace_ids:
             self._head_signature_by_workspace.pop(workspace_id, None)
-        stale_common_dirs = set(self._target_candidates_by_common_dir) - live_common_dirs
-        for common_dir in stale_common_dirs:
-            self._remote_signature_by_common_dir.pop(common_dir, None)
-            self._target_candidates_by_common_dir.pop(common_dir, None)
-            self._remote_names_by_common_dir.pop(common_dir, None)
+        for common_dir in set(self._target_scan_by_common_dir) - live_common_dirs:
+            del self._target_scan_by_common_dir[common_dir]
