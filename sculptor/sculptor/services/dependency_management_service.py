@@ -1004,7 +1004,10 @@ class DependencyManagementService(Service):
         binary = self.resolve_binary_path(tool)
         if binary is None:
             return DependencyCheckResult(installed=False)
+        return self._check_binary(tool, binary)
 
+    def _check_binary(self, tool: Dependency, binary: str) -> DependencyCheckResult:
+        """Whether `binary` runs, and the version of `tool` it reports."""
         try:
             result = self.concurrency_group.run_process_to_completion(
                 [binary, "--version"],
@@ -1483,20 +1486,12 @@ class DependencyManagementService(Service):
             # Inside the probe directory's lifetime, so its link still resolves to `sculptor_jj`.
             if found is None or Path(found).resolve() == Path(sculptor_jj).resolve():
                 return None
-        version = self._read_jj_version(found)
+        version = self._check_binary(Dependency.JJ, found).version
         return LoginShellJj(
             path=found,
             version=version,
             is_version_in_range=version is not None and self.is_version_in_range(version, Dependency.JJ),
         )
-
-    def _read_jj_version(self, binary: str) -> str | None:
-        """The version `binary --version` reports, or None when it fails or reports none."""
-        try:
-            result = self.concurrency_group.run_process_to_completion([binary, "--version"], timeout=5.0)
-        except ProcessError:
-            return None
-        return _parse_version_for_tool(Dependency.JJ, f"{result.stdout}\n{result.stderr}")
 
     def _run_jj_outside_any_repo(self, binary: str, arguments: Sequence[str]) -> str:
         """Run jj where only user-level config applies, with the environment agents get."""
