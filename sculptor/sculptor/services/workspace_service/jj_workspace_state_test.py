@@ -12,7 +12,6 @@ from queue import Queue
 
 import pytest
 
-from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
@@ -21,7 +20,7 @@ from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
-from sculptor.services.user_config.user_config import get_default_user_config_instance
+from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
@@ -32,17 +31,6 @@ from sculptor.testing.jj_repos import make_workspace_stale
 from sculptor.testing.jj_repos import run_jj
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceJjStateInfo
-
-
-@pytest.fixture
-def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary) -> Iterator[None]:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(
-            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
-        )
-    )
-    yield
-    set_user_config_instance(None)
 
 
 @pytest.fixture
@@ -198,6 +186,7 @@ def test_the_jj_poller_rests_quietly_while_the_published_jj_readiness_has_a_bloc
 
 
 def _point_jj_at(binary: Path) -> None:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj=str(binary))})
-    )
+    """Resolve jj to `binary`, keeping the rest of the configuration the test runs with."""
+    config = get_user_config_instance()
+    dependency_paths = config.dependency_paths.model_copy(update={"jj": str(binary)})
+    set_user_config_instance(config.model_copy(update={"dependency_paths": dependency_paths}))
