@@ -61,7 +61,11 @@ def _redirect_workspace_checkouts_to_tmp_path(tmp_path: Path, monkeypatch: pytes
 
 
 @pytest.fixture
-def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary, silly_global_config: UserConfig) -> Iterator[None]:
+def jj_resolved_over_the_global_config(jj_binary: JjBinary, silly_global_config: UserConfig) -> Iterator[None]:
+    """Point Sculptor at the pinned jj after `silly_global_config`, which the service collection sets.
+
+    The shared `jj_resolved_to_the_pinned_binary` does not wait for it, so the global config would replace it.
+    """
     set_user_config_instance(
         silly_global_config.model_copy(update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))})
     )
@@ -71,7 +75,7 @@ def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary, silly_global_config: U
 
 @pytest.fixture
 def jj_project(
-    jj_resolved_to_the_pinned_binary: None,
+    jj_resolved_over_the_global_config: None,
     jj_colocated_repo: JjColocatedRepo,
     test_service_collection: CompleteServiceCollection,
 ) -> Project:

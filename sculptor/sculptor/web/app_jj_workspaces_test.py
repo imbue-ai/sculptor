@@ -60,13 +60,6 @@ def _resolve_jj_to(jj_value: str) -> None:
 
 
 @pytest.fixture
-def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary) -> Iterator[None]:
-    _resolve_jj_to(str(jj_binary.path))
-    yield
-    set_user_config_instance(None)
-
-
-@pytest.fixture
 def jj_not_installed() -> Iterator[None]:
     """jj configured as a custom binary with no path, so none resolves."""
     _resolve_jj_to("CUSTOM")
