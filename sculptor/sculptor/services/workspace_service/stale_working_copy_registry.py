@@ -6,10 +6,9 @@ from sculptor.primitives.ids import WorkspaceID
 class StaleWorkingCopyRegistry:
     """The jj workspaces whose working copy the last snapshot found stale.
 
-    The workspace service marks a workspace when a snapshotting call fails as
-    stale and clears it when a snapshot or an update succeeds; the jj poller,
-    which never snapshots, publishes the mark. Recovery is the user's choice,
-    so nothing here updates a working copy.
+    A snapshot that fails as stale marks a workspace; a snapshot or an update
+    that succeeds clears it. Recovery is the user's choice, so nothing here
+    updates a working copy.
     """
 
     def __init__(self) -> None:

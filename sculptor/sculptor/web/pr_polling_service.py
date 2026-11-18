@@ -832,9 +832,9 @@ class PrPollingService(Service):
         Applies the short-circuits *before* a workspace can enter a round or
         fallback: not ready (no checkout) → ``None``; no PR head (e.g. a detached
         HEAD) or no target / non-GitHub origin / an origin with no owner and name /
-        on the target branch → ``none`` with zero gh calls. The heads and the base come from the workspace's VCS;
-        the origin is read from the main repository, which exists even when a
-        checkout has no ``.git`` of its own.
+        on the target branch → ``none`` with zero gh calls. The heads and the base
+        come from the workspace's VCS; the origin is read from the main repository,
+        which exists even when a checkout has no ``.git`` of its own.
         """
         location = self._resolve_checkout_location(workspace_id, state)
         if location is None:

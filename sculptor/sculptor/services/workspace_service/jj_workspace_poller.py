@@ -75,8 +75,7 @@ class PublishedJjReadiness:
     """The jj readiness the dependency service last published, read without running jj.
 
     ``updates`` is registered as an observer of the dependency service, which
-    pushes its whole status every time it computes one: on each health check
-    from an open window, and around installs and settings changes.
+    pushes its whole status each time it computes one.
     """
 
     def __init__(self) -> None:
@@ -117,28 +116,23 @@ class JjWorkspacePoller:
 
         self._stop_event = threading.Event()
 
-        # ``_observer_lock`` guards the observer list and the two last-emitted caches,
-        # which a backfill in add_observer and a read in get_jj_state iterate while
-        # the scan thread writes them.
+        # ``_observer_lock`` guards the observer list and the last-emitted caches, which
+        # other threads read while the scan thread writes them.
         self._observers: list[Queue[StreamingUpdateSourceTypes]] = []
         self._observer_lock = threading.Lock()
         self._state_by_workspace: dict[WorkspaceID, WorkspaceJjStateInfo] = {}
         self._target_info_by_workspace: dict[WorkspaceID, WorkspaceTargetBranchesInfo] = {}
 
-        # Scan-thread-only, so they need no lock.
         self._scan_by_store: dict[Path, _StoreScan] = {}
         # Workspaces and stores whose last scan failed, so a lasting failure is logged once.
         self._failed_scan_keys: set[WorkspaceID | Path] = set()
 
         self._cycle = 0
 
-    # -- Observer registry -------------------------------------------------
-
     def add_observer(self, queue: Queue[StreamingUpdateSourceTypes]) -> None:
         """Register a subscriber queue and immediately backfill current state.
 
-        Per-connection scope filtering is the caller's job: ``project_for_scope``
-        in ``streams.py`` drops out-of-scope entries from each ``StreamingUpdate``.
+        Per-connection scope filtering is the caller's job.
         """
         with self._observer_lock:
             self._observers.append(queue)
@@ -168,8 +162,6 @@ class JjWorkspacePoller:
             for observer in self._observers:
                 observer.put(info)
 
-    # -- Lifecycle ---------------------------------------------------------
-
     def start(self) -> None:
         self._concurrency_group.start_new_thread(
             target=self._run_loop,
@@ -189,8 +181,6 @@ class JjWorkspacePoller:
                 self._scan_once()
             except Exception as e:
                 log_exception(e, "jj workspace scan cycle failed", priority=ExceptionPriority.LOW_PRIORITY)
-
-    # -- Scan --------------------------------------------------------------
 
     def _scan_once(self) -> None:
         # Until the dependency service publishes a readiness, the poller scans as usual.

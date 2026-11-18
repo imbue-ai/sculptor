@@ -1,9 +1,9 @@
 """The workspace service's jj workspace state: its poller, its cache and its stale working-copy marks.
 
-jj workspaces cannot be created through the service's create path yet, so the
-workspace row is written through the service and its checkout built with jj's
-seam directly. A service built here is never started, so its poller scans only
-when a test asks it to.
+The fixture writes the workspace row through the workspace service and builds
+its checkout with jj's seam directly, so these tests do not depend on how jj
+workspaces are created. A service built here is never started, so its poller
+scans only when a test asks it to.
 """
 
 from collections.abc import Iterator
