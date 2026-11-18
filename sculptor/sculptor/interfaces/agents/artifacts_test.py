@@ -1,6 +1,7 @@
 import json
 
 from sculptor.interfaces.agents.artifacts import AgentTaskStatus
+from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import Task
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
 
@@ -103,3 +104,12 @@ def test_task_validation_accepts_camel_case_input() -> None:
     task = Task.model_validate_json(raw_task_json)
     assert task.active_form == "Investigating widget"
     assert task.blocked_by == ["2"]
+
+
+def test_a_diff_artifact_stored_before_it_named_an_uncommitted_diff_base_still_loads() -> None:
+    stored = json.dumps({"object_type": "DiffArtifact", "uncommitted_diff": "diff", "target_branch_merge_base": "abc"})
+
+    artifact = DiffArtifact.model_validate_json(stored)
+
+    assert artifact.uncommitted_diff == "diff"
+    assert artifact.uncommitted_diff_base == ""

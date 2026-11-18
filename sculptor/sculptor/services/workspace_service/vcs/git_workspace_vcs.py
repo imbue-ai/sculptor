@@ -13,6 +13,7 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.environment_manager.environments.clone_strategy import clone_repository
+from sculptor.services.workspace_service.vcs.checkout_paths import validate_checkout_relative_path
 from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import BranchDeletionPolicy
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
@@ -38,6 +39,7 @@ from sculptor.services.workspace_service.vcs.git_log_parsing import parse_file_d
 from sculptor.services.workspace_service.vcs.git_log_parsing import parse_name_status_lines
 from sculptor.services.workspace_service.vcs.git_log_parsing import parse_numstat_lines
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
+from sculptor.services.workspace_service.vcs.git_repo_queries import is_well_formed_branch_name
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
@@ -122,10 +124,13 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def remove_checkout(
         self,
         location: CheckoutLocation,
+        target_ref: str | None,
         created_ref_name: str | None,
         deletion_policy: BranchDeletionPolicy,
     ) -> None:
         """Remove a worktree and apply `deletion_policy` to its branch; other kinds leave the repository alone.
+
+        git needs no `target_ref`: the only branch a worktree owns is the one it was created on.
 
         `created_ref_name` is the branch the worktree was created on. When it no
         longer exists because it was renamed inside the worktree (the agent's
@@ -293,19 +298,11 @@ class GitWorkspaceVcs(WorkspaceVcs):
         return [] if current_branch is None else [current_branch]
 
     def validate_new_ref_name(self, repo_path: Path, ref_name: str) -> RefNameValidation:
-        if not ref_name or not self._is_well_formed_branch_name(repo_path, ref_name):
+        if not ref_name or not is_well_formed_branch_name(self._git, repo_path, ref_name):
             return RefNameValidation(ref_name=ref_name, status=RefNameStatus.MALFORMED)
         if does_ref_exist(self._git, repo_path, f"refs/heads/{ref_name}"):
             return RefNameValidation(ref_name=ref_name, status=RefNameStatus.ALREADY_EXISTS)
         return RefNameValidation(ref_name=ref_name, status=RefNameStatus.AVAILABLE)
-
-    def _is_well_formed_branch_name(self, repo_path: Path, ref_name: str) -> bool:
-        # `check-ref-format` rejects `--end-of-options`; `--branch` consumes the next
-        # argument as the name, so a name starting with `-` is still not an option.
-        result = self._git.run_git(
-            ["check-ref-format", "--branch", ref_name], repo_path, is_read_only=True, is_checked=False
-        )
-        return result.returncode == 0
 
     def resolve_base_commit_id(self, repo_path: Path, base_ref: str) -> str | None:
         return self._resolve_commit_id(repo_path, base_ref)
@@ -313,7 +310,10 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def default_setup_command(self) -> str:
         return DEFAULT_GIT_WORKSPACE_SETUP_COMMAND
 
-    def read_identity(self, location: CheckoutLocation) -> GitHeadIdentity:
+    def read_identity(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
+    ) -> GitHeadIdentity:
+        """The checked-out branch; git's identity depends on neither the target nor the requested name."""
         return read_head_identity(self._git, location.checkout_path)
 
     def compute_diff_artifact(
@@ -342,6 +342,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
             target_branch_diff = self._run_diff(diff_options, checkout, merge_base, "target-branch") + untracked_diff
         return DiffArtifact(
             uncommitted_diff=(uncommitted_diff + untracked_diff).strip(),
+            uncommitted_diff_base=self._resolve_commit_id(checkout, "HEAD") or "",
             target_branch_diff=target_branch_diff.strip(),
             target_branch_merge_base=merge_base or "",
             file_errors=self._detect_file_errors(checkout),
@@ -586,7 +587,7 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def discard_file_changes(self, location: CheckoutLocation, file_path: str) -> GitOperationResult:
         """Restore a tracked file from HEAD, or delete an untracked one."""
         checkout = location.checkout_path
-        validation_error = _validate_checkout_relative_path(file_path, checkout)
+        validation_error = validate_checkout_relative_path(file_path, checkout)
         if validation_error is not None:
             return GitOperationResult(success=False, stdout="", stderr="", error_message=validation_error)
 
@@ -619,8 +620,10 @@ class GitWorkspaceVcs(WorkspaceVcs):
             return False
         return result.returncode == 0
 
-    def get_pull_request_refs(self, location: CheckoutLocation) -> PullRequestRefs:
-        """The checked-out branch as the only head candidate.
+    def get_pull_request_refs(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
+    ) -> PullRequestRefs:
+        """The checked-out branch as the only head candidate, whatever the target and requested name.
 
         A detached HEAD has no candidate. Failures read as "nothing to look up",
         so PR polling reports no pull request rather than erroring.
@@ -687,12 +690,3 @@ def _build_commit_record(
         parent_hashes=parents.split() if parents else [],
         files=files,
     )
-
-
-def _validate_checkout_relative_path(file_path: str, checkout: Path) -> str | None:
-    """Why `file_path` may not be touched, or None when it stays inside `checkout`."""
-    if file_path.startswith("/"):
-        return "Absolute paths are not allowed"
-    if not (checkout / file_path).resolve().is_relative_to(checkout.resolve()):
-        return "Path traversal is not allowed"
-    return None

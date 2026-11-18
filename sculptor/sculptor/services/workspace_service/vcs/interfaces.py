@@ -14,6 +14,8 @@ from sculptor.services.workspace_service.vcs.data_types import GitOperationResul
 from sculptor.services.workspace_service.vcs.data_types import PullRequestRefs
 from sculptor.services.workspace_service.vcs.data_types import RefNameValidation
 from sculptor.services.workspace_service.vcs.data_types import RevisionDiff
+from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
+from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.state.chat_state import ToolInput
 
 
@@ -39,12 +41,15 @@ class WorkspaceVcs(ABC):
     def remove_checkout(
         self,
         location: CheckoutLocation,
+        target_ref: str | None,
         created_ref_name: str | None,
         deletion_policy: BranchDeletionPolicy,
     ) -> None:
-        """Detach a deleted workspace's checkout from the repository and apply `deletion_policy` to its ref.
+        """Detach a deleted workspace's checkout from the repository and apply `deletion_policy` to its refs.
 
-        Logs VCS failures instead of raising them: deleting a workspace must always make progress.
+        `target_ref` is the workspace's target, from which jj finds the
+        workspace's own stack. Logs VCS failures instead of raising them:
+        deleting a workspace must always make progress.
         """
 
     @abstractmethod
@@ -68,8 +73,13 @@ class WorkspaceVcs(ABC):
         """The shell command run in a fresh checkout when the project configures none."""
 
     @abstractmethod
-    def read_identity(self, location: CheckoutLocation) -> GitHeadIdentity:
-        """What the checkout currently has checked out."""
+    def read_identity(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
+    ) -> GitHeadIdentity | JjHeadIdentity:
+        """What the checkout currently has checked out.
+
+        jj needs `target_ref` and `requested_ref_name` to rank the bookmarks on the workspace's stack.
+        """
 
     @abstractmethod
     def compute_diff_artifact(
@@ -86,7 +96,7 @@ class WorkspaceVcs(ABC):
         location: CheckoutLocation,
         target_ref: str | None,
         base_commit_id: str | None,
-    ) -> GitCommitHistory:
+    ) -> GitCommitHistory | JjRevisionHistory:
         """The revisions the workspace has made since it forked from `target_ref`.
 
         `base_commit_id` is the fork point when there is no target or it cannot be resolved.
@@ -118,8 +128,13 @@ class WorkspaceVcs(ABC):
         """Throw away the uncommitted changes to one file."""
 
     @abstractmethod
-    def get_pull_request_refs(self, location: CheckoutLocation) -> PullRequestRefs:
-        """What PR polling needs to look up the workspace's pull request."""
+    def get_pull_request_refs(
+        self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
+    ) -> PullRequestRefs:
+        """What PR polling needs to look up the workspace's pull request.
+
+        jj needs `target_ref` and `requested_ref_name` to rank the bookmarks on the workspace's stack.
+        """
 
     @abstractmethod
     def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:

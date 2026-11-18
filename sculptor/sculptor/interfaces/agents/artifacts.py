@@ -46,6 +46,10 @@ class DiffArtifact(SerializableModel):
 
     object_type: str = "DiffArtifact"
     uncommitted_diff: str = ""
+    # Commit id of the uncommitted_diff's old side; the frontend fetches "old"
+    # file content for hunk expansion at this commit. Empty when the old side
+    # is not a single commit.
+    uncommitted_diff_base: str = ""
     target_branch_diff: str = ""  # Diff from merge-base(target, HEAD) to HEAD
     # Commit SHA of merge-base(target, HEAD) — the ref the target_branch_diff's
     # old-side line numbers reference. The frontend fetches the "old" file

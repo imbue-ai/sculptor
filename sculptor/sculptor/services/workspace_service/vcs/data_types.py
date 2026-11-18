@@ -12,7 +12,7 @@ BranchDeletionPolicy = Literal["never", "delete_if_safe", "always"]
 
 
 class VcsCommandResult(FrozenModel):
-    """A git or gh command that ran to completion."""
+    """A version-control command that ran to completion."""
 
     command: tuple[str, ...]
     returncode: int

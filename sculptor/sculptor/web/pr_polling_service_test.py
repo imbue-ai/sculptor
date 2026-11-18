@@ -101,6 +101,7 @@ def _add_workspace_poll_state(svc: PrPollingService, workspace_id: WorkspaceID) 
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
         checkout_location=None,
         target_branch="main",
+        requested_branch_name=None,
         is_open=True,
     )
 
@@ -176,6 +177,7 @@ def _register_checkout(
         initialization_strategy=WorkspaceInitializationStrategy.CLONE,
         checkout_location=CheckoutLocation(repo_path=repo, checkout_path=checkout, checkout_name=str(workspace_id)),
         target_branch=target_branch,
+        requested_branch_name=None,
         is_open=True,
     )
     svc._workspace_poll_state[workspace_id] = state
@@ -1021,6 +1023,7 @@ def _candidate(
             repo_path=_WORKING_DIR, checkout_path=_WORKING_DIR, checkout_name=str(workspace_id)
         ),
         target_branch=target_branch,
+        requested_branch_name=None,
         is_open=is_open,
     )
     return _PullRequestLookup(

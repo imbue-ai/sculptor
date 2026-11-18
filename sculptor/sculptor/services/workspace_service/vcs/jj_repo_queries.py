@@ -13,14 +13,17 @@ from typing import Sequence
 
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
+from sculptor.services.workspace_service.vcs.jj_cli import parse_refused_snapshot_files
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmark
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
+from sculptor.services.workspace_service.vcs.jj_data_types import JjWorkingCopySnapshot
 from sculptor.services.workspace_service.vcs.jj_data_types import JjWorkspaceEntry
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
 from sculptor.services.workspace_service.vcs.jj_revsets import any_remote_bookmark_revset
 from sculptor.services.workspace_service.vcs.jj_revsets import exact_string_pattern
 from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import local_bookmark_revset
+from sculptor.services.workspace_service.vcs.runner_support import DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
 
 COLOCATION_INIT_TIMEOUT_SECONDS = 600.0
 
@@ -28,6 +31,7 @@ COLOCATION_INIT_TIMEOUT_SECONDS = 600.0
 _GIT_TRACKING_REMOTE = "git"
 _JSON_LINES_BOOKMARK_TEMPLATE = 'json(self) ++ "\\n"'
 _REMOTE_BOOKMARKS_TEMPLATE = 'remote_bookmarks.map(|b| json(b) ++ "\\n").join("")'
+_COMMIT_TEMPLATE = "json(self)"
 _TRUNK_FALLBACK_BOOKMARK_NAMES = ("main", "master")
 # The `name` keyword prints jj's quoted display form for names that need quoting; `json(name)` is the raw name.
 _WORKSPACE_LIST_TEMPLATE = 'json(name) ++ "\\t" ++ json(root) ++ "\\n"'
@@ -64,6 +68,21 @@ def list_bookmarks(jj: JjCli, repo_dir: Path) -> list[JjBookmark]:
     )
     bookmarks = [_parse_bookmark(json.loads(line)) for line in result.stdout.splitlines()]
     return [bookmark for bookmark in bookmarks if bookmark.remote != _GIT_TRACKING_REMOTE]
+
+
+def list_tracked_bookmark_names(jj: JjCli, repo_dir: Path, revset: JjRevset) -> set[str]:
+    """The local bookmarks on `revset` that track a bookmark on a real remote."""
+    result = jj.run(
+        ["bookmark", "list", "--tracked", "-r", revset, "-T", _JSON_LINES_BOOKMARK_TEMPLATE],
+        repo_dir,
+        snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
+    )
+    bookmarks = (_parse_bookmark(json.loads(line)) for line in result.stdout.splitlines())
+    return {
+        bookmark.name
+        for bookmark in bookmarks
+        if bookmark.remote is not None and bookmark.remote != _GIT_TRACKING_REMOTE and bookmark.is_tracked
+    }
 
 
 def resolve_trunk_symbol(jj: JjCli, repo_dir: Path) -> str | None:
@@ -194,6 +213,28 @@ def read_workspace_config_path(jj: JjCli, workspace_root: Path) -> Path | None:
         return None
     result = jj.run(["config", "path", "--workspace"], workspace_root, snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY)
     return Path(result.stdout.strip())
+
+
+def snapshot_working_copy(
+    jj: JjCli, workspace_root: Path, *, timeout: float = DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
+) -> JjWorkingCopySnapshot:
+    """Snapshot the workspace's files into its working-copy commit and read that commit.
+
+    A snapshot that finds no change adds no operation. Raises
+    `JjWorkingCopyStaleError` when the workspace is stale.
+    """
+    result = jj.run(
+        ["log", "--no-graph", "-r", "@", "-T", _COMMIT_TEMPLATE],
+        workspace_root,
+        snapshot=JjSnapshotPolicy.SNAPSHOT,
+        timeout=timeout,
+    )
+    commit = json.loads(result.stdout)
+    return JjWorkingCopySnapshot(
+        commit_id=commit["commit_id"],
+        parent_commit_ids=tuple(commit["parents"]),
+        refused_files=parse_refused_snapshot_files(result.stderr),
+    )
 
 
 def update_stale(jj: JjCli, workspace_root: Path) -> None:

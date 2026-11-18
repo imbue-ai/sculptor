@@ -340,6 +340,7 @@ class _WorkspacePollState:
         "initialization_strategy",
         "checkout_location",
         "target_branch",
+        "requested_branch_name",
         "is_open",
         "is_deleted",
         "first_failure",
@@ -353,12 +354,14 @@ class _WorkspacePollState:
         initialization_strategy: WorkspaceInitializationStrategy,
         checkout_location: CheckoutLocation | None,
         target_branch: str | None,
+        requested_branch_name: str | None,
         is_open: bool,
     ) -> None:
         self.workspace_id = workspace_id
         self.initialization_strategy = initialization_strategy
         self.checkout_location = checkout_location
         self.target_branch = target_branch
+        self.requested_branch_name = requested_branch_name
         self.is_open = is_open
         self.is_deleted = False
         self.first_failure: tuple[datetime.datetime, Exception] | None = None
@@ -588,6 +591,7 @@ class PrPollingService(Service):
             initialization_strategy=workspace.initialization_strategy,
             checkout_location=checkout_location,
             target_branch=workspace.target_branch,
+            requested_branch_name=workspace.requested_branch_name,
             is_open=workspace.is_open,
         )
 
@@ -829,7 +833,9 @@ class PrPollingService(Service):
         if target_branch is None:
             return no_pr_status
         vcs = make_workspace_vcs(state.initialization_strategy, self._runners, self.concurrency_group)
-        head_ref_names = vcs.get_pull_request_refs(location).head_ref_names
+        head_ref_names = vcs.get_pull_request_refs(
+            location, target_ref=target_branch, requested_ref_name=state.requested_branch_name
+        ).head_ref_names
         if not head_ref_names:
             return no_pr_status
         origin_url = read_origin_url(self._runners.git, location.repo_path)

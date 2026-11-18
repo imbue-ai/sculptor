@@ -8,7 +8,6 @@ failure, including a timeout, is a `VcsCommandError`. Nothing is retried: jj
 merges concurrent operations itself.
 """
 
-import os
 import re
 from enum import StrEnum
 from pathlib import Path
@@ -17,7 +16,6 @@ from typing import Sequence
 from typing import assert_never
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.workspace_service.vcs.data_types import VcsCommandResult
@@ -26,9 +24,11 @@ from sculptor.services.workspace_service.vcs.errors import VcsBinaryNotFoundErro
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandExitError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandTimeoutError
-from sculptor.services.workspace_service.vcs.git_cli import BinaryResolver
-from sculptor.services.workspace_service.vcs.git_cli import DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
-from sculptor.services.workspace_service.vcs.git_cli import EnvOverridesReader
+from sculptor.services.workspace_service.vcs.runner_support import BinaryResolver
+from sculptor.services.workspace_service.vcs.runner_support import DEFAULT_VCS_COMMAND_TIMEOUT_SECONDS
+from sculptor.services.workspace_service.vcs.runner_support import EnvOverridesReader
+from sculptor.services.workspace_service.vcs.runner_support import build_command_env
+from sculptor.services.workspace_service.vcs.runner_support import read_no_env_overrides
 
 _STALE_WORKING_COPY_MESSAGE = "The working copy is stale"
 _REFUSED_SNAPSHOT_HEADER = "Warning: Refused to snapshot some files:"
@@ -44,10 +44,6 @@ class JjSnapshotPolicy(StrEnum):
     IGNORE_WORKING_COPY = "IGNORE_WORKING_COPY"
 
 
-def _no_env_overrides() -> Mapping[str, str | Secret]:
-    return {}
-
-
 class JjCli:
     """Runs jj with the user's configured binary."""
 
@@ -55,7 +51,7 @@ class JjCli:
         self,
         concurrency_group: ConcurrencyGroup,
         resolve_binary: BinaryResolver,
-        read_env_overrides: EnvOverridesReader = _no_env_overrides,
+        read_env_overrides: EnvOverridesReader = read_no_env_overrides,
     ) -> None:
         self._concurrency_group = concurrency_group
         self._resolve_binary_path = resolve_binary
@@ -104,7 +100,7 @@ class JjCli:
         extra_env: Mapping[str, str] | None,
     ) -> VcsCommandResult:
         command = [self._resolve_binary(), "--no-pager", "--color=never", *arguments]
-        env = self._build_env(extra_env)
+        env = build_command_env(self._read_env_overrides, extra_env)
         try:
             result = self._concurrency_group.run_process_to_completion(
                 command=command,
@@ -155,16 +151,6 @@ class JjCli:
         if binary is None:
             raise VcsBinaryNotFoundError("jj binary not found", command=(), returncode=None, stdout="", stderr="")
         return binary
-
-    def _build_env(self, extra_env: Mapping[str, str] | None) -> Mapping[str, str] | None:
-        """The env overrides, then `extra_env`, over the process environment; None when neither adds anything."""
-        overrides = {**self._read_env_overrides(), **(extra_env or {})}
-        if not overrides:
-            return None
-        unwrapped_overrides = {
-            name: value.unwrap() if isinstance(value, Secret) else value for name, value in overrides.items()
-        }
-        return {**os.environ, **unwrapped_overrides}
 
 
 def parse_refused_snapshot_files(stderr: str) -> dict[str, str]:

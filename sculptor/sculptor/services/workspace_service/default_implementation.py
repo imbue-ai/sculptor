@@ -6,6 +6,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Generator
 from typing import Self
+from typing import assert_never
 from typing import cast
 
 from loguru import logger
@@ -44,6 +45,7 @@ from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceService
@@ -69,9 +71,11 @@ from sculptor.services.workspace_service.vcs.checkout_paths import workspace_che
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
 from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
+from sculptor.services.workspace_service.vcs.data_types import GitCommitHistory
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
+from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
@@ -401,6 +405,7 @@ class DefaultWorkspaceService(WorkspaceService):
             environment_id = workspace.environment_id
             environment_manager = self.environment_manager
             requested_branch_name = workspace.requested_branch_name
+            target_branch = workspace.target_branch
             vcs = self.get_workspace_vcs(workspace.initialization_strategy)
             try:
                 checkout_location: CheckoutLocation | None = self._get_checkout_location(workspace, transaction)
@@ -435,8 +440,9 @@ class DefaultWorkspaceService(WorkspaceService):
                     else:
                         vcs.remove_checkout(
                             checkout_location,
-                            requested_branch_name,
-                            get_user_config_instance().workspace_branch_deletion_policy,
+                            target_ref=target_branch,
+                            created_ref_name=requested_branch_name,
+                            deletion_policy=get_user_config_instance().workspace_branch_deletion_policy,
                         )
                 finally:
                     environment_manager.delete_environment(environment_id)
@@ -945,7 +951,13 @@ class DefaultWorkspaceService(WorkspaceService):
         history = vcs.get_revision_history(
             location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
         )
-        return (history.commits, history.fork_point)
+        match history:
+            case GitCommitHistory():
+                return (history.commits, history.fork_point)
+            case JjRevisionHistory():
+                raise WorkspaceCommitHistoryUnavailableError(workspace_id)
+            case _ as unreachable:
+                assert_never(unreachable)
 
     # Workspace File Operations
 

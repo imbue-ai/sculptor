@@ -17,6 +17,7 @@ from sculptor.services.workspace_service.vcs.jj_repo_queries import forget_works
 from sculptor.services.workspace_service.vcs.jj_repo_queries import init_colocated
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
+from sculptor.services.workspace_service.vcs.jj_repo_queries import list_tracked_bookmark_names
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_workspaces
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_remotes
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_workspace_config_path
@@ -188,6 +189,22 @@ def test_list_bookmarks_reports_a_locally_deleted_bookmark_as_absent_not_conflic
     assert not local.is_conflicted
     assert remote.remote == "origin"
     assert remote.commit_id is not None
+
+
+def test_list_tracked_bookmark_names_lists_the_bookmarks_on_a_revset_that_track_a_real_remote(
+    jj_cli: JjCli, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    _push_new_bookmark(jj_binary, jj_colocated_repo, "pushed")
+    run_jj(
+        jj_binary,
+        ("--ignore-working-copy", "bookmark", "create", "local-only", "-r", "main"),
+        cwd=jj_colocated_repo.path,
+    )
+    run_jj(jj_binary, ("--ignore-working-copy", "bookmark", "untrack", "main@origin"), cwd=jj_colocated_repo.path)
+
+    names = list_tracked_bookmark_names(jj_cli, jj_colocated_repo.path, JjRevset("main"))
+
+    assert names == {"pushed"}
 
 
 def test_resolve_trunk_symbol_names_the_remote_bookmark_on_trunk(
