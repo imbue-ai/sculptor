@@ -132,8 +132,7 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
-from sculptor.services.jj_availability import JjUnavailableError
-from sculptor.services.jj_availability import require_jj_available
+from sculptor.services.jj_availability import describe_jj_unavailability
 from sculptor.services.pi_login_service import PiLoginMode
 from sculptor.services.pi_login_service import broadcast_pi_models_refresh
 from sculptor.services.pi_login_service import pi_login_terminal_id
@@ -689,10 +688,9 @@ def _validate_jj_workspace_creation_request(
     vcs = services.workspace_service.get_workspace_vcs(WorkspaceInitializationStrategy.JJ_WORKSPACE)
     try:
         facts = gather_jj_workspace_creation_facts(project, jj, services.dependency_management_service)
-        try:
-            require_jj_available(facts.jj_readiness)
-        except JjUnavailableError as e:
-            raise HTTPException(status_code=412, detail=str(e)) from e
+        jj_unavailability = describe_jj_unavailability(facts.jj_readiness)
+        if jj_unavailability is not None:
+            raise HTTPException(status_code=412, detail=jj_unavailability)
         if not creates_jj_workspaces(facts):
             raise HTTPException(
                 status_code=400, detail=f"The repository at {project_path} does not create jj workspaces"
