@@ -44,8 +44,8 @@ from sculptor.services.workspace_service.stale_working_copy_registry import Stal
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
+from sculptor.services.workspace_service.vcs.jj_repo_queries import select_target_candidates
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import JjRepositoryScan
-from sculptor.services.workspace_service.vcs.jj_workspace_scan import list_scanned_target_candidates
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import name_pull_request_base
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import project_jj_workspace_identity
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import scan_jj_workspaces
@@ -365,7 +365,9 @@ def _to_target_branches_info(
 ) -> WorkspaceTargetBranchesInfo:
     """The bookmarks the workspace may target, without its own: diffing a stack against itself shows nothing."""
     own_bookmarks = set(identity.bookmarks)
-    target_branches = tuple(symbol for symbol in list_scanned_target_candidates(scan) if symbol not in own_bookmarks)
+    target_branches = tuple(
+        symbol for symbol in select_target_candidates(scan.bookmarks) if symbol not in own_bookmarks
+    )
     named_refs = target_branches if workspace.target_branch is None else (*target_branches, workspace.target_branch)
     return WorkspaceTargetBranchesInfo(
         workspace_id=workspace.object_id,

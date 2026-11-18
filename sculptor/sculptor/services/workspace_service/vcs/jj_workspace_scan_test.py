@@ -8,7 +8,7 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmark
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
-from sculptor.services.workspace_service.vcs.jj_workspace_scan import list_scanned_target_candidates
+from sculptor.services.workspace_service.vcs.jj_repo_queries import select_target_candidates
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import name_pull_request_base
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import project_jj_workspace_identity
 from sculptor.services.workspace_service.vcs.jj_workspace_scan import resolve_target_commit_id
@@ -199,8 +199,8 @@ def test_a_conflicted_bookmark_is_neither_on_a_stack_nor_a_target_candidate(
     assert identity is not None
     assert "forked" not in identity.bookmarks
     assert [bookmark.name for bookmark in scan.bookmarks if bookmark.is_conflicted] == ["forked"]
-    assert "forked" not in list_scanned_target_candidates(scan)
-    assert {"main", "main@origin"} <= set(list_scanned_target_candidates(scan))
+    assert "forked" not in select_target_candidates(scan.bookmarks)
+    assert {"main", "main@origin"} <= set(select_target_candidates(scan.bookmarks))
 
 
 def test_a_stale_workspace_is_scanned_like_any_other(

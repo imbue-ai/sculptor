@@ -23,7 +23,6 @@ from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmark
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
 from sculptor.services.workspace_service.vcs.jj_data_types import JjStackRevision
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
-from sculptor.services.workspace_service.vcs.jj_repo_queries import select_target_candidates
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
 from sculptor.services.workspace_service.vcs.jj_revsets import is_full_commit_id
 from sculptor.services.workspace_service.vcs.jj_revsets import parse_bookmark_symbol
@@ -152,11 +151,6 @@ def project_jj_workspace_identity(
         has_conflict=working_copy.has_conflict,
         is_divergent=working_copy.is_divergent,
     )
-
-
-def list_scanned_target_candidates(scan: JjRepositoryScan) -> list[str]:
-    """The scanned bookmarks a workspace may target, by the same rule as the seam's target candidates."""
-    return select_target_candidates(scan.bookmarks)
 
 
 def name_pull_request_base(target_ref: str) -> str:
