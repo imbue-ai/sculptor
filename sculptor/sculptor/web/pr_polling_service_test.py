@@ -34,7 +34,8 @@ from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import make_github_looking_origin
 from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
-from sculptor.utils.build import get_internal_folder
+from sculptor.utils.build import get_jj_bin_dir
+from sculptor.utils.build import link_jj_bin
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceJjStateInfo
@@ -578,9 +579,7 @@ def test_polling_a_jj_workspace_runs_no_jj_readiness_probe_and_leaves_jj_bin_as_
         target_branch=f"{jj_colocated_repo.default_bookmark}@origin",
         initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
     )
-    jj_link = get_internal_folder() / "jj-bin" / "jj"
-    jj_link.parent.mkdir(parents=True)
-    jj_link.symlink_to(jj_binary.path)
+    link_jj_bin(jj_binary.path)
     refused_jj = _write_script(tmp_path / "old-jj", 'echo "jj 0.28.2-0123456789abcdef"')
     set_user_config_instance(
         get_default_user_config_instance().model_copy(update={"dependency_paths": DependencyPaths(jj=str(refused_jj))})
@@ -591,7 +590,7 @@ def test_polling_a_jj_workspace_runs_no_jj_readiness_probe_and_leaves_jj_bin_as_
         set_user_config_instance(None)
 
     assert isinstance(status, PrStatusInfo) and status.pr_state == "open"
-    assert jj_link.readlink() == jj_binary.path
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path
     jj_arguments = jj_invocations.read_text().splitlines()
     assert [
         arguments for arguments in jj_arguments if arguments == "--version" or "config list user" in arguments

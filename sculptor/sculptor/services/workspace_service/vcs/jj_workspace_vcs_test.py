@@ -37,7 +37,7 @@ from sculptor.testing.jj_repos import make_github_looking_origin
 from sculptor.testing.jj_repos import make_workspace_stale
 from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
-from sculptor.utils.build import get_internal_folder
+from sculptor.utils.build import get_jj_bin_dir
 from sculptor.utils.build import link_jj_bin
 
 _SNAPSHOT_LIMIT_MIB = 10
@@ -988,7 +988,7 @@ def test_agent_environment_puts_jj_on_path_points_gh_at_a_github_origin_and_stop
     environment = jj_vcs.agent_environment(checkout)
 
     assert environment == AgentVcsEnvironment(
-        path_prefixes=(get_internal_folder() / "jj-bin",),
+        path_prefixes=(get_jj_bin_dir(),),
         environment_variables={
             "GH_REPO": "github.com/sculptor-tests/jj-fixture",
             "GIT_CEILING_DIRECTORIES": str(checkout.checkout_path.parent),
@@ -1038,7 +1038,7 @@ def test_describing_the_agent_environment_creates_and_changes_no_file(
 ) -> None:
     environment = jj_vcs.agent_environment(checkout)
 
-    assert environment.path_prefixes == (get_internal_folder() / "jj-bin",)
+    assert environment.path_prefixes == (get_jj_bin_dir(),)
     assert not environment.path_prefixes[0].exists()
 
 

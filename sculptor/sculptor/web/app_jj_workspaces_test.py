@@ -40,7 +40,8 @@ from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
-from sculptor.utils.build import get_internal_folder
+from sculptor.utils.build import get_jj_bin_dir
+from sculptor.utils.build import link_jj_bin
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
 from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.data_types import CreateWorkspaceRequestV2
@@ -585,15 +586,13 @@ def test_rerunning_a_jj_workspaces_setup_command_starts_a_new_run_with_jj_bin_on
     with test_services.data_model_service.open_transaction(RequestID()) as transaction:
         transaction.update_project_fields(jj_project.object_id, workspace_setup_command="jj --version")
 
-    jj_link = get_internal_folder() / "jj-bin" / "jj"
-    jj_link.unlink()
-    jj_link.symlink_to(tmp_path / "jj-from-an-earlier-launch")
+    link_jj_bin(tmp_path / "jj-from-an-earlier-launch")
 
     response = client.post(f"/api/v1/workspaces/{workspace_id}/setup/rerun")
 
     assert response.status_code == 200, response.text
     assert response.json()["runId"] is not None
-    assert jj_link.readlink() == jj_binary.path
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path
 
 
 def test_rerunning_a_jj_workspaces_setup_command_while_jj_is_unavailable_says_why_and_leaves_jj_bin(
@@ -615,4 +614,4 @@ def test_rerunning_a_jj_workspaces_setup_command_while_jj_is_unavailable_says_wh
 
     assert response.status_code == 412, response.text
     assert _detail(response) == {"error": describe_jj_unavailability(JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED))}
-    assert (get_internal_folder() / "jj-bin" / "jj").readlink() == jj_binary.path
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path
