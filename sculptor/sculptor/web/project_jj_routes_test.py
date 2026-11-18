@@ -44,13 +44,6 @@ def _resolve_jj_to(jj_value: str) -> None:
 
 
 @pytest.fixture
-def jj_available(jj_binary: JjBinary) -> Iterator[None]:
-    _resolve_jj_to(str(jj_binary.path))
-    yield
-    set_user_config_instance(None)
-
-
-@pytest.fixture
 def jj_unavailable() -> Iterator[None]:
     _resolve_jj_to("CUSTOM")
     yield
@@ -131,7 +124,10 @@ def _put_use_jj_for_new_workspaces(client: TestClient, project_id: ProjectID, va
 
 
 def test_the_preflight_lists_a_repository_s_blockers_warnings_and_uncommitted_changes(
-    jj_available: None, client: TestClient, test_services: CompleteServiceCollection, git_repo: Path
+    jj_resolved_to_the_pinned_binary: None,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    git_repo: Path,
 ) -> None:
     (git_repo / ".gitmodules").write_text('[submodule "vendor"]\n\tpath = vendor\n\turl = ../vendor\n')
     (git_repo / ".husky").mkdir()
@@ -162,7 +158,7 @@ def test_the_preflight_while_jj_is_unavailable_gives_the_reason_the_colocate_ref
 
 
 def test_reading_the_preflight_derives_the_repository_s_streamed_state_from_disk_again(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     client: TestClient,
     test_services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
@@ -195,7 +191,7 @@ def test_the_preflight_of_an_unknown_project_is_not_found(client: TestClient) ->
 
 
 def test_colocating_answers_202_and_the_repository_becomes_a_colocation_that_creates_jj_workspaces(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     client: TestClient,
     test_services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
@@ -223,7 +219,10 @@ def test_colocating_without_jj_is_a_failed_precondition(
 
 
 def test_colocating_a_repository_with_a_blocker_conflicts(
-    jj_available: None, client: TestClient, test_services: CompleteServiceCollection, git_repo: Path
+    jj_resolved_to_the_pinned_binary: None,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    git_repo: Path,
 ) -> None:
     (git_repo / ".gitmodules").write_text('[submodule "vendor"]\n\tpath = vendor\n\turl = ../vendor\n')
     project = _register_project(test_services, git_repo)
@@ -235,14 +234,16 @@ def test_colocating_a_repository_with_a_blocker_conflicts(
     assert not (git_repo / ".jj").exists()
 
 
-def test_colocating_an_unknown_project_is_not_found(jj_available: None, client: TestClient) -> None:
+def test_colocating_an_unknown_project_is_not_found(
+    jj_resolved_to_the_pinned_binary: None, client: TestClient
+) -> None:
     response = client.post(f"/api/v1/projects/{ProjectID()}/jj/colocate")
 
     assert response.status_code == 404, response.text
 
 
 def test_turning_use_jj_for_new_workspaces_on_in_a_colocated_repository_stores_it(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     client: TestClient,
     test_services: CompleteServiceCollection,
     published_states: Queue[StreamingUpdateSourceTypes],
@@ -259,7 +260,10 @@ def test_turning_use_jj_for_new_workspaces_on_in_a_colocated_repository_stores_i
 
 
 def test_turning_use_jj_for_new_workspaces_on_without_a_colocation_conflicts(
-    jj_available: None, client: TestClient, test_services: CompleteServiceCollection, git_repo: Path
+    jj_resolved_to_the_pinned_binary: None,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    git_repo: Path,
 ) -> None:
     project = _register_project(test_services, git_repo)
 
@@ -298,7 +302,7 @@ def test_turning_use_jj_for_new_workspaces_off_needs_neither_jj_nor_a_colocation
 
 
 def test_turning_use_jj_for_new_workspaces_on_for_an_unknown_project_is_not_found(
-    jj_available: None, client: TestClient
+    jj_resolved_to_the_pinned_binary: None, client: TestClient
 ) -> None:
     response = _put_use_jj_for_new_workspaces(client, ProjectID(), True)
 
@@ -324,7 +328,7 @@ def _make_conflicted_bookmark(jj_binary: JjBinary, repo: Path, name: str) -> Non
 
 
 def test_the_bookmarks_of_a_colocated_repository_are_its_local_and_remote_ones_less_conflicted_ones(
-    jj_available: None,
+    jj_resolved_to_the_pinned_binary: None,
     jj_binary: JjBinary,
     client: TestClient,
     test_services: CompleteServiceCollection,
@@ -346,7 +350,10 @@ def test_the_bookmarks_of_a_colocated_repository_are_its_local_and_remote_ones_l
 
 
 def test_the_bookmarks_of_a_repository_that_is_not_colocated_conflict(
-    jj_available: None, client: TestClient, test_services: CompleteServiceCollection, git_repo: Path
+    jj_resolved_to_the_pinned_binary: None,
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    git_repo: Path,
 ) -> None:
     project = _register_project(test_services, git_repo)
 

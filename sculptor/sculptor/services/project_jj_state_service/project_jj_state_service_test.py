@@ -131,6 +131,11 @@ def _resolve_jj_to(silly_global_config: UserConfig, jj_value: str) -> None:
 
 @pytest.fixture
 def jj_available(silly_global_config: UserConfig, jj_binary: JjBinary) -> None:
+    """Resolve jj to the pinned binary on top of the service collection's config.
+
+    `jj_resolved_to_the_pinned_binary` does not fit here: `test_service_collection`
+    installs `silly_global_config`, which can replace the config it sets.
+    """
     _resolve_jj_to(silly_global_config, str(jj_binary.path))
 
 
