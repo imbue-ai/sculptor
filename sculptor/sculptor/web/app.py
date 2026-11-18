@@ -4400,7 +4400,10 @@ async def to_websocket_stream(
     except ServerStopped:
         with logger.contextualize(**user_session.logger_kwargs):
             logger.debug("Server is stopping, closing update stream.")
-            await websocket.close(code=1001, reason="Server is stopping")
+            try:
+                await websocket.close(code=1001, reason="Server is stopping")
+            except WebSocketDisconnect:
+                logger.debug("WebSocket client disconnected before the stream was closed")
             return
     except WebSocketDisconnect:
         with logger.contextualize(**user_session.logger_kwargs):

@@ -23,6 +23,7 @@ from sculptor.primitives.ids import UserSettingsID
 from sculptor.web.app import to_websocket_stream
 from sculptor.web.auth import ANONYMOUS_USER_EMAIL
 from sculptor.web.auth import UserSession
+from sculptor.web.streams import ServerStopped
 
 _STREAM_SCOPE: Scope = {"type": "websocket", "path": "/api/v1/stream/ws", "headers": [], "query_string": b""}
 
@@ -51,7 +52,23 @@ def _updates_never_read() -> Generator[None, None, None]:
     yield
 
 
+async def _send_to_client_that_leaves_after_accept(message: Message) -> None:
+    if message["type"] != "websocket.accept":
+        raise ClientDisconnected()
+
+
+def _updates_until_server_stops() -> Generator[None, None, None]:
+    raise ServerStopped()
+    yield
+
+
 async def test_stream_returns_quietly_when_client_leaves_before_accept() -> None:
     websocket = WebSocket(_STREAM_SCOPE, receive=_receive_connect, send=_send_to_departed_client)
 
     await to_websocket_stream(_anonymous_user_session(), _updates_never_read(), websocket, Event())
+
+
+async def test_stream_returns_quietly_when_client_leaves_before_shutdown_close() -> None:
+    websocket = WebSocket(_STREAM_SCOPE, receive=_receive_connect, send=_send_to_client_that_leaves_after_accept)
+
+    await to_websocket_stream(_anonymous_user_session(), _updates_until_server_stops(), websocket, Event())
