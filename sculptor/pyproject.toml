@@ -33,7 +33,7 @@ dependencies = [
     "pydantic>=2.11.4",
     "pydantic-settings>=2.14.2",
     "pygit2>=1.18.0",
-    "pyjwt[crypto]>=2.14.0",
+    "pyjwt[crypto]>=2.15.1",
     "python-multipart",
     "python-slugify>=8.0.0",
     "pyyaml>=6.0",

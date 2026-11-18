@@ -1452,7 +1452,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "pygit2", specifier = ">=1.18.0" },
     { name = "pyinstaller", marker = "extra == 'packaging'", specifier = ">=6.15.0" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.14.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.15.1" },
     { name = "python-multipart" },
     { name = "python-slugify", specifier = ">=8.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
