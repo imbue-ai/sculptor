@@ -228,12 +228,7 @@ const useColocationRequest = ({
   const hasStreamAnswered = jjState !== jjStateAtRequest;
 
   useEffect((): (() => void) | undefined => {
-    if (!isSuccess) {
-      return undefined;
-    }
-
-    if (hasStreamAnswered) {
-      reset();
+    if (!isSuccess || hasStreamAnswered) {
       return undefined;
     }
     const timeout = window.setTimeout(reset, COLOCATION_SETTLE_TIMEOUT_MS);
