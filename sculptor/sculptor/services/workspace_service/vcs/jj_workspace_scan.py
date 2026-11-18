@@ -24,6 +24,7 @@ from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
 from sculptor.services.workspace_service.vcs.jj_data_types import JjStackRevision
 from sculptor.services.workspace_service.vcs.jj_repo_queries import list_bookmarks
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
+from sculptor.services.workspace_service.vcs.jj_revsets import bookmark_name_of_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import is_full_commit_id
 from sculptor.services.workspace_service.vcs.jj_revsets import parse_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import working_copy_revset
@@ -138,7 +139,7 @@ def project_jj_workspace_identity(
         bookmark.name for bookmark in scan.bookmarks if bookmark.remote is not None and bookmark.is_tracked
     }
     projection = project_jj_stack(
-        stack, working_copy.commit_id, requested_bookmark, _target_bookmark_name(target_ref), tracked_bookmark_names
+        stack, working_copy.commit_id, requested_bookmark, bookmark_name_of_symbol(target_ref), tracked_bookmark_names
     )
     return JjHeadIdentity(
         working_copy_change_id=working_copy.change_id,
@@ -155,7 +156,7 @@ def project_jj_workspace_identity(
 
 def name_pull_request_base(target_ref: str) -> str:
     """The branch a pull request into `target_ref` names as its base: the bookmark's name, so `main` for `main@origin`."""
-    return _target_bookmark_name(target_ref) or target_ref
+    return bookmark_name_of_symbol(target_ref) or target_ref
 
 
 def _is_above_target(revision: JjScannedRevision, target_commit_id: str | None) -> bool:
@@ -172,16 +173,6 @@ def _to_stack_revision(revision: JjScannedRevision) -> JjStackRevision:
         bookmarks=revision.bookmarks,
         is_described=revision.description != "",
     )
-
-
-def _target_bookmark_name(target_ref: str | None) -> str | None:
-    """The bookmark name in a target symbol, such as `main` for `main@origin`."""
-    if target_ref is None:
-        return None
-    try:
-        return parse_bookmark_symbol(target_ref).name
-    except InvalidRevisionError:
-        return None
 
 
 def _stacks_revset(target_commit_id_by_workspace: Mapping[str, str | None]) -> JjRevset:

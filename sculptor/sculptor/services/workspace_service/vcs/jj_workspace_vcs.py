@@ -66,9 +66,9 @@ from sculptor.services.workspace_service.vcs.jj_repo_queries import select_targe
 from sculptor.services.workspace_service.vcs.jj_repo_queries import set_workspace_config
 from sculptor.services.workspace_service.vcs.jj_repo_queries import snapshot_working_copy
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
+from sculptor.services.workspace_service.vcs.jj_revsets import bookmark_name_of_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import is_full_commit_id
 from sculptor.services.workspace_service.vcs.jj_revsets import local_bookmark_revset
-from sculptor.services.workspace_service.vcs.jj_revsets import parse_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import revset_for_base
 from sculptor.services.workspace_service.vcs.jj_revsets import root_file_fileset
 from sculptor.services.workspace_service.vcs.jj_revsets import working_copy_revset
@@ -270,7 +270,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
             repo_path, JjRevset(f"{local_bookmark_revset(created_ref_name)} & ::{working_copy_commit_id}")
         ):
             own_bookmarks.add(created_ref_name)
-        own_bookmarks.discard(_target_bookmark_name(target_ref))
+        own_bookmarks.discard(bookmark_name_of_symbol(target_ref))
         own_bookmarks -= self._read_bookmarks_on_other_stacks(repo_path, location.checkout_name, target_commit_id)
         return own_bookmarks
 
@@ -401,7 +401,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
         commit_id = self._read_working_copy_commit_id(checkout)
         projection = self._project_stack(checkout, commit_id, target_ref, requested_ref_name)
         return PullRequestRefs(
-            head_ref_names=projection.pr_head_candidates, base_ref_name=_target_bookmark_name(target_ref)
+            head_ref_names=projection.pr_head_candidates, base_ref_name=bookmark_name_of_symbol(target_ref)
         )
 
     def _read_working_copy_commit_id(self, checkout: Path) -> str:
@@ -424,7 +424,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
             revisions,
             working_copy_commit_id,
             requested_ref_name,
-            _target_bookmark_name(target_ref),
+            bookmark_name_of_symbol(target_ref),
             tracked_bookmark_names,
         )
 
@@ -664,16 +664,6 @@ def _stack_revset(working_copies: JjRevset, target_commit_id: str | None) -> JjR
     if target_commit_id is None:
         return JjRevset(f"(::({working_copies}) & mutable()) | ({working_copies})")
     return JjRevset(f"(::({working_copies}) ~ ::{target_commit_id}) | ({working_copies})")
-
-
-def _target_bookmark_name(target_ref: str | None) -> str | None:
-    """The bookmark name in a target symbol, such as `main` for `main@origin`."""
-    if target_ref is None:
-        return None
-    try:
-        return parse_bookmark_symbol(target_ref).name
-    except InvalidRevisionError:
-        return None
 
 
 def _parse_revision_record(row: Sequence[Any], working_copy_commit_id: str) -> JjRevisionRecord:

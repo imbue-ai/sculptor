@@ -63,6 +63,16 @@ def parse_bookmark_symbol(symbol: str) -> JjBookmarkSymbol:
     return JjBookmarkSymbol(name=name, remote=remote if separator else None)
 
 
+def bookmark_name_of_symbol(symbol: str | None) -> str | None:
+    """The bookmark name in a symbol, such as `main` for `main@origin`; None for no symbol or a malformed one."""
+    if symbol is None:
+        return None
+    try:
+        return parse_bookmark_symbol(symbol).name
+    except InvalidRevisionError:
+        return None
+
+
 def format_bookmark_symbol(symbol: JjBookmarkSymbol) -> str:
     """The symbol in jj's own syntax; a remote bookmark is `name@remote`, never git's `remote/name`."""
     if symbol.remote is None:

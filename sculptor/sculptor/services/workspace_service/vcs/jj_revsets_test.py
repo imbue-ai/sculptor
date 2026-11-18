@@ -6,6 +6,7 @@ import pytest
 from sculptor.services.workspace_service.vcs.errors import InvalidRevisionError
 from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
 from sculptor.services.workspace_service.vcs.jj_revsets import any_remote_bookmark_revset
+from sculptor.services.workspace_service.vcs.jj_revsets import bookmark_name_of_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import exact_string_pattern
 from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import local_bookmark_revset
@@ -177,3 +178,10 @@ def test_revset_for_base_treats_a_git_style_remote_ref_as_a_local_name_that_does
 def test_revset_for_base_rejects_anything_that_is_neither_a_symbol_nor_a_commit_id(request_string: str) -> None:
     with pytest.raises(InvalidRevisionError):
         revset_for_base(request_string)
+
+
+def test_bookmark_name_of_symbol_drops_the_remote_and_names_nothing_for_no_or_a_malformed_symbol() -> None:
+    assert bookmark_name_of_symbol("release/1.0@origin") == "release/1.0"
+    assert bookmark_name_of_symbol("main") == "main"
+    assert bookmark_name_of_symbol("a@b@c") is None
+    assert bookmark_name_of_symbol(None) is None
