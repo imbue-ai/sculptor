@@ -603,9 +603,8 @@ declare const WorkspacePeekAgentStatus: {
  */
 export type WorkspacePeekAgentStatus = typeof WorkspacePeekAgentStatus[keyof typeof WorkspacePeekAgentStatus];
 /**
- * A curated, extension-facing view of a single workspace: identity, label, version
- * control, live branch or bookmarks, and code-host link. Deliberately a subset — not the host's full
- * `Workspace` model — so the extension contract doesn't couple to backend
+ * A curated, extension-facing view of a single workspace. Deliberately a subset —
+ * not the host's full `Workspace` model — so the extension contract doesn't couple to backend
  * internals. The element type of `useWorkspaces` and the return of
  * `useCurrentWorkspace`, so an extension reads the same shape whether it looks at
  * one workspace or all of them.

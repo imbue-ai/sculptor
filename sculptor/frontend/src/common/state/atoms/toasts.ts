@@ -37,9 +37,7 @@ export const workspaceOpenCloseErrorToastAtom = atom<ErrorToastData | null>(null
 // name is rolled back, so this is the only signal the write didn't stick.
 export const workspaceRenameErrorToastAtom = atom<ErrorToastData | null>(null);
 
-// Surfaced when the server rejects a change of a workspace's target, or no
-// candidate opens pull requests into the base an existing PR targets; the
-// target stays as it was.
+// Surfaced when a workspace's target cannot be changed; the target stays as it was.
 export const workspaceTargetChangeErrorToastAtom = atom<ErrorToastData | null>(null);
 
 // Surfaced when creating an agent (from the add-panel `+` dropdown or Cmd+K) fails on

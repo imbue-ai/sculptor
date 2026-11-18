@@ -155,8 +155,7 @@ const useWorkspaceMenuItems = (
 ): Array<ReactElement> => {
   const identityLabel = useWorkspaceIdentityLabel({ workspaceId: workspace.objectId });
   const jjState = useAtomValue(workspaceJjStateAtomFamily(workspace.objectId));
-  // A jj workspace goes by its bookmark and its working copy's change id; a git
-  // workspace by its branch. The bookmark takes the branch row's place.
+  // A jj workspace's bookmark takes the branch row's place.
   const identityCopyItems: ReadonlyArray<IdentityCopyItem> =
     workspaceVcsOf(workspace) === "jj"
       ? [
@@ -197,9 +196,9 @@ const useWorkspaceMenuItems = (
     </menu.Sub>
   ) : null;
   // Injected into the "Rename" group (right after the rename row, no leading
-  // separator). The name lives on the workspace object and the branch, bookmark
-  // and change id are plain atom reads (pushed over the WebSocket), so all copy
-  // synchronously; only the opaque id is tucked away in Diagnostics.
+  // separator). The name lives on the workspace object and the rest are plain
+  // atom reads (pushed over the WebSocket), so all copy synchronously; only the
+  // opaque id is tucked away in Diagnostics.
   const copyGroup = (
     <>
       <menu.Item

@@ -155,8 +155,7 @@ export const JjIdentityPill = ({ workspaceId }: { workspaceId: string }): ReactE
           changeId: jjState.workingCopyChangeId,
           uniquePrefixLength: jjState.workingCopyChangeIdPrefixLength,
         });
-  // The label copies the bookmark, else the change id; only a requested name
-  // with no jj state yet copies that name.
+  // What a click copies, named for the aria-label and the card's hint.
   const copiedThing =
     primaryBookmark !== null
       ? { noun: "bookmark", name: primaryBookmark }
