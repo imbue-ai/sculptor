@@ -236,6 +236,29 @@ class TestWorkspaceCreate:
         assert request_body["requestedBranchName"] == "dev/auto-generated"
 
     @respx.mock
+    def test_create_jj_strategy_previews_a_bookmark_name(self, runner: CliRunner) -> None:
+        """A jj workspace needs a bookmark name, so the CLI previews one for the jj kind as it does for worktree."""
+        _mock_session()
+        _mock_initialize_project()
+        preview_route = respx.get("http://localhost:5050/api/v1/workspaces/preview-branch-name").mock(
+            return_value=Response(200, json={"branchName": "dev/fix-thing"})
+        )
+        create_route = respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict(strategy="JJ_WORKSPACE"))
+        )
+
+        result = runner.invoke(
+            app,
+            ["workspace", "create", "--repo", "/tmp/test", "--strategy", "jj", "--name", "Fix Thing", "--json"],
+        )
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        assert preview_route.calls[0].request.url.params["mode"] == "JJ_WORKSPACE"
+        request_body = json.loads(create_route.calls[0].request.content)
+        assert request_body["initializationStrategy"] == "JJ_WORKSPACE"
+        assert request_body["requestedBranchName"] == "dev/fix-thing"
+
+    @respx.mock
     def test_create_passes_target_branch(self, runner: CliRunner) -> None:
         """--target-branch is forwarded in the create request body."""
         _mock_session()

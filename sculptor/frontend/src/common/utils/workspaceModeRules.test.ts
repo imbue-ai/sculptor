@@ -4,18 +4,19 @@ import { WorkspaceInitializationStrategy } from "~/api";
 
 import { hasRequiredCreationFields, toCreateRequestFields } from "./workspaceModeRules.ts";
 
-const { IN_PLACE, CLONE, WORKTREE } = WorkspaceInitializationStrategy;
+const { IN_PLACE, CLONE, WORKTREE, JJ_WORKSPACE } = WorkspaceInitializationStrategy;
 
 describe("toCreateRequestFields", () => {
   it.each([
     { mode: IN_PLACE, expected: { branchName: undefined, sourceBranch: undefined } },
     { mode: CLONE, expected: { branchName: "dev/ws", sourceBranch: "main" } },
     { mode: WORKTREE, expected: { branchName: "dev/ws", sourceBranch: "main" } },
+    { mode: JJ_WORKSPACE, expected: { branchName: "dev/ws", sourceBranch: "main" } },
   ])("sends only the fields $mode uses, trimmed", ({ mode, expected }) => {
     expect(toCreateRequestFields({ mode, branchName: "  dev/ws ", sourceBranch: " main" })).toEqual(expected);
   });
 
-  it.each([IN_PLACE, CLONE, WORKTREE])("leaves blank fields out for %s", (mode) => {
+  it.each(Object.values(WorkspaceInitializationStrategy))("leaves blank fields out for %s", (mode) => {
     expect(toCreateRequestFields({ mode, branchName: "   ", sourceBranch: "" })).toEqual({
       branchName: undefined,
       sourceBranch: undefined,
@@ -32,6 +33,9 @@ describe("hasRequiredCreationFields", () => {
     { mode: WORKTREE, branchName: "  ", sourceBranch: "main", expected: false },
     { mode: WORKTREE, branchName: "dev/ws", sourceBranch: undefined, expected: false },
     { mode: WORKTREE, branchName: "dev/ws", sourceBranch: "", expected: false },
+    { mode: JJ_WORKSPACE, branchName: "dev/ws", sourceBranch: undefined, expected: true },
+    { mode: JJ_WORKSPACE, branchName: "dev/ws", sourceBranch: "main", expected: true },
+    { mode: JJ_WORKSPACE, branchName: "  ", sourceBranch: "main", expected: false },
   ])(
     "is $expected for $mode with branch name '$branchName' and source branch '$sourceBranch'",
     ({ mode, branchName, sourceBranch, expected }) => {

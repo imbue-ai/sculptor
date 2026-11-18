@@ -15,7 +15,7 @@ class WorkspaceCreateOutput(BaseModel):
     id: str = Field(description="Unique workspace ID")
     repo_id: str = Field(description="Associated repo/project ID")
     description: str | None = Field(description="User-provided description")
-    strategy: str = Field(description="Workspace initialization strategy (clone, in-place, or worktree)")
+    strategy: str = Field(description="Workspace initialization strategy")
     source_branch: str | None = Field(description="Source branch name")
 
 

@@ -14,6 +14,10 @@ def test_checkout_path_for_strategy_applies_the_same_rule_to_a_strategy_and_path
     assert (
         checkout_path_for_strategy(WorkspaceInitializationStrategy.WORKTREE, None, environment) == environment / "code"
     )
+    assert (
+        checkout_path_for_strategy(WorkspaceInitializationStrategy.JJ_WORKSPACE, repo, environment)
+        == environment / "code"
+    )
 
 
 def test_checkout_path_for_strategy_is_none_when_the_directory_it_lives_under_is_unknown(tmp_path: Path) -> None:
@@ -21,7 +25,8 @@ def test_checkout_path_for_strategy_is_none_when_the_directory_it_lives_under_is
     assert checkout_path_for_strategy(WorkspaceInitializationStrategy.CLONE, tmp_path / "repo", None) is None
 
 
-def test_only_clone_and_worktree_workspaces_have_an_isolated_checkout() -> None:
+def test_every_workspace_but_an_in_place_one_has_an_isolated_checkout() -> None:
     assert not is_isolated_checkout(WorkspaceInitializationStrategy.IN_PLACE)
     assert is_isolated_checkout(WorkspaceInitializationStrategy.CLONE)
     assert is_isolated_checkout(WorkspaceInitializationStrategy.WORKTREE)
+    assert is_isolated_checkout(WorkspaceInitializationStrategy.JJ_WORKSPACE)

@@ -123,7 +123,8 @@ _REVISION_RECORD_TEMPLATE = (
     + ' ++ "," ++ json(f.source().path()) ++ "]").join(",") ++ "]"'
     + ' ++ ",[" ++ self.diff().stat().files().map(|f| "[" ++ json(f.path()) ++ "," ++ json(f.lines_added())'
     + ' ++ "," ++ json(f.lines_removed()) ++ "]").join(",") ++ "]"'
-    + ' ++ "," ++ json(empty) ++ "," ++ json(conflict) ++ "," ++ json(divergent) ++ "]\\n"'
+    + ' ++ "," ++ json(empty) ++ "," ++ json(conflict) ++ "," ++ json(divergent)'
+    + ' ++ "," ++ json(change_id.shortest().prefix()) ++ "]\\n"'
 )
 
 
@@ -680,7 +681,7 @@ def _target_bookmark_name(target_ref: str | None) -> str | None:
 
 
 def _parse_revision_record(row: Sequence[Any], working_copy_commit_id: str) -> JjRevisionRecord:
-    commit, bookmarks, changes, stats, is_empty, has_conflict, is_divergent = row
+    commit, bookmarks, changes, stats, is_empty, has_conflict, is_divergent, change_id_prefix = row
     lines_changed_by_path = {path: (added, removed) for path, added, removed in stats}
     files = tuple(
         CommitFileChange(
@@ -695,6 +696,7 @@ def _parse_revision_record(row: Sequence[Any], working_copy_commit_id: str) -> J
     author = commit["author"]
     return JjRevisionRecord(
         change_id=commit["change_id"],
+        change_id_prefix=change_id_prefix,
         commit_id=commit["commit_id"],
         description=commit["description"].removesuffix("\n"),
         author_name=author["name"],

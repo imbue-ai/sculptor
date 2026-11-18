@@ -49,6 +49,11 @@ def get_user_config_instance() -> UserConfig:
     return _CONFIG_INSTANCE or get_default_user_config_instance()
 
 
+def read_jj_snapshot_max_new_file_size_mib() -> int:
+    """The configured limit, in MiB, on a new file jj snapshots; read on every call, so a change applies at once."""
+    return get_user_config_instance().jj_snapshot_max_new_file_size_mib
+
+
 def get_user_config_instance_if_set() -> UserConfig | None:
     """Return the loaded config instance, or None if none has been set.
 

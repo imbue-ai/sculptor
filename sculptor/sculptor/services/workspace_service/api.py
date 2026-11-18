@@ -30,6 +30,7 @@ from sculptor.services.workspace_service.vcs.data_types import CommitRecord
 from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
+from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 
 
 def resolve_workspace_setup_command(stored_command: str | None, default_command: str) -> str | None:
@@ -71,6 +72,14 @@ class WorkspaceCommitHistoryUnavailableError(ExpectedError):
     def __init__(self, workspace_id: WorkspaceID) -> None:
         self.workspace_id = workspace_id
         super().__init__(f"Workspace {workspace_id} has revisions, not git commits")
+
+
+class WorkspaceRevisionHistoryUnavailableError(ExpectedError):
+    """Raised when a workspace's history is not a list of jj revisions, as in a git workspace."""
+
+    def __init__(self, workspace_id: WorkspaceID) -> None:
+        self.workspace_id = workspace_id
+        super().__init__(f"Workspace {workspace_id} has git commits, not revisions")
 
 
 class WorkspaceFilesUnavailableError(ExpectedError):
@@ -468,6 +477,19 @@ class WorkspaceService(Service, ABC):
 
         Raises:
             WorkspaceNotFoundError: If the workspace does not exist.
+        """
+
+    @abstractmethod
+    def get_revision_history(
+        self,
+        workspace_id: WorkspaceID,
+        transaction: DataModelTransaction,
+    ) -> JjRevisionHistory:
+        """Get a jj workspace's revisions, newest first, back to where its stack forks from its target.
+
+        Raises:
+            WorkspaceNotFoundError: If the workspace does not exist or has no checkout yet.
+            WorkspaceRevisionHistoryUnavailableError: If the workspace is a git workspace.
         """
 
     # Workspace File Operations

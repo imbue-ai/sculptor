@@ -145,7 +145,11 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
                     atomic_copy_env_file(source_env_file, dest_env_file)
                 elif dest_env_file.exists():
                     dest_env_file.unlink()
-            case WorkspaceInitializationStrategy.IN_PLACE | WorkspaceInitializationStrategy.WORKTREE:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.WORKTREE
+                | WorkspaceInitializationStrategy.JJ_WORKSPACE
+            ):
                 pass
             case _ as unreachable:
                 assert_never(unreachable)

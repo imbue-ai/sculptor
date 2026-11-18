@@ -158,3 +158,17 @@ def test_jj_workspace_raises_the_tripwire_instead_of_giving_no_hint(
 
     with pytest.raises(GitCommandInJjWorkspaceError):
         resolve_branch_rename_hint(_wrap(environment), "<user>/<slug>")
+
+
+def test_jj_workspace_gets_no_hint(tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    workspace_dir = tmp_path / "workspace"
+    (workspace_dir / "code" / ".jj").mkdir(parents=True)
+    environment = LocalEnvironment(
+        environment_id=LocalEnvironmentID(str(workspace_dir)),
+        project_id=ProjectID(),
+        concurrency_group=test_root_concurrency_group,
+        repo_host_path=tmp_path / "repo",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+
+    assert resolve_branch_rename_hint(_wrap(environment), "<user>/<slug>") is None

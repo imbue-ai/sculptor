@@ -31,6 +31,7 @@ from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.branch_poller import WorkspaceBranchPoller
 from sculptor.services.workspace_service.vcs.git_cli import GitCli
+from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.testing.local_git_repo import LocalGitRepo
 from sculptor.web.data_types import StreamingUpdateSourceTypes
@@ -39,11 +40,18 @@ from sculptor.web.data_types import WorkspaceTargetBranchesInfo
 
 
 class _FakeWorkspace:
-    def __init__(self, object_id: WorkspaceID, project_id: ProjectID) -> None:
+    def __init__(
+        self,
+        object_id: WorkspaceID,
+        project_id: ProjectID,
+        target_branch: str | None = None,
+        initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
+    ) -> None:
         self.object_id = object_id
         self.project_id = project_id
+        self.target_branch = target_branch
         self.is_deleted = False
-        self.initialization_strategy = WorkspaceInitializationStrategy.WORKTREE
+        self.initialization_strategy = initialization_strategy
 
 
 class _FakeTransaction:
@@ -93,7 +101,7 @@ def _build_poller(
     return WorkspaceBranchPoller(
         concurrency_group=cg,
         data_model_service=_FakeDataModelService(workspaces),  # type: ignore[arg-type]
-        vcs_runners=VcsRunners(git=git_cli),
+        vcs_runners=VcsRunners(git=git_cli, jj=JjCli(cg, lambda tool: None)),
         resolve_working_dir=resolve_working_dir or (lambda workspace: working_dirs.get(workspace.object_id)),
         refresh_diff_on_branch_change=refresh_diff_on_branch_change,
     )
@@ -211,6 +219,64 @@ def test_target_falls_back_to_local_excluding_own_branch(
     target_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceTargetBranchesInfo)]
     assert "feature-x" in target_infos[0].target_branches
     assert "wsbranch" not in target_infos[0].target_branches
+
+
+def test_target_branches_name_the_pull_request_base_of_each_remote_candidate(
+    base_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli
+) -> None:
+    LocalGitRepo(base_repo).run_git(["remote", "add", "origin", str(tmp_path / "origin.git")])
+    _add_remote_ref(base_repo, "origin/main")
+    _add_remote_ref(base_repo, "origin/feature/foo")
+    worktree = tmp_path / "ws"
+    _add_worktree(base_repo, worktree, "wsbranch")
+    workspace = _FakeWorkspace(WorkspaceID(), ProjectID(), target_branch="origin/main")
+    poller = _build_poller([workspace], {workspace.object_id: worktree}, test_root_concurrency_group, git_cli)
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    poller.add_observer(queue)
+
+    poller._scan_once()
+
+    target_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceTargetBranchesInfo)]
+    assert target_infos[0].pr_base_names == {"origin/main": "main", "origin/feature/foo": "feature/foo"}
+
+
+def test_target_branches_keep_a_local_candidate_whose_first_segment_is_no_remote(
+    base_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli
+) -> None:
+    LocalGitRepo(base_repo).run_git(["branch", "release/1.0"])
+    worktree = tmp_path / "ws"
+    _add_worktree(base_repo, worktree, "wsbranch")
+    workspace = _FakeWorkspace(WorkspaceID(), ProjectID())
+    poller = _build_poller([workspace], {workspace.object_id: worktree}, test_root_concurrency_group, git_cli)
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    poller.add_observer(queue)
+
+    poller._scan_once()
+
+    target_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceTargetBranchesInfo)]
+    assert target_infos[0].pr_base_names["release/1.0"] == "release/1.0"
+
+
+def test_a_new_target_outside_the_candidates_is_published_with_its_pull_request_base(
+    base_repo: Path, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli
+) -> None:
+    LocalGitRepo(base_repo).run_git(["remote", "add", "upstream", str(tmp_path / "upstream.git")])
+    _add_remote_ref(base_repo, "upstream/main")
+    worktree = tmp_path / "ws"
+    _add_worktree(base_repo, worktree, "wsbranch")
+    workspace = _FakeWorkspace(WorkspaceID(), ProjectID(), target_branch="upstream/main")
+    poller = _build_poller([workspace], {workspace.object_id: worktree}, test_root_concurrency_group, git_cli)
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    poller.add_observer(queue)
+    poller._scan_once()
+    _drain(queue)
+
+    workspace.target_branch = "upstream/release/2.0"
+    poller._scan_once()
+
+    target_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceTargetBranchesInfo)]
+    assert [info.target_branches for info in target_infos] == [("upstream/main",)]
+    assert target_infos[0].pr_base_names == {"upstream/main": "main", "upstream/release/2.0": "release/2.0"}
 
 
 def test_get_current_branch_returns_cached_value_and_none_for_unknown(
@@ -344,6 +410,33 @@ def test_remote_scan_runs_once_per_repo_in_the_main_repo(
         cwd for cwd, arguments in _read_git_invocations(git_invocation_log) if arguments.startswith("branch -r")
     ]
     assert remote_listing_directories == [base_repo.resolve()]
+
+
+def test_a_repository_left_without_workspaces_is_scanned_afresh_when_one_returns(
+    base_repo: Path,
+    tmp_path: Path,
+    test_root_concurrency_group: ConcurrencyGroup,
+    git_cli: GitCli,
+    git_invocation_log: Path,
+) -> None:
+    _add_remote_ref(base_repo, "origin/main")
+    worktree = tmp_path / "ws"
+    _add_worktree(base_repo, worktree, "wsbranch")
+    workspace = _FakeWorkspace(WorkspaceID(), ProjectID())
+    workspaces = [workspace]
+    poller = _build_poller(workspaces, {workspace.object_id: worktree}, test_root_concurrency_group, git_cli)
+    poller._scan_once()
+    workspaces.clear()
+    poller._scan_once()
+    workspaces.append(workspace)
+    git_invocation_log.write_text("")
+
+    poller._scan_once()
+
+    remote_listings = [
+        arguments for _, arguments in _read_git_invocations(git_invocation_log) if arguments.startswith("branch -r")
+    ]
+    assert len(remote_listings) == 1
 
 
 @pytest.mark.parametrize("checkout_shape", ["plain_directory", "jj_workspace", "missing_directory"])
@@ -502,3 +595,23 @@ def test_git_run_in_a_jj_workspace_by_the_target_scan_is_logged_once_at_error(
     assert levels == ["ERROR"]
     branch_infos = [item for item in _drain(queue) if isinstance(item, WorkspaceBranchInfo)]
     assert [info.current_branch for info in branch_infos] == ["wsbranch"]
+
+
+def test_a_jj_workspace_gets_neither_a_branch_nor_target_branches(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli, git_invocation_log: Path
+) -> None:
+    checkout = tmp_path / "ws"
+    (checkout / ".jj").mkdir(parents=True)
+    workspace = _FakeWorkspace(
+        WorkspaceID(), ProjectID(), initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE
+    )
+    poller = _build_poller([workspace], {workspace.object_id: checkout}, test_root_concurrency_group, git_cli)
+    queue: Queue[StreamingUpdateSourceTypes] = Queue()
+    poller.add_observer(queue)
+
+    with record_logged_error_levels() as levels:
+        poller._scan_once()
+
+    assert levels == []
+    assert _drain(queue) == []
+    assert _read_git_invocations(git_invocation_log) == []

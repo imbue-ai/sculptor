@@ -54,9 +54,11 @@ from sculptor.web.data_types import BtwUpdate
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import ExtensionCommandUiAction
 from sculptor.web.data_types import OpenFileUiAction
+from sculptor.web.data_types import ProjectJjState
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import UserUpdateSourceTypes
 from sculptor.web.data_types import WebviewCommandUiAction
+from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.data_types import WorkspaceSetupOutputChunk
 from sculptor.web.data_types import WorkspaceSetupStatus
 from sculptor.web.derived import CodingAgentTaskView
@@ -339,6 +341,8 @@ class StreamingUpdate(SerializableModel):
     ui_open_file_by_workspace_id: dict[WorkspaceID, OpenFileUiAction] = Field(default_factory=dict)
     ui_webview_command_by_workspace_id: dict[WorkspaceID, WebviewCommandUiAction] = Field(default_factory=dict)
     ui_extension_command_by_workspace_id: dict[WorkspaceID, ExtensionCommandUiAction] = Field(default_factory=dict)
+    workspace_jj_state_by_workspace_id: dict[WorkspaceID, WorkspaceJjStateInfo] = Field(default_factory=dict)
+    project_jj_state_by_project_id: dict[ProjectID, ProjectJjState] = Field(default_factory=dict)
 
 
 _WorkspaceValueT = TypeVar("_WorkspaceValueT")
@@ -453,6 +457,11 @@ def project_for_scope(
         ui_extension_command_by_workspace_id=_narrow_by_workspace_id(
             update.ui_extension_command_by_workspace_id, proj.scoped_workspace_ids
         ),
+        workspace_jj_state_by_workspace_id=_narrow_by_workspace_id(
+            update.workspace_jj_state_by_workspace_id, proj.scoped_workspace_ids
+        ),
+        # Dropped like the projects in user_update, which narrow scopes never carry.
+        project_jj_state_by_project_id={},
     )
 
 
@@ -808,6 +817,8 @@ def _convert_to_streaming_update(
     updated_ui_open_file_by_workspace_id: dict[WorkspaceID, OpenFileUiAction] = {}
     updated_ui_webview_command_by_workspace_id: dict[WorkspaceID, WebviewCommandUiAction] = {}
     updated_ui_extension_command_by_workspace_id: dict[WorkspaceID, ExtensionCommandUiAction] = {}
+    updated_workspace_jj_state_by_workspace_id: dict[WorkspaceID, WorkspaceJjStateInfo] = {}
+    updated_project_jj_state_by_project_id: dict[ProjectID, ProjectJjState] = {}
     messages_by_task: dict[TaskID, list[Message]] = defaultdict(list)
 
     for model in all_data:
@@ -837,6 +848,12 @@ def _convert_to_streaming_update(
 
         elif isinstance(model, WorkspaceTargetBranchesInfo):
             updated_workspace_target_branches_by_workspace_id[model.workspace_id] = model
+
+        elif isinstance(model, WorkspaceJjStateInfo):
+            updated_workspace_jj_state_by_workspace_id[model.workspace_id] = model
+
+        elif isinstance(model, ProjectJjState):
+            updated_project_jj_state_by_project_id[model.project_id] = model
 
         elif isinstance(model, DependenciesStatus):
             latest_dependencies_status = model
@@ -901,6 +918,8 @@ def _convert_to_streaming_update(
         ui_open_file_by_workspace_id=updated_ui_open_file_by_workspace_id,
         ui_webview_command_by_workspace_id=updated_ui_webview_command_by_workspace_id,
         ui_extension_command_by_workspace_id=updated_ui_extension_command_by_workspace_id,
+        workspace_jj_state_by_workspace_id=updated_workspace_jj_state_by_workspace_id,
+        project_jj_state_by_project_id=updated_project_jj_state_by_project_id,
     )
 
 

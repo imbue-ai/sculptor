@@ -13,7 +13,11 @@ def is_isolated_checkout(initialization_strategy: WorkspaceInitializationStrateg
     match initialization_strategy:
         case WorkspaceInitializationStrategy.IN_PLACE:
             return False
-        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
+        case (
+            WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+            | WorkspaceInitializationStrategy.JJ_WORKSPACE
+        ):
             return True
         case _ as unreachable:
             assert_never(unreachable)

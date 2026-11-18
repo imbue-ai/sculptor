@@ -17,11 +17,13 @@ import {
 import { handleBtwUpdateAtom } from "../atoms/btwPopup";
 import { dependenciesStatusAtom } from "../atoms/dependenciesStatus";
 import { notificationsAtom } from "../atoms/notifications";
+import { updateProjectJjStatesAtom } from "../atoms/projectJjState";
 import { updateProjectsAtom } from "../atoms/projects";
 import { updatePrStatusAtom } from "../atoms/prStatus";
 import { sculptorSettingsAtom } from "../atoms/sculptorSettings";
 import { isAgentExtensionLoadingAllowedAtom, isExtensionsEnabledAtom } from "../atoms/userConfig";
 import { updateWorkspaceBranchAtom } from "../atoms/workspaceBranch";
+import { updateWorkspaceJjStatesAtom } from "../atoms/workspaceJjState";
 import { updateWorkspacesAtom } from "../atoms/workspaces";
 import { appendSetupOutputChunkAtom } from "../atoms/workspaceSetupOutput";
 import { updateWorkspaceSetupStatusAtom } from "../atoms/workspaceSetupStatus";
@@ -112,6 +114,8 @@ export const useUnifiedStream = (): void => {
   const updatePrStatus = useSetAtom(updatePrStatusAtom);
   const updateWorkspaceBranch = useSetAtom(updateWorkspaceBranchAtom);
   const updateWorkspaceTargetBranches = useSetAtom(updateWorkspaceTargetBranchesAtom);
+  const updateWorkspaceJjStates = useSetAtom(updateWorkspaceJjStatesAtom);
+  const updateProjectJjStates = useSetAtom(updateProjectJjStatesAtom);
   const updateWorkspaceSetupStatus = useSetAtom(updateWorkspaceSetupStatusAtom);
   const appendSetupOutputChunk = useSetAtom(appendSetupOutputChunkAtom);
   const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
@@ -217,6 +221,14 @@ export const useUnifiedStream = (): void => {
         });
       }
 
+      if (data.workspaceJjStateByWorkspaceId) {
+        updateWorkspaceJjStates(data.workspaceJjStateByWorkspaceId);
+      }
+
+      if (data.projectJjStateByProjectId) {
+        updateProjectJjStates(data.projectJjStateByProjectId);
+      }
+
       // Handle workspace setup status updates
       if (data.workspaceSetupStatusByWorkspaceId && Object.keys(data.workspaceSetupStatusByWorkspaceId).length > 0) {
         Object.entries(data.workspaceSetupStatusByWorkspaceId).forEach(([workspaceId, setupStatus]) => {
@@ -300,6 +312,8 @@ export const useUnifiedStream = (): void => {
       updatePrStatus,
       updateWorkspaceBranch,
       updateWorkspaceTargetBranches,
+      updateWorkspaceJjStates,
+      updateProjectJjStates,
       updateWorkspaceSetupStatus,
       appendSetupOutputChunk,
       setDependenciesStatus,

@@ -41,6 +41,7 @@ from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.dependency_management_service import Dependency
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
+from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
@@ -272,6 +273,7 @@ def _run_terminal_agent_in_environment(
                 environment_concurrency_group, services.dependency_management_service.resolve_binary_path
             ),
             environment_concurrency_group,
+            read_jj_snapshot_max_new_file_size_mib,
         )
         checkout = CheckoutLocation(
             repo_path=project.get_local_user_path(),

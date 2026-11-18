@@ -82,6 +82,7 @@ class ProjectFieldUpdate(TypedDict, total=False):
     default_system_prompt: str | None
     workspace_setup_command: str | None
     naming_pattern: str | None
+    use_jj_for_new_workspaces: bool
 
 
 # Workspace fields excluded from WorkspaceFieldUpdate because they're set

@@ -9,7 +9,8 @@ pattern resolved for this user with the slug left for the agent to fill in
 (`dev/<slug>`).
 
 There is no hint for an in-place workspace, whose branch is the user's own; nor
-when the current branch does not fit the pattern, which happens when the user
+for a jj workspace, which has bookmarks rather than a branch; nor when the
+current branch does not fit the pattern, which happens when the user
 typed a custom name or a clone sits on its source branch; nor when the pattern
 has no `<slug>` to replace.
 """
@@ -43,7 +44,7 @@ class BranchRenameHint(FrozenModel):
 
 def resolve_branch_rename_hint(environment: AgentExecutionEnvironment, naming_pattern: str) -> BranchRenameHint | None:
     match environment.get_initialization_strategy():
-        case WorkspaceInitializationStrategy.IN_PLACE:
+        case WorkspaceInitializationStrategy.IN_PLACE | WorkspaceInitializationStrategy.JJ_WORKSPACE:
             return None
         case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
             return _resolve_git_branch_rename_hint(environment, naming_pattern)

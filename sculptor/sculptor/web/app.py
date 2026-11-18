@@ -118,7 +118,6 @@ from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
 from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
-from sculptor.primitives.ids import TypeIDPrefixMismatchError
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.ids import create_organization_id
 from sculptor.primitives.ids import create_user_id
@@ -154,6 +153,7 @@ from sculptor.services.user_config.user_config import replace_config
 from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
 from sculptor.services.voice_models import find_voice_model_file
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
+from sculptor.services.workspace_service.api import WorkspaceCommitHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import resolve_workspace_setup_command
@@ -318,6 +318,9 @@ from sculptor.web.middleware import resolve_stream_scope
 from sculptor.web.middleware import run_sync_function_with_debugging_support_if_enabled
 from sculptor.web.middleware import shutdown_event as shutdown_event_impl
 from sculptor.web.open_with import open_path_in_external_app
+from sculptor.web.path_id_validation import validate_project_id
+from sculptor.web.path_id_validation import validate_task_id
+from sculptor.web.path_id_validation import validate_workspace_id
 from sculptor.web.remote_repos import remote_repos_router
 from sculptor.web.skills import discover_skills
 from sculptor.web.streams import Scope
@@ -330,55 +333,11 @@ from sculptor.web.ui_actions import next_webview_seq
 from sculptor.web.ui_actions import publish_ui_action
 from sculptor.web.ui_actions import subscriber_count
 from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload_diagnostics
+from sculptor.web.workspace_jj_routes import workspace_jj_router
 
 UpdateT = TypeVar("UpdateT", bound=StreamingUpdate)
 
 _SERVER_START_TIME = time.time()
-
-
-def validate_project_id(project_id: str) -> ProjectID:
-    """Validate and return a ProjectID, raising HTTPException if invalid."""
-    try:
-        return ProjectID(project_id)
-    except (typeid.errors.TypeIDException, TypeIDPrefixMismatchError, ValueError) as e:
-        raise HTTPException(
-            status_code=422,
-            detail=[
-                {
-                    "loc": ["path", "project_id"],
-                    "msg": f"Invalid project ID format: {project_id}",
-                    "type": "value_error",
-                }
-            ],
-        ) from e
-
-
-def validate_task_id(task_id: str) -> TaskID:
-    """Validate and return a TaskID, raising HTTPException if invalid."""
-    try:
-        return TaskID(task_id)
-    except (typeid.errors.TypeIDException, TypeIDPrefixMismatchError, ValueError) as e:
-        raise HTTPException(
-            status_code=422,
-            detail=[{"loc": ["path", "task_id"], "msg": f"Invalid task ID format: {task_id}", "type": "value_error"}],
-        ) from e
-
-
-def validate_workspace_id(workspace_id: str) -> WorkspaceID:
-    """Validate and return a WorkspaceID, raising HTTPException if invalid."""
-    try:
-        return WorkspaceID(workspace_id)
-    except (typeid.errors.TypeIDException, TypeIDPrefixMismatchError, ValueError) as e:
-        raise HTTPException(
-            status_code=422,
-            detail=[
-                {
-                    "loc": ["path", "workspace_id"],
-                    "msg": f"Invalid workspace ID format: {workspace_id}",
-                    "type": "value_error",
-                }
-            ],
-        ) from e
 
 
 def _project_path_from_git_repo_url(user_git_repo_url: str | None) -> str | None:
@@ -673,6 +632,9 @@ def _validate_workspace_creation_request(
                 )
             if source_branch is None:
                 raise HTTPException(status_code=400, detail="source_branch is required for WORKTREE workspaces")
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            # TODO(SCU-1878): accept jj workspaces in repositories that create them.
+            raise HTTPException(status_code=400, detail="jj workspaces cannot be created yet")
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -949,15 +911,20 @@ def preview_branch_name(
 ) -> PreviewBranchNameResponse:
     """Resolve the auto-filled branch-name preview for the Add Workspace form.
 
-    In-place mode returns an empty string since the field is hidden. Clone and
-    worktree modes resolve the project's or user-global naming pattern against
-    a `<slug>` derived from the workspace name (random if empty) and a `<user>`
-    slug derived from the repo's `git config user.name`.
+    In-place mode returns an empty string since the field is hidden. Every other
+    mode resolves the project's or user-global naming pattern against a `<slug>`
+    derived from the workspace name (random if empty) and a `<user>` slug derived
+    from the repo's `git config user.name`; for a jj workspace the name is its
+    bookmark's.
     """
     match mode:
         case WorkspaceInitializationStrategy.IN_PLACE:
             return PreviewBranchNameResponse(branch_name="")
-        case WorkspaceInitializationStrategy.CLONE | WorkspaceInitializationStrategy.WORKTREE:
+        case (
+            WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+            | WorkspaceInitializationStrategy.JJ_WORKSPACE
+        ):
             pass
         case _ as unreachable:
             assert_never(unreachable)
@@ -1329,6 +1296,8 @@ def get_workspace_commits(
             commits, fork_point = services.workspace_service.get_commit_history(validated_workspace_id, transaction)
         except WorkspaceNotFoundError:
             return CommitHistoryResponse(commits=[], fork_point=None)
+        except WorkspaceCommitHistoryUnavailableError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
 
         return CommitHistoryResponse(
             commits=[
@@ -5420,6 +5389,7 @@ def _element_tags() -> ElementIDs:
 
 APP.include_router(router)
 APP.include_router(remote_repos_router)
+APP.include_router(workspace_jj_router)
 
 APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 

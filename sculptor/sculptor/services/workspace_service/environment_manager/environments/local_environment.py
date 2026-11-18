@@ -17,6 +17,7 @@ from pydantic import PrivateAttr
 
 from sculptor.agents.default.constants import CLONE_MODE_PROMPT
 from sculptor.agents.default.constants import IN_PLACE_MODE_PROMPT
+from sculptor.agents.default.constants import JJ_WORKSPACE_MODE_PROMPT
 from sculptor.agents.default.constants import WORKTREE_MODE_PROMPT
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
@@ -166,6 +167,8 @@ class LocalEnvironment(Environment):
                 mode_prompt = CLONE_MODE_PROMPT
             case WorkspaceInitializationStrategy.WORKTREE:
                 mode_prompt = WORKTREE_MODE_PROMPT
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                mode_prompt = JJ_WORKSPACE_MODE_PROMPT
             case _ as unreachable:
                 assert_never(unreachable)
 
