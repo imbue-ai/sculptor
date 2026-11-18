@@ -243,6 +243,23 @@ def test_creating_a_jj_workspace_refuses_a_base_that_names_no_bookmark_or_commit
     assert _list_workspace_strategies(test_services) == []
 
 
+def test_creating_a_jj_workspace_that_names_no_base_needs_a_trunk_bookmark(
+    client: TestClient,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_project: Project,
+    test_services: CompleteServiceCollection,
+) -> None:
+    """With no source and no target, the base is the trunk bookmark, and a `trunk()` that names nothing leaves none."""
+    run_jj(jj_binary, ("config", "set", "--repo", 'revset-aliases."trunk()"', "none()"), cwd=jj_colocated_repo.path)
+
+    response = _post_jj_workspace(client, jj_project)
+
+    assert response.status_code == 400, response.text
+    assert "has no trunk bookmark to start from" in _detail(response)
+    assert _list_workspace_strategies(test_services) == []
+
+
 def test_a_jj_workspace_is_created_on_the_trunk_bookmark_by_default(
     client: TestClient,
     jj_binary: JjBinary,
