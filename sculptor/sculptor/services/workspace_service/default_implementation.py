@@ -312,10 +312,7 @@ class DefaultWorkspaceService(WorkspaceService):
 
     def get_workspace_vcs(self, initialization_strategy: WorkspaceInitializationStrategy) -> WorkspaceVcs:
         return make_workspace_vcs(
-            initialization_strategy,
-            self.vcs_runners,
-            self.concurrency_group,
-            read_jj_snapshot_max_new_file_size_mib,
+            initialization_strategy, self.vcs_runners, self.concurrency_group, read_jj_snapshot_max_new_file_size_mib
         )
 
     def forget_orphaned_jj_workspaces(self) -> None:
