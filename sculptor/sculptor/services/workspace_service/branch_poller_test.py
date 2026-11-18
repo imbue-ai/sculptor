@@ -412,6 +412,33 @@ def test_remote_scan_runs_once_per_repo_in_the_main_repo(
     assert remote_listing_directories == [base_repo.resolve()]
 
 
+def test_a_repository_left_without_workspaces_is_scanned_afresh_when_one_returns(
+    base_repo: Path,
+    tmp_path: Path,
+    test_root_concurrency_group: ConcurrencyGroup,
+    git_cli: GitCli,
+    git_invocation_log: Path,
+) -> None:
+    _add_remote_ref(base_repo, "origin/main")
+    worktree = tmp_path / "ws"
+    _add_worktree(base_repo, worktree, "wsbranch")
+    workspace = _FakeWorkspace(WorkspaceID(), ProjectID())
+    workspaces = [workspace]
+    poller = _build_poller(workspaces, {workspace.object_id: worktree}, test_root_concurrency_group, git_cli)
+    poller._scan_once()
+    workspaces.clear()
+    poller._scan_once()
+    workspaces.append(workspace)
+    git_invocation_log.write_text("")
+
+    poller._scan_once()
+
+    remote_listings = [
+        arguments for _, arguments in _read_git_invocations(git_invocation_log) if arguments.startswith("branch -r")
+    ]
+    assert len(remote_listings) == 1
+
+
 @pytest.mark.parametrize("checkout_shape", ["plain_directory", "jj_workspace", "missing_directory"])
 def test_checkout_without_git_is_flagged_in_published_state(
     checkout_shape: str, tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli
