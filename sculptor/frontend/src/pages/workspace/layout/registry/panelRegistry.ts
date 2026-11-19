@@ -111,14 +111,14 @@ export const registerPanelComponent = (id: PanelId, component: ComponentType): v
 
 // A jj workspace's history is revisions. The panel id stays "commits" because
 // persisted layouts key on it.
-const DISPLAY_NAME_BY_VCS: Readonly<Partial<Record<PanelId, Readonly<Record<WorkspaceVcs, string>>>>> = {
-  commits: { git: "Commits", jj: "Revisions" },
+const JJ_DISPLAY_NAME_BY_PANEL_ID: Readonly<Partial<Record<PanelId, string>>> = {
+  commits: "Revisions",
 };
 
 export const buildStaticPanelDefinitions = (vcs: WorkspaceVcs): ReadonlyArray<PanelDefinition> => {
   return STATIC_PANEL_METADATA.map((meta) => ({
     id: meta.id,
-    displayName: DISPLAY_NAME_BY_VCS[meta.id]?.[vcs] ?? meta.displayName,
+    displayName: (vcs === "jj" ? JJ_DISPLAY_NAME_BY_PANEL_ID[meta.id] : undefined) ?? meta.displayName,
     icon: meta.icon,
     kind: "static",
     defaultSection: meta.defaultSection,
