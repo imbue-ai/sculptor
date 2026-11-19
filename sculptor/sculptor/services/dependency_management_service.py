@@ -1253,7 +1253,7 @@ class DependencyManagementService(Service):
     def _get_status(self) -> DependenciesStatus:
         """Compute the current status of all dependencies; call only while holding ``_status_computation_lock``.
 
-        Its one side effect is keeping the login shell's answer, when it asks the shell.
+        Asking the login shell keeps its answer for later computations.
         """
         git_check = self.check_installed(Dependency.GIT)
         claude_check = self.check_installed(Dependency.CLAUDE)

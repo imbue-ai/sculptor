@@ -409,7 +409,7 @@ def _make_login_profile_put_first(
 ) -> Path:
     """Make the user's login shell bash, with a profile that puts `directory` first on PATH and logs each run to the returned file.
 
-    The profile also prints a greeting, as many do.
+    The profile also prints a greeting, as many do, so the tests show the probe is not misled by what a profile prints.
     """
     runs_log = jj_isolated_env.home_path / "profile_runs.log"
     monkeypatch.setenv("SHELL", "/bin/bash")
