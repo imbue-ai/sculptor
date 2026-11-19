@@ -799,10 +799,6 @@ class DependencyManagementService(Service):
         with self._status_computation_lock:
             return self._compute_and_publish_status()
 
-    def _request_status_refresh(self) -> None:
-        """Have a running service recompute the status soon, on its refresher thread."""
-        self._status_refresh_requested.set()
-
     def _run_status_refresher(self) -> None:
         """Recompute the status on a slow timer, and soon after a refresh is requested, until the service stops."""
         has_warned_refresh_failure = False
@@ -850,7 +846,7 @@ class DependencyManagementService(Service):
         path = self._resolve_configured_binary_path(tool)
         status = self._status
         if status is not None and _dependency_info_for_tool(status, tool).path != path:
-            self._request_status_refresh()
+            self._status_refresh_requested.set()
         return path
 
     def _resolve_configured_binary_path(self, tool: Dependency) -> str | None:
@@ -1344,7 +1340,7 @@ class DependencyManagementService(Service):
         readiness = self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
         status = self._status
         if status is not None and status.jj_readiness != readiness:
-            self._request_status_refresh()
+            self._status_refresh_requested.set()
         return readiness
 
     def _jj_readiness_from_check(self, check: DependencyCheckResult) -> JjReadiness:
