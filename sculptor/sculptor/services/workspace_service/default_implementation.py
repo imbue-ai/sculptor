@@ -2,6 +2,7 @@ import json
 import threading
 import uuid
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from queue import Queue
 from typing import Generator
@@ -43,6 +44,7 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.jj_availability import prepare_jj_for_launch
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
@@ -574,8 +576,11 @@ class DefaultWorkspaceService(WorkspaceService):
         with lock:
             yield
 
-    def _require_vcs_available(self, initialization_strategy: WorkspaceInitializationStrategy) -> None:
-        """Raise `JjUnavailableError` before a jj workspace's environment runs jj, so the agent says why it stopped."""
+    def _prepare_vcs_for_launch(self, initialization_strategy: WorkspaceInitializationStrategy) -> None:
+        """Raise `JjUnavailableError` before a jj workspace's environment runs jj, so the agent says why it stopped.
+
+        Otherwise, for jj, point jj-bin at the ready jj through `prepare_jj_for_launch`.
+        """
         match initialization_strategy:
             case (
                 WorkspaceInitializationStrategy.IN_PLACE
@@ -584,9 +589,28 @@ class DefaultWorkspaceService(WorkspaceService):
             ):
                 return
             case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-                require_jj_available(self.dependency_management_service.get_jj_readiness())
+                prepare_jj_for_launch(self.dependency_management_service)
             case _ as unreachable:
                 assert_never(unreachable)
+
+    def resume_workspace_environment(self, project: Project, workspace: Workspace) -> Environment:
+        """Resume the workspace's existing environment behind the same gate as an agent's start.
+
+        Raises `JjUnavailableError` for a jj workspace while jj cannot be used, and
+        `EnvironmentNotFoundError` when the workspace has no environment to resume.
+        """
+        self._prepare_vcs_for_launch(workspace.initialization_strategy)
+        if workspace.environment_id is None:
+            raise EnvironmentNotFoundError()
+        return self.environment_manager.resume_environment(
+            environment_id=workspace.environment_id,
+            project_path=project.get_local_user_path(),
+            project_id=project.object_id,
+            concurrency_group=self.concurrency_group,
+            vcs=self.get_workspace_vcs(workspace.initialization_strategy),
+            workspace_id=workspace.object_id,
+            initialization_strategy=workspace.initialization_strategy,
+        )
 
     def _create_or_resume_environment(
         self,
@@ -610,7 +634,7 @@ class DefaultWorkspaceService(WorkspaceService):
 
             if workspace is None:
                 raise WorkspaceNotFoundError(workspace_id)
-            self._require_vcs_available(workspace.initialization_strategy)
+            self._prepare_vcs_for_launch(workspace.initialization_strategy)
 
             environment_id_to_resume = workspace.environment_id
             environment: Environment | None = None
@@ -711,6 +735,13 @@ class DefaultWorkspaceService(WorkspaceService):
             root_progress_handle=root_progress_handle,
             task_id=str(task_id),
         )
+        vcs_environment = self.get_workspace_vcs(environment.initialization_strategy).agent_environment(
+            CheckoutLocation(
+                repo_path=project.get_local_user_path(),
+                checkout_path=environment.get_working_directory(),
+                checkout_name=str(workspace_id),
+            )
+        )
 
         # Wrap the environment in AgentExecutionEnvironment for per-task namespacing
         agent_environment = LocalAgentExecutionEnvironment(
@@ -731,7 +762,7 @@ class DefaultWorkspaceService(WorkspaceService):
         # The terminal will be created on demand when the user first connects.
         if environment.supports_terminal:
             try:
-                environment.start_terminal_manager(self.concurrency_group)
+                environment.start_terminal_manager(self.concurrency_group, vcs_environment)
             except Exception as e:
                 logger.error(
                     "Failed to start terminal for workspace {}, terminal will be created on demand: {}",
@@ -778,7 +809,7 @@ class DefaultWorkspaceService(WorkspaceService):
                 self.setup_runner.start(
                     workspace_id=str(workspace_id),
                     command=setup_command_to_run,
-                    subprocess_runner=environment.run_setup_subprocess,
+                    subprocess_runner=partial(environment.run_setup_subprocess, vcs_environment=vcs_environment),
                     shutdown_event_source=environment.concurrency_group.shutdown_event,
                     state_dir=state_dir,
                     on_persist=self._persist_setup_state,

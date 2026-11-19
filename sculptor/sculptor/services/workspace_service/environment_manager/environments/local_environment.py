@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -32,6 +33,7 @@ from sculptor.interfaces.environments.errors import FileOrDirectoryCouldNotBeDel
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_file_size_mib
 from sculptor.services.workspace_service.environment_manager.env_file_parser import atomic_copy_env_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
@@ -45,6 +47,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.services.workspace_service.vcs.checkout_layout import checkout_path_for_strategy
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.utils.build import get_workspaces_folder
@@ -168,7 +171,9 @@ class LocalEnvironment(Environment):
             case WorkspaceInitializationStrategy.WORKTREE:
                 mode_prompt = WORKTREE_MODE_PROMPT
             case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-                mode_prompt = JJ_WORKSPACE_MODE_PROMPT
+                mode_prompt = JJ_WORKSPACE_MODE_PROMPT.format(
+                    snapshot_max_new_file_size_mib=read_jj_snapshot_max_new_file_size_mib()
+                )
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -359,6 +364,7 @@ class LocalEnvironment(Environment):
         on_chunk: Callable[[bytes], None],
         on_pid: Callable[[int], None],
         shutdown_event: ReadOnlyEvent,
+        vcs_environment: AgentVcsEnvironment,
     ) -> int:
         # Run setup in the agent's working directory: for CLONE workspaces
         # this is the freshly-cloned copy under workspace/code/, not the
@@ -370,10 +376,10 @@ class LocalEnvironment(Environment):
         else:
             merged = {**self._project_env_vars, **os.environ}
         merged.pop("CLAUDECODE", None)
-        env = {k: v for k, v in merged.items() if v is not None}
+        env = vcs_environment.applied_to({k: v for k, v in merged.items() if v is not None})
         logger.info("Starting setup subprocess in workspace: {}", self.workspace_path)
         process = subprocess.Popen(
-            ["bash", "-l", "-c", command],
+            ["bash", "-l", "-c", _reapply_path_prefixes(command, vcs_environment.path_prefixes)],
             cwd=str(working_directory),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
@@ -483,6 +489,7 @@ class LocalEnvironment(Environment):
     def start_terminal_manager(
         self,
         concurrency_group: ConcurrencyGroup,
+        vcs_environment: AgentVcsEnvironment,
     ) -> None:
         """Register terminal config so terminals can be created on demand.
 
@@ -493,6 +500,8 @@ class LocalEnvironment(Environment):
         Args:
             concurrency_group: Long-lived concurrency group for terminal thread/process
                 lifecycle management. Should outlive individual agent runs.
+            vcs_environment: The workspace version control's agent environment,
+                which the terminals' shells get.
         """
         # Register environment config so the on-demand terminal creation path
         # (WebSocket endpoint -> create_terminal_for_environment) can find the
@@ -508,6 +517,7 @@ class LocalEnvironment(Environment):
                 workspace_path=self.get_workspace_path(),
                 working_directory=self.get_working_directory(),
                 concurrency_group=concurrency_group,
+                vcs_environment=vcs_environment,
                 extra_env=dict(self._sculpt_terminal_env_vars),
                 env_var_override=self._env_var_override,
                 sculptor_folder=self._sculptor_folder,
@@ -538,6 +548,23 @@ class LocalEnvironment(Environment):
         self.close()
         with self._closing_lock:
             remove_local_environment(Path(self.workspace_path))
+
+
+def _reapply_path_prefixes(command: str, path_prefixes: Sequence[Path]) -> str:
+    """`command`, first putting `path_prefixes` back in front of PATH, which a login shell's profile may have reordered.
+
+    The prefixes go on the command's first line, so bash still reports the
+    command's own line numbers.
+
+    >>> _reapply_path_prefixes("jj git fetch", (Path("/internal/jj-bin"),))
+    'export PATH=/internal/jj-bin"${PATH:+:$PATH}"; jj git fetch'
+    >>> _reapply_path_prefixes("make setup", ())
+    'make setup'
+    """
+    if not path_prefixes:
+        return command
+    quoted_prefixes = shlex.quote(os.pathsep.join(str(prefix) for prefix in path_prefixes))
+    return f'export PATH={quoted_prefixes}"${{PATH:+:$PATH}}"; {command}'
 
 
 def _drain_setup_stdout(process: subprocess.Popen, on_chunk: Callable[[bytes], None]) -> None:

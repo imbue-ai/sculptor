@@ -14,6 +14,7 @@ import struct
 import termios
 import threading
 from collections import deque
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Callable
 
@@ -26,6 +27,7 @@ from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.terminal_manager import TerminalManager
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.spawned_pty_process import SpawnedPtyProcess
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 
 # Buffer size for reading from pty — larger buffers reduce syscall overhead
 # for bulk output (e.g., `cat large_file`), matching ttyd's approach.
@@ -65,6 +67,7 @@ class TerminalEnvironmentConfig(FrozenModel):
     workspace_path: Path
     working_directory: Path
     concurrency_group: ConcurrencyGroup
+    vcs_environment: AgentVcsEnvironment = Field(description="The workspace version control's agent environment")
     extra_env: dict[str, str] = Field(default_factory=dict)
     env_var_override: bool = False
     sculptor_folder: Path | None = None
@@ -181,6 +184,30 @@ def stop_terminals_for_environment(environment_id: str) -> None:
     _stop_managers_concurrently(to_stop)
 
 
+def build_terminal_extra_env(
+    extra_env: Mapping[str, str],
+    project_env: Mapping[str, str],
+    vcs_environment: AgentVcsEnvironment,
+    inherited_env: Mapping[str, str],
+) -> dict[str, str]:
+    """The variables a terminal's shell gets over the backend's environment (``inherited_env``).
+
+    ``extra_env`` layers over the project's ``.env``. The version control's
+    variables fill in only what the user has set in neither, since a terminal
+    is the user's own shell: a ``GH_REPO`` they chose stands. Its PATH entries
+    go in front of the PATH entries the shell prepends. Its chat-agent
+    variables are not for terminals, where a person can answer an editor.
+    """
+    vcs_defaults = {
+        name: value for name, value in vcs_environment.environment_variables.items() if name not in inherited_env
+    }
+    terminal_env = {**vcs_defaults, **project_env, **extra_env}
+    path = vcs_environment.prefix_path(terminal_env.get("PATH", ""))
+    if path:
+        terminal_env["PATH"] = path
+    return terminal_env
+
+
 def create_terminal_for_environment(
     environment_id: str,
     terminal_index: int,
@@ -209,7 +236,7 @@ def create_terminal_for_environment(
     # the user made to ~/.sculptor/.env or .sculptor/.env after the workspace
     # was created. Sculpt vars (in config.extra_env) layer on top.
     project_env = load_project_env_vars(config.working_directory, sculptor_folder=config.sculptor_folder)
-    terminal_extra_env = {**project_env, **config.extra_env}
+    terminal_extra_env = build_terminal_extra_env(config.extra_env, project_env, config.vcs_environment, os.environ)
 
     manager = LocalTerminalManager(
         environment_id=environment_id,

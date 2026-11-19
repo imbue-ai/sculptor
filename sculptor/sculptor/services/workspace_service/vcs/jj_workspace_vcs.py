@@ -76,6 +76,7 @@ from sculptor.services.workspace_service.vcs.jj_stack_projection import project_
 from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
 from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
 from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
+from sculptor.utils.build import get_jj_bin_dir
 
 # `|| true` keeps a missing or unreachable origin from blocking workspace startup.
 DEFAULT_JJ_WORKSPACE_SETUP_COMMAND = "jj git fetch --remote origin 2>/dev/null || true"
@@ -95,6 +96,8 @@ _REFUSED_SNAPSHOT_ERROR_PREFIX = "jj did not snapshot this file: "
 _ORIGIN_REMOTE = "origin"
 _GH_REPO = "GH_REPO"
 _GIT_CEILING_DIRECTORIES = "GIT_CEILING_DIRECTORIES"
+_JJ_EDITOR = "JJ_EDITOR"
+_EDITOR_THAT_FAILS = "false"
 # The seam's file changes have no copy status, so a copy counts as an added file.
 _FILE_STATUS_BY_JJ_STATUS: Mapping[str, CommitFileStatus] = {
     "modified": "M",
@@ -619,16 +622,24 @@ class JjWorkspaceVcs(WorkspaceVcs):
         return GitOperationResult(success=True, stdout=result.stdout, stderr=result.stderr)
 
     def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:
-        """`GH_REPO` for a GitHub origin, since gh finds no `.git` to read it from, and a git ceiling above the checkout.
+        """jj-bin first on PATH, `GH_REPO` for a GitHub origin, a git ceiling above the checkout, and no editor.
 
-        The ceiling makes a `git` run in the workspace fail instead of finding an
-        enclosing repository.
+        It touches no file and checks no readiness, so any caller may ask for it;
+        jj-bin's link is kept where a process launches. gh finds no `.git` to read
+        the repository from, so it needs `GH_REPO`. The ceiling makes a `git` run
+        in the workspace fail instead of finding an enclosing repository.
+        `JJ_EDITOR=false` makes a jj command that would open an editor fail at
+        once instead of waiting on a terminal no one is at.
         """
         environment_variables = {_GIT_CEILING_DIRECTORIES: str(location.checkout_path.parent)}
         gh_repo = self._read_gh_repo(location.repo_path)
         if gh_repo is not None:
             environment_variables[_GH_REPO] = gh_repo
-        return AgentVcsEnvironment(environment_variables=environment_variables)
+        return AgentVcsEnvironment(
+            path_prefixes=(get_jj_bin_dir(),),
+            environment_variables=environment_variables,
+            chat_agent_environment_variables={_JJ_EDITOR: _EDITOR_THAT_FAILS},
+        )
 
     def _read_gh_repo(self, repo_path: Path) -> str | None:
         """`HOST/OWNER/REPO` for a GitHub `origin`; None for any other origin or none."""

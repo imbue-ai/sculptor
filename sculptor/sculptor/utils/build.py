@@ -4,6 +4,7 @@ from functools import cache
 from pathlib import Path
 from typing import Final
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from loguru import logger
 from packaging.version import Version
@@ -81,6 +82,34 @@ def get_sculpt_bin_dir(executable_parent: Path | None = None, *, packaged: bool 
     return sculpt_bin_dir
 
 
+def get_jj_bin_dir() -> Path:
+    """Return the directory, under the internal folder, that holds only a ``jj`` symlink, without touching it.
+
+    Processes launched in jj workspaces get this directory at the front of
+    PATH, so the ``jj`` they type is the one Sculptor resolved (managed or
+    custom), as ``sculpt-bin/`` does for ``sculpt``. ``link_jj_bin`` keeps it.
+    """
+    return get_internal_folder() / "jj-bin"
+
+
+def link_jj_bin(jj_binary: Path) -> None:
+    """Point the ``jj`` symlink in ``get_jj_bin_dir()`` at ``jj_binary``.
+
+    A changed ``jj_binary`` replaces the link in one rename, so a concurrent
+    PATH lookup never finds it missing. Nothing removes the link: a jj that
+    later becomes unusable is refused at the next launch, before any process
+    could run it.
+    """
+    jj_bin_dir = get_jj_bin_dir()
+    jj_bin_dir.mkdir(parents=True, exist_ok=True)
+    jj_link = jj_bin_dir / "jj"
+    if jj_link.is_symlink() and jj_link.readlink() == jj_binary:
+        return
+    staged_link = jj_bin_dir / f".jj-{uuid4().hex}"
+    staged_link.symlink_to(jj_binary)
+    staged_link.replace(jj_link)
+
+
 def build_sculpt_backend_env(
     *,
     backend_port: int,
@@ -115,14 +144,17 @@ def is_dev_build() -> bool:
     return Version(version.__version__).is_devrelease
 
 
-def _get_repo_root() -> Path | None:
-    """Find the repository root by looking for a .git directory.
+def _get_repo_root(start_directory: Path) -> Path | None:
+    """Find the repository root: the nearest directory, from ``start_directory`` up, holding ``.git`` or ``.jj``.
 
-    Returns None if we can't find a repository root (e.g., in a packaged build).
+    A jj workspace of this repository has ``.jj`` and no ``.git``, and when
+    Sculptor runs from source it sits inside another checkout, whose root a
+    search for ``.git`` alone would find instead. Returns None if we can't
+    find a repository root (e.g., in a packaged build).
     """
-    current = Path(__file__).resolve().parent
+    current = start_directory
     while current != current.parent:
-        if (current / ".git").exists():
+        if (current / ".git").exists() or (current / ".jj").is_dir():
             return current
         current = current.parent
     return None
@@ -184,7 +216,7 @@ def get_sculptor_folder() -> Path:
         logger.info("Sculptor folder: {} (from {} env var)", path, SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG)
     elif not is_packaged():
         # Running from source: use the repo root so each checkout has its own data
-        repo_root = _get_repo_root()
+        repo_root = _get_repo_root(Path(__file__).resolve().parent)
         if repo_root is not None:
             path = repo_root / ".dev_sculptor"
         else:

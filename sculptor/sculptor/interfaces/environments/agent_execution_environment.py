@@ -21,6 +21,7 @@ from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 
 if TYPE_CHECKING:
     from _typeshed import OpenBinaryModeReading
@@ -266,6 +267,7 @@ class AgentExecutionEnvironment(Protocol):
     def start_terminal_manager(
         self,
         concurrency_group: ConcurrencyGroup,
+        vcs_environment: AgentVcsEnvironment,
     ) -> None:
         """Start the terminal manager for this environment.
 
@@ -275,6 +277,8 @@ class AgentExecutionEnvironment(Protocol):
         Args:
             concurrency_group: Long-lived concurrency group for terminal thread/process
                 lifecycle management. Should outlive individual agent runs.
+            vcs_environment: The workspace version control's agent environment,
+                which the terminals' shells get.
         """
         ...
 

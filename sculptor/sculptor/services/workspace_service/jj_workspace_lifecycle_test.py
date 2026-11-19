@@ -32,6 +32,9 @@ from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import run_jj
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.utils.build import get_jj_bin_dir
+from sculptor.utils.build import link_jj_bin
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
 
 
@@ -347,3 +350,40 @@ def test_a_first_agent_start_while_jj_is_unavailable_creates_nothing_until_jj_is
     checkout = _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
 
     assert (checkout / ".jj" / "repo").is_file()
+
+
+def test_starting_an_agent_in_a_jj_workspace_points_jj_bin_at_the_jj_readiness_accepted(
+    isolated_sculptor_folder: Path,  # noqa: F811
+    jj_binary: JjBinary,
+    jj_project: Project,
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+) -> None:
+    link_jj_bin(tmp_path / "jj-from-an-earlier-launch")
+    workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
+
+    _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path
+
+
+def test_an_agent_start_while_jj_is_unavailable_stops_at_the_gate_and_leaves_jj_bin_as_it_was(
+    isolated_sculptor_folder: Path,  # noqa: F811
+    jj_binary: JjBinary,
+    jj_project: Project,
+    test_service_collection: CompleteServiceCollection,
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _create_jj_workspace(test_service_collection, jj_project, source_branch=None)
+    _start_first_agent(test_service_collection, jj_project, workspace, test_root_concurrency_group)
+    _point_jj_at_a_broken_binary(monkeypatch, tmp_path)
+
+    error = _start_agent_while_jj_is_unavailable(
+        test_service_collection, jj_project, workspace, test_root_concurrency_group
+    )
+
+    assert str(error).startswith("jj cannot run")
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path

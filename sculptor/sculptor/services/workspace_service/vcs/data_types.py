@@ -1,3 +1,5 @@
+import os
+from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
@@ -140,3 +142,26 @@ class AgentVcsEnvironment(FrozenModel):
 
     path_prefixes: tuple[Path, ...] = Field(default=(), description="Directories prepended to PATH")
     environment_variables: dict[str, str] = Field(default_factory=dict)
+    chat_agent_environment_variables: dict[str, str] = Field(
+        default_factory=dict,
+        description="Added for chat agents only, whose commands run with no terminal for an editor or prompt",
+    )
+
+    def prefix_path(self, path: str) -> str:
+        """`path` with `path_prefixes` in front of it, adding no empty entry, which would mean the working directory.
+
+        >>> AgentVcsEnvironment(path_prefixes=(Path("/jj-bin"),)).prefix_path("/usr/bin:/bin")
+        '/jj-bin:/usr/bin:/bin'
+        >>> AgentVcsEnvironment(path_prefixes=(Path("/jj-bin"),)).prefix_path("")
+        '/jj-bin'
+        >>> AgentVcsEnvironment().prefix_path("/usr/bin")
+        '/usr/bin'
+        """
+        return os.pathsep.join([*(str(prefix) for prefix in self.path_prefixes), *([path] if path else [])])
+
+    def applied_to(self, environment: Mapping[str, str]) -> dict[str, str]:
+        """`environment` with `environment_variables` set over it and `path_prefixes` in front of its PATH."""
+        applied = {**environment, **self.environment_variables}
+        if self.path_prefixes:
+            applied["PATH"] = self.prefix_path(environment.get("PATH", ""))
+        return applied

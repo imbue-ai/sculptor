@@ -1,9 +1,24 @@
+from collections.abc import Iterator
+from pathlib import Path
+from uuid import uuid4
+
 import pytest
 
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.jj_availability import JjUnavailableError
 from sculptor.services.jj_availability import describe_jj_unavailability
+from sculptor.services.jj_availability import prepare_jj_for_launch
 from sculptor.services.jj_availability import require_jj_available
 from sculptor.services.jj_version import JJ_PINNED_VERSION
+from sculptor.services.user_config.user_config import set_user_config_instance
+from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjIsolatedEnv
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.utils.build import get_jj_bin_dir
+from sculptor.utils.build import link_jj_bin
 from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjIdentity
@@ -58,3 +73,53 @@ def test_an_available_jj_has_no_unavailability_to_describe() -> None:
 
     assert describe_jj_unavailability(readiness) is None
     require_jj_available(readiness)
+
+
+@pytest.fixture
+def dependency_management_service(jj_isolated_env: JjIsolatedEnv) -> Iterator[DependencyManagementService]:
+    with ConcurrencyGroup(name="dependency_management_service") as concurrency_group:
+        yield DependencyManagementService(concurrency_group=concurrency_group)
+    set_user_config_instance(None)
+
+
+def _resolve_jj_to(jj_path: Path) -> None:
+    set_user_config_instance(
+        UserConfig(
+            user_email="test@example.com",
+            user_id=uuid4().hex,
+            organization_id=uuid4().hex,
+            instance_id=uuid4().hex,
+            dependency_paths=DependencyPaths(jj=str(jj_path)),
+        )
+    )
+
+
+def test_preparing_a_launch_points_jj_bin_at_the_resolved_jj_when_it_passes_readiness(
+    dependency_management_service: DependencyManagementService,
+    jj_binary: JjBinary,
+    isolated_sculptor_folder: Path,  # noqa: F811
+) -> None:
+    _resolve_jj_to(jj_binary.path)
+
+    prepare_jj_for_launch(dependency_management_service)
+
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path
+
+
+def test_preparing_a_launch_refuses_a_jj_version_sculptor_does_not_support_and_leaves_jj_bin_as_it_was(
+    dependency_management_service: DependencyManagementService,
+    jj_binary: JjBinary,
+    isolated_sculptor_folder: Path,  # noqa: F811
+    tmp_path: Path,
+) -> None:
+    link_jj_bin(jj_binary.path)
+    old_jj = tmp_path / "jj"
+    old_jj.write_text(f'#!/bin/sh\necho "jj 0.28.2-{uuid4().hex}"\n')
+    old_jj.chmod(0o755)
+    _resolve_jj_to(old_jj)
+
+    with pytest.raises(JjUnavailableError) as raised:
+        prepare_jj_for_launch(dependency_management_service)
+
+    assert str(raised.value).startswith(f"jj 0.28.2 at {old_jj} is not supported")
+    assert (get_jj_bin_dir() / "jj").readlink() == jj_binary.path

@@ -1,3 +1,7 @@
+import os
+import shutil
+import subprocess
+import sys
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -67,11 +71,17 @@ from sculptor.tasks.handlers.run_agent.setup import scan_message_history
 from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
 from sculptor.tasks.handlers.run_agent.v1 import AgentTaskFailure
 from sculptor.tasks.handlers.run_agent.v1 import _build_agent_path
+from sculptor.tasks.handlers.run_agent.v1 import _build_agent_secrets
 from sculptor.tasks.handlers.run_agent.v1 import _eager_fetch_pi_models_into_state
 from sculptor.tasks.handlers.run_agent.v1 import _run_agent_in_environment
 from sculptor.tasks.handlers.run_agent.v1 import _save_messages
 from sculptor.tasks.handlers.run_agent.v1 import _send_user_input_message
 from sculptor.tasks.handlers.run_agent.v1 import on_exception
+from sculptor.testing.jj_launch_environment import JjLaunchEnvironment
+from sculptor.testing.jj_launch_environment import jj_environment_nested_in_git_repository  # noqa: F401
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
+from sculptor.utils.build import get_sculpt_bin_dir
+from sculptor.utils.build import is_packaged
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
@@ -306,6 +316,81 @@ class _SigtermOnFirstPushAgent(DefaultAgentWrapper):
         )
         self._exit_code = AGENT_EXIT_CODE_FROM_SIGTERM
         return True
+
+
+def test_chat_agent_secrets_in_a_git_workspace_take_nothing_from_its_version_control(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+) -> None:
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    executable_parent = Path(sys.executable).parent
+
+    secrets = _build_agent_secrets(
+        settings=test_settings,
+        task=local_task,
+        task_state=AgentTaskStateV2(workspace_id=WorkspaceID()),
+        project=project,
+        environment=agent_env,
+        vcs=services.workspace_service.get_workspace_vcs(environment.initialization_strategy),
+    )
+
+    assert secrets["PATH"] == _build_agent_path(
+        is_packaged=is_packaged(),
+        executable_parent=executable_parent,
+        current_path=os.environ["PATH"],
+        sculpt_dir=get_sculpt_bin_dir(executable_parent),
+    )
+    assert {"GH_REPO", "GIT_CEILING_DIRECTORIES", "JJ_EDITOR"}.isdisjoint(secrets)
+
+
+def test_a_chat_agent_in_a_jj_workspace_finds_the_managed_jj_has_no_editor_and_cannot_run_git(
+    local_task: Task,
+    services: ServiceCollectionForTask,
+    jj_environment_nested_in_git_repository: JjLaunchEnvironment,  # noqa: F811
+    test_settings: SculptorSettings,
+) -> None:
+    launch = jj_environment_nested_in_git_repository
+    agent_env = LocalAgentExecutionEnvironment(
+        environment=launch.environment,
+        task_id=local_task.object_id,
+        dependency_management_service=services.dependency_management_service,
+    )
+    jj_project = Project(
+        object_id=launch.environment.project_id,
+        name="jj project",
+        organization_reference=local_task.organization_reference,
+        user_git_repo_url=f"file://{launch.location.repo_path}",
+    )
+
+    secrets = _build_agent_secrets(
+        settings=test_settings,
+        task=local_task,
+        task_state=AgentTaskStateV2(workspace_id=WorkspaceID(launch.location.checkout_name)),
+        project=jj_project,
+        environment=agent_env,
+        vcs=launch.vcs,
+    )
+    process_env = {**os.environ, **secrets}
+    found_jj = shutil.which("jj", path=secrets["PATH"])
+    jj_version = subprocess.run(
+        ["jj", "--version"], cwd=launch.location.checkout_path, env=process_env, capture_output=True, text=True
+    )
+    git_status = subprocess.run(
+        ["git", "status"], cwd=launch.location.checkout_path, env=process_env, capture_output=True, text=True
+    )
+
+    assert found_jj is not None and Path(found_jj).readlink() == launch.managed_jj
+    assert jj_version.returncode == 0, jj_version.stderr
+    assert git_status.returncode != 0
+    assert "not a git repository" in git_status.stderr
+    assert secrets["JJ_EDITOR"] == "false"
 
 
 def test_sigtermed_in_flight_message_is_recorded_as_processed(

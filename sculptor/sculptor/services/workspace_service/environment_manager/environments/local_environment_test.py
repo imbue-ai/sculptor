@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from sculptor.config.user_config import UserConfig
 from sculptor.database.workspace_enums import GitInitializationStrategy
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
@@ -19,13 +20,22 @@ from sculptor.foundation.secrets_utils import Secret
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    get_environment_config,
+)
+from sculptor.services.workspace_service.vcs.data_types import AgentVcsEnvironment
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.data_types import CheckoutSpec
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_workspace_vcs import GitWorkspaceVcs
+from sculptor.testing.jj_launch_environment import JjLaunchEnvironment
+from sculptor.testing.jj_launch_environment import jj_environment_nested_in_git_repository  # noqa: F401
+from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.local_git_repo import LocalGitRepo
+from sculptor.testing.sculptor_folder import isolated_sculptor_folder  # noqa: F401
 from sculptor.testing.workspace_vcs import make_test_git_cli
 from sculptor.testing.workspace_vcs import make_test_git_workspace_vcs
 
@@ -101,14 +111,16 @@ def clone_test_ctx(
 def test_run_setup_subprocess_happy_path(local_environment: LocalEnvironment) -> None:
     chunks: list[bytes] = []
     pids: list[int] = []
-    rc = local_environment.run_setup_subprocess("echo hi", chunks.append, pids.append, Event())
+    rc = local_environment.run_setup_subprocess("echo hi", chunks.append, pids.append, Event(), AgentVcsEnvironment())
     assert rc == 0
     assert b"hi" in b"".join(chunks)
 
 
 def test_run_setup_subprocess_on_pid_invoked_once(local_environment: LocalEnvironment) -> None:
     pids: list[int] = []
-    rc = local_environment.run_setup_subprocess("true", lambda _data: None, pids.append, Event())
+    rc = local_environment.run_setup_subprocess(
+        "true", lambda _data: None, pids.append, Event(), AgentVcsEnvironment()
+    )
     assert rc == 0
     assert len(pids) == 1
     # start_new_session=True makes the bash child its own pgid leader, so
@@ -128,7 +140,7 @@ def test_run_setup_subprocess_on_pid_called_before_chunks(local_environment: Loc
         pids.append(pid)
         events.append("pid")
 
-    rc = local_environment.run_setup_subprocess("echo hello", _on_chunk, _on_pid, Event())
+    rc = local_environment.run_setup_subprocess("echo hello", _on_chunk, _on_pid, Event(), AgentVcsEnvironment())
     assert rc == 0
     assert len(pids) == 1
     assert events[0] == "pid"
@@ -151,7 +163,7 @@ def test_run_setup_subprocess_on_pid_skipped_on_pgid_failure(
     monkeypatch.setattr(os, "getpgid", _bad_pgid)
     pids: list[int] = []
     with pytest.raises(RuntimeError, match="start_new_session did not take effect"):
-        local_environment.run_setup_subprocess("true", lambda _data: None, pids.append, Event())
+        local_environment.run_setup_subprocess("true", lambda _data: None, pids.append, Event(), AgentVcsEnvironment())
     assert pids == []
 
 
@@ -170,7 +182,7 @@ def test_run_setup_subprocess_cwd_is_working_directory(clone_test_ctx: CloneTest
         sculptor_folder=clone_test_ctx.sculptor_folder,
     )
     chunks: list[bytes] = []
-    rc = env.run_setup_subprocess("pwd", chunks.append, lambda _pid: None, Event())
+    rc = env.run_setup_subprocess("pwd", chunks.append, lambda _pid: None, Event(), AgentVcsEnvironment())
     assert rc == 0
     captured = b"".join(chunks).decode()
     expected = str(env.get_working_directory().resolve())
@@ -182,16 +194,67 @@ def test_run_setup_subprocess_cwd_is_working_directory(clone_test_ctx: CloneTest
     )
 
 
+def test_the_setup_command_of_a_jj_workspace_finds_the_managed_jj_and_cannot_run_git(
+    jj_environment_nested_in_git_repository: JjLaunchEnvironment,  # noqa: F811
+    jj_binary: JjBinary,
+) -> None:
+    launch = jj_environment_nested_in_git_repository
+    chunks: list[bytes] = []
+
+    exit_code = launch.environment.run_setup_subprocess(
+        "jj --version && ! git status",
+        chunks.append,
+        lambda _pid: None,
+        Event(),
+        launch.vcs.agent_environment(launch.location),
+    )
+
+    output = b"".join(chunks).decode()
+    assert exit_code == 0, output
+    assert f"jj {jj_binary.version}" in output
+    assert "not a git repository" in output
+
+
+def test_the_setup_command_of_a_jj_workspace_runs_sculptors_jj_when_the_login_profile_puts_another_first(
+    jj_environment_nested_in_git_repository: JjLaunchEnvironment,  # noqa: F811
+    jj_binary: JjBinary,
+    tmp_path: Path,
+) -> None:
+    launch = jj_environment_nested_in_git_repository
+    other_jj_dir = tmp_path / "other_jj"
+    other_jj_dir.mkdir()
+    other_jj = other_jj_dir / "jj"
+    other_jj.write_text("#!/bin/sh\necho 'jj 0.28.2 from the login profile'\n")
+    other_jj.chmod(0o755)
+    (Path(os.environ["HOME"]) / ".bash_profile").write_text(f'export PATH="{other_jj_dir}:$PATH"\n')
+    vcs_environment = launch.vcs.agent_environment(launch.location)
+    chunks: list[bytes] = []
+
+    exit_code = launch.environment.run_setup_subprocess(
+        "command -v jj && jj --version", chunks.append, lambda _pid: None, Event(), vcs_environment
+    )
+
+    output = b"".join(chunks).decode()
+    assert exit_code == 0, output
+    assert output.splitlines()[0] == str(vcs_environment.path_prefixes[0] / "jj")
+    assert f"jj {jj_binary.version}" in output
+    assert "from the login profile" not in output
+
+
 def test_run_setup_subprocess_non_zero_exit(local_environment: LocalEnvironment) -> None:
     chunks: list[bytes] = []
-    rc = local_environment.run_setup_subprocess("exit 7", chunks.append, lambda _pid: None, Event())
+    rc = local_environment.run_setup_subprocess(
+        "exit 7", chunks.append, lambda _pid: None, Event(), AgentVcsEnvironment()
+    )
     assert rc == 7
 
 
 def test_run_setup_subprocess_stdin_closed(local_environment: LocalEnvironment) -> None:
     chunks: list[bytes] = []
     start = time.monotonic()
-    rc = local_environment.run_setup_subprocess("read x; echo done", chunks.append, lambda _pid: None, Event())
+    rc = local_environment.run_setup_subprocess(
+        "read x; echo done", chunks.append, lambda _pid: None, Event(), AgentVcsEnvironment()
+    )
     elapsed = time.monotonic() - start
     # `read` should fail immediately because stdin is /dev/null (EOF), so the
     # command exits without hanging.
@@ -210,7 +273,9 @@ def test_run_setup_subprocess_cancel(local_environment: LocalEnvironment) -> Non
 
     threading.Thread(target=_trigger_cancel, daemon=True).start()
     start = time.monotonic()
-    rc = local_environment.run_setup_subprocess("sleep 60", chunks.append, lambda _pid: None, cancel)
+    rc = local_environment.run_setup_subprocess(
+        "sleep 60", chunks.append, lambda _pid: None, cancel, AgentVcsEnvironment()
+    )
     elapsed = time.monotonic() - start
     assert elapsed < 10.0
     assert rc != 0
@@ -238,7 +303,7 @@ def test_run_setup_subprocess_kills_process_group(local_environment: LocalEnviro
 
     threading.Thread(target=_trigger_cancel, daemon=True).start()
     rc = local_environment.run_setup_subprocess(
-        'bash -c "echo $$; sleep 60" & wait', _capture_pid, lambda _pid: None, cancel
+        'bash -c "echo $$; sleep 60" & wait', _capture_pid, lambda _pid: None, cancel, AgentVcsEnvironment()
     )
     assert rc != 0
     if "child" in pid_holder:
@@ -258,7 +323,9 @@ def test_run_setup_subprocess_handles_process_lookup_error(
         raise ProcessLookupError(3, "No such process")
 
     monkeypatch.setattr(os, "getpgid", _always_raise)
-    rc = local_environment.run_setup_subprocess("true", lambda _data: None, lambda _pid: None, Event())
+    rc = local_environment.run_setup_subprocess(
+        "true", lambda _data: None, lambda _pid: None, Event(), AgentVcsEnvironment()
+    )
     assert rc == 0
 
 
@@ -454,6 +521,20 @@ def test_project_env_overrides_hide_their_values_when_printed(
     assert "very-secret-value" not in repr(overrides)
 
 
+def test_starting_the_terminal_manager_registers_the_vcs_environment_for_the_workspace_terminals(
+    local_environment: LocalEnvironment, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    vcs_environment = AgentVcsEnvironment(
+        path_prefixes=(Path("/sculptor/internal/jj-bin"),), environment_variables={"GH_REPO": "github.com/owner/repo"}
+    )
+
+    local_environment.start_terminal_manager(test_root_concurrency_group, vcs_environment)
+
+    config = get_environment_config(str(local_environment.environment_id))
+    assert config is not None
+    assert config.vcs_environment == vcs_environment
+
+
 def test_get_system_prompt_dispatches_on_initialization_strategy(local_environment: LocalEnvironment) -> None:
     """get_system_prompt returns a distinct <Environment mode> block for each strategy."""
     local_environment.initialization_strategy = WorkspaceInitializationStrategy.IN_PLACE
@@ -478,6 +559,44 @@ def test_get_system_prompt_dispatches_on_initialization_strategy(local_environme
     assert "jj workspace" in jj_prompt
     assert "no `.git`" in jj_prompt
     assert "worktree" not in jj_prompt
+
+
+def test_the_jj_mode_prompt_states_the_standing_rules_and_the_configured_snapshot_limit(
+    local_environment: LocalEnvironment,
+) -> None:
+    set_user_config_instance(
+        UserConfig(
+            user_email="test@example.com",
+            user_id=uuid4().hex,
+            organization_id=uuid4().hex,
+            instance_id=uuid4().hex,
+            jj_snapshot_max_new_file_size_mib=25,
+        )
+    )
+    local_environment.initialization_strategy = WorkspaceInitializationStrategy.JJ_WORKSPACE
+    try:
+        jj_prompt = local_environment.get_system_prompt()
+    finally:
+        set_user_config_instance(None)
+
+    assert jj_prompt is not None
+    standing_rules = (
+        "no `.git`",
+        "Use `jj` for all version control",
+        "working copy is the commit `@`",
+        "shared with the user's own checkout",
+        "`jj undo`, `jj op restore` or `jj workspace forget`",
+        "Always pass `-m`",
+        "move it onto your newest described change",
+        "NEVER push without explicit permission",
+        "`jj git push -b <bookmark>`",
+        "only after they next run a jj command",
+        "`--head <bookmark>`",
+        "larger than 25 MiB",
+        "`jj workspace update-stale`",
+        "`jj st`",
+    )
+    assert [rule for rule in standing_rules if rule not in jj_prompt] == []
 
 
 def test_create_worktree_happy_path(tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup) -> None:
