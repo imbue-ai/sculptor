@@ -66,7 +66,7 @@ def describe_jj_unavailability(readiness: JjReadiness) -> str | None:
 
 
 def can_jj_read(readiness: JjReadiness) -> TypeIs[JjAvailable | JjUnsupportedGit | JjNoIdentity | JjShadowed]:
-    """Whether Sculptor's jj can still read a repository: true unless jj is not installed, cannot run or is unsupported.
+    """Whether Sculptor's jj can still read a repository while `readiness` holds.
 
     Reading needs no author identity and runs no git, and Sculptor reads with its
     own jj, whichever jj the user's shell runs. Anything that writes, or launches
