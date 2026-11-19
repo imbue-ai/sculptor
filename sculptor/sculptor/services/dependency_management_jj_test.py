@@ -26,6 +26,7 @@ from sculptor.services.dependency_management_service import Dependency
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.dependency_management_service import JjIdentityError
 from sculptor.services.dependency_management_service import _configured_binary_value
+from sculptor.services.jj_version import JJ_MINIMUM_GIT_VERSION
 from sculptor.services.jj_version import JJ_PINNED_VERSION
 from sculptor.services.managed_tools import JjManagedTool
 from sculptor.services.managed_tools import ResolvedDistribution
@@ -47,6 +48,7 @@ from sculptor.web.data_types import JjNoIdentity
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjShadowed
+from sculptor.web.data_types import JjUnsupportedGit
 from sculptor.web.data_types import JjUnsupportedVersion
 from sculptor.web.data_types import LoginShellJj
 
@@ -551,6 +553,113 @@ def test_a_gate_reads_the_login_shell_jj_of_the_last_computed_status_without_sta
     assert isinstance(readiness_before_any_status, JjAvailable)
     assert readiness_after_the_status == JjShadowed(blocker=JjBlocker.SHADOWED, path=str(cargo_jj), version="0.28.2")
     assert profile_runs_log.read_text().splitlines() == ["ran"]
+
+
+def _git_stub_in(directory: Path, version: str) -> Path:
+    """A `git` in `directory` that reports `version` as Apple's Command Line Tools git does."""
+    directory.mkdir(exist_ok=True)
+    stub = directory / "git"
+    stub.unlink(missing_ok=True)
+    stub.write_text(f'#!/bin/bash\necho "git version {version} (Apple Git-154)"\n')
+    stub.chmod(0o755)
+    return stub
+
+
+def _set_jj_git_executable_path(jj_isolated_env: JjIsolatedEnv, git: Path) -> None:
+    jj_isolated_env.jj_config_path.write_text(f'[git]\nexecutable-path = "{git}"\n')
+
+
+def test_jj_is_unavailable_while_the_git_first_on_path_is_older_than_jj_accepts(
+    jj_test_home: _JjTestHome, jj_binary: JjBinary, jj_service: DependencyManagementService
+) -> None:
+    old_git = _git_stub_in(jj_test_home.bin_dir, "2.39.5")
+    _stage_managed_jj(jj_test_home, JJ_PINNED_VERSION, jj_binary.path)
+    _configure_jj("MANAGED")
+
+    status = jj_service.get_status()
+
+    assert status.jj_readiness == JjUnsupportedGit(
+        blocker=JjBlocker.UNSUPPORTED_GIT, path=str(old_git), version="2.39.5", minimum_version=JJ_MINIMUM_GIT_VERSION
+    )
+
+
+def test_jj_is_unavailable_while_its_git_executable_path_names_a_git_older_than_it_accepts(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+) -> None:
+    old_git = _git_stub_in(tmp_path / "old_git", "2.39.5")
+    _set_jj_git_executable_path(jj_isolated_env, old_git)
+    _configure_jj(str(jj_binary.path))
+
+    readiness = jj_service.get_jj_readiness()
+
+    assert readiness == JjUnsupportedGit(
+        blocker=JjBlocker.UNSUPPORTED_GIT, path=str(old_git), version="2.39.5", minimum_version=JJ_MINIMUM_GIT_VERSION
+    )
+
+
+def test_jj_is_unavailable_while_its_git_executable_path_names_no_git(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+) -> None:
+    _set_jj_git_executable_path(jj_isolated_env, tmp_path / "missing" / "git")
+    _configure_jj(str(jj_binary.path))
+
+    readiness = jj_service.get_jj_readiness()
+
+    assert readiness == JjUnsupportedGit(
+        blocker=JjBlocker.UNSUPPORTED_GIT, path=None, version=None, minimum_version=JJ_MINIMUM_GIT_VERSION
+    )
+
+
+def test_readiness_is_unchanged_by_a_git_at_the_oldest_version_jj_accepts(
+    jj_test_home: _JjTestHome, jj_binary: JjBinary, jj_service: DependencyManagementService
+) -> None:
+    _git_stub_in(jj_test_home.bin_dir, JJ_MINIMUM_GIT_VERSION)
+    _configure_jj(str(jj_binary.path))
+
+    readiness = jj_service.get_jj_readiness()
+
+    assert readiness == JjAvailable(
+        blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL)
+    )
+
+
+def test_a_git_too_old_for_jj_is_reported_before_a_missing_identity(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_service: DependencyManagementService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("JJ_USER")
+    monkeypatch.delenv("JJ_EMAIL")
+    _git_stub_in(jj_test_home.bin_dir, "2.39.5")
+    _configure_jj(str(jj_binary.path))
+
+    readiness = jj_service.get_jj_readiness()
+
+    assert readiness.blocker == JjBlocker.UNSUPPORTED_GIT
+
+
+def test_a_gate_finds_a_git_too_old_for_jj_that_came_first_on_path_after_the_last_status(
+    jj_test_home: _JjTestHome, jj_binary: JjBinary, jj_service: DependencyManagementService
+) -> None:
+    _configure_jj(str(jj_binary.path))
+    status = jj_service.get_status()
+    old_git = _git_stub_in(jj_test_home.bin_dir, "2.39.5")
+
+    readiness = jj_service.probe_jj_readiness()
+
+    assert isinstance(status.jj_readiness, JjAvailable)
+    assert readiness == JjUnsupportedGit(
+        blocker=JjBlocker.UNSUPPORTED_GIT, path=str(old_git), version="2.39.5", minimum_version=JJ_MINIMUM_GIT_VERSION
+    )
 
 
 def _jj_release_tarball(version: str) -> bytes:

@@ -18,6 +18,7 @@ from sculptor.services.workspace_service.jj_workspace_creation import JjWorkspac
 from sculptor.services.workspace_service.jj_workspace_creation import creates_jj_workspaces
 from sculptor.services.workspace_service.jj_workspace_creation import gather_jj_workspace_creation_facts
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
+from sculptor.testing.jj_readiness import BLOCKERS_THAT_LET_JJ_READ
 from sculptor.testing.jj_repos import JJ_TEST_USER_EMAIL
 from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
@@ -27,6 +28,7 @@ from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjIdentity
 from sculptor.web.data_types import JjNotInstalled
+from sculptor.web.data_types import JjReadiness
 
 _JJ_AVAILABLE = JjAvailable(blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL))
 _JJ_NOT_INSTALLED = JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
@@ -146,6 +148,23 @@ def test_a_plain_git_repository_is_not_colocated(
 
     assert facts.is_colocated is False
     assert facts.jj_readiness == _JJ_AVAILABLE
+
+
+@pytest.mark.parametrize("readiness", BLOCKERS_THAT_LET_JJ_READ)
+def test_colocation_is_read_while_jj_is_unavailable_but_can_still_read_and_creates_no_jj_workspaces(
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+    test_root_concurrency_group: ConcurrencyGroup,
+    readiness: JjReadiness,
+) -> None:
+    project = _make_project(jj_colocated_repo.path, use_jj_for_new_workspaces=True)
+
+    facts = gather_jj_workspace_creation_facts(
+        project, _make_jj_cli(test_root_concurrency_group, jj_binary.path), readiness
+    )
+
+    assert facts.is_colocated is True
+    assert creates_jj_workspaces(facts) is False
 
 
 def test_colocation_is_not_checked_while_jj_is_unavailable(

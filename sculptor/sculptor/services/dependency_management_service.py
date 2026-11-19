@@ -37,6 +37,7 @@ from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
+from sculptor.services.jj_version import JJ_MINIMUM_GIT_VERSION
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
 from sculptor.services.managed_tools import JJ_VERSION_RANGE
 from sculptor.services.managed_tools import ManagedTool
@@ -68,6 +69,7 @@ from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import JjShadowed
+from sculptor.web.data_types import JjUnsupportedGit
 from sculptor.web.data_types import JjUnsupportedVersion
 from sculptor.web.data_types import LoginShellJj
 from sculptor.web.data_types import VersionRangeInfo
@@ -183,6 +185,22 @@ def _parse_git_version(stdout: str) -> str | None:
     """Extract version from 'git version 2.44.0' output."""
     match = re.search(r"git version (\S+)", stdout)
     return match.group(1) if match else None
+
+
+def _is_git_version_accepted_by_jj(version: str) -> bool:
+    """Whether a git reporting `version` is at or above the oldest git jj accepts, comparing release numbers only.
+
+    >>> _is_git_version_accepted_by_jj("2.39.5")
+    False
+    >>> _is_git_version_accepted_by_jj("2.50.1")
+    True
+    >>> _is_git_version_accepted_by_jj("2.42.0.windows.1")
+    True
+    >>> _is_git_version_accepted_by_jj("unknown")
+    False
+    """
+    release = re.match(r"\d+(?:\.\d+)*", version)
+    return release is not None and Version(release.group(0)) >= Version(JJ_MINIMUM_GIT_VERSION)
 
 
 def parse_pi_version(stdout: str) -> str | None:
@@ -1403,6 +1421,9 @@ class DependencyManagementService(Service):
         if check.version is None or not self.is_version_in_range(check.version, Dependency.JJ):
             return JjUnsupportedVersion(blocker=JjBlocker.UNSUPPORTED_VERSION, path=check.path, version=check.version)
         try:
+            unsupported_git = self._find_unsupported_git_jj_runs(check.path)
+            if unsupported_git is not None:
+                return unsupported_git
             identity = self._read_jj_identity(check.path)
         except ProcessError as e:
             return JjNotRunnable(blocker=JjBlocker.NOT_RUNNABLE, error=_describe_process_error(e))
@@ -1481,6 +1502,30 @@ class DependencyManagementService(Service):
             path=found,
             version=version,
             is_version_in_range=version is not None and self.is_version_in_range(version, Dependency.JJ),
+        )
+
+    def _find_unsupported_git_jj_runs(self, jj_binary: str) -> JjUnsupportedGit | None:
+        """`JjUnsupportedGit` unless the git `jj_binary` runs to fetch and push is one jj accepts; None when it is.
+
+        jj runs its `git.executable-path`, `git` unless the user set it, found on
+        PATH. A process launched in a jj workspace has the PATH agents get, with
+        only jj-bin, which holds no git, put in front of it. Raises `ProcessError`
+        when jj cannot read its config.
+
+        A known limit: the setup command and workspace terminals run the user's
+        login profile, which can reorder PATH (macOS path_helper moves /usr/bin to
+        the front), so the git they run can differ from the one checked here.
+        """
+        executable = self._run_jj_outside_any_repo(
+            jj_binary, ["--ignore-working-copy", "config", "get", "git.executable-path"]
+        ).strip()
+        agent_path = (self._build_agent_probe_env() or os.environ).get("PATH")
+        git = shutil.which(executable, path=agent_path)
+        version = self._check_binary(Dependency.GIT, git).version if git is not None else None
+        if version is not None and _is_git_version_accepted_by_jj(version):
+            return None
+        return JjUnsupportedGit(
+            blocker=JjBlocker.UNSUPPORTED_GIT, path=git, version=version, minimum_version=JJ_MINIMUM_GIT_VERSION
         )
 
     def _run_jj_outside_any_repo(self, binary: str, arguments: Sequence[str]) -> str:

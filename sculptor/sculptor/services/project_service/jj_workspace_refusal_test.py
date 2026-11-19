@@ -98,6 +98,26 @@ def test_a_jj_workspace_resolves_while_the_login_shell_runs_an_older_jj_since_sc
     )
 
 
+def test_a_jj_workspace_resolves_while_jjs_git_is_too_old_to_fetch_with_since_reading_runs_no_git(
+    jj: JjCli,
+    dependency_management_service: DependencyManagementService,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_workspace: JjWorkspace,
+    jj_isolated_env: JjIsolatedEnv,
+    tmp_path: Path,
+) -> None:
+    old_git = tmp_path / "git"
+    old_git.write_text("#!/bin/sh\necho 'git version 2.39.5'\n")
+    old_git.chmod(0o755)
+    jj_isolated_env.jj_config_path.write_text(f'[git]\nexecutable-path = "{old_git}"\n')
+    assert dependency_management_service.probe_jj_readiness().blocker == JjBlocker.UNSUPPORTED_GIT
+
+    assert (
+        resolve_project_in_jj_workspace(jj_workspace.path, jj, dependency_management_service)
+        == jj_colocated_repo.path.resolve()
+    )
+
+
 def test_a_directory_inside_a_jj_workspace_of_a_colocated_repository_resolves_to_the_repository_root(
     jj: JjCli,
     dependency_management_service: DependencyManagementService,

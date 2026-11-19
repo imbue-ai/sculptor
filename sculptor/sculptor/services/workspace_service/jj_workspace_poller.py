@@ -18,9 +18,11 @@ The poller never snapshots, so it never finds a working copy stale itself:
 the workspace service marks one in the stale working-copy registry when a
 snapshot fails that way, and every cycle publishes the mark.
 
-While jj is unavailable a cycle does nothing at all. The poller does not
-check jj itself: it reads the readiness the dependency service last
-published.
+While Sculptor's jj cannot read a repository (`can_jj_read`) a cycle does
+nothing at all. A blocker that stops only writes, such as a missing author
+identity, leaves it scanning, so a running agent's workspace state keeps
+refreshing. The poller does not check jj itself: it reads the readiness the
+dependency service last published.
 """
 
 import threading
@@ -41,6 +43,7 @@ from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.errors import ExpectedError
 from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.jj_availability import can_jj_read
 from sculptor.services.workspace_service.stale_working_copy_registry import StaleWorkingCopyRegistry
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
@@ -193,7 +196,7 @@ class JjWorkspacePoller:
     def _scan_once(self) -> None:
         # Until the dependency service publishes a readiness, the poller scans as usual.
         readiness = self._read_jj_readiness()
-        if readiness is not None and readiness.blocker is not None:
+        if readiness is not None and not can_jj_read(readiness):
             return
         self._cycle += 1
         force_recompute = self._cycle % _FALLBACK_RECOMPUTE_EVERY_CYCLES == 0

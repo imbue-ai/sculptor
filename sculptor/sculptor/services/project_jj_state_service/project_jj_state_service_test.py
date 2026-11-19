@@ -24,6 +24,8 @@ from sculptor.services.project_jj_state_service.project_jj_state_service import 
 from sculptor.services.project_jj_state_service.project_jj_state_service import is_colocation_gone
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.jj_workspace_creation import JjWorkspaceCreationFacts
+from sculptor.testing.jj_readiness import BLOCKERS_THAT_LET_JJ_READ
+from sculptor.testing.jj_readiness import BLOCKERS_THAT_STOP_JJ_READING
 from sculptor.testing.jj_repos import JJ_TEST_USER_EMAIL
 from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
@@ -99,6 +101,22 @@ def test_a_colocation_is_gone_only_when_the_flag_is_on_and_jj_reads_no_colocatio
     facts: JjWorkspaceCreationFacts, is_repository_present: bool, is_gone: bool
 ) -> None:
     assert is_colocation_gone(facts, is_repository_present=is_repository_present) is is_gone
+
+
+@pytest.mark.parametrize("readiness", BLOCKERS_THAT_LET_JJ_READ)
+def test_a_colocation_jj_reads_as_absent_is_gone_while_jj_is_unavailable_but_can_still_read(
+    readiness: JjReadiness,
+) -> None:
+    facts = _facts(use_jj_for_new_workspaces=True, is_colocated=False, jj_readiness=readiness)
+
+    assert is_colocation_gone(facts, is_repository_present=True)
+
+
+@pytest.mark.parametrize("readiness", BLOCKERS_THAT_STOP_JJ_READING)
+def test_a_colocation_is_never_gone_while_jj_cannot_read(readiness: JjReadiness) -> None:
+    facts = _facts(use_jj_for_new_workspaces=True, is_colocated=False, jj_readiness=readiness)
+
+    assert not is_colocation_gone(facts, is_repository_present=True)
 
 
 @pytest.fixture

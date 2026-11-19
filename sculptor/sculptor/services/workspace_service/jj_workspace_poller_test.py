@@ -24,15 +24,15 @@ from sculptor.services.workspace_service.stale_working_copy_registry import Stal
 from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_workspace_vcs import JjWorkspaceVcs
+from sculptor.testing.jj_readiness import BLOCKERS_THAT_LET_JJ_READ
+from sculptor.testing.jj_readiness import BLOCKERS_THAT_STOP_JJ_READING
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
 from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.workspace_vcs import make_test_git_cli
 from sculptor.web.data_types import JjAvailable
-from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjIdentity
-from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjReadiness
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.data_types import WorkspaceJjStateInfo
@@ -394,11 +394,12 @@ class _UnexpectedRefreshError(Exception):
     """Raised by a diff refresh standing in for a failure no handler anticipates."""
 
 
-def test_a_cycle_while_jj_is_unavailable_runs_and_logs_nothing_and_the_next_one_with_jj_back_scans(
-    harness: _Harness,
+@pytest.mark.parametrize("readiness", BLOCKERS_THAT_STOP_JJ_READING)
+def test_a_cycle_while_jj_cannot_read_runs_and_logs_nothing_and_the_next_one_with_jj_back_scans(
+    harness: _Harness, readiness: JjReadiness
 ) -> None:
     workspace, _ = harness.add_workspace()
-    harness.jj_readiness = JjNotInstalled(blocker=JjBlocker.NOT_INSTALLED)
+    harness.jj_readiness = readiness
 
     with record_logged_error_levels() as levels:
         while_unavailable = harness.scan()
@@ -407,6 +408,20 @@ def test_a_cycle_while_jj_is_unavailable_runs_and_logs_nothing_and_the_next_one_
 
     assert (while_unavailable, levels, harness.count_jj_invocations() > 0) == ([], [], True)
     assert [state.workspace_id for state in _states(once_available)] == [workspace.object_id]
+
+
+@pytest.mark.parametrize("readiness", BLOCKERS_THAT_LET_JJ_READ)
+def test_a_cycle_while_jj_is_unavailable_but_can_still_read_publishes_a_state_change(
+    harness: _Harness, readiness: JjReadiness
+) -> None:
+    _, checkout = harness.add_workspace()
+    harness.jj_readiness = readiness
+    harness.scan()
+
+    harness.jj(checkout, "describe", "-m", "described by a running agent")
+    after_describe = _states(harness.scan())
+
+    assert [state.working_copy_description for state in after_describe] == ["described by a running agent"]
 
 
 def test_a_git_workspace_is_not_scanned(harness: _Harness, tmp_path: Path) -> None:

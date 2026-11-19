@@ -169,6 +169,7 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
 
   const jjProjects = projects.filter((project) => project.useJjForNewWorkspaces);
   const minimumVersion = jj?.versionRange?.minVersion ?? null;
+  const loginShellJj = dependenciesStatus?.loginShellJj ?? null;
 
   return (
     <SettingsSectionLayout description="Jujutsu (jj) is a version control system that works on top of git. Sculptor uses it only when the check below passes.">
@@ -307,6 +308,19 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
           {jj?.path ?? "—"}
         </Text>
       </SettingRow>
+
+      {loginShellJj && (
+        <SettingRow
+          title="jj in your terminal"
+          description="Your shell profile puts another jj first on PATH, so workspace terminals run it, while agents run the jj above."
+        >
+          <Text size="2" style={{ wordBreak: "break-all" }}>
+            {loginShellJj.version === null
+              ? `${loginShellJj.path} (no recognizable version)`
+              : `${loginShellJj.path} (jj ${loginShellJj.version})`}
+          </Text>
+        </SettingRow>
+      )}
 
       {displayMode === "CUSTOM" && (
         <SettingRow title="Binary path" description="Absolute path or command name (e.g. /opt/homebrew/bin/jj or jj).">

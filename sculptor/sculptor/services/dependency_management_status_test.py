@@ -129,14 +129,19 @@ def test_probing_jj_readiness_finds_an_identity_removed_since_the_status_was_com
     )
 
 
-def test_reading_jj_readiness_before_any_status_is_computed_runs_only_jj_and_stores_nothing(
+def test_reading_jj_readiness_before_any_status_is_computed_runs_only_jj_and_its_git_and_stores_nothing(
     recording_git_and_jj: RecordingBinaries,  # noqa: F811
     service: DependencyManagementService,
 ) -> None:
     readiness = service.get_jj_readiness()
 
     assert isinstance(readiness, JjAvailable)
-    assert [run.split()[0] for run in recording_git_and_jj.read_runs()] == ["jj", "jj"]
+    assert [run.split()[:4] for run in recording_git_and_jj.read_runs()] == [
+        ["jj", "--version"],
+        ["jj", "--ignore-working-copy", "config", "get"],
+        ["git", "--version"],
+        ["jj", "--ignore-working-copy", "config", "list"],
+    ]
     assert service.get_last_computed_status() is None
 
 

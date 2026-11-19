@@ -925,6 +925,7 @@ class JjBlocker(UpperCaseStrEnum):
     NOT_INSTALLED = auto()
     NOT_RUNNABLE = auto()
     UNSUPPORTED_VERSION = auto()
+    UNSUPPORTED_GIT = auto()
     NO_IDENTITY = auto()
     SHADOWED = auto()
 
@@ -974,6 +975,17 @@ class JjUnsupportedVersion(SerializableModel):
     version: str | None
 
 
+class JjUnsupportedGit(SerializableModel):
+    """The git jj runs to fetch and push is older than the oldest git jj accepts, or jj finds none."""
+
+    blocker: Literal[JjBlocker.UNSUPPORTED_GIT]
+    # None when jj finds no git.
+    path: str | None
+    # None when jj finds no git, or `git --version` printed no recognizable version.
+    version: str | None
+    minimum_version: str
+
+
 class JjNoIdentity(SerializableModel):
     """jj runs, but its ``user.name`` or ``user.email`` is unset."""
 
@@ -1004,7 +1016,8 @@ class LoginShellJj(SerializableModel):
 # JJ_AVAILABLE: jj is available to Sculptor exactly when ``blocker`` is None. It is derived
 # on demand and never stored.
 JjReadiness = TypeAliasType(
-    "JjReadiness", JjAvailable | JjNotInstalled | JjNotRunnable | JjUnsupportedVersion | JjNoIdentity | JjShadowed
+    "JjReadiness",
+    JjAvailable | JjNotInstalled | JjNotRunnable | JjUnsupportedVersion | JjUnsupportedGit | JjNoIdentity | JjShadowed,
 )
 
 
