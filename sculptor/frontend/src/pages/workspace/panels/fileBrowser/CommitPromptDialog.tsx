@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import { UserConfigField } from "~/api";
 import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
-import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 import { JjPromptFallbackNotice } from "~/components/JjPromptFallbackNotice.tsx";
 
@@ -19,7 +18,6 @@ type CommitPromptDialogProps = {
 export const CommitPromptDialog = ({ open, onOpenChange, isJjFallback }: CommitPromptDialogProps): ReactElement => {
   const commitPrompt = useAtomValue(commitPromptAtom);
   const { updateField } = useUserConfig();
-  const openSettings = useOpenSettings();
   // Local draft of the prompt. While the dialog is open, reset the draft to the
   // committed value on each open transition and whenever that value changes, so
   // editing always starts from (and follows) the current commit prompt.
@@ -47,15 +45,7 @@ export const CommitPromptDialog = ({ open, onOpenChange, isJjFallback }: CommitP
           This prompt is sent to the agent when you click Commit. The agent will commit your changes with an appropriate
           message.
         </Dialog.Description>
-        {isJjFallback ? (
-          <JjPromptFallbackNotice
-            kind="commit"
-            onOpenJjPrompt={(): void => {
-              onOpenChange(false);
-              openSettings("JJ", "commit");
-            }}
-          />
-        ) : null}
+        {isJjFallback ? <JjPromptFallbackNotice kind="commit" onLeave={(): void => onOpenChange(false)} /> : null}
         <TextArea
           value={promptValue}
           onChange={(e) => setPromptValue(e.target.value)}

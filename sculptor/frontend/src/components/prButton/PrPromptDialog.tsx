@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import { ElementIds, UserConfigField } from "../../api";
 import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
-import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import { JjPromptFallbackNotice } from "../JjPromptFallbackNotice.tsx";
 
@@ -19,7 +18,6 @@ type PrPromptDialogProps = {
 export const PrPromptDialog = ({ open, onOpenChange, isJjFallback }: PrPromptDialogProps): ReactElement => {
   const prCreationPrompt = useAtomValue(prCreationPromptAtom);
   const { updateField } = useUserConfig();
-  const openSettings = useOpenSettings();
   const [promptValue, setPromptValue] = useState(prCreationPrompt);
 
   // While the dialog is open, keep the editor seeded with the saved prompt:
@@ -53,15 +51,7 @@ export const PrPromptDialog = ({ open, onOpenChange, isJjFallback }: PrPromptDia
           This prompt is sent to the agent when you click Create PR. The agent will push your changes and create the
           pull request.
         </Dialog.Description>
-        {isJjFallback ? (
-          <JjPromptFallbackNotice
-            kind="pr-creation"
-            onOpenJjPrompt={(): void => {
-              onOpenChange(false);
-              openSettings("JJ", "pr-creation");
-            }}
-          />
-        ) : null}
+        {isJjFallback ? <JjPromptFallbackNotice kind="pr-creation" onLeave={(): void => onOpenChange(false)} /> : null}
         <TextArea
           value={promptValue}
           onChange={(e) => setPromptValue(e.target.value)}
