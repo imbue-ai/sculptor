@@ -81,7 +81,6 @@ const JjRepositoriesRow = ({
   </SettingRow>
 );
 
-/** Where the status row says an in-range jj comes from. */
 const describeJjSource = (jj: DependencyInfo): string => {
   if (jj.source === "MANAGED") {
     return "Managed";
