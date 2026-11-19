@@ -4,9 +4,9 @@ import re
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
+from loguru import logger
 
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.primitives.ids import WorkspaceID
@@ -611,15 +611,18 @@ def test_fetch_open_prs_for_token_paginates() -> None:
             return _make_finished(_search_stdout([_search_node(1)], has_next=True, end_cursor="CURSOR_1"))
         return _make_finished(_search_stdout([_search_node(2)], has_next=False))
 
-    with patch("sculptor.web.pr_status.logger") as mock_logger:
+    warnings: list[str] = []
+    handler_id = logger.add(warnings.append, level="WARNING", filter=fetch_open_prs_for_token.__module__)
+    try:
         result = fetch_open_prs_for_token(handler)
+    finally:
+        logger.remove(handler_id)
 
     assert [n["number"] for n in result.nodes] == [1, 2]
     assert len(captured) == 2
     assert any(arg == "after=CURSOR_1" for arg in captured[1]), "second page must pass after=<cursor>"
-    # Pagination must be logged so silent truncation can't masquerade as full coverage.
-    assert mock_logger.warning.called
-    assert "pagination" in mock_logger.warning.call_args[0][0]
+    # The poller runs every round, so following pagination is routine and must not log a warning.
+    assert warnings == []
 
 
 def test_fetch_open_prs_for_token_missing_rate_limit_is_tolerated() -> None:
