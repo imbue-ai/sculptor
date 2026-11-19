@@ -5,14 +5,14 @@ import { getWorkspaceRevisions } from "~/api";
 import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
 
 import type { BackendQueryKeyResult, BackendQueryResult } from "../queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "../queryClient.ts";
+import { workspaceRevisionsQueryKeyPrefix } from "../queryClient.ts";
 import { useWorkspace } from "./useWorkspace.ts";
 
 const workspaceRevisionsQueryKey = (
   workspaceId: string | null,
   targetBranch: string | null,
 ): BackendQueryKeyResult => ({
-  key: [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "git", "revisions", targetBranch] as const,
+  key: [...workspaceRevisionsQueryKeyPrefix(workspaceId), targetBranch],
   isValid: workspaceId !== null,
 });
 

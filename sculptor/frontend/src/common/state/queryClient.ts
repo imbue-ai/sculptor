@@ -71,8 +71,8 @@ export const workspaceQueryKeyPrefix = (workspaceId: string): QueryKey =>
 export const workspaceGitQueryKeyPrefix = (workspaceId: string): QueryKey =>
   [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "git"] as const;
 
-export const workspaceRevisionsQueryKeyPrefix = (workspaceId: string): QueryKey =>
-  [...workspaceGitQueryKeyPrefix(workspaceId), "revisions"] as const;
+export const workspaceRevisionsQueryKeyPrefix = (workspaceId: string | null): QueryKey =>
+  [SCULPTOR_QUERY_KEY_PREFIX, "workspace", workspaceId, "git", "revisions"] as const;
 
 /**
  * Query key for the Home recent-workspaces list — a pulled REST snapshot,
