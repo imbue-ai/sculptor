@@ -89,16 +89,6 @@ export const RevisionRow = ({
   const description = revision.description.split("\n", 1)[0].trim();
   const isMuted = revision.isWorkingCopy && revision.isEmpty;
   const flagChips = flagChipsOf(revision);
-  const historyFiles = useMemo(
-    () =>
-      revision.files.map((file) => ({
-        path: file.path,
-        status: file.status,
-        additions: file.additions,
-        deletions: file.deletions,
-      })),
-    [revision.files],
-  );
 
   return (
     <div
@@ -141,10 +131,10 @@ export const RevisionRow = ({
           )}
         </Flex>
       </Flex>
-      {isExpanded && historyFiles.length > 0 && (
+      {isExpanded && revision.files.length > 0 && (
         <div className={historyStyles.commitFiles}>
           <div className={historyStyles.commitFilesGraphLine} />
-          <HistoryFileList files={historyFiles} viewMode="flat" onFileClick={(filePath) => onFileClick(filePath)} />
+          <HistoryFileList files={revision.files} viewMode="flat" onFileClick={(filePath) => onFileClick(filePath)} />
         </div>
       )}
     </div>
