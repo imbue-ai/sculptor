@@ -45,7 +45,7 @@ import {
   type AgentPromptKind,
   buildCommitMessage,
   buildCreatePrMessage,
-  type JjPromptBookmark,
+  type PromptWorkspace,
 } from "~/common/utils/agentPrompts.ts";
 import { DEFAULT_LLM_MODEL } from "~/common/utils/modelConstants.ts";
 import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
@@ -307,11 +307,7 @@ const sendAutomatedPrompt = async (
 // control, its target, and for jj its bookmark. Undefined until the workspace
 // is loaded and, for a jj workspace, until its jj state arrives, since the
 // message names the bookmark the state reports.
-type MessageWorkspace =
-  | { vcs: "git"; targetBranch: string | null }
-  | { vcs: "jj"; bookmark: JjPromptBookmark; target: { bookmark: string; prBaseName: string | null } | null };
-
-const readMessageWorkspace = (get: Getter, workspaceId: string): MessageWorkspace | undefined => {
+const readMessageWorkspace = (get: Getter, workspaceId: string): PromptWorkspace | undefined => {
   const workspace = asLiveWorkspace(get(workspaceAtomFamily(workspaceId)));
   if (workspace === null) return undefined;
   const targetBranch = workspace.targetBranch || null;

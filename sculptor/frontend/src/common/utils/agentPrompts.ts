@@ -10,16 +10,15 @@ export type AgentPromptKind = "commit" | "pr-creation";
  */
 export type JjPromptBookmark = { status: "set"; name: string } | { status: "missing"; requestedName: string | null };
 
-type CommitPromptWorkspace = { vcs: "git" } | { vcs: "jj"; bookmark: JjPromptBookmark };
+/** A jj workspace's target bookmark, and the branch a pull request names as its base once the backend has named it. */
+type JjPromptTarget = { bookmark: string; prBaseName: string | null };
 
-type PrPromptWorkspace =
+/** What a workspace's Commit and Create PR messages say about it, by its version control. */
+export type PromptWorkspace =
   | { vcs: "git"; targetBranch: string | null }
-  | {
-      vcs: "jj";
-      bookmark: JjPromptBookmark;
-      /** The target bookmark and the branch a pull request names as its base, once the backend has named it. */
-      target: { bookmark: string; prBaseName: string | null } | null;
-    };
+  | { vcs: "jj"; bookmark: JjPromptBookmark; target: JjPromptTarget | null };
+
+type CommitPromptWorkspace = { vcs: "git" } | { vcs: "jj"; bookmark: JjPromptBookmark };
 
 const JJ_PREAMBLE = "This is a jj workspace with no git inside, so use jj rather than git.";
 
@@ -48,10 +47,7 @@ export const buildCommitMessage = (inputs: { prompt: string; workspace: CommitPr
 
 // Where a jj workspace's pull request goes: the target's base when the backend
 // has named it, else whatever branch the target bookmark tracks.
-const describeJjPrDestination = (
-  head: string,
-  target: { bookmark: string; prBaseName: string | null } | null,
-): string => {
+const describeJjPrDestination = (head: string, target: JjPromptTarget | null): string => {
   if (target === null) {
     return `with \`gh pr create --head ${head}\``;
   }
@@ -62,10 +58,7 @@ const describeJjPrDestination = (
   return `into \`${target.prBaseName}\` with \`gh pr create --head ${head} --base ${target.prBaseName}\``;
 };
 
-const buildJjPrSuffix = (
-  bookmark: JjPromptBookmark,
-  target: { bookmark: string; prBaseName: string | null } | null,
-): string => {
+const buildJjPrSuffix = (bookmark: JjPromptBookmark, target: JjPromptTarget | null): string => {
   const name = bookmark.status === "set" ? bookmark.name : bookmark.requestedName;
   if (name === null) {
     return (
@@ -80,7 +73,7 @@ const buildJjPrSuffix = (
   return `${createFirst}Push the bookmark \`${name}\` with \`jj git push -b ${name}\`, then open the pull request from \`${name}\` ${describeJjPrDestination(name, target)}.`;
 };
 
-export const buildCreatePrMessage = (inputs: { prompt: string; workspace: PrPromptWorkspace }): string => {
+export const buildCreatePrMessage = (inputs: { prompt: string; workspace: PromptWorkspace }): string => {
   const { prompt, workspace } = inputs;
   switch (workspace.vcs) {
     case "git":
