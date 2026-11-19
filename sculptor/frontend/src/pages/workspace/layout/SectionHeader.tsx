@@ -106,8 +106,8 @@ const revealTabInStrip = (tab: HTMLElement): void => {
   const tabRect = tab.getBoundingClientRect();
   const stripRect = strip.getBoundingClientRect();
   const { paddingLeft, paddingRight } = getComputedStyle(strip);
-  const visibleLeft = stripRect.left + (parseFloat(paddingLeft) || 0);
-  const visibleRight = stripRect.right - (parseFloat(paddingRight) || 0);
+  const visibleLeft = stripRect.left + parseFloat(paddingLeft);
+  const visibleRight = stripRect.right - parseFloat(paddingRight);
   if (tabRect.left < visibleLeft) {
     strip.scrollLeft -= visibleLeft - tabRect.left;
   } else if (tabRect.right > visibleRight) {
