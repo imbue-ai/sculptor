@@ -82,7 +82,7 @@ def resolve_project_in_jj_workspace(
     repository_root = _find_linked_repository_root(jj_workspace_root)
     if repository_root is None:
         raise ProjectInJjWorkspaceError(jj_workspace_root)
-    _raise_if_jj_is_unusable(jj_workspace_root, dependency_management_service.get_jj_readiness())
+    _raise_if_jj_is_unusable(jj_workspace_root, dependency_management_service.probe_jj_readiness())
     if not is_jj_colocated(jj, repository_root):
         raise ProjectInJjWorkspaceError(jj_workspace_root)
     return repository_root

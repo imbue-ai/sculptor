@@ -1143,7 +1143,7 @@ class DefaultWorkspaceService(WorkspaceService):
             ):
                 raise WorkspaceWorkingCopyUpdateUnavailableError(workspace_id)
             case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-                require_jj_available(self.dependency_management_service.get_jj_readiness())
+                require_jj_available(self.dependency_management_service.probe_jj_readiness())
                 logger.debug("Updating the stale working copy of workspace {}", workspace_id)
                 update_stale(self.vcs_runners.jj, location.checkout_path)
             case _ as unreachable:

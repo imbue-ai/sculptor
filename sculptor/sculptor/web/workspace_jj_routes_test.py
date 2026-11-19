@@ -220,5 +220,5 @@ def test_updating_the_working_copy_while_jj_is_unavailable_says_why_it_is_unavai
     response = client.post(f"/api/v1/workspaces/{jj_workspace_row.object_id}/jj/update-stale")
 
     assert response.status_code == 412, response.text
-    readiness = test_services.dependency_management_service.get_jj_readiness()
+    readiness = test_services.dependency_management_service.probe_jj_readiness()
     assert response.json()["detail"] == describe_jj_unavailability(readiness)

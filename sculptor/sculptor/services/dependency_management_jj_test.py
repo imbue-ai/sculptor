@@ -13,6 +13,7 @@ import threading
 from collections.abc import Iterator
 from functools import partial
 from pathlib import Path
+from queue import Queue
 from uuid import uuid4
 
 import pytest
@@ -38,6 +39,7 @@ from sculptor.utils.build import SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG
 from sculptor.utils.build import get_sculptor_folder
 from sculptor.web.data_types import BinaryMode
 from sculptor.web.data_types import BinarySource
+from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import JjAvailable
 from sculptor.web.data_types import JjBlocker
 from sculptor.web.data_types import JjIdentity
@@ -420,6 +422,52 @@ def local_release_server(tmp_path: Path) -> Iterator[tuple[Path, str]]:
     server.shutdown()
     thread.join()
     server.server_close()
+
+
+class _JjManagedToolFromLocalRelease(JjManagedTool):
+    """jj's managed install, downloading from a local server instead of GitHub releases."""
+
+    def __init__(self, distribution: ResolvedDistribution) -> None:
+        self._distribution = distribution
+
+    def resolve_distribution(self) -> ResolvedDistribution:
+        return self._distribution
+
+
+def _local_jj_release(local_release_server: tuple[Path, str]) -> ResolvedDistribution:
+    served_dir, base_url = local_release_server
+    asset = f"jj-v{JJ_PINNED_VERSION}-test.tar.gz"
+    tarball = _jj_release_tarball(JJ_PINNED_VERSION)
+    (served_dir / asset).write_bytes(tarball)
+    return ResolvedDistribution(
+        version=JJ_PINNED_VERSION,
+        url=f"{base_url}/{asset}",
+        checksum_sha256=hashlib.sha256(tarball).hexdigest(),
+        size=None,
+        archive="tarball",
+        binary_subpath=JjManagedTool.binary_subpath,
+    )
+
+
+@pytest.mark.allow_dependency_downloads
+def test_a_finished_managed_jj_install_tells_every_window_that_jj_is_managed(
+    jj_test_home: _JjTestHome,
+    jj_service: DependencyManagementService,
+    local_release_server: tuple[Path, str],
+) -> None:
+    _configure_jj("MANAGED")
+    assert jj_service.get_status().jj.installed is False
+    window: Queue[DependenciesStatus] = Queue()
+    jj_service.add_observer_queue(window)
+
+    result = jj_service._install_managed_tool(_JjManagedToolFromLocalRelease(_local_jj_release(local_release_server)))
+    status = window.get(timeout=10.0)
+    while status.jj.source != BinarySource.MANAGED:
+        status = window.get(timeout=10.0)
+    jj_service._install_thread[Dependency.JJ].join(timeout=10.0)
+
+    assert result.success is True, result.error
+    assert status.jj.managed_version == JJ_PINNED_VERSION
 
 
 @pytest.mark.allow_dependency_downloads

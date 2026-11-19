@@ -95,6 +95,9 @@ _TEMP_DIR_PREFIX = "tmp-"
 _DOWNLOAD_CHUNK_SIZE_BYTES = 65536
 # Versions to keep when a tool has no ManagedTool conformer to override it.
 _DEFAULT_RETENTION_KEEP = 2
+# How often a running service recomputes the status with no event asking for it,
+# because a tool can be installed, removed or reconfigured outside Sculptor.
+_DEPENDENCY_STATUS_REFRESH_INTERVAL_SECONDS = 60.0
 
 
 def _is_valid_custom_binary(value: str) -> bool:
@@ -118,6 +121,22 @@ def _configured_binary_value(config: UserConfig, tool: Dependency) -> str:
             return config.dependency_paths.jj
         case Dependency.GIT | Dependency.GH:
             raise ValueError(f"{tool} has no managed binary mode")
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _dependency_info_for_tool(status: DependenciesStatus, tool: Dependency) -> DependencyInfo:
+    match tool:
+        case Dependency.CLAUDE:
+            return status.claude
+        case Dependency.GIT:
+            return status.git
+        case Dependency.PI:
+            return status.pi
+        case Dependency.JJ:
+            return status.jj
+        case Dependency.GH:
+            return status.gh
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -272,7 +291,7 @@ class VoiceModelsInstaller:
         stop_requested: threading.Event,
         start_thread: Callable[[Callable[[], None], str], ObservableThread],
         ensure_progress_notifier: Callable[[], None],
-        notify_observers: Callable[[], None],
+        notify_observers: Callable[[], object],
     ) -> None:
         self._download_file = download_file
         self._install_lock = install_lock
@@ -597,6 +616,17 @@ class DependencyManagementService(Service):
     # Pushes status to observers while any install is in flight, so the download
     # thread never computes status itself. Guarded by _progress_lock.
     _progress_notifier_thread: ObservableThread | None = PrivateAttr(default=None)
+    # Serializes status computations, so triggers that arrive together do not
+    # each run every probe. Held while probing; reads of _status never take it.
+    _status_computation_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    # Guards _status and _observer_queues together, so every observer receives
+    # statuses in the order they were stored. Never held during I/O.
+    _observer_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    # The last computed status, which every read is served from; None until the first computation.
+    _status: DependenciesStatus | None = PrivateAttr(default=None)
+    # Set to have the status refresher recompute the status now rather than at its next timed refresh.
+    _status_refresh_requested: threading.Event = PrivateAttr(default_factory=threading.Event)
+    _status_refresher_thread: ObservableThread | None = PrivateAttr(default=None)
     _observer_queues: set[Queue[Any]] = PrivateAttr(default_factory=set)
     # Cooperative cancellation: set by stop() so the background install thread
     # can wrap up at the next chunk boundary instead of being interrupted by
@@ -612,19 +642,26 @@ class DependencyManagementService(Service):
     def start(self) -> None:
         self._cleanup_stale_state()
         self._auto_install_if_needed()
+        self._status_refresher_thread = self.concurrency_group.start_new_thread(
+            target=self._run_status_refresher, name="dependency-status-refresher", is_checked=False
+        )
 
     def stop(self) -> None:
         """Signal any in-flight install to wrap up before the concurrency group exits.
 
         ``Service.run()`` calls ``stop()`` while the concurrency group is still
         ACTIVE. We set the cancellation event so the download loop returns at the
-        next chunk boundary (and the progress notifier wakes from its wait), then
-        wait for each thread to finish — including the download thread's
-        ``finally`` block — so the group's ``__exit__`` doesn't race with that
-        cleanup. Bounded by a timeout so a stuck install can't block shutdown.
+        next chunk boundary (and the progress notifier and status refresher wake
+        from their waits), then wait for each thread to finish — including the
+        download thread's ``finally`` block — so the group's ``__exit__`` doesn't
+        race with that cleanup. Bounded by a timeout so a stuck install can't block
+        shutdown.
         """
         self._stop_requested.set()
+        self._status_refresh_requested.set()
         threads = list(self._install_thread.values())
+        if self._status_refresher_thread is not None:
+            threads.append(self._status_refresher_thread)
         installer = self._voice_models_installer
         if installer is not None and installer.thread is not None:
             threads.append(installer.thread)
@@ -726,32 +763,90 @@ class DependencyManagementService(Service):
                 logger.warning("Failed to start auto-install of managed {} binary: {}", tool.value, result.error)
                 with self._progress_lock:
                     self._install_error[tool] = result.error or "Installation failed"
-                self._notify_observers()
+                self.refresh_status()
         except Exception:
             logger.opt(exception=True).warning("Failed to start auto-install of managed {} binary", tool.value)
 
     def add_observer_queue(self, queue: Queue[Any]) -> None:
-        """Register a stream queue for pushing status updates."""
-        self._observer_queues.add(queue)
+        """Register a stream queue for status updates; it receives the last computed status at once, if there is one."""
+        with self._observer_lock:
+            self._observer_queues.add(queue)
+            if self._status is not None:
+                queue.put(self._status)
 
     def remove_observer_queue(self, queue: Queue[Any]) -> None:
         """Unregister a stream queue."""
-        self._observer_queues.discard(queue)
+        with self._observer_lock:
+            self._observer_queues.discard(queue)
 
-    def _notify_observers(self, status: DependenciesStatus | None = None) -> None:
-        """Push status to all registered observer queues.
+    def get_last_computed_status(self) -> DependenciesStatus | None:
+        """The last computed status of every dependency, or None before the first; never runs a probe."""
+        return self._status
 
-        If *status* is ``None``, calls ``_get_status()`` to compute it.
+    def get_status(self) -> DependenciesStatus:
+        """The last computed status of every dependency, computed first if there is none yet."""
+        status = self._status
+        if status is not None:
+            return status
+        with self._status_computation_lock:
+            status = self._status
+            if status is not None:
+                return status
+            return self._compute_and_publish_status()
+
+    def refresh_status(self) -> DependenciesStatus:
+        """Compute every dependency's status now, keep it for reads, and push it to every observer."""
+        with self._status_computation_lock:
+            return self._compute_and_publish_status()
+
+    def _run_status_refresher(self) -> None:
+        """Recompute the status on a slow timer, and soon after a refresh is requested, until the service stops."""
+        has_warned_refresh_failure = False
+        while True:
+            self._status_refresh_requested.wait(_DEPENDENCY_STATUS_REFRESH_INTERVAL_SECONDS)
+            if self._stop_requested.is_set():
+                return
+            # Cleared before computing, so a request made during this refresh gets one of its own.
+            self._status_refresh_requested.clear()
+            try:
+                self.refresh_status()
+                has_warned_refresh_failure = False
+            except InvalidConcurrencyGroupStateError:
+                logger.debug("Stopping the dependency status refresher: concurrency group is exiting")
+                return
+            except Exception:
+                if has_warned_refresh_failure:
+                    logger.debug("Dependency status refresh failed (repeat)")
+                else:
+                    logger.opt(exception=True).warning("Dependency status refresh failed")
+                    has_warned_refresh_failure = True
+
+    def _compute_and_publish_status(self) -> DependenciesStatus:
+        """Compute, store and push the status; call only while holding ``_status_computation_lock``.
+
         Delta detection is handled by the stream layer (``stream_everything``),
-        not here — this method pushes unconditionally.
+        so the status is pushed whether or not it changed.
         """
-        if status is None:
-            status = self._get_status()
-        for queue in self._observer_queues:
-            queue.put(status)
+        status = self._get_status()
+        with self._observer_lock:
+            self._status = status
+            for queue in self._observer_queues:
+                queue.put(status)
+        return status
 
     def resolve_binary_path(self, tool: Dependency) -> str | None:
-        """Resolve the binary path for a dependency based on the active mode."""
+        """Resolve the binary path for a dependency based on the active mode.
+
+        A path other than the one in the last computed status means the tool was
+        installed, removed or moved since, so a refresh is requested.
+        """
+        path = self._resolve_configured_binary_path(tool)
+        status = self._status
+        if status is not None and _dependency_info_for_tool(status, tool).path != path:
+            self._status_refresh_requested.set()
+        return path
+
+    def _resolve_configured_binary_path(self, tool: Dependency) -> str | None:
         match tool:
             case Dependency.CLAUDE:
                 return self._resolve_claude_path()
@@ -1221,8 +1316,29 @@ class DependencyManagementService(Service):
         )
 
     def get_jj_readiness(self) -> JjReadiness:
-        """JJ_AVAILABLE: whether Sculptor can use the resolved jj, or the first check that fails."""
-        return self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
+        """JJ_AVAILABLE in the last computed status: whether Sculptor can use the resolved jj, or the first check that fails.
+
+        Running no jj, this can trail a change made outside Sculptor, so a gate
+        about to let jj act on the user's repository calls `probe_jj_readiness`.
+        Before the first status is computed it probes jj alone, rather than
+        every tool, and stores nothing.
+        """
+        status = self._status
+        if status is None:
+            return self.probe_jj_readiness()
+        return status.jj_readiness
+
+    def probe_jj_readiness(self) -> JjReadiness:
+        """JJ_AVAILABLE as jj reports it now, for a gate about to let jj act on the user's repository.
+
+        A readiness other than the last computed status's requests a refresh, so
+        every observer learns of it too.
+        """
+        readiness = self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
+        status = self._status
+        if status is not None and status.jj_readiness != readiness:
+            self._status_refresh_requested.set()
+        return readiness
 
     def _jj_readiness_from_check(self, check: DependencyCheckResult) -> JjReadiness:
         if check.path is None:
@@ -1302,7 +1418,7 @@ class DependencyManagementService(Service):
                 self._run_jj_outside_any_repo(binary, ["config", "set", "--user", key, value])
             except ProcessError as e:
                 raise JjIdentityError(_describe_process_error(e)) from e
-        return self.get_status()
+        return self.refresh_status()
 
     def _get_remote_cli_info(self, tool: Dependency) -> DependencyInfo:
         """Build a DependencyInfo for the gh remote-host CLI.
@@ -1329,7 +1445,7 @@ class DependencyManagementService(Service):
                     stop_requested=self._stop_requested,
                     start_thread=self._start_unchecked_thread,
                     ensure_progress_notifier=self._ensure_progress_notifier_running,
-                    notify_observers=self._notify_observers,
+                    notify_observers=self.refresh_status,
                 )
             return self._voice_models_installer
 
@@ -1358,12 +1474,6 @@ class DependencyManagementService(Service):
         if not file_path.is_file():
             return None
         return file_path
-
-    def get_status(self) -> DependenciesStatus:
-        """Get the status of all dependencies and push to observers if changed."""
-        status = self._get_status()
-        self._notify_observers(status)
-        return status
 
     def _get_managed_version(self, tool: Dependency) -> str | None:
         """Get the highest installed managed version for a tool."""
@@ -1445,7 +1555,7 @@ class DependencyManagementService(Service):
                     self._progress_notifier_thread = None
                     return
             try:
-                self._notify_observers()
+                self.refresh_status()
                 has_warned_push_failure = False
             except InvalidConcurrencyGroupStateError:
                 # The handle stays set; new installs are refused during shutdown.
@@ -1468,7 +1578,7 @@ class DependencyManagementService(Service):
         Resolves the tool's distribution synchronously (Claude fetches + validates
         its GCP manifest here; pi reads its static pin), then spawns the background
         download thread; the download, checksum verification, and activation continue
-        on that thread. Progress is pushed to observers via _notify_observers() and
+        on that thread. Progress is pushed to observers via refresh_status() and
         can be polled via get_status(). An unmanaged tool (e.g. git) has no seam entry
         → "not supported".
         """
@@ -1527,7 +1637,7 @@ class DependencyManagementService(Service):
             name="dependency-management-install-download",
             is_checked=False,
         )
-        self._notify_observers()
+        self.refresh_status()
 
         return InstallResult(success=True)
 
@@ -1573,7 +1683,7 @@ class DependencyManagementService(Service):
             # residual race where the group begins exiting mid-notify.
             if not self._stop_requested.is_set():
                 try:
-                    self._notify_observers()
+                    self.refresh_status()
                 except InvalidConcurrencyGroupStateError:
                     logger.debug("Skipping status notify: concurrency group is exiting")
 

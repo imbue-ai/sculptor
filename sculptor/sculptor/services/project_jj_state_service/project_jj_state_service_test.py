@@ -245,7 +245,7 @@ def test_jj_becoming_available_republishes_a_repository_that_creates_jj_workspac
     _wait_for_state(published_states, _state(project, JjColocationState.ABSENT))
 
     _resolve_jj_to(silly_global_config, str(jj_binary.path))
-    services.dependency_management_service.get_status()
+    services.dependency_management_service.refresh_status()
 
     _wait_for_state(published_states, _state(project, JjColocationState.COLOCATED, creates_jj_workspaces=True))
 
@@ -262,7 +262,7 @@ def test_jj_becoming_unavailable_stops_a_repository_creating_jj_workspaces_but_k
     _wait_for_state(published_states, _state(project, JjColocationState.COLOCATED, creates_jj_workspaces=True))
 
     _resolve_jj_to(silly_global_config, "CUSTOM")
-    services.dependency_management_service.get_status()
+    services.dependency_management_service.refresh_status()
 
     _wait_for_state(published_states, _state(project, JjColocationState.ABSENT))
     assert _read_use_jj_for_new_workspaces(services, project) is True

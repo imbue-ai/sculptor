@@ -685,7 +685,9 @@ def _validate_jj_workspace_creation_request(
     project_path = project.get_local_user_path()
     jj = build_vcs_runners(concurrency_group, services.dependency_management_service.resolve_binary_path).jj
     try:
-        facts = gather_jj_workspace_creation_facts(project, jj, services.dependency_management_service)
+        facts = gather_jj_workspace_creation_facts(
+            project, jj, services.dependency_management_service.probe_jj_readiness()
+        )
     except VcsCommandError as e:
         raise HTTPException(status_code=409, detail=f"The repository at {project_path} could not be read") from e
     jj_unavailability = describe_jj_unavailability(facts.jj_readiness)
@@ -3353,12 +3355,9 @@ def skip_account_setup(
 def get_dependencies_status(
     request: Request, user_session: UserSession = Depends(get_user_session)
 ) -> DependenciesStatus:
-    """Check if required dependencies are installed."""
+    """Check every dependency now and return the status, which every open window is also sent."""
     services = get_services_from_request_or_websocket(request)
-    service = services.dependency_management_service
-    ds = service.get_status()
-
-    return ds
+    return services.dependency_management_service.refresh_status()
 
 
 @router.post("/api/v1/dependencies/install")
@@ -3513,7 +3512,7 @@ def update_user_config(
     old_dep = old_user_config.dependency_paths if old_user_config else None
     if new_user_config.dependency_paths != old_dep:
         services = get_services_from_request_or_websocket(request)
-        services.dependency_management_service.get_status()
+        services.dependency_management_service.refresh_status()
 
     return new_user_config
 
@@ -4554,6 +4553,10 @@ def _get_typed_artifact_data(
 
 @router.get("/api/v1/health")
 def get_health_check(request: Request) -> HealthCheckResponse:
+    """Liveness, version and environment facts, with the last computed dependency status.
+
+    Runs no tool, because every open window polls it.
+    """
     services = get_services_from_request_or_websocket(request)
     user_config = get_user_config_instance()
     free_gb = (_get_disk_bytes_free(services.settings) or 1_000_000_000_000) / (1024 * 1024 * 1024)
@@ -4562,7 +4565,7 @@ def get_health_check(request: Request) -> HealthCheckResponse:
     with services.data_model_service.open_task_transaction() as transaction:
         active_task_count = len(transaction.get_active_tasks())
 
-    dependencies_status = services.dependency_management_service.get_status()
+    dependencies_status = services.dependency_management_service.get_last_computed_status()
 
     return HealthCheckResponse(
         version=version.__version__,

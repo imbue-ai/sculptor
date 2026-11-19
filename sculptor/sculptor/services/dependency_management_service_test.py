@@ -106,7 +106,7 @@ def _wait_for_install_complete(
     """Wait for *tool*'s background install thread to finish, including its trailing notify.
 
     Joining the thread — rather than polling ``_installing`` — ensures the thread's
-    final ``_notify_observers()`` has returned before the caller leaves the
+    final ``refresh_status()`` has returned before the caller leaves the
     ConcurrencyGroup block; polling the flag returns mid-finalization and races the
     group's teardown (FOLLOWUPS-10).
     """
@@ -731,6 +731,7 @@ class TestCleanup:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
             service.start()
+            service.stop()
 
         assert not (claude_dir / "tmp-stale").exists()
 
@@ -1471,7 +1472,7 @@ class TestProgressNotifierThread:
         notify_mock = MagicMock(side_effect=itertools.chain([RuntimeError("boom")], itertools.repeat(None)))
         with (
             patch.object(DependencyManagementService, "_PROGRESS_NOTIFY_INTERVAL_SECONDS", 0.01),
-            patch.object(DependencyManagementService, "_notify_observers", notify_mock),
+            patch.object(DependencyManagementService, "refresh_status", notify_mock),
         ):
             with service._progress_lock:
                 service._installing[Dependency.CLAUDE] = True
@@ -2562,6 +2563,7 @@ class TestCleanupStaleStatePi:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
             service.start()
+            service.stop()
 
         assert not (pi_dir / "tmp-stale").exists()
         remaining = sorted(d.name for d in pi_dir.iterdir() if d.is_dir() and d.name.startswith("version-"))
