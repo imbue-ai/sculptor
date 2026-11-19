@@ -2,15 +2,8 @@
 
 from __future__ import annotations
 
-import shlex
 import subprocess
-import sys
-from io import StringIO
 from pathlib import Path
-from typing import Sequence
-from typing import TextIO
-
-from loguru import logger
 
 
 def is_path_in_git_repo(path: Path) -> bool:
@@ -61,18 +54,32 @@ def resolve_worktree_to_main_repo(path: Path) -> Path:
     return main_repo
 
 
-def get_git_repo_root() -> Path:
-    """Gets a Path to the current git repo root, assuming that our cwd is somewhere inside the repo."""
-    completed_process = subprocess.run(
-        ("git", "rev-parse", "--show-toplevel"),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=True,
-    )
-    root_dir = Path(completed_process.stdout.decode().strip())
-    assert root_dir.is_dir(), f"{root_dir} must be a directory"
-    return root_dir
+class RepoRootNotFoundError(Exception):
+    """Raised when no directory from the working directory up holds ``.git`` or ``.jj``."""
+
+
+def find_repo_root(start_directory: Path) -> Path | None:
+    """Find the repository root: the nearest directory, from ``start_directory`` up, holding ``.git`` or ``.jj``.
+
+    A jj workspace of a repository has ``.jj`` and no ``.git``, and it can sit
+    inside another checkout (a from-source Sculptor keeps its workspaces in the
+    checkout's ``.dev_sculptor``), whose root a search for ``.git`` alone, or
+    ``git rev-parse``, would find instead. Returns None if no directory holds
+    either.
+    """
+    for directory in (start_directory, *start_directory.parents):
+        if (directory / ".git").exists() or (directory / ".jj").is_dir():
+            return directory
+    return None
+
+
+def get_repo_root() -> Path:
+    """Return the root of the git checkout or jj workspace that holds the working directory."""
+    working_directory = Path.cwd()
+    repo_root = find_repo_root(working_directory)
+    if repo_root is None:
+        raise RepoRootNotFoundError(f"{working_directory} is not inside a git checkout or a jj workspace")
+    return repo_root
 
 
 def get_repo_url_from_folder(repo_path: Path) -> str:
@@ -94,36 +101,8 @@ def get_repo_url_from_folder(repo_path: Path) -> str:
 
 def get_repo_base_path() -> Path:
     """Return the repo root containing this module, falling back to its grandparent directory."""
-    working_directory = Path(__file__).parent
-    try:
-        return Path(
-            _run_command_and_capture_output(["git", "rev-parse", "--show-toplevel"], cwd=working_directory).strip()
-        )
-    except subprocess.CalledProcessError as e:
-        try:
-            return working_directory.parents[1]
-        except IndexError:
-            raise RuntimeError("Unable to find repo base") from e
-
-
-def _run_command_and_capture_output(args: Sequence[str], cwd: Path | None = None) -> str:
-    arg_str = " ".join(shlex.quote(arg) for arg in args)
-    logger.debug("Running command: {}", arg_str)
-    with subprocess.Popen(args, text=True, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
-        with StringIO() as output:
-            _handle_output(proc, output, sys.stderr)
-            if proc.wait() != 0:
-                raise subprocess.CalledProcessError(proc.returncode, cmd=args, output=output.getvalue())
-            return output.getvalue()
-
-
-def _handle_output(process: subprocess.Popen[str], *files: TextIO) -> None:
-    process_stdout = process.stdout
-    assert process_stdout is not None
-    while True:
-        output = process_stdout.read(1)
-        if output:
-            for f in files:
-                f.write(output)
-        elif process.poll() is not None:
-            break
+    module_directory = Path(__file__).parent
+    repo_root = find_repo_root(module_directory)
+    if repo_root is None:
+        return module_directory.parents[1]
+    return repo_root

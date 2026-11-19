@@ -11,6 +11,7 @@ from packaging.version import Version
 
 import sculptor
 from sculptor import version
+from sculptor.foundation.git import find_repo_root
 
 if TYPE_CHECKING:
     from sculptor.primitives.ids import ProjectID
@@ -144,22 +145,6 @@ def is_dev_build() -> bool:
     return Version(version.__version__).is_devrelease
 
 
-def _get_repo_root(start_directory: Path) -> Path | None:
-    """Find the repository root: the nearest directory, from ``start_directory`` up, holding ``.git`` or ``.jj``.
-
-    A jj workspace of this repository has ``.jj`` and no ``.git``, and when
-    Sculptor runs from source it sits inside another checkout, whose root a
-    search for ``.git`` alone would find instead. Returns None if we can't
-    find a repository root (e.g., in a packaged build).
-    """
-    current = start_directory
-    while current != current.parent:
-        if (current / ".git").exists() or (current / ".jj").is_dir():
-            return current
-        current = current.parent
-    return None
-
-
 def is_packaged() -> bool:
     """Return True when running inside a PyInstaller bundle (analogous to Electron's app.isPackaged)."""
     return hasattr(sys, "frozen")
@@ -216,7 +201,7 @@ def get_sculptor_folder() -> Path:
         logger.info("Sculptor folder: {} (from {} env var)", path, SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG)
     elif not is_packaged():
         # Running from source: use the repo root so each checkout has its own data
-        repo_root = _get_repo_root(Path(__file__).resolve().parent)
+        repo_root = find_repo_root(Path(__file__).resolve().parent)
         if repo_root is not None:
             path = repo_root / ".dev_sculptor"
         else:

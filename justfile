@@ -196,6 +196,24 @@ typecheck:
 # Exclude pattern for style checks (test fixtures and snapshots)
 _style_exclude := '__snapshots__|test_data'
 
+# Defines list_tracked_files, which prints the repository's tracked files when
+# run from the repository root. A jj workspace has no .git, and git run in one
+# lists the files of whatever checkout encloses it, so there jj lists them.
+_list_tracked_files_fn := '''
+list_tracked_files() {
+  if [ -e .git ]; then
+    git ls-files
+  elif [ -d .jj ]; then
+    local jj="''' + justfile_directory() + '''/.venv/bin/jj"
+    [ -x "$jj" ] || jj=jj
+    "$jj" file list
+  else
+    echo "list_tracked_files: $(pwd) is neither a git checkout nor a jj workspace" >&2
+    return 1
+  fi
+}
+'''
+
 # File patterns to skip in hygiene checks (binary and cache files)
 _binary_file_pattern := '*.png|*.ico|*.jpg|*.jpeg|*.gif|*.webp|*.pdf|*.woff|*.woff2|*.ttf|*.eot'
 _cache_file_pattern := '*.raw|*.llm_cache_json|*.transport_cache_jsonl|*.count_tokens_cache_json|*.golden.html'
@@ -206,9 +224,11 @@ check-file-hygiene:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
+    {{ _list_tracked_files_fn }}
     _do_check_file_hygiene() {
       cd "{{justfile_directory()}}"
       echo "Checking file hygiene (trailing whitespace and EOF formatting)..."
+      TRACKED_FILES="$(list_tracked_files)"
       # Helper function to check if file should be skipped
       # Using a function avoids bash 3.2 bug with case statements inside $()
       should_skip() {
@@ -234,7 +254,7 @@ check-file-hygiene:
         elif [ "$(tail -c 2 "$f" | wc -l)" -gt 1 ]; then
           PROBLEMS="${PROBLEMS}${f}: multiple trailing newlines\n"
         fi
-      done < <(git ls-files | grep -Ev '{{_style_exclude}}')
+      done < <(printf '%s\n' "$TRACKED_FILES" | grep -Ev '{{_style_exclude}}')
       if [ -n "$PROBLEMS" ]; then
         echo "File hygiene issues found:"
         echo -e "$PROBLEMS"
@@ -279,10 +299,11 @@ check-yaml:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
+    {{ _list_tracked_files_fn }}
     _do_check_yaml() {
       cd "{{justfile_directory()}}"
       echo "Checking YAML file syntax..."
-      YAML_FILES=$(git ls-files '*.yaml' '*.yml' | grep -Ev '{{_style_exclude}}|authentik')
+      YAML_FILES=$(list_tracked_files | grep -E '\.ya?ml$' | grep -Ev '{{_style_exclude}}|authentik')
       if [ -z "$YAML_FILES" ]; then
         echo "No YAML files to check."
         exit 0
@@ -308,11 +329,13 @@ check-uv-lock:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
+    {{ _list_tracked_files_fn }}
     _do_check_uv_lock() {
       cd "{{justfile_directory()}}"
       echo "Checking uv.lock is up to date..."
       # Find all pyproject.toml files that have corresponding uv.lock files
-      for lockfile in $(git ls-files '**/uv.lock' 'uv.lock'); do
+      LOCKFILES=$(list_tracked_files | grep -E '(^|/)uv\.lock$')
+      for lockfile in $LOCKFILES; do
         dir=$(dirname "$lockfile")
         if [ -f "$dir/pyproject.toml" ]; then
           echo "Checking $lockfile..."
@@ -332,10 +355,11 @@ check-shellcheck:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
+    {{ _list_tracked_files_fn }}
     _do_check_shellcheck() {
       cd "{{justfile_directory()}}"
       echo "Running shellcheck on shell scripts..."
-      SHELL_FILES=$(git ls-files '*.sh' '*.bash' | grep -Ev '{{_style_exclude}}|infra_scripts')
+      SHELL_FILES=$(list_tracked_files | grep -E '\.(sh|bash)$' | grep -Ev '{{_style_exclude}}|infra_scripts')
       if [ -z "$SHELL_FILES" ]; then
         echo "No shell scripts to check."
         exit 0
@@ -1588,6 +1612,43 @@ test-unit-backend junitxml="": install-jj
       env -u SESSION_TOKEN uv run --project sculptor pytest -n "${SCULPTOR_TEST_WORKERS:-8}" "{{justfile_directory()}}/sculptor/sculptor/" "{{justfile_directory()}}/sculptor/builder/" --ignore=tests -m "not integration and not acceptance" {{ if junitxml != "" { "--junitxml=" + quote(junitxml) } else { "" } }}
     }
     quiet_by_default test-unit-backend _do_test_unit_backend
+
+# The oldest git Sculptor supports. Apple's Command Line Tools ship git 2.39 up to
+# Xcode 16, the oldest git on a platform Sculptor ships for; 2.39.5 is the last
+# release of that line, and Debian 12's git.
+_oldest_supported_git := "2.39.5"
+# The oldest git the pinned jj accepts: jj runs git to fetch and push, and
+# refuses anything older.
+_oldest_git_for_jj := "2.42.0"
+
+# Run the VCS seam's unit tests against old gits that scripts/build_git.sh builds
+# from source into .venv/git-<version>: the jj tests against the oldest git jj
+# accepts, the rest against the oldest git Sculptor supports. The other test
+# recipes use the git on PATH, usually a recent one.
+[group("test")]
+test-vcs-oldest-git: install-jj
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _run_tests_with_git() {
+      local version="$1"; shift
+      local prefix="{{justfile_directory()}}/.venv/git-$version"
+      # Callers run this under `||`, which turns off `set -e` inside it.
+      "{{justfile_directory()}}/scripts/build_git.sh" "$version" "$prefix" || return 1
+      echo "=== VCS tests with $("$prefix/bin/git" --version) ==="
+      PATH="$prefix/bin:$PATH" env -u SESSION_TOKEN uv run --project sculptor pytest -n "${SCULPTOR_TEST_WORKERS:-8}" -m "not integration and not acceptance" "$@"
+    }
+    _do_test_vcs_oldest_git() {
+      vcs_tests="{{justfile_directory()}}/sculptor/sculptor/services/workspace_service/vcs"
+      failed=""
+      _run_tests_with_git {{ _oldest_supported_git }} "$vcs_tests" --ignore-glob='*/jj_*_test.py' || failed="$failed {{ _oldest_supported_git }}"
+      _run_tests_with_git {{ _oldest_git_for_jj }} "$vcs_tests"/jj_*_test.py || failed="$failed {{ _oldest_git_for_jj }}"
+      if [ -n "$failed" ]; then
+        echo "VCS tests failed with git$failed"
+        return 1
+      fi
+    }
+    quiet_by_default test-vcs-oldest-git _do_test_vcs_oldest_git
 
 [group("test")]
 test-unit-frontend:

@@ -1,5 +1,5 @@
 # Runs `just check` and `just test-unit` on a GitHub-hosted ubuntu-latest
-# runner, with JUnit reporting on PRs.
+# runner, with JUnit reporting on PRs, and the VCS tests on old gits.
 
 name: checks
 
@@ -193,3 +193,51 @@ jobs:
           check_name: sculpt CLI pytest
           fail_on_failure: false
           require_tests: false
+
+  # Runs the VCS seam's unit tests against the oldest gits Sculptor and the
+  # pinned jj accept (`just test-vcs-oldest-git`). The runner's own git is
+  # recent, so a command an old git rejects passes everywhere else.
+  vcs-tests-on-oldest-git:
+    name: VCS tests on the oldest supported git
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ startsWith(github.base_ref, 'release/') }}
+    env:
+      JUST_VERBOSE: "1"
+      SCIENCE_FILESYSTEM_ROOT: /tmp/science
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      # Restored after the sync, which creates .venv.
+      - name: Cache the git builds
+        id: git-builds-cache
+        uses: actions/cache@v4
+        with:
+          path: .venv/git-*
+          key: git-builds-${{ runner.os }}-${{ hashFiles('scripts/build_git.sh') }}
+
+      - name: Install the git build's dependencies
+        if: steps.git-builds-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y zlib1g-dev
+
+      - name: Run VCS tests on the oldest supported git
+        run: just test-vcs-oldest-git
