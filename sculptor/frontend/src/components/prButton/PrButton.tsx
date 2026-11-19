@@ -14,9 +14,10 @@ import {
   canPromptActiveAgentAtomFamily,
   createPrActionAtomFamily,
 } from "../../common/state/atoms/workspaceAgentActions.ts";
+import { workspaceTargetBranchesAtomFamily } from "../../common/state/atoms/workspaceTargetBranches.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
 import { buildCreatePrMessage } from "../../common/utils/agentPrompts.ts";
-import { toPrBaseRefName } from "../../common/utils/refNames.ts";
+import { isPrBaseOtherThanTarget } from "../../common/utils/prBaseNames.ts";
 import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
 import { PrPromptDialog } from "./PrPromptDialog.tsx";
@@ -485,6 +486,7 @@ export const PrButton = ({
   onSwitchTarget,
 }: PrButtonProps): ReactElement | null => {
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceId));
+  const prBaseNames = useAtomValue(workspaceTargetBranchesAtomFamily(workspaceId))?.prBaseNames ?? {};
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const effectiveError: EffectiveError | null = prStatus?.errorCategory
@@ -521,7 +523,7 @@ export const PrButton = ({
     const isMismatchRelevant =
       prStatus.mismatchedPrIid != null &&
       prStatus.mismatchedPrTargetBranch != null &&
-      prStatus.mismatchedPrTargetBranch !== toPrBaseRefName(targetBranch);
+      isPrBaseOtherThanTarget({ prBaseName: prStatus.mismatchedPrTargetBranch, targetRef: targetBranch, prBaseNames });
     if (isMismatchRelevant) {
       return (
         <AssignPrButton

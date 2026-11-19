@@ -5,8 +5,9 @@ import { createStore, Provider } from "jotai";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ElementIds, type Workspace } from "../../../api";
+import { ElementIds, type Workspace, WorkspaceInitializationStrategy } from "../../../api";
 import { workspaceBranchAtomFamily } from "../../../common/state/atoms/workspaceBranch.ts";
+import { workspaceJjStateAtomFamily } from "../../../common/state/atoms/workspaceJjState.ts";
 import type { OpenInRuntime } from "./menu.tsx";
 import { WorkspaceContextMenuContent, WorkspaceDropdownMenuContent } from "./menu.tsx";
 import type { WorkspaceAction } from "./types/contextActions.ts";
@@ -143,6 +144,75 @@ describe("Copy branch", () => {
         openInRuntime={openInRuntime}
       />,
     );
+
+    expect(screen.getAllByTestId(ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH)[0].getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+  });
+});
+
+describe("Copy bookmark and change id", () => {
+  const CHANGE_ID = "kxqpmzvyrstuwlnokxqpmzvyrstuwlno";
+
+  const fakeJjWorkspace = (id: string): Workspace =>
+    ({
+      objectId: id,
+      description: `ws-${id}`,
+      initializationStrategy: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    }) as unknown as Workspace;
+
+  const storeWithJjState = (id: string, primaryBookmark: string | null): ReturnType<typeof createStore> => {
+    const store = createStore();
+    store.set(workspaceJjStateAtomFamily(id), {
+      workspaceId: id,
+      workingCopyChangeId: CHANGE_ID,
+      workingCopyChangeIdPrefixLength: 2,
+      workingCopyDescription: "",
+      isWorkingCopyEmpty: false,
+      bookmarks: primaryBookmark === null ? [] : [primaryBookmark],
+      primaryBookmark,
+      unbookmarkedRevisionCount: 0,
+      hasConflict: false,
+      isDivergent: false,
+      isWorkingCopyStale: false,
+    });
+    return store;
+  };
+
+  const renderJjMenu = (id: string, store: ReturnType<typeof createStore>): void => {
+    renderInDropdown(
+      <WorkspaceDropdownMenuContent
+        actions={makeActions()}
+        workspace={fakeJjWorkspace(id)}
+        destructiveColor="red"
+        openInRuntime={openInRuntime}
+      />,
+      store,
+    );
+  };
+
+  it("copies a jj workspace's primary bookmark in place of a branch", async () => {
+    const user = userEvent.setup();
+    renderJjMenu("w6", storeWithJjState("w6", "dev/feature"));
+
+    const copyBookmark = screen.getAllByTestId(ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH)[0];
+    expect(copyBookmark.textContent).toContain("Copy bookmark");
+    await user.click(copyBookmark);
+
+    expect(await navigator.clipboard.readText()).toBe("dev/feature");
+  });
+
+  it("copies a jj workspace's change id", async () => {
+    const user = userEvent.setup();
+    renderJjMenu("w7", storeWithJjState("w7", "dev/feature"));
+
+    await user.click(screen.getAllByText("Copy change id")[0]);
+
+    expect(await navigator.clipboard.readText()).toBe(CHANGE_ID);
+  });
+
+  it("offers no bookmark to copy while a jj workspace has none", () => {
+    renderJjMenu("w8", storeWithJjState("w8", null));
 
     expect(screen.getAllByTestId(ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH)[0].getAttribute("aria-disabled")).toBe(
       "true",

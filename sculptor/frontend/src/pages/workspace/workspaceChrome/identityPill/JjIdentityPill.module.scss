@@ -1,0 +1,62 @@
+// The requested bookmark before it exists: ghosted, so it does not read as a
+// bookmark the workspace already has.
+.tentative {
+  border: 1px dashed var(--gray-a8);
+  border-radius: var(--radius-1);
+  color: var(--gray-10);
+  padding: 0 var(--space-1);
+}
+
+// jj's own logs dim a change id past its shortest unique prefix.
+.changeIdRest {
+  color: var(--gray-10);
+}
+
+.description {
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
+  max-width: 32ch;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moreBookmarks {
+  background: var(--gray-a3);
+  border-radius: var(--radius-1);
+  color: var(--gray-11);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  padding: 0 var(--space-1);
+}
+
+.unbookmarked {
+  color: var(--amber-11);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+}
+
+.card {
+  max-width: 420px;
+  padding: var(--space-3);
+}
+
+.cardLabel {
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.cardValue {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--mono-font-family);
+}
+
+.muted {
+  color: var(--gray-10);
+}

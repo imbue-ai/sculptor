@@ -1,0 +1,37 @@
+// A <button>, so neutralize the UA button
+// chrome; the text inherits its color, so a pill's variants can recolor it.
+.pill {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: var(--space-1);
+  margin: 0;
+  // Allow the pill to shrink so a long name truncates rather than pushing the
+  // header's right-side controls out of the overflow-hidden bar.
+  min-width: 0;
+  padding: 2px 6px;
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}
+
+.text {
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon {
+  color: var(--gray-11);
+  flex-shrink: 0;
+}

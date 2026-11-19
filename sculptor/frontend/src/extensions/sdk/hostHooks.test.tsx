@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Workspace } from "~/api";
 import { WorkspaceInitializationStrategy } from "~/api";
 import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
+import { workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState.ts";
 import { updateWorkspacesAtom } from "~/common/state/atoms/workspaces.ts";
 import { newWorkspaceDialogAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 
@@ -157,5 +158,44 @@ describe("useWorkspaces", () => {
     const { result } = renderHook(() => useWorkspaces(), { wrapper: createWrapper(storeWithWorkspace(), "ext-a") });
 
     expect(result.current?.map((view) => view.branch)).toEqual([null]);
+  });
+
+  it("reports a git workspace's version control, with no bookmarks", () => {
+    const { result } = renderHook(() => useWorkspaces(), { wrapper: createWrapper(storeWithWorkspace(), "ext-a") });
+
+    expect(result.current?.map((view) => [view.vcs, view.bookmarks])).toEqual([["git", []]]);
+  });
+
+  it("reports a jj workspace's primary bookmark as its branch, with all its bookmarks", () => {
+    const store = createStore();
+    const workspace: Workspace = {
+      objectId: "ws-ext-jj",
+      projectId: "proj-1",
+      organizationReference: "org-1",
+      description: "My jj workspace",
+      initializationStrategy: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+      sourceBranch: "main@origin",
+      requestedBranchName: "dev/requested",
+    };
+    store.set(updateWorkspacesAtom, [workspace]);
+    store.set(workspaceJjStateAtomFamily("ws-ext-jj"), {
+      workspaceId: "ws-ext-jj",
+      workingCopyChangeId: "kxqpmzvyrstuwlnokxqpmzvyrstuwlno",
+      workingCopyChangeIdPrefixLength: 2,
+      workingCopyDescription: "",
+      isWorkingCopyEmpty: false,
+      bookmarks: ["dev/part-2", "dev/feature"],
+      primaryBookmark: "dev/feature",
+      unbookmarkedRevisionCount: 0,
+      hasConflict: false,
+      isDivergent: false,
+      isWorkingCopyStale: false,
+    });
+
+    const { result } = renderHook(() => useWorkspaces(), { wrapper: createWrapper(store, "ext-a") });
+
+    expect(result.current?.map(({ vcs, branch, bookmarks }) => ({ vcs, branch, bookmarks }))).toEqual([
+      { vcs: "jj", branch: "dev/feature", bookmarks: ["dev/part-2", "dev/feature"] },
+    ]);
   });
 });

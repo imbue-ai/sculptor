@@ -603,9 +603,8 @@ declare const WorkspacePeekAgentStatus: {
  */
 export type WorkspacePeekAgentStatus = typeof WorkspacePeekAgentStatus[keyof typeof WorkspacePeekAgentStatus];
 /**
- * A curated, extension-facing view of a single workspace: identity, label, live git
- * branch, and code-host link. Deliberately a subset — not the host's full
- * `Workspace` model — so the extension contract doesn't couple to backend
+ * A curated, extension-facing view of a single workspace. Deliberately a subset —
+ * not the host's full `Workspace` model — so the extension contract doesn't couple to backend
  * internals. The element type of `useWorkspaces` and the return of
  * `useCurrentWorkspace`, so an extension reads the same shape whether it looks at
  * one workspace or all of them.
@@ -613,8 +612,15 @@ export type WorkspacePeekAgentStatus = typeof WorkspacePeekAgentStatus[keyof typ
 export type WorkspaceView = {
 	id: string;
 	description: string;
-	/** Live current branch, or `null` until the backend has reported it. */
+	/** The workspace's version control. A `jj` workspace has no git inside it. */
+	vcs: "git" | "jj";
+	/**
+	 * Live current branch; in a jj workspace, its primary bookmark. `null` until
+	 * the backend has reported it, or while a jj workspace has no bookmark.
+	 */
 	branch: string | null;
+	/** A jj workspace's bookmarks, nearest its working copy first; empty for git. */
+	bookmarks: ReadonlyArray<string>;
 	targetBranch: string | null;
 	/**
 	 * Web URL of the workspace's pull/merge request, or `null` when there is none

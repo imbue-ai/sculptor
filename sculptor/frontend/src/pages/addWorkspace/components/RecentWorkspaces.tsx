@@ -23,9 +23,8 @@ const PAGE_SIZE = 25;
 // The label a workspace's row settles on, so search matches what the row shows.
 const rowLabelText = (workspace: RecentWorkspaceResponse, sources: WorkspaceIdentitySources | undefined): string => {
   const label = resolveWorkspaceIdentityLabel({
-    liveBranch: sources?.liveBranch ?? null,
+    sources: sources ?? { vcs: "git", liveBranch: null, requestedBranchName: null },
     fetchedBranch: workspace.currentBranch ?? null,
-    requestedBranchName: sources?.requestedBranchName ?? null,
     hasGraceElapsed: true,
   });
   return label.status === "READY" ? label.text : "";

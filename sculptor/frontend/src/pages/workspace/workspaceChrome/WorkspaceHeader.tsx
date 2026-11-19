@@ -1,17 +1,18 @@
-import { Badge, Flex, Skeleton, Text, Tooltip } from "@radix-ui/themes";
+import { Badge, Flex, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 
-import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/api";
+import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/hooks/navigation";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
+import { ToastType, workspaceTargetChangeErrorToastAtom } from "~/common/state/atoms/toasts.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
-import { useWorkspaceIdentityLabel } from "~/common/state/hooks/useWorkspaceIdentity.ts";
 import { useWorkspaceTarget } from "~/common/state/hooks/useWorkspaceTarget.ts";
-import { toPrBaseRefName, toRemoteRefName } from "~/common/utils/refNames.ts";
+import { findTargetForPrBase, isPrBaseOtherThanTarget } from "~/common/utils/prBaseNames.ts";
+import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getCollapsedSidebarToggleClearance } from "~/electron/platform.ts";
 import { extensionWorkspaceWidgetsAtom } from "~/extensions/extensionRegistry.ts";
@@ -25,6 +26,8 @@ import { primaryOf } from "~/pages/workspace/layout/types/section.ts";
 import { DiffSummary } from "../../../components/diffSummary/DiffSummary";
 import { PrButton } from "../../../components/prButton/PrButton";
 import { useWorkspaceTargetBranches } from "./hooks/useWorkspaceTargetBranches";
+import { useWorkspaceTargetChange } from "./hooks/useWorkspaceTargetChange.ts";
+import { WorkspaceIdentityPill } from "./identityPill/WorkspaceIdentityPill.tsx";
 import { TargetBranchSelector } from "./TargetBranchSelector";
 import styles from "./WorkspaceHeader.module.scss";
 
@@ -35,6 +38,14 @@ const MODE_BADGE_LABEL: Record<WorkspaceInitializationStrategy, string> = {
   [WorkspaceInitializationStrategy.CLONE]: "clone",
   [WorkspaceInitializationStrategy.WORKTREE]: "worktree",
   [WorkspaceInitializationStrategy.JJ_WORKSPACE]: "jj",
+};
+
+// Only a jj workspace's badge explains itself: nothing git-based works inside it.
+const MODE_BADGE_TOOLTIP: Record<WorkspaceInitializationStrategy, string | null> = {
+  [WorkspaceInitializationStrategy.IN_PLACE]: null,
+  [WorkspaceInitializationStrategy.CLONE]: null,
+  [WorkspaceInitializationStrategy.WORKTREE]: null,
+  [WorkspaceInitializationStrategy.JJ_WORKSPACE]: "jj workspace — no git inside. Agents use jj here.",
 };
 
 type SectionToggleProps = {
@@ -88,92 +99,60 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const workspaceWidgets = useAtomValue(extensionWorkspaceWidgetsAtom);
+  const setTargetChangeErrorToast = useSetAtom(workspaceTargetChangeErrorToastAtom);
 
   // External hooks
   const { workspaceID } = useWorkspacePageParams();
   const projectID = useActiveProjectID();
   const workspace = useWorkspace(workspaceID);
-  const identityLabel = useWorkspaceIdentityLabel({ workspaceId: workspaceID });
   const gitProvider = useGitProvider(projectID ?? "");
   const currentTargetBranch = useWorkspaceTarget(workspaceID);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
-  const targetBranches = useWorkspaceTargetBranches(workspaceID);
+  const { targetBranches, prBaseNames } = useWorkspaceTargetBranches(workspaceID);
+  const changeTarget = useWorkspaceTargetChange(workspaceID);
 
   // Internal state
-  const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isTargetBranchOpen, setIsTargetBranchOpen] = useState<boolean>(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const branchCopyText = identityLabel.status === "READY" ? identityLabel.copyText : null;
-
-  // Effects
-  // Prevent setState-on-unmount from the "Copied!" timer.
-  useEffect(() => {
-    return (): void => {
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    };
-  }, []);
 
   // Functions and callbacks
-  const handleCopyBranch = useCallback((): void => {
-    if (branchCopyText === null) {
-      return;
-    }
-    navigator.clipboard
-      .writeText(branchCopyText)
-      .then(() => {
-        setIsCopied(true);
-        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
-      })
-      .catch((error) => {
-        console.warn("Failed to copy branch name to clipboard.", error);
-      });
-  }, [branchCopyText]);
-
-  const handleTargetBranchChange = useCallback(
-    async (branch: string): Promise<void> => {
-      try {
-        await updateWorkspace({ path: { workspace_id: workspaceID }, body: { targetBranch: branch } });
-      } catch (e) {
-        console.error("Failed to change target branch:", e);
-      }
-    },
-    [workspaceID],
-  );
-
+  // Retarget the workspace at the candidate that opens pull requests into an
+  // existing PR's base.
   const handleSwitchTarget = useCallback(
-    async (newTarget: string): Promise<void> => {
-      // PRs live on the origin remote, so prefer its ref for the branch.
-      const remoteRef = toRemoteRefName(newTarget);
-      const fullBranch =
-        targetBranches.find((b) => b === remoteRef) ??
-        targetBranches.find((b) => b.endsWith(`/${newTarget}`)) ??
-        remoteRef;
-      try {
-        await updateWorkspace({ path: { workspace_id: workspaceID }, body: { targetBranch: fullBranch } });
-      } catch (e) {
-        console.error("Failed to switch target branch:", e);
+    (prBaseName: string): void => {
+      const newTarget = findTargetForPrBase({ prBaseName, targetBranches, prBaseNames });
+      if (newTarget === null) {
+        setTargetChangeErrorToast({
+          title: `Could not change the target to ${prBaseName}`,
+          description: "No target candidate opens pull requests into it. Fetch it, then try again.",
+          type: ToastType.ERROR,
+          action: null,
+        });
+        return;
       }
+      changeTarget(newTarget);
     },
-    [workspaceID, targetBranches],
+    [targetBranches, prBaseNames, changeTarget, setTargetChangeErrorToast],
   );
 
   // JSX and rendering logic
-  // Only show mismatch when the PR's target branch differs from the current
-  // workspace target, compared the way PR status matches them.
+  // Only show mismatch when the PR's base differs from the current workspace
+  // target's, by the backend's base names.
   const hasMismatch =
     currentTargetBranch !== null &&
     prStatus?.prState === "none" &&
     prStatus.mismatchedPrIid != null &&
     prStatus.mismatchedPrTargetBranch != null &&
-    prStatus.mismatchedPrTargetBranch !== toPrBaseRefName(currentTargetBranch);
+    isPrBaseOtherThanTarget({
+      prBaseName: prStatus.mismatchedPrTargetBranch,
+      targetRef: currentTargetBranch,
+      prBaseNames,
+    });
   // Stable reference so the useMemo inside TargetBranchSelector doesn't thrash.
   const mismatchForSelector = useMemo(
     () =>
       hasMismatch
         ? {
-            targetBranch: prStatus.mismatchedPrTargetBranch!,
+            prBaseName: prStatus.mismatchedPrTargetBranch!,
             badge: {
               text: `PR #${prStatus.mismatchedPrIid}`,
               tooltip: "Open PR targets this branch",
@@ -201,10 +180,18 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
   const canCreatePr = gitProvider !== null;
   const isMismatched = mismatchForSelector != null;
 
+  const vcs = workspaceVcsOf(workspace);
+
   // Surface the workspace's init mode next to the branch — but only for the
   // non-default strategies (worktree is the default and stays unlabeled).
   const modeStrategy = workspace.initializationStrategy;
   const shouldShowModeBadge = modeStrategy !== WorkspaceInitializationStrategy.WORKTREE;
+  const modeBadgeTooltip = MODE_BADGE_TOOLTIP[modeStrategy];
+  const modeBadge = (
+    <Badge size="1" color="gray" variant="solid" data-testid={ElementIds.TASK_MODE_BADGE}>
+      {MODE_BADGE_LABEL[modeStrategy]}
+    </Badge>
+  );
 
   return (
     <div
@@ -240,45 +227,32 @@ const WorkspaceHeaderComponent = (): ReactElement | null => {
         </Text>
       )}
 
-      {/* Branch pill: a real button so it is focusable and Enter/Space-activatable
-          for free; the visible label is the branch name, so the aria-label spells
-          out what pressing it does. */}
-      {identityLabel.status === "READY" ? (
-        <Tooltip
-          content={isCopied ? "Copied!" : "Workspace branch — click to copy"}
-          open={isCopied || undefined}
-          side="bottom"
-        >
-          <button
-            type="button"
-            className={styles.branchSection}
-            onClick={handleCopyBranch}
-            aria-label={`Copy branch name ${identityLabel.text}`}
-            data-testid={ElementIds.BRANCH_NAME}
-          >
-            <identityLabel.icon size={12} className={styles.branchIcon} />
-            <span className={styles.branchName}>{identityLabel.text}</span>
-          </button>
-        </Tooltip>
-      ) : identityLabel.status === "LOADING" ? (
-        <Skeleton width="160px" height="16px" />
-      ) : null}
+      <WorkspaceIdentityPill workspaceId={workspaceID} />
 
       {/* Workspace init-mode badge (non-default modes only). */}
-      {shouldShowModeBadge && (
-        <Badge size="1" color="gray" variant="solid" data-testid={ElementIds.TASK_MODE_BADGE}>
-          {MODE_BADGE_LABEL[modeStrategy]}
-        </Badge>
-      )}
+      {shouldShowModeBadge &&
+        (modeBadgeTooltip === null ? (
+          modeBadge
+        ) : (
+          <Tooltip content={modeBadgeTooltip} side="bottom">
+            {modeBadge}
+          </Tooltip>
+        ))}
 
       {/* Arrow + target branch */}
       <span className={styles.arrowSeparator}>&rarr;</span>
-      <Tooltip content="Target branch" side="bottom" open={isTargetBranchOpen ? false : undefined}>
+      <Tooltip
+        content={vcs === "jj" ? "Target bookmark" : "Target branch"}
+        side="bottom"
+        open={isTargetBranchOpen ? false : undefined}
+      >
         <span>
           <TargetBranchSelector
+            vcs={vcs}
             currentTargetBranch={currentTargetBranch}
             targetBranches={targetBranches}
-            onBranchChange={handleTargetBranchChange}
+            prBaseNames={prBaseNames}
+            onBranchChange={changeTarget}
             onOpenChange={setIsTargetBranchOpen}
             variant={isMismatched ? "amber" : "default"}
             mismatch={mismatchForSelector}

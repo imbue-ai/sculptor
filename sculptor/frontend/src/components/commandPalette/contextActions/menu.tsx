@@ -1,18 +1,29 @@
 import { ContextMenu, DropdownMenu } from "@radix-ui/themes";
-import { useStore } from "jotai";
-import { Copy, FolderOpenIcon, GitBranch, Stethoscope } from "lucide-react";
+import { useAtomValue, useStore } from "jotai";
+import type { LucideIcon } from "lucide-react";
+import { Bookmark, Copy, FolderOpenIcon, GitBranch, GitCommitVertical, Stethoscope } from "lucide-react";
 import type { ComponentType, ReactElement, ReactNode } from "react";
 import { Fragment } from "react";
 
 import { ElementIds, type ExternalApp, type Workspace } from "../../../api";
 import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
+import { workspaceJjStateAtomFamily } from "../../../common/state/atoms/workspaceJjState.ts";
 import { useWorkspaceIdentityLabel } from "../../../common/state/hooks/useWorkspaceIdentity.ts";
+import { workspaceVcsOf } from "../../../common/utils/workspaceVcs.ts";
 import { pendingWorkspaceRenameIdAtom, renamingWorkspaceIdAtom } from "./atoms/contextActions.ts";
 import type { WorkspaceAction } from "./types/contextActions.ts";
 
 /** Pixel size shared by every icon rendered in these context menus. */
 const ICON_SIZE = 14;
+
+/** A "Copy …" row for one of the names a workspace's checkout goes by; disabled while `text` is unknown. */
+type IdentityCopyItem = {
+  label: string;
+  icon: LucideIcon;
+  text: string | null;
+  testId?: string;
+};
 
 /**
  * The Radix menu primitives the workspace menu body renders through.
@@ -143,7 +154,27 @@ const useWorkspaceMenuItems = (
   },
 ): Array<ReactElement> => {
   const identityLabel = useWorkspaceIdentityLabel({ workspaceId: workspace.objectId });
-  const branch = identityLabel.status === "READY" ? identityLabel.copyText : null;
+  const jjState = useAtomValue(workspaceJjStateAtomFamily(workspace.objectId));
+  // A jj workspace's bookmark takes the branch row's place.
+  const identityCopyItems: ReadonlyArray<IdentityCopyItem> =
+    workspaceVcsOf(workspace) === "jj"
+      ? [
+          {
+            label: "Copy bookmark",
+            icon: Bookmark,
+            text: jjState?.primaryBookmark ?? null,
+            testId: ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH,
+          },
+          { label: "Copy change id", icon: GitCommitVertical, text: jjState?.workingCopyChangeId ?? null },
+        ]
+      : [
+          {
+            label: "Copy branch",
+            icon: GitBranch,
+            text: identityLabel.status === "READY" ? identityLabel.copyText : null,
+            testId: ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH,
+          },
+        ];
   const isOpenInVisible =
     openInRuntime != null && openInRuntime.canOpenInOS() && openInRuntime.isMacUi() && getOpenWithItems().length > 0;
   // Render the Open-in submenu inline, immediately after the `open_pr`
@@ -165,9 +196,9 @@ const useWorkspaceMenuItems = (
     </menu.Sub>
   ) : null;
   // Injected into the "Rename" group (right after the rename row, no leading
-  // separator). The name lives on the workspace object and the branch is a
-  // plain atom read (pushed over the WebSocket), so both copy synchronously;
-  // only the opaque id is tucked away in Diagnostics.
+  // separator). The name lives on the workspace object and the rest are plain
+  // atom reads (pushed over the WebSocket), so all copy synchronously; only the
+  // opaque id is tucked away in Diagnostics.
   const copyGroup = (
     <>
       <menu.Item
@@ -181,17 +212,20 @@ const useWorkspaceMenuItems = (
       >
         <Copy size={14} /> Copy workspace name
       </menu.Item>
-      <menu.Item
-        data-testid={ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH}
-        disabled={!branch}
-        onSelect={async (): Promise<void> => {
-          if (branch) {
-            await navigator.clipboard.writeText(branch);
-          }
-        }}
-      >
-        <GitBranch size={14} /> Copy branch
-      </menu.Item>
+      {identityCopyItems.map(({ label, icon: Icon, text, testId }) => (
+        <menu.Item
+          key={label}
+          data-testid={testId}
+          disabled={!text}
+          onSelect={async (): Promise<void> => {
+            if (text) {
+              await navigator.clipboard.writeText(text);
+            }
+          }}
+        >
+          <Icon size={14} /> {label}
+        </menu.Item>
+      ))}
       <menu.Sub>
         <menu.SubTrigger data-testid={ElementIds.TAB_CONTEXT_MENU_DIAGNOSTICS}>
           <Stethoscope size={14} /> Diagnostics

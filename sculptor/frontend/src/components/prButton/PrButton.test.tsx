@@ -10,6 +10,7 @@ import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { commitPromptSendFailedToastAtom } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { workspaceTargetBranchesAtomFamily } from "~/common/state/atoms/workspaceTargetBranches.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
@@ -89,32 +90,59 @@ describe("PrButton without a target branch", () => {
 });
 
 describe("PrButton offers to adopt an existing PR only when it targets another branch", () => {
-  const renderWithNoPr = (targetBranch: string, mismatchedPrTargetBranch: string): void => {
-    renderWithProviders(<PrButton workspaceId={WORKSPACE_ID} targetBranch={targetBranch} gitProvider="github" />, {
-      store: storeWith(prStatus({ prState: "none", mismatchedPrIid: 7, mismatchedPrTargetBranch })),
+  const renderWithNoPr = (inputs: {
+    targetBranch: string;
+    prBaseNames: Record<string, string>;
+    mismatchedPrTargetBranch: string;
+  }): void => {
+    const store = storeWith(
+      prStatus({ prState: "none", mismatchedPrIid: 7, mismatchedPrTargetBranch: inputs.mismatchedPrTargetBranch }),
+    );
+    store.set(workspaceTargetBranchesAtomFamily(WORKSPACE_ID), {
+      workspaceId: WORKSPACE_ID,
+      targetBranches: Object.keys(inputs.prBaseNames),
+      prBaseNames: inputs.prBaseNames,
     });
+    renderWithProviders(
+      <PrButton workspaceId={WORKSPACE_ID} targetBranch={inputs.targetBranch} gitProvider="github" />,
+      { store },
+    );
   };
 
   it("offers the existing PR when it targets a different branch", () => {
-    renderWithNoPr("origin/main", "release");
+    renderWithNoPr({
+      targetBranch: "origin/main",
+      prBaseNames: { "origin/main": "main" },
+      mismatchedPrTargetBranch: "release",
+    });
 
     expect(screen.getByTestId(ElementIds.PR_BUTTON_ASSIGN)).toBeTruthy();
   });
 
-  it("offers to create a PR when the existing PR targets the remote target's branch", () => {
-    renderWithNoPr("origin/main", "main");
+  it("offers to create a PR when the existing PR targets the target's base", () => {
+    renderWithNoPr({
+      targetBranch: "origin/main",
+      prBaseNames: { "origin/main": "main" },
+      mismatchedPrTargetBranch: "main",
+    });
 
     expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeTruthy();
   });
 
-  it("keeps offering the reported PR when the target is a local branch with a slash", () => {
-    // PR status matches `feature/login` as `login`, so it reports the PR based
-    // on `feature/login` as a mismatch. Answering that with "Create PR" would
-    // hide the PR that already exists.
-    renderWithNoPr("feature/login", "feature/login");
+  it("takes the target's base from the backend, which keeps a local branch's first segment", () => {
+    renderWithNoPr({
+      targetBranch: "feature/login",
+      prBaseNames: { "feature/login": "feature/login" },
+      mismatchedPrTargetBranch: "feature/login",
+    });
+
+    expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeTruthy();
+  });
+
+  it("keeps offering the reported PR while the backend has not named the target's base", () => {
+    renderWithNoPr({ targetBranch: "origin/main", prBaseNames: {}, mismatchedPrTargetBranch: "main" });
 
     expect(screen.getByTestId(ElementIds.PR_BUTTON_ASSIGN)).toBeTruthy();
-    expect(screen.queryByTestId(ElementIds.PR_BUTTON_CREATE)).toBeNull();
   });
 });
 

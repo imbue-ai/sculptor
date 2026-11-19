@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RecentWorkspaceResponse, Workspace } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
+import { workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState.ts";
 import { updateWorkspacesAtom } from "~/common/state/atoms/workspaces.ts";
 import { recentWorkspacesQueryKey } from "~/common/state/queryClient.ts";
 
@@ -20,6 +21,7 @@ type WorkspaceFixture = {
   description: string;
   requestedBranchName: string | null;
   listedBranch: string | null;
+  initializationStrategy?: WorkspaceInitializationStrategy;
 };
 
 // Every fixture was created from `main`; none of them is on it.
@@ -29,7 +31,7 @@ const listed = (fixture: WorkspaceFixture): RecentWorkspaceResponse => ({
   objectId: fixture.id,
   projectId: "proj-1",
   description: fixture.description,
-  initializationStrategy: WorkspaceInitializationStrategy.WORKTREE,
+  initializationStrategy: fixture.initializationStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
   sourceBranch: SOURCE_BRANCH,
   isDeleted: false,
   createdAt: "2024-01-01T00:00:00.000Z",
@@ -45,7 +47,7 @@ const streamed = (fixture: WorkspaceFixture): Workspace => ({
   projectId: "proj-1",
   organizationReference: "org-1",
   description: fixture.description,
-  initializationStrategy: WorkspaceInitializationStrategy.WORKTREE,
+  initializationStrategy: fixture.initializationStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
   sourceBranch: SOURCE_BRANCH,
   requestedBranchName: fixture.requestedBranchName,
   isOpen: false,
@@ -121,6 +123,38 @@ describe("RecentWorkspaces search", () => {
 
     search(SOURCE_BRANCH);
 
+    expect(visibleRowNames()).toEqual([]);
+  });
+
+  it("finds a jj workspace by its primary bookmark, not the name it requested", () => {
+    const store = createStore();
+    store.set(workspaceJjStateAtomFamily("ws-jj"), {
+      workspaceId: "ws-jj",
+      workingCopyChangeId: "kxqpmzvyrstuwlnokxqpmzvyrstuwlno",
+      workingCopyChangeIdPrefixLength: 2,
+      workingCopyDescription: "",
+      isWorkingCopyEmpty: false,
+      bookmarks: ["dev/bookmarked"],
+      primaryBookmark: "dev/bookmarked",
+      unbookmarkedRevisionCount: 0,
+      hasConflict: false,
+      isDivergent: false,
+      isWorkingCopyStale: false,
+    });
+    renderRecentWorkspaces(store, [
+      {
+        id: "ws-jj",
+        description: "Bookmarked",
+        requestedBranchName: "dev/requested-name",
+        listedBranch: null,
+        initializationStrategy: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+      },
+    ]);
+
+    search("dev/bookmarked");
+    expect(visibleRowNames()).toEqual(["Bookmarked"]);
+
+    search("dev/requested-name");
     expect(visibleRowNames()).toEqual([]);
   });
 });

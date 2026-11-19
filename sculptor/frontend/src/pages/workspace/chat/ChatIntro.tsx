@@ -1,10 +1,11 @@
-import { CircleHelpIcon, GitBranchIcon, SparklesIcon, UsersIcon } from "lucide-react";
+import { CircleHelpIcon, GitBranchIcon, InfoIcon, SparklesIcon, UsersIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { useAgent } from "~/common/state/hooks/useAgent.ts";
 import { useProject } from "~/common/state/hooks/useProjects";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
+import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
 
 import { useChatAgent } from "./ChatAgentContext.tsx";
 import styles from "./ChatIntro.module.scss";
@@ -40,6 +41,7 @@ export const ChatIntro = (): ReactElement => {
   const agent = useAgent(agentId);
 
   const isInPlace = workspace?.initializationStrategy === WorkspaceInitializationStrategy.IN_PLACE;
+  const isJj = workspace !== null && workspaceVcsOf(workspace) === "jj";
   const projectName = project?.name ?? "";
   const sourceBranch = workspace?.sourceBranch;
   const createdAt = workspace?.createdAt;
@@ -68,6 +70,12 @@ export const ChatIntro = (): ReactElement => {
           {createdAt && <> at {formatTimestamp(createdAt)}</>}
         </span>
       </div>
+      {isJj && (
+        <div className={styles.detailRow}>
+          <InfoIcon size={DETAIL_ICON_SIZE_PX} className={styles.detailIcon} />
+          <span>This workspace has no git inside. Agents use jj for version control here.</span>
+        </div>
+      )}
       <div className={styles.detailRow}>
         <SparklesIcon size={DETAIL_ICON_SIZE_PX} className={styles.detailIcon} />
         <span>

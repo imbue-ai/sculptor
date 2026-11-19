@@ -57,7 +57,9 @@ const renderBoard = (): void => {
 const workspace = (id: string, description: string): WorkspaceView => ({
   id,
   description,
+  vcs: "git",
   branch: null,
+  bookmarks: [],
   targetBranch: null,
   pullRequestUrl: null,
 });

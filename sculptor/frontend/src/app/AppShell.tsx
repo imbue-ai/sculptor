@@ -40,6 +40,7 @@ import {
   workspaceDeleteErrorToastAtom,
   workspaceOpenCloseErrorToastAtom,
   workspaceRenameErrorToastAtom,
+  workspaceTargetChangeErrorToastAtom,
 } from "~/common/state/atoms/toasts.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
@@ -68,6 +69,11 @@ const APP_TOASTS: ReadonlyArray<{ key: string; toastAtom: AtomToastAtom; duratio
   { key: "workspace-delete-error", toastAtom: workspaceDeleteErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "workspace-open-close-error", toastAtom: workspaceOpenCloseErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
   { key: "workspace-rename-error", toastAtom: workspaceRenameErrorToastAtom, duration: ERROR_TOAST_DURATION_MS },
+  {
+    key: "workspace-target-change-error",
+    toastAtom: workspaceTargetChangeErrorToastAtom,
+    duration: ERROR_TOAST_DURATION_MS,
+  },
   { key: "mention-chip-unreachable", toastAtom: mentionChipUnreachableToastAtom },
   { key: "terminal-prompt-rejected", toastAtom: terminalPromptRejectedToastAtom },
   { key: "commit-prompt-send-failed", toastAtom: commitPromptSendFailedToastAtom },
