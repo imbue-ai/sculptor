@@ -3,8 +3,9 @@
 A test points the backend at the pinned jj with `use_jj_binary` and colocates the
 factory's base repository before it spawns the instance, then creates jj
 workspaces through `POST /api/v1/workspaces`, as `sculpt workspace create
---strategy jj` does. The `jj_isolated_env` fixture gives the test process, and so
-the backend and its agents, an empty jj user config and a test identity.
+--strategy jj` does. Tests also request the `jj_isolated_env` fixture, so the
+backend and its agents, which inherit the test process's environment, read none
+of the developer's own configuration.
 """
 
 import json

@@ -189,11 +189,7 @@ export const invalidateWorkspaceGitQueries = (workspaceId: string): void => {
   void queryClient.invalidateQueries({ queryKey: workspaceGitQueryKeyPrefix(workspaceId) });
 };
 
-/**
- * Mark a jj workspace's cached revisions stale so any active observer refetches.
- * Triggered by a change in the workspace's streamed jj state: a bookmark or a
- * description can change while the diff, and so `diffUpdatedAt`, stays the same.
- */
+/** Mark a jj workspace's cached revisions stale so any active observer refetches. */
 export const invalidateWorkspaceRevisionsQueries = (workspaceId: string): void => {
   void queryClient.invalidateQueries({ queryKey: workspaceRevisionsQueryKeyPrefix(workspaceId) });
 };

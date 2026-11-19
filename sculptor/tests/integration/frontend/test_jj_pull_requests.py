@@ -39,7 +39,7 @@ from sculptor.testing.user_stories import user_story
 
 _BOOKMARK = "jj-pull-request"
 _NAME_WITH_OWNER = "sculptor-tests/jj-fixture"
-# The poller's floor; the default interval would leave the test waiting on the next round.
+# Well under the default, so the open pull request shows within the test's wait.
 _PR_POLL_INTERVAL_SECONDS = 10
 
 # Paths are injected with `.replace(...)`, so the JSON braces need no escaping.
