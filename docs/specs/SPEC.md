@@ -159,7 +159,7 @@ persistence** records everything.
 | **`sculpt` CLI** | First-class headless surface (terminal, scripts, CI) for driving the same local Sculptor as the GUI. See §8. |
 | **Local backend server** | The single local service both surfaces talk to — exposes the HTTP API and the live update stream, owns the Project/Workspace/Agent domain, and derives the shaped UI state the frontend renders. |
 | **Agent runner** | Launches and supervises the underlying agent CLI (Claude or Pi) for each Agent, relaying its messages, status, and tool activity back through the backend. |
-| **Isolation layer** | Backs each Workspace with an isolated copy of the repo — **worktree**, **clone**, or **in-place** — all running locally on your machine. |
+| **Isolation layer** | Backs each Workspace with an isolated copy of the repo — **worktree**, **jj workspace**, **clone**, or **in-place** — all running locally on your machine. |
 | **Custom backend (experimental)** | An opt-in escape hatch that relocates the *whole* backend off-host: a user-supplied launcher command (e.g. Docker, SSH, a VM) that the app connects to over a printed URL. It is **not** a per-workspace isolation mode — it moves the entire service, not one workspace's checkout (→ §7.12, §9.1). |
 | **Local persistence** | A local store (an append-only snapshot log plus a materialized current-state view, with versioned migrations) holding Projects, Workspaces, Agents, and conversation history. |
 
@@ -176,7 +176,7 @@ here — they live in §5 and §10.
 **Project (aka Repo).** A connected git repository — "Project" and "Repo" are the same thing; a
 project *is* the repo you pointed Sculptor at. It is the parent of its workspaces and carries
 repo-level settings the user can configure: a default system prompt, an optional workspace **setup
-command**, and a branch-naming pattern.
+command**, a branch-naming pattern, and whether its new workspaces are **jj workspaces** (→ §7.14).
 
 **Workspace.** An isolated copy of a project's repository where agents do their work, so they never
 edit your own checkout directly. By default a workspace is a **git worktree** — it shares your repo's
@@ -185,7 +185,9 @@ them yourself. This is the standard mode in both the GUI and `sculpt run`. Two o
 **experimental** opt-ins (→ §7.12): a full **clone** (a separate clone whose remotes mirror your
 repo's, where the agent's commits stay in the clone until you push the branch back — to a remote you
 share with your local repo, or directly to your on-disk repo) and **in-place** (the agent
-works directly in your checkout, with no isolation). A
+works directly in your checkout, with no isolation). A repository colocated with **jj (Jujutsu)** that
+has jj turned on for new workspaces creates a **jj workspace** in place of a worktree: a second jj
+working copy of the repository, named by a **bookmark** rather than a branch (→ §7.14). A
 workspace's mode is fixed for its lifetime.
 
 A workspace also has a source branch, a **target branch** (what its changes and any PR are measured
@@ -215,7 +217,9 @@ Changes view (§7.5). Just after the agent edits files, the diff may briefly sho
 
 **Commit / Branch / Pull Request.** The git outputs of a workspace. A workspace owns a branch; the
 agent or user makes commits on it; and a workspace can open a **pull request** against its target
-branch, after which Sculptor tracks the PR's CI and review status (and can "babysit" CI → §7.6).
+branch, after which Sculptor tracks the PR's CI and review status (and can "babysit" CI → §7.6). In a
+jj workspace the same roles are played by **revisions** and a **bookmark**, and the pull request is the
+bookmark's (→ §7.14).
 
 **Skill.** An invocable, named workflow — bundled (the spec → architect → plan → build → review
 pipeline, plus `fix-bug`, `mock`, and `setup-repo`) or experimental (`handoff`, `stack`). Skills are invoked as
@@ -294,7 +298,8 @@ terminal agent, Pi, or a registered agent → §7.4). By default
 the workspace is a **worktree**: it shares your repo's history but gets its own branch, so the
 agent's commits show up in your repo right away and you can push them yourself. (The older **clone**
 mode and the unisolated **in-place** mode are experimental opt-ins that, once enabled in Settings,
-add a mode picker to this form — see §7.12.) Each open workspace is a **tab**.
+add a mode picker to this form — see §7.12. A repository that uses jj offers a **jj workspace** in
+place of the worktree — see §7.14.) Each open workspace is a **tab**.
 
 Inside a workspace, a header **banner** shows where you are: the repo, the workspace's branch (which
 you can copy), and a one-glance **diff summary**. The banner also shows the workspace's **target
@@ -303,8 +308,9 @@ open PR's target wouldn't match. The selector works for **every repo regardless 
 repo with a remote offers its remote-tracking branches as targets, while a repo with no remote falls
 back to offering the repo's own local branches. (Opening a pull request, by contrast, requires
 a GitHub `origin` → §7.6 — the target-branch concept is independent of the PR surface.)
-A non-default mode (clone or in-place) is shown as a strategy badge, and the banner collapses
-progressively as space tightens.
+A non-default mode (clone, in-place, or jj) is shown as a strategy badge, and the banner collapses
+progressively as space tightens. A jj workspace's banner names its bookmark rather than a branch
+(→ §7.14).
 
 If the project defines a **setup command**, it runs when the workspace is created; its progress and
 logs are surfaced, with controls to cancel or re-run, and the workspace's diff isn't meaningful
@@ -481,7 +487,8 @@ jump straight there.
 
 When an agent edits files, you review the result in the **Files** panel, which sits at the top-left
 of the workspace and carries three tabs: **Browse** (the workspace's full file tree, for opening any
-file), **Changes** (every modified file), and **Commits** (the workspace's commit history). The
+file), **Changes** (every modified file), and **Commits** (the workspace's commit history; **Revisions**
+in a jj workspace, whose **Uncommitted** scope is likewise **Working copy** → §7.14). The
 Changes and Commits tabs show a count badge when there's something to see. Nothing leaves the
 workspace until you choose to commit (→ §7.6 Pull Requests).
 
@@ -537,7 +544,7 @@ branch you can open a **pull request** straight from the workspace's top bar wit
 Clicking it pushes the branch and asks the agent to open the request against the workspace's target
 branch. A workspace with no target branch (Sculptor found no default branch when it created the
 workspace) shows **Create PR** disabled, and its target-branch selector reads **No target branch** in a
-warning color until you pick one. If you'd rather adjust how that's done first, the button's chevron menu offers **Edit
+warning color until you pick one. If you'd rather adjust how that's done first, right-clicking the button offers **Edit
 prompt...**, which opens a dialog to revise the PR-creation prompt before you create anything. While
 Sculptor is looking up status, the button shows a spinner with "Checking PR...".
 
@@ -676,12 +683,18 @@ which zone each panel lives in, per-panel hotkeys, and which non-builtin panels 
 reset-to-defaults. **File Browser** sets diff defaults (split versus unified, line wrapping, the
 default split ratio), tab-close behavior, and the commit-message prompt.
 
-The repo-facing sections are **Repositories**, **Git**, and **CI**. Repositories lists your connected
-repos with their paths and agent counts and lets you add or remove them and configure each one's
-**setup command** and **branch-naming pattern**. Git holds the cross-repo defaults: the pull-request
+The repo-facing sections are **Repositories**, **Git**, **Jujutsu**, and **CI**. Repositories lists
+your connected repos with their paths and agent counts and lets you add or remove them and configure
+each one's **setup command**, **branch-naming pattern**, and its two **jj switches** — whether it is a
+colocated jj repository, and whether its new workspaces use jj — with a "jj" badge on a repository
+whose new workspaces are jj workspaces (→ §7.14). Git holds the cross-repo defaults: the pull-request
 creation prompt, PR-status polling and its interval (plus a multiplier that throttles polling for
-closed workspaces), the global
-branch-naming pattern, and the branch-deletion policy. CI configures the **CI babysitter** that
+closed workspaces), the global naming pattern for a new workspace's branch or jj bookmark, and the
+**Branch and bookmark deletion when a workspace is removed** policy, which covers a worktree
+workspace's branch and a jj workspace's bookmarks. **Jujutsu** manages the optional jj binary
+(managed or custom path, its status, the minimum and detected versions), jj's author identity, the
+largest new file jj snapshots, the jj variants of the commit, PR-creation and CI-babysitter prompts,
+and the list of repositories that use jj (→ §7.14). CI configures the **CI babysitter** that
 watches pipelines and asks an agent to fix failures — handing the fix prompt to the agent only once
 the workspace's agents are **idle**, so a failed pipeline never interrupts an agent mid-turn. The CI
 controls are a toggle, a retry cap, a **babysitter-agent selector** (which agent type the babysitter
@@ -811,6 +824,126 @@ whatever code it holds at load time — adding an extension means running that c
 add sources you trust (the extension trust model is documented in `SECURITY.md`; outbound links an
 extension opens are restricted to `http(s)`).
 
+### 7.14 Jujutsu (jj) workspaces
+
+Sculptor can back a repository's new workspaces with **jj (Jujutsu)** instead of git. jj is optional:
+Sculptor needs no jj until a repository uses it, and a repository uses it only after you turn it on.
+In such a repository each new workspace is a **jj workspace** — a second jj working copy of the
+repository, with a `.jj` and no `.git`, so git commands fail inside it and agents work with jj. It
+stands in for the worktree: it shares the repository's history, so its revisions are visible from your
+own checkout, and it is named by a **bookmark** rather than a branch. Git hooks do not run in it. A
+workspace keeps its kind for its lifetime, so turning jj off for a repository affects only the
+workspaces created after that.
+
+**Setting up jj.** The **Jujutsu** settings section (→ §7.10) opens on a callout that says whether jj is
+usable — "jj {version} is available, managed by Sculptor." — or names what stops it and how to fix it:
+jj is not installed, does not run, is an unsupported version, runs a git older than jj accepts (or finds
+none), or has **no author identity**; or the user's own login shell runs a different jj outside the
+supported versions — which blocks jj because that jj shares the colocated repository. jj is usable only
+when none of those holds. The repository's jj switches, the colocation dialog and an agent that cannot
+start give the same reason sentence; the Add Workspace form says only that jj is unavailable.
+Sculptor accepts the pinned jj release or any later 0.x release; it can download and manage a pinned
+copy — first only when you click **Install jj**, then replacing it at startup if it is broken or out of
+range — or use a jj on your `PATH` or at a custom path. When the login shell runs a different jj, the
+section lists it as **jj in your terminal**, since workspace terminals run it while
+agents run Sculptor's. When jj has no author identity, the section offers a form, prefilled from your
+global git identity, that writes `user.name` and `user.email` to your jj user config. A **Re-check**
+button, and opening the section, check again for changes made outside Sculptor.
+
+**Turning jj on for a repository.** Each repository's configuration in the **Repositories** settings
+section has a Jujutsu group with two switches, both disabled — with the tooltip "Ensure that jujutsu VCS
+is available in the settings panel to use these features" and the reason, an "Open Jujutsu settings"
+link, and a Re-check button — while jj is unusable:
+
+- **Is this repository a colocated jj repository?** reflects whether the repository has a `.jj` beside its
+  `.git`. Turning it on opens an **Initialize jujutsu colocation** dialog that says Sculptor will run
+  `jj git init --colocate` in the repository, that your files, branch and HEAD stay as they are, and that
+  git afterwards shows untracked files as added because jj records them. The dialog first checks the
+  repository: git submodules, Git LFS, a `.jj` not colocated with the `.git`, and a git merge, rebase,
+  cherry-pick or revert in progress block it; git hooks and a sparse checkout draw a warning; and
+  uncommitted changes draw a note that they become jj's working-copy commit. While jj runs the switch
+  reads "Initializing jujutsu colocation"; on success it locks on, and a failure shows jj's error with a
+  **Retry**. While jj is usable, a colocated repository's switch is locked on: Sculptor never undoes a
+  colocation and never deletes the repository's `.jj` directory.
+- **Use jj for new workspaces created in this repository** decides whether new workspaces are jj
+  workspaces. It needs a colocation, turns on by itself when Sculptor colocates the repository, starts off
+  for a repository you colocated yourself, and turns itself off if the colocation later disappears.
+  A repository that creates jj workspaces — the switch on, colocated, and jj usable — shows a **jj**
+  badge.
+
+**Creating a jj workspace.** In a repository that uses jj, the Add Workspace form offers **jj workspace**
+in place of Worktree — shown as a chip linking to the repository's settings when it is the only mode, or
+alongside Clone and In-place when those are enabled (→ §7.12). The name field becomes **Bookmark name
+(required)**, auto-filled from the naming pattern, and the source picker lists the repository's local and
+remote bookmarks (`main`, `main@origin`), reading "same as target" until you pick one. The workspace's
+target starts as the repository's trunk bookmark (usually `main@origin`), and its working copy starts as
+a new, empty revision on the source, or on the target when no source is picked. The sidebar's **+**
+creates a jj workspace the same way, and `sculpt workspace create --strategy jj` and
+`sculpt run --strategy jj` do from the CLI (→ §8). While jj is unusable, such a repository creates no
+jj workspaces — the form shows "This repository creates jj
+workspaces, and jj is unavailable." with an "Open Jujutsu settings" link, and the sidebar's **+** opens
+the form instead of creating one; Sculptor never falls back to a worktree. With no setup command of its
+own, a jj workspace runs `jj git fetch --remote origin 2>/dev/null || true` on creation.
+
+**Inside a jj workspace.** The banner (→ §7.2) shows a "jj" strategy badge and, in place of the branch
+name, an **identity pill** naming the workspace's primary bookmark, with "+N" for its other bookmarks,
+"↑N" for described revisions above the bookmark, and a "conflict" badge. Until a bookmark exists it shows
+the requested bookmark name greyed out, and with neither it shows the working copy's change id and
+description. Hovering opens a card with the bookmarks, the working copy's change id, commit id and
+description, its flags (empty, conflict, divergent, stale), and the target; clicking copies the bookmark,
+or the change id. The target selector lists the repository's bookmarks, reading **No target bookmark**
+when none is set. At the end of each Claude or Pi agent turn, while the workspace has no bookmark, Sculptor creates
+the requested bookmark on the newest described revision — if exactly one is newest and the name is free.
+Sculptor never moves a bookmark afterwards; agents are told to keep it on their newest described change,
+and a Claude agent is reminded when described work sits above its bookmark or has none. Claude and Pi
+agents in a jj workspace are told that git fails there, are asked to use the bundled jj skill before any
+version-control command; chat agents run with jj's editor disabled, and are told to pass `-m`
+wherever jj would ask for a description, and to stop and name the jj they found if `jj --version` is
+older than Sculptor supports.
+
+**Changes, revisions and commits.** The Files panel (→ §7.5) renames **Commits** to **Revisions**: a
+list of the workspace's revisions from its fork point with the target up to the working copy, newest
+first, each showing its description's first line (or "(no description set)"), change id, file count and
+line stats, commit id, bookmarks, and badges for working copy, empty, conflict and divergent; clicking
+one lists its files and opens their diffs, and a footer marks the fork point. The **Uncommitted** scope
+becomes **Working copy** — the working-copy revision against its parent — while **All** covers everything
+since the fork point. **Discard changes** restores the file from the parent and notes that the
+discarded content stays recoverable from the jj operation log. **Commit** and **Create PR** (→ §7.6)
+send the jj commit and jj PR-creation prompts when set, else the git prompts, and Sculptor adds that the
+workspace has no git, the bookmark to set or push, and the branch the pull request opens into (`main`
+for a target of `main@origin`); with no target bookmark Create PR is disabled, its tooltip saying
+Sculptor couldn't find a target bookmark; their right-click menu's **Edit jj prompt...** opens the prompt in the
+Jujutsu settings section, and before a jj prompt is set **Edit prompt...** edits the git prompt with a
+link to set a jj one. The CI babysitter likewise sends its jj prompts when set, else the git ones, adding its own
+jj instructions that name the pull request's bookmark to move and push. Sculptor finds a jj workspace's pull request by its bookmarks.
+
+**Stale working copies.** When a jj operation elsewhere in the repository rewrites a workspace's
+working-copy revision, jj stops recording that workspace's file changes. The workspace then shows a
+banner explaining this with an **Update working copy** button; Sculptor never updates a stale working
+copy by itself, and an agent that hits one is told to update it, check the result, and tell you.
+
+**Large new files.** jj leaves a new file larger than its snapshot limit untracked, so it is in no diff,
+commit or push. Sculptor sets that limit to 10 MiB in jj workspaces, configurable as **Maximum new file
+size** in the Jujutsu section; an existing workspace picks up a changed value when Sculptor next resumes
+it. The Changes panel of a jj workspace lists such files, in both scopes, in a "jj left N new file(s)
+out" banner with each path, jj's reason, and an "Open Jujutsu settings" link; the banner updates whenever
+the workspace's diff is recomputed, such as after an agent changes files, and appears in no other view.
+
+**When jj becomes unusable.** Existing jj workspaces keep their files, but no agent starts in them and
+the setup command does not run until jj is usable again; an agent that cannot start shows **jj Not Available**
+with the reason and a "Go to Settings" link.
+
+**Pushing and your own checkout.** Agents are told never to push without your permission. A push from
+a jj workspace reaches the remote at once, but the pushed bookmark appears among your own checkout's
+git branches only after you next run a jj command there.
+
+**Deleting a jj workspace** removes its directory and tells jj to forget the workspace. Its own
+bookmarks — those on its revisions, never one named like the target or on another workspace's stack —
+follow the Git section's branch and bookmark deletion policy (Never keeps them, Delete if safe forgets
+the merged or already-pushed ones, Always forgets them all). Forgetting leaves the remote branch and the revisions
+in place. A folder inside a jj workspace given to Add Repository (or to `sculptor <path>`) adds the
+colocated repository the workspace belongs to.
+
 ## 8. The `sculpt` CLI  _(core product surface)_
 
 `sculpt` is a first-class way to drive Sculptor **headlessly** — from a terminal, a shell script, or
@@ -826,7 +959,7 @@ The CLI is organized into a handful of command groups, each mapping to a domain 
 | Group | What it's for |
 |---|---|
 | `sculpt repo` | List and show the **Projects (Repos)** Sculptor knows about — their paths and whether they're accessible. |
-| `sculpt workspace` | Create, list, show, rename, and delete **Workspaces**. Pick the isolation **strategy** (`--strategy`: `worktree`, `clone`, `in-place`); choose the source branch (`--branch`), a name for the workspace's new branch (`--branch-name`), its target (`--target-branch`), and a description (`--name`) at create time; `list` can span all repos (`--all`) or one (`--repo`), and `delete` takes `--yes`/`-y` to skip the prompt. |
+| `sculpt workspace` | Create, list, show, rename, and delete **Workspaces**. Pick the isolation **strategy** (`--strategy`: `worktree` by default, `clone`, `in-place`, or `jj` for a jj workspace → §7.14); choose the source branch (`--branch`; for `jj`, a bookmark such as `main@origin` or a full commit id, defaulting to the target), a name for the workspace's new branch, or a jj workspace's bookmark (`--branch-name`), its target (`--target-branch`), and a description (`--name`) at create time; `list` can span all repos (`--all`) or one (`--repo`), and `delete` takes `--yes`/`-y` to skip the prompt. |
 | `sculpt agent` | Manage **Agents** in a workspace: `create` one (with an opening `--prompt`, a `--model`, a `--name`, and a `--harness`), list (filter by status, scope with `--all` / `--repo` / `--workspace`), show, `send` a message (with `--model` and repeatable `--file` attachments), check `status`, read `messages` (`--limit`/`--tail`), `interrupt` a running one, rename, and delete. `send`, `status`, and `messages` all accept `--follow` to stream live. Choose the **model** (`haiku`, `sonnet`, `opus`, `fable` for the newest model of that family, as the Claude CLI resolves it; `sonnet[1m]` / `opus[1m]` are accepted synonyms; or a model id such as `claude-opus-5-5` for one version; with no `--model`, `create` uses the current pinned Opus) and the **harness** (`--harness`: `Claude`, `Pi`, `Terminal`, or a registered terminal agent by display name; omitting it uses your most-recently-used type — the same default the GUI's **+** button applies, and an explicit choice updates that MRU). |
 | `sculpt run` | One-shot convenience: from a single prompt, create a workspace **and** an agent in one step, optionally `--follow` its output live. Accepts the same workspace-creation flags as `sculpt workspace create` (`--strategy`, `--branch`, `--target-branch`, …) plus `--model`, `--file`, and `--harness`. Because `run` always sends a prompt, a terminal/registered harness is rejected here (use `sculpt agent create` for those). |
 | `sculpt signal` | Run from **inside an agent's environment** to report state back to Sculptor — `busy`, `idle`, `waiting`, `files-changed` (refreshes the diff), or `session-id <id>` (which takes the session identifier as an argument). Lets terminal-based agents light up the same status indicators the GUI shows. |
@@ -868,8 +1001,14 @@ hold across every workspace and agent.
 
 By default an agent works in an **isolated copy** of your repository, so it can read, edit, and run
 real commands freely without ever touching your own checkout — the files you have open stay exactly as
-you left them. Working **in place** in your actual checkout is the deliberate, opt-in exception. An
-agent's edits are committed onto a **workspace branch** that belongs to that workspace; nothing is
+you left them. Working **in place** in your actual checkout is the deliberate, opt-in exception. A
+**jj workspace** isolates the same way a worktree does, with a working copy of its own, but it shares
+the repository's jj history with your checkout: creating one records your checkout's uncommitted edits
+in its jj working-copy commit, and the workspace's bookmarks live in the shared repository. Colocating
+a repository with jj adds a `.jj` beside your `.git`; Sculptor does that only when you confirm it, and
+never undoes a colocation (→ §7.14). An
+agent's edits are committed onto a **workspace branch** (in a jj workspace, its revisions and
+bookmark) that belongs to that workspace; nothing is
 ever pushed to a remote, and no pull request is opened, unless you take that action yourself. The
 trust posture is straightforward: agents run real shell commands inside their workspace and can do
 real work there, while you remain the gatekeeper for anything that reaches the outside world — pushes,
@@ -1052,7 +1191,8 @@ restart** in place — no manual re-download required.
 #### 11.4 Help docs
 
 User-facing help lives under **`docs/help/`** — getting started, workspaces, chat, terminal, agents,
-changes, pull requests, skills, the command palette, settings, and the experimental container backend.
+changes, pull requests, skills, Jujutsu (jj) workspaces, the command palette, settings, and the
+experimental container backend.
 These docs are **audited and refreshed for each release** so they match the shipped version, including
 re-captured screenshots.
 
@@ -1080,7 +1220,19 @@ inconsistent about the §9-product-behavior vs. §10-engineering-substrate line:
 The core nouns are defined in §6 (Core Domain Model). This is a quick reference for secondary terms
 used throughout:
 
-- **Target branch** — the branch a workspace's changes and pull request are measured against.
+- **Target branch** — the branch a workspace's changes and pull request are measured against. In a
+  jj workspace it is a **target bookmark** such as `main@origin`.
+- **jj (Jujutsu)** — an optional version control system that stores its history in a git repository.
+- **Colocated repository** — a repository with a `.jj` beside its `.git`, so both git and jj work in
+  it; the precondition for jj workspaces.
+- **jj workspace** — a second jj working copy of a colocated repository, with no `.git` of its own;
+  the workspace kind a repository with jj turned on creates instead of a worktree.
+- **Bookmark** — jj's name for a revision; pushed, it becomes a git branch. A jj workspace is named by
+  one.
+- **Revision** — a jj change. The workspace's **working copy** is itself a revision, which every jj
+  command first updates with the files' changes.
+- **Stale working copy** — a jj workspace whose revision another jj operation rewrote; jj records no
+  changes there until the working copy is updated.
 - **Plan mode** — an agent investigates and proposes a plan for your approval before changing files.
 - **Fast mode** — runs the same model faster at a higher per-token price, on the models that support it.
 - **Effort** — how much thinking an agent spends per step (Low … Max).

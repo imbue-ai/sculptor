@@ -758,7 +758,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **ADDWS-018 — Mode selector visibility**
   - Given: clone and/or in-place workspaces are enabled in settings.
   - When: viewing the form.
-  - Then: an environment/mode selector is shown (Worktree always; Clone and/or In-place when enabled); if neither experimental mode is enabled, the selector is hidden and defaults to Worktree.
+  - Then: an environment/mode selector is shown (Worktree always; Clone and/or In-place when enabled); if neither experimental mode is enabled, the selector is hidden and defaults to Worktree. (A repository that uses jj shows jj workspace in Worktree's place → ADDWS-026.)
 
 - **ADDWS-019 — Change mode updates branch fields**
   - Given: a mode is selected.
@@ -775,6 +775,26 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks "Create workspace" or presses `Cmd+Enter`.
   - Then: the workspace and its first agent are created and the user is navigated into the new workspace/agent tab.
 
+- **ADDWS-026 — jj workspace mode for a repository that uses jj**
+  - Given: the selected repository has "Use jj for new workspaces created in this repository" on, is colocated, and jj is usable.
+  - When: viewing the form.
+  - Then: the environment reads "jj workspace" in place of Worktree — as a chip whose tooltip reads "This repository creates jj workspaces. Change that in its settings." and which opens that repository's settings when clicked, or, when Clone or In-place is enabled, as the first option of the mode picker; a repository that does not use jj shows Worktree as before.
+
+- **ADDWS-027 — Bookmark name & bookmark source**
+  - Given: the mode is jj workspace.
+  - When: the user types a workspace name, edits the name field, or opens the source picker.
+  - Then: the name field reads "Bookmark name (required)" and auto-fills from the workspace name like a branch name, with a "Shuffle bookmark name" control; an invalid name shows "'{name}' is not a valid bookmark name" and a taken one "Bookmark '{name}' already exists"; the source picker reads "source same as target" until the user picks one of the repository's local or remote bookmarks (e.g. `main`, `main@origin`), which it re-reads each time it opens.
+
+- **ADDWS-028 — Creating while jj is unavailable**
+  - Given: the selected repository uses jj, and jj is not usable.
+  - When: viewing the form.
+  - Then: an amber callout reads "This repository creates jj workspaces, and jj is unavailable." with an "Open Jujutsu settings" link that opens the Jujutsu settings section; the Create button stays disabled, and no Worktree is offered in place of the jj workspace.
+
+- **ADDWS-029 — Quick-create from the sidebar in a jj repository**
+  - Given: a repository that uses jj is listed in the sidebar, and its last workspace was not created as Clone or In-place.
+  - When: the user clicks the repository's "+".
+  - Then: a jj workspace and its first agent are created and opened, with the "jj" badge and the identity pill in the banner; while jj is unusable or still being checked, the Add Workspace form opens for that repository instead.
+
 - **ADDWS-022 — Keyboard focus into form**
   - Given: the page loads with nothing focused.
   - When: the user presses ArrowDown/ArrowUp.
@@ -783,7 +803,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **ADDWS-023 — Create error: branch exists**
   - Given: the user submits with a branch name that already exists.
   - When: the request returns a conflict.
-  - Then: an error toast "Branch '{name}' already exists" appears and the form stays open for editing.
+  - Then: an error toast "Branch '{name}' already exists" (for a jj workspace, "Bookmark '{name}' already exists") appears and the form stays open for editing.
 
 - **ADDWS-024 — Create error: generic failure**
   - Given: the user submits the form.
@@ -987,7 +1007,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **WS-024 — Edit PR prompt before creating**
   - Given: the Create PR button is shown.
-  - When: the user opens its chevron menu and clicks "Edit prompt…".
+  - When: the user right-clicks it and clicks "Edit prompt...".
   - Then: a dialog opens to edit the prompt; Save updates it and closes.
 
 - **WS-025 — Open PR display**
@@ -1059,9 +1079,44 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Then: a dropdown offers Open folder, Copy path, Copy relative path, and Open in installed apps (VS Code, etc.), each performing its labeled action; the chosen app is remembered.
 
 - **WS-036 — Initialization-strategy badge**
-  - Given: the workspace uses clone or in-place mode.
+  - Given: the workspace uses clone, in-place, or jj workspace mode.
   - When: viewing the banner.
-  - Then: a "clone" or "in-place" badge is shown next to the repo name (no badge for worktree).
+  - Then: a "clone", "in-place", or "jj" badge is shown after the branch or bookmark (no badge for worktree); the "jj" badge's tooltip reads "jj workspace — no git inside. Agents use jj here.".
+
+- **WS-080 — jj identity pill**
+  - Given: a jj workspace.
+  - When: viewing the banner.
+  - Then: in place of the branch name, a pill shows the workspace's primary bookmark, "+N" for its other bookmarks, "↑N" for described revisions above the bookmark, and a red "conflict" badge when the working copy has a conflict; before any bookmark exists it shows the requested bookmark name greyed out, and with neither it shows the working copy's change id (unique prefix in bold) and description.
+
+- **WS-081 — jj identity card & copy**
+  - Given: the jj identity pill.
+  - When: the user hovers the pill, or clicks it.
+  - Then: a card lists Bookmarks (or "None yet. Sculptor sets {name} on the newest described revision."), Ahead ("{N} described revision(s) above {bookmark}"), Change, Commit, Description (or "(no description set)"), Flags (empty, conflict, divergent, stale), and Target (or "No target bookmark"), ending "Click to copy the bookmark" (or "the change id"); clicking copies it and the hint reads "Copied!".
+
+- **WS-082 — Target-bookmark selector**
+  - Given: a jj workspace.
+  - When: the user opens the target selector and picks a bookmark.
+  - Then: the selector (tooltip "Target bookmark") lists the repository's local and remote bookmarks, such as `main` and `main@origin`, other than the workspace's own; picking one updates the target in the banner; with no target it reads "No target bookmark" in a warning color.
+
+- **WS-083 — Stale working copy banner**
+  - Given: a jj operation elsewhere in the repository rewrote a jj workspace's working-copy revision.
+  - When: viewing the workspace, then clicking "Update working copy".
+  - Then: an amber banner under the header reads "This workspace's working copy is stale: another jj operation rewrote its revision, so jj will not record changes to its files until it is updated."; clicking "Update working copy" shows it loading and then removes the banner, or adds "Could not update the working copy: {error}" in red.
+
+- **WS-084 — Agent in a jj workspace while jj is unusable**
+  - Given: a jj workspace, and jj is not usable.
+  - When: an agent in it starts or resumes.
+  - Then: the agent shows a red "jj Not Available" error with the reason (e.g. "jj is not installed: install it or set its path on the Jujutsu settings page") and a "Go to Settings" link that opens the Jujutsu settings section; once jj is usable again the "jj Not Available" badge turns orange and a green "jj available" badge appears below the error.
+
+- **WS-085 — Create PR from a jj workspace**
+  - Given: a jj workspace with a GitHub origin and a target bookmark.
+  - When: the user clicks "Create PR".
+  - Then: the jj PR-creation prompt (or, while none is set, the git one) is sent to the agent with Sculptor's jj instructions: push the workspace's bookmark with `jj git push -b {bookmark}` and open the pull request into the branch the target tracks (e.g. `main` for `main@origin`), creating the bookmark first when it does not exist yet. With no target bookmark the button is disabled, and hovering it shows "Sculptor couldn't find a target bookmark for this workspace. Pick one from the target selector to create a PR.".
+
+- **WS-086 — Edit the PR prompt from a jj workspace**
+  - Given: the Create PR button of a jj workspace.
+  - When: the user right-clicks it.
+  - Then: with a jj PR-creation prompt set, the menu offers "Edit jj prompt...", which opens the Jujutsu settings section at that prompt; with none set, it offers "Edit prompt...", whose "Edit PR Creation Prompt" dialog says "No jj PR creation prompt is set, …" with a "Set a jj PR creation prompt" link that opens the Jujutsu settings section at that prompt.
 
 ## Banner & diff summary
 
@@ -1298,9 +1353,9 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Then: an intro card shows the project/branch, workspace name, agent name, creation time, source-branch info, a shared-code warning, and a `/sculptor:help` hint.
 
 - **CHAT-002 — Intro reflects workspace type**
-  - Given: the workspace is in-place / branched / cloned.
+  - Given: the workspace is in-place / branched / cloned / a jj workspace.
   - When: the intro renders.
-  - Then: it shows "Working directly in {branch}", "Branched off {branch}", or "Cloned {branch} from {project}" accordingly.
+  - Then: it shows "Working directly in {project}", "Branched off {branch} from {project}", "Cloned {branch} from {project}", or "jj workspace on {source} from {project}" accordingly, followed by the creation time; a jj workspace adds the line "This workspace has no git inside. Agents use jj for version control here.".
 
 - **CHAT-003 — Setup status card in intro**
   - Given: the workspace has pending setup commands.
@@ -1752,7 +1807,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **PANEL-001 — Browse / Changes / Commits tabs**
   - Given: the file browser panel.
   - When: the user clicks the Browse, Changes, or Commits tab.
-  - Then: the corresponding view is shown; Changes and Commits show a count badge when there are changes/commits.
+  - Then: the corresponding view is shown; Changes and Commits show a count badge when there are changes/commits. (A jj workspace's Commits tab is "Revisions" → PANEL-058.)
 
 - **PANEL-002 — Review all**
   - Given: changes/commits exist and the Review-all feature is enabled.
@@ -1819,7 +1874,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **PANEL-014 — Diff scope picker**
   - Given: the Changes tab with a target branch.
   - When: the user picks "All" vs "Uncommitted".
-  - Then: the list shows all changes vs target or only uncommitted changes, with counts per segment.
+  - Then: the list shows all changes vs target or only uncommitted changes, with counts per segment. (In a jj workspace "Uncommitted" reads "Working copy" → PANEL-060.)
 
 - **PANEL-015 — Discard a change**
   - Given: a changed file with a discard control.
@@ -1840,6 +1895,26 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Given: the commit button.
   - When: the user right-clicks it and chooses "Edit prompt…", edits, and saves.
   - Then: the commit prompt updates and the dialog closes.
+
+- **PANEL-060 — Working copy scope in a jj workspace**
+  - Given: the Changes tab of a jj workspace.
+  - When: viewing the scope picker, or picking a scope.
+  - Then: the scopes read "All" and "Working copy" (each with its count when above zero); "Working copy" lists only the working-copy revision's changes against its parent, and "All" everything since the workspace forked off its target.
+
+- **PANEL-061 — Discard in a jj workspace**
+  - Given: a changed file in a jj workspace's Working copy scope.
+  - When: the user clicks its "Discard changes" control, then "Discard".
+  - Then: the "Discard changes" dialog adds "The discarded content stays recoverable from the jj operation log."; on Discard the file leaves the list; a failure keeps the dialog open with "Could not discard the changes: {reason}" in red.
+
+- **PANEL-063 — New files jj left out**
+  - Given: an agent's turn in a jj workspace added a new file larger than the jj snapshot limit.
+  - When: the user opens the Changes tab, in either scope.
+  - Then: the changed-file list omits that file, and an amber banner above it reads "jj left {N} new file(s) out" and "jj does not record a new file over its size limit, so these are in no diff, commit or push. Raise the limit on the Jujutsu settings page, or delete the files.", lists each such file's path with jj's reason (e.g. its size in bytes), and links "Open Jujutsu settings" to the Jujutsu settings section.
+
+- **PANEL-062 — Commit in a jj workspace**
+  - Given: a jj workspace with changes.
+  - When: the user clicks "Commit N changes", or right-clicks it.
+  - Then: clicking sends the jj commit prompt (or, while none is set, the git one) with Sculptor's jj instructions — "This is a jj workspace with no git inside, so use jj rather than git." and the bookmark to move or create; the right-click menu offers "Edit jj prompt..." (opening the Jujutsu settings section at "jj commit prompt") once a jj prompt is set, else "Edit prompt...", whose dialog says "No jj commit prompt is set, so this jj workspace is sent this git prompt, with Sculptor's jj instructions added." with a "Set a jj commit prompt" link.
 
 ## History
 
@@ -1872,6 +1947,16 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Given: a merge commit / the end of history.
   - When: rendered / expanded.
   - Then: a merge indicator allows expanding the second-parent branch chain; a terminus/fork-point indicator is shown at the bottom.
+
+- **PANEL-058 — Revisions tab in a jj workspace**
+  - Given: a jj workspace.
+  - When: the user opens the Files panel's history tab.
+  - Then: the tab reads "Revisions"; it lists the revisions from the workspace's fork point with its target up to the working copy, newest first, each with its description's first line (or "(no description set)"), change id with the unique prefix in bold, "+A -D · N files", relative time and commit id, blue bookmark badges, and "working copy", "empty", "conflict" or "divergent" chips; the footer reads "fork point ({target} · {commit})"; "Loading revisions…" shows while loading and "No revisions available" when the revisions cannot be read.
+
+- **PANEL-059 — Open a revision's files**
+  - Given: the Revisions tab lists revisions.
+  - When: the user clicks a revision, then one of its files.
+  - Then: the revision expands to list its files, and the file's diff at that revision opens in the panel's viewer.
 
 ## Diff panel / viewer
 
@@ -2346,6 +2431,36 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks "Remove repo & agents" and confirms.
   - Then: a confirmation dialog (showing the agent count) deletes the repo on confirm (with a success/error toast).
 
+- **SET-042 — Repository jj switches while jj is unusable**
+  - Given: jj is not installed, does not run, is an unsupported version, or has no author identity; a repo row is expanded with Configure.
+  - When: the user looks at the row's Jujutsu group, or clicks its "Re-check" after fixing jj outside Sculptor.
+  - Then: both "Is this repository a colocated jj repository?" and "Use jj for new workspaces created in this repository" are disabled, and hovering either shows "Ensure that jujutsu VCS is available in the settings panel to use these features"; below them the reason is shown in the backend's words (e.g. "jj is not installed: install it or set its path on the Jujutsu settings page."), with an "Open Jujutsu settings" link and a "Re-check" button; no "jj" badge is shown. After a Re-check that finds jj usable, the reason disappears and the colocation switch enables. Opening the Repositories section re-checks too.
+
+- **SET-043 — Colocate a repository with jj**
+  - Given: jj is usable and the repository is not a jj colocation.
+  - When: the user turns on "Is this repository a colocated jj repository?" and clicks "Initialize" in the "Initialize jujutsu colocation" dialog.
+  - Then: the dialog closes; the switch disables and shows a spinner with "Initializing jujutsu colocation"; it then turns on and stays disabled, with the tooltip "Sculptor will not destroy your jj colocation. Use the command line to complete this if you are sure."; "Use jj for new workspaces created in this repository" turns on and enables; and the repo row shows a "jj" badge.
+
+- **SET-044 — Colocation dialog pre-flight**
+  - Given: the "Initialize jujutsu colocation" dialog is open.
+  - When: it reads the repository.
+  - Then: it says Sculptor will run `jj git init --colocate` in the repository's path, that the files, branch and HEAD stay as they are, and that git afterwards shows untracked files as added; "Checking the repository…" shows while it reads. Red callouts name anything that blocks colocation (git submodules, Git LFS, a `.jj` directory not colocated with the `.git` — "Sculptor never deletes a .jj directory: remove it yourself, then try again." —, a git merge/rebase/cherry-pick/revert in progress, or jj unavailable, with an "Open Jujutsu settings" link) and disable "Initialize"; amber callouts warn about git hooks ("Hooks do not run in jj workspaces.") and a sparse checkout; a grey note says "Your uncommitted changes become jj's working-copy commit." when there are any. "Cancel" closes the dialog.
+
+- **SET-045 — A colocation that fails**
+  - Given: the user confirmed a colocation.
+  - When: jj fails to colocate the repository, or the server refuses the request.
+  - Then: a failed run leaves the switch off and enabled, with jj's error in red beneath it and a "Retry" button; a refused or failed request shows an error toast with its reason (falling back to "Failed to initialize the jujutsu colocation") and the switch returns to its previous state.
+
+- **SET-046 — Use jj for new workspaces**
+  - Given: a repository's Jujutsu group.
+  - When: the user toggles "Use jj for new workspaces created in this repository".
+  - Then: the switch changes and the repo row gains or loses a "jj" badge (tooltip "New workspaces in this repository are jj workspaces"); the hint beneath reads "New workspaces in this repository are jj workspaces, with no git inside. Existing workspaces keep their kind."; while the repository is not colocated the switch is disabled with the tooltip "Initialize the jujutsu colocation first"; a failed save shows an error toast with the server's reason (falling back to "Failed to save the jj setting").
+
+- **SET-047 — A repository colocated outside Sculptor**
+  - Given: the user ran `jj git init --colocate` in a repository themselves, and jj is usable.
+  - When: the user opens the repository's Configure.
+  - Then: "Is this repository a colocated jj repository?" is on and disabled; "Use jj for new workspaces created in this repository" is off and enabled; no "jj" badge is shown until the user turns that second switch on.
+
 ## Git
 
 - **SET-023 — Git settings**
@@ -2355,8 +2470,40 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **SET-024 — Global defaults**
   - Given: the Git section.
-  - When: the user edits the default branch-naming pattern or branch-deletion policy (Never / Delete if safe / Always).
-  - Then: each saves with a toast.
+  - When: the user edits the default naming pattern (which names a new workspace's branch or jj bookmark) or the "Branch and bookmark deletion when a workspace is removed" policy (Never / Delete if safe / Always).
+  - Then: each saves with a toast; the policy's description says it applies to a worktree workspace's branch and a jj workspace's bookmarks.
+
+## Jujutsu
+
+- **SET-048 — jj availability & Re-check**
+  - Given: the Jujutsu section.
+  - When: the section opens, or the user clicks "Re-check".
+  - Then: "Checking jj…" shows until the status is known; then a callout says either "jj {version} is available, managed by Sculptor." (or "…, from {path}.") in green, or what stops jj in red — "jj is not installed.", "jj is installed but does not run." (with the error), "This jj version is not supported." (with "{path} reports jj {version}" and "Sculptor needs jj {minimum} or a newer compatible version. …"), "jj cannot fetch or push with the git it finds." (with "{path} reports git {version}" or "jj finds no git", and "jj needs git {git minimum} or newer. …"), "Your login shell runs a jj that Sculptor does not support." (with "{path} reports jj {version}" and "Sculptor needs jj {minimum} or a newer compatible version, because your repositories are shared with the jj you run yourself. …") — or, in orange, "jj has no author identity.", each with the step that fixes it.
+
+- **SET-049 — jj source mode, install, path & versions**
+  - Given: the Jujutsu section.
+  - When: the user switches Binary Source between Managed and Custom, clicks "Install jj", or enters a Binary path and clicks "Apply".
+  - Then: Status shows "v{version} — Managed", "v{version} — External binary", "v{version} — Needs {minimum} or a newer compatible version", "No path configured", "Does not run", or "Not installed"; Managed shows "Install jj", then "Installing..." with a progress bar, then "Up to date", or the install error with "Retry"; Minimum version, Detected version and Active path are listed; when the login shell runs a different jj, a "jj in your terminal" row shows its path and version.
+
+- **SET-050 — jj author identity**
+  - Given: the Jujutsu section.
+  - When: jj has an identity, or the user fills in the Name and Email fields (prefilled from the global git identity when jj has none) and clicks "Save identity".
+  - Then: Author identity shows "{name} <{email}>" while nothing stops jj, and after a save the availability callout turns green; a failed save shows the error (default "Could not save the identity"); while anything other than a missing identity stops jj, the row reads "Read once jj is installed and runs."
+
+- **SET-051 — Maximum new file size**
+  - Given: the Jujutsu section.
+  - When: the user edits "Maximum new file size" (MiB) and leaves the field.
+  - Then: a value from 1 to 1024 saves with a toast; any other value reverts to the saved one.
+
+- **SET-052 — jj prompts**
+  - Given: the Jujutsu section's "jj commit prompt", "jj PR creation prompt", "jj CI Babysitter pipeline prompt" and "jj CI Babysitter merge conflict prompt" rows.
+  - When: the user clicks "Use suggested wording", edits the prompt, or clicks "Use the git prompt".
+  - Then: an unset row shows "Uses the git prompt:" and that git prompt; "Use suggested wording" replaces it with an editable jj prompt that saves on blur; "Use the git prompt" (or saving it empty) returns the row to the git prompt.
+
+- **SET-053 — Repositories using jj & documentation**
+  - Given: the Jujutsu section.
+  - When: viewing "Repositories using jj", or clicking a repository's "Configure" link there.
+  - Then: each repository that uses jj for new workspaces is listed with a "Configure" link that opens the Repositories section on that repository; with none the row reads "No repository uses jj for new workspaces yet."; a "jj documentation" link opens jj's documentation in the browser.
 
 ## CI babysitter
 
@@ -2604,6 +2751,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   entity mentions, rich markdown rendering, clone/in-place workspaces, Review-all,
   Pi agent, image upload, CI babysitter, and the dev/devtools panels. Tests should set
   the relevant flag (or assert the gated UI is absent when off).
+- Scenarios about jj (a jj workspace, the Jujutsu settings section, or a repository's jj
+  switches, including the jj parts of otherwise git scenarios) need a usable jj — the
+  pinned release, with an author identity — and a repository colocated with jj that has
+  "Use jj for new workspaces created in this repository" on, except where their Given says
+  otherwise, such as that jj is not usable or the repository is not yet colocated.
 - The home-page rows and the workspace banner reuse the same PR button component, so
   the WS-PR scenarios (WS-022…WS-032) also describe the home-row PR behavior (HOME-020).
 - Status dots (running / waiting / error / ready / read / unread, plus the two-dot mixed
