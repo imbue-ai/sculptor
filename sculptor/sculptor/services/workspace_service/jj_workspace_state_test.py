@@ -146,7 +146,7 @@ def test_a_diff_refresh_that_finds_the_working_copy_stale_marks_it_and_a_later_r
     assert not cleared.is_working_copy_stale
 
 
-def test_reading_the_revisions_of_a_stale_workspace_marks_it_stale(
+def test_reading_the_revisions_of_a_stale_workspace_marks_it_stale_and_serves_them_as_last_recorded(
     unstarted_workspace_service: DefaultWorkspaceService,
     test_service_collection: CompleteServiceCollection,
     jj_workspace_row: Workspace,
@@ -157,9 +157,9 @@ def test_reading_the_revisions_of_a_stale_workspace_marks_it_stale(
     make_workspace_stale(jj_binary, jj_colocated_repo.path, _checkout(jj_workspace_row))
 
     with test_service_collection.data_model_service.open_transaction(RequestID()) as transaction:
-        with pytest.raises(JjWorkingCopyStaleError):
-            unstarted_workspace_service.get_revision_history(workspace_id, transaction)
+        history = unstarted_workspace_service.get_revision_history(workspace_id, transaction)
 
+    assert [revision.is_working_copy for revision in history.revisions] == [True]
     assert _scan_for_state(unstarted_workspace_service, workspace_id).is_working_copy_stale
 
 

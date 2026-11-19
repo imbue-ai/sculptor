@@ -175,6 +175,20 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         """The header pill naming a jj workspace by its bookmark, or by its requested one until it has one."""
         return self.get_by_test_id(ElementIDs.JJ_IDENTITY_PILL)
 
+    def get_jj_identity_card(self) -> Locator:
+        """The jj identity pill's hover card, which renders in a portal."""
+        return self._page.get_by_test_id(ElementIDs.JJ_IDENTITY_CARD)
+
+    def get_jj_unbookmarked_marker(self) -> Locator:
+        """The pill's `↑k` marker: how many described revisions sit above the primary bookmark."""
+        return self.get_by_test_id(ElementIDs.JJ_UNBOOKMARKED_MARKER)
+
+    def get_jj_stale_banner(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.JJ_STALE_BANNER)
+
+    def get_jj_update_stale_button(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.JJ_UPDATE_STALE_BUTTON)
+
     def get_thinking_indicator(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.THINKING_INDICATOR)
 

@@ -18,8 +18,6 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.services.user_config.user_config import load_config
-from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.changes_panel import get_changes_panel_in
 from sculptor.testing.elements.chat_panel import select_model_by_name
@@ -31,6 +29,8 @@ from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSecti
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import colocate_with_jj
+from sculptor.testing.jj_sculptor_instance import update_user_config
+from sculptor.testing.jj_sculptor_instance import use_jj_binary
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_workspace_without_agent
 from sculptor.testing.playwright_utils import request_with_retry
@@ -44,19 +44,9 @@ from sculptor.testing.user_stories import user_story
 _BOOKMARK = "jj-revisions"
 
 
-def _use_jj_binary(factory: SculptorInstanceFactory, jj_binary: JjBinary) -> None:
-    """Point the backend at the pinned jj as a CUSTOM path, before it starts."""
-    config_path = factory._delegate.sculptor_folder / "internal" / "config.toml"
-    config = load_config(config_path)
-    dependency_paths = config.dependency_paths.model_copy(update={"jj": str(jj_binary.path)})
-    save_config(config.model_copy(update={"dependency_paths": dependency_paths}), config_path)
-
-
 def _limit_new_jj_files_to_mib(factory: SculptorInstanceFactory, mib: int) -> None:
     """Set Sculptor's limit on the new files jj snapshots, which it writes into each jj workspace's config."""
-    config_path = factory._delegate.sculptor_folder / "internal" / "config.toml"
-    config = load_config(config_path)
-    save_config(config.model_copy(update={"jj_snapshot_max_new_file_size_mib": mib}), config_path)
+    update_user_config(factory, jj_snapshot_max_new_file_size_mib=mib)
 
 
 def _write_small_and_oversized_files_prompt() -> str:
@@ -131,7 +121,7 @@ def _open_jj_workspace_agent(page: Page) -> PlaywrightTaskPage:
 def test_jj_workspace_lists_revisions_and_discards_the_working_copy(
     sculptor_instance_factory_: SculptorInstanceFactory, jj_binary: JjBinary, jj_isolated_env: JjIsolatedEnv
 ) -> None:
-    _use_jj_binary(sculptor_instance_factory_, jj_binary)
+    use_jj_binary(sculptor_instance_factory_, jj_binary)
     colocate_with_jj(jj_binary, sculptor_instance_factory_.base_repo.base_path)
 
     with sculptor_instance_factory_.spawn_instance() as instance:
@@ -185,7 +175,7 @@ def test_jj_workspace_lists_revisions_and_discards_the_working_copy(
 def test_changes_panel_lists_new_files_jj_left_out(
     sculptor_instance_factory_: SculptorInstanceFactory, jj_binary: JjBinary, jj_isolated_env: JjIsolatedEnv
 ) -> None:
-    _use_jj_binary(sculptor_instance_factory_, jj_binary)
+    use_jj_binary(sculptor_instance_factory_, jj_binary)
     _limit_new_jj_files_to_mib(sculptor_instance_factory_, 1)
     colocate_with_jj(jj_binary, sculptor_instance_factory_.base_repo.base_path)
 

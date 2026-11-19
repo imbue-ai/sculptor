@@ -1,8 +1,9 @@
 import { createStore } from "jotai";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { WorkspaceJjStateInfo } from "~/api";
 import { updateWorkspaceJjStatesAtom, workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState";
+import { queryClient, workspaceRevisionsQueryKeyPrefix } from "~/common/state/queryClient";
 
 const makeJjState = (workspaceId: string, overrides: Partial<WorkspaceJjStateInfo> = {}): WorkspaceJjStateInfo => ({
   workspaceId,
@@ -45,5 +46,37 @@ describe("updateWorkspaceJjStatesAtom", () => {
     store.set(updateWorkspaceJjStatesAtom, { "ws-b": makeJjState("ws-b") });
 
     expect(store.get(workspaceJjStateAtomFamily("ws-a"))).toEqual(stateA);
+  });
+
+  describe("cached revisions", () => {
+    const revisionsKey = [...workspaceRevisionsQueryKeyPrefix("ws-a"), "main@origin"];
+
+    afterEach(() => {
+      queryClient.clear();
+    });
+
+    const isRevisionsStale = (): boolean | undefined => queryClient.getQueryState(revisionsKey)?.isInvalidated;
+
+    it("go stale when the workspace's jj state changes, as when Sculptor creates its bookmark", () => {
+      const store = createStore();
+      store.set(updateWorkspaceJjStatesAtom, { "ws-a": makeJjState("ws-a") });
+      queryClient.setQueryData(revisionsKey, { revisions: [], forkPoint: null });
+
+      store.set(updateWorkspaceJjStatesAtom, {
+        "ws-a": makeJjState("ws-a", { primaryBookmark: "feature", bookmarks: ["feature"] }),
+      });
+
+      expect(isRevisionsStale()).toBe(true);
+    });
+
+    it("stay fresh when a frame repeats the workspace's jj state", () => {
+      const store = createStore();
+      store.set(updateWorkspaceJjStatesAtom, { "ws-a": makeJjState("ws-a") });
+      queryClient.setQueryData(revisionsKey, { revisions: [], forkPoint: null });
+
+      store.set(updateWorkspaceJjStatesAtom, { "ws-a": makeJjState("ws-a") });
+
+      expect(isRevisionsStale()).toBe(false);
+    });
   });
 });

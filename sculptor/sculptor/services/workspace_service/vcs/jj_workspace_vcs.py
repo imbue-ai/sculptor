@@ -549,14 +549,38 @@ class JjWorkspaceVcs(WorkspaceVcs):
 
         `base_commit_id` stands in for a target that is unset or names no commit.
         The working copy is snapshotted first, so its record shows the agent's
-        latest edits.
+        latest edits. Raises `JjWorkingCopyStaleError` when the workspace is stale.
+        """
+        working_copy = snapshot_working_copy(self._jj, location.checkout_path)
+        return self._read_revision_history(location.checkout_path, target_ref, base_commit_id, working_copy.commit_id)
+
+    def get_recorded_revision_history(
+        self,
+        location: CheckoutLocation,
+        target_ref: str | None,
+        base_commit_id: str | None,
+    ) -> JjRevisionHistory:
+        """The same revisions as `get_revision_history`, with the working copy as the repository last recorded it.
+
+        Nothing is snapshotted, so this also reads a stale workspace, whose files
+        jj will not snapshot until its working copy is updated.
         """
         checkout = location.checkout_path
-        working_copy = snapshot_working_copy(self._jj, checkout)
+        working_copy_commit_id = resolve_commit_id(self._jj, checkout, _WORKING_COPY)
+        assert working_copy_commit_id is not None, "a jj workspace always has a working-copy commit"
+        return self._read_revision_history(checkout, target_ref, base_commit_id, working_copy_commit_id)
+
+    def _read_revision_history(
+        self,
+        checkout: Path,
+        target_ref: str | None,
+        base_commit_id: str | None,
+        working_copy_commit_id: str,
+    ) -> JjRevisionHistory:
         fork_from = self._resolve_target_commit_id(checkout, target_ref) or self._resolve_target_commit_id(
             checkout, base_commit_id
         )
-        fork_point = None if fork_from is None else self._find_fork_point(checkout, fork_from, working_copy.commit_id)
+        fork_point = None if fork_from is None else self._find_fork_point(checkout, fork_from, working_copy_commit_id)
         if fork_point is None:
             return JjRevisionHistory(revisions=(), fork_point=None)
         result = self._jj.run(
@@ -566,7 +590,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
                 "--limit",
                 str(_MAX_HISTORY_REVISIONS),
                 "-r",
-                f"{fork_point}..{working_copy.commit_id}",
+                f"{fork_point}..{working_copy_commit_id}",
                 "-T",
                 _REVISION_RECORD_TEMPLATE,
             ],
@@ -574,7 +598,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
             snapshot=JjSnapshotPolicy.IGNORE_WORKING_COPY,
         )
         revisions = tuple(
-            _parse_revision_record(json.loads(line), working_copy.commit_id) for line in result.stdout.splitlines()
+            _parse_revision_record(json.loads(line), working_copy_commit_id) for line in result.stdout.splitlines()
         )
         return JjRevisionHistory(revisions=revisions, fork_point=fork_point)
 
