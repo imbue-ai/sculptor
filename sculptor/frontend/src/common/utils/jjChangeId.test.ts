@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { shortChangeId } from "./jjChangeId.ts";
+import { shortChangeId, shortCommitId } from "./jjChangeId.ts";
 
 const CHANGE_ID = "kxqpmzvyrstuwlnokxqpmzvyrstuwlno";
 
@@ -17,5 +17,11 @@ describe("shortChangeId", () => {
       uniquePrefix: "kxqpmzvyrs",
       rest: "",
     });
+  });
+});
+
+describe("shortCommitId", () => {
+  it("shows the first eight characters of a commit id, as jj's logs do", () => {
+    expect(shortCommitId("0123456789abcdef0123456789abcdef01234567")).toBe("01234567");
   });
 });

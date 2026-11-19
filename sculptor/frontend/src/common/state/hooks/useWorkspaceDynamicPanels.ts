@@ -30,6 +30,7 @@ import {
 
 import type { AgentDiagnosticsByAgentId } from "./useWorkspaceAgentDiagnostics.ts";
 import { useWorkspaceAgentDiagnostics } from "./useWorkspaceAgentDiagnostics.ts";
+import { useWorkspaceVcs } from "./useWorkspaceVcs.ts";
 
 // True when two diagnostics maps carry the same data. Diagnostics feed the tab
 // context-menu copy actions — closures that panelRegistriesEqual deliberately ignores —
@@ -57,6 +58,8 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const allAgents = useAtomValue(agentsArrayAtom);
   const allTerminalTabs = useAtomValue(terminalTabStateAtom);
   const extensionPanels = useAtomValue(extensionPanelsAtom);
+  // The static panels' labels follow the workspace's VCS.
+  const vcs = useWorkspaceVcs(workspaceId);
   const setPanelRegistry = useSetAtom(panelRegistryAtom);
   const setTerminalTabs = useSetAtom(terminalTabStateAtom);
   const setTerminalCloseTarget = useSetAtom(terminalCloseTargetAtom);
@@ -164,7 +167,7 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   // passive effect the first committed frame after a workspace switch would still show
   // the previous workspace's dynamic panels.
   useLayoutEffect(() => {
-    const staticDefinitions = buildStaticPanelDefinitions();
+    const staticDefinitions = buildStaticPanelDefinitions(vcs);
     const dynamicDefinitions = deriveDynamicPanels(agents, terminals);
     // Merge extension-contributed panels into the rebuilt registry so they survive every
     // agent-tick rebuild. An extension panel whose id collides with a
@@ -187,5 +190,5 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
       agentDiagnosticsEqual(previousDiagnosticsRef.current, diagnosticsByAgentId);
     previousDiagnosticsRef.current = diagnosticsByAgentId;
     setPanelRegistry((previous) => (areDiagnosticsUnchanged && panelRegistriesEqual(previous, next) ? previous : next));
-  }, [agents, terminals, extensionPanels, diagnosticsByAgentId, setPanelRegistry]);
+  }, [vcs, agents, terminals, extensionPanels, diagnosticsByAgentId, setPanelRegistry]);
 };

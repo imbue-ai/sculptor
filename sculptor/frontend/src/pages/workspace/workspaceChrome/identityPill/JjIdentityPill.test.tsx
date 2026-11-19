@@ -1,19 +1,46 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Workspace, WorkspaceJjStateInfo } from "~/api";
+import type * as api from "~/api";
+import type { RevisionInfo, Workspace, WorkspaceJjStateInfo } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
+import { queryClient } from "~/common/state/queryClient.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 
 import { JjIdentityPill } from "./JjIdentityPill.tsx";
 
+const { mockGetWorkspaceRevisions } = vi.hoisted(() => ({ mockGetWorkspaceRevisions: vi.fn() }));
+
+vi.mock("~/api", async () => {
+  const actual = await vi.importActual<typeof api>("~/api");
+  return { ...actual, getWorkspaceRevisions: mockGetWorkspaceRevisions };
+});
+
 type Store = ReturnType<typeof createStore>;
 
 const CHANGE_ID = "kxqpmzvyrstuwlnokxqpmzvyrstuwlno";
+const WORKING_COPY_COMMIT_ID = "0123456789abcdef0123456789abcdef01234567";
+
+const workingCopyRevision: RevisionInfo = {
+  changeId: CHANGE_ID,
+  changeIdPrefixLength: 2,
+  commitId: WORKING_COPY_COMMIT_ID,
+  description: "",
+  authorName: "Ada Lovelace",
+  timestamp: "2026-11-16T00:00:00Z",
+  parentCommitIds: ["fedcba9876543210fedcba9876543210fedcba98"],
+  files: [],
+  bookmarks: [],
+  isWorkingCopy: true,
+  isEmpty: false,
+  hasConflict: false,
+  isDivergent: false,
+};
 
 const makeStore = (inputs: {
   requestedBookmark: string | null;
@@ -51,13 +78,26 @@ const makeStore = (inputs: {
 };
 
 const renderPill = (store: Store): void => {
-  renderWithProviders(<JjIdentityPill workspaceId="ws1" />, { store });
+  renderWithProviders(
+    <QueryClientProvider client={queryClient}>
+      <JjIdentityPill workspaceId="ws1" />
+    </QueryClientProvider>,
+    { store },
+  );
 };
 
 const pill = (): HTMLElement => screen.getByTestId(ElementIds.JJ_IDENTITY_PILL);
 
+beforeEach(() => {
+  mockGetWorkspaceRevisions.mockResolvedValue({
+    data: { revisions: [workingCopyRevision], forkPoint: "fedcba9876543210fedcba9876543210fedcba98" },
+  });
+});
+
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
+  queryClient.clear();
 });
 
 describe("JjIdentityPill", () => {
@@ -202,5 +242,18 @@ describe("JjIdentityPill", () => {
 
     expect(card.textContent).not.toContain("Ahead");
     expect(screen.queryByTestId(ElementIds.JJ_UNBOOKMARKED_MARKER)).toBeNull();
+  });
+
+  it("shows the working copy's commit id in its card, read from the revisions once it opens", async () => {
+    const user = userEvent.setup();
+    renderPill(makeStore({ requestedBookmark: null, jjState: {} }));
+
+    expect(mockGetWorkspaceRevisions).not.toHaveBeenCalled();
+
+    await user.tab();
+    const card = await screen.findByTestId(ElementIds.JJ_IDENTITY_CARD);
+
+    expect(await within(card).findByText("01234567")).toBeTruthy();
+    expect(mockGetWorkspaceRevisions).toHaveBeenCalledOnce();
   });
 });

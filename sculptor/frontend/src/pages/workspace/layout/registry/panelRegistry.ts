@@ -14,6 +14,7 @@ import type { ComponentType } from "react";
 
 import { agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import type { AgentDotStatus } from "~/common/utils/statusDot.ts";
+import type { WorkspaceVcs } from "~/common/utils/workspaceVcs.ts";
 import { activePanelIdInSubSectionAtom, panelsInSubSectionAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import type { PanelId, SubSectionId } from "~/pages/workspace/layout/types/section.ts";
 
@@ -108,10 +109,16 @@ export const registerPanelComponent = (id: PanelId, component: ComponentType): v
   registeredComponents.set(id, component);
 };
 
-export const buildStaticPanelDefinitions = (): ReadonlyArray<PanelDefinition> => {
+// A jj workspace's history is revisions. The panel id stays "commits" because
+// persisted layouts key on it.
+const JJ_DISPLAY_NAME_BY_PANEL_ID: Readonly<Partial<Record<PanelId, string>>> = {
+  commits: "Revisions",
+};
+
+export const buildStaticPanelDefinitions = (vcs: WorkspaceVcs): ReadonlyArray<PanelDefinition> => {
   return STATIC_PANEL_METADATA.map((meta) => ({
     id: meta.id,
-    displayName: meta.displayName,
+    displayName: (vcs === "jj" ? JJ_DISPLAY_NAME_BY_PANEL_ID[meta.id] : undefined) ?? meta.displayName,
     icon: meta.icon,
     kind: "static",
     defaultSection: meta.defaultSection,
@@ -152,7 +159,7 @@ export const buildExtensionPanelDefinitions = (
 // The current registry (static + extension + dynamic). Kept in sync with the active
 // workspace's agent/terminal panels and the loaded extensions by useWorkspaceDynamicPanels;
 // defaults to the static panels so reads before sync never crash.
-export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStaticPanelDefinitions());
+export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStaticPanelDefinitions("git"));
 
 // True when two panel definitions are equal for render purposes: same identity, or
 // all of the stable, render-relevant fields match. A registry rebuild on an agent tick

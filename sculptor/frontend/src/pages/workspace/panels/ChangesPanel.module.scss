@@ -3,6 +3,19 @@
   min-height: 0;
 }
 
+// Scrolls on its own past a share of the list's height, so the changed-files
+// tree below it keeps the rest however many files jj left out.
+.leftOutFiles {
+  flex: 0 1 auto;
+  max-height: 40%;
+  min-height: 0;
+  overflow-y: auto;
+
+  &:not(:empty) {
+    padding: 0 var(--space-3) var(--space-2);
+  }
+}
+
 .commitFooter {
   border-top: 1px solid var(--gray-a5);
 }

@@ -4,7 +4,6 @@ import type { ReactElement } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
-import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import type { WorkspaceFilePayload } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import { useWorkspaceFilePayload } from "~/common/state/hooks/useWorkspaceFileContent.ts";
 import { isSupportedImageFormat } from "~/pages/workspace/panels/fileBrowser/utils/fileType.ts";
@@ -258,6 +257,8 @@ type BinaryPreviewProps = {
   filePath: string;
   fileStatus: string | null;
   previousFilePath: string | null;
+  /** The commit the diff was taken against, where the "before" image is read; null shows no before-image. */
+  baseCommitId: string | null;
 };
 
 export const BinaryPreview = ({
@@ -265,15 +266,14 @@ export const BinaryPreview = ({
   filePath,
   fileStatus,
   previousFilePath,
+  baseCommitId,
 }: BinaryPreviewProps): ReactElement => {
   const isImage = useMemo(() => isSupportedImageFormat(filePath), [filePath]);
-  const workspace = useWorkspace(workspaceId);
-  const baseRef = workspace?.targetBranch ?? "main";
 
   const imageData = useImageData(workspaceId, filePath);
   const isModifiedImage = isImage && fileStatus === "M";
   const oldFilePath = previousFilePath ?? filePath;
-  const oldImageData = useImageDataAtRef(workspaceId, oldFilePath, isModifiedImage ? baseRef : null);
+  const oldImageData = useImageDataAtRef(workspaceId, oldFilePath, isModifiedImage ? baseCommitId : null);
 
   if (!isImage) {
     const fileName = filePath.split("/").pop() ?? filePath;

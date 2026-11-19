@@ -11,6 +11,8 @@ import { useCallback, useMemo, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
+import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
+import { useWorkspaceVcs } from "~/common/state/hooks/useWorkspaceVcs.ts";
 import {
   activeDiffTabAtomFamily,
   changesSelectionFromTab,
@@ -23,6 +25,7 @@ import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts
 
 import styles from "./ChangesPanel.module.scss";
 import { DiscardDialog } from "./changesPanel/DiscardDialog.tsx";
+import { JjLeftOutFilesBanner } from "./changesPanel/JjLeftOutFilesBanner.tsx";
 import { useDiscardFile } from "./changesPanel/useDiscardFile.ts";
 import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import {
@@ -41,6 +44,8 @@ import { reconcileSelectionByRecency } from "./selectionRecency.ts";
 const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const workspace = useWorkspace(workspaceId);
   const hasTargetBranch = workspace?.targetBranch != null;
+  const vcs = useWorkspaceVcs(workspaceId);
+  const { data: diff } = useWorkspaceDiff(workspaceId);
 
   const [scope, setScope] = useAtom(changesScopeAtomFamily(workspaceId));
   const viewMode = useAtomValue(fileBrowserViewModeAtomFamily(workspaceId));
@@ -49,7 +54,12 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
 
   const uncommittedStatusMap = useFileStatusMap(workspaceId, "uncommitted");
   const allStatusMap = useFileStatusMap(workspaceId, "vs-target-branch");
-  const { discardFile } = useDiscardFile(workspaceId);
+  const {
+    discardFile,
+    isDiscarding,
+    errorMessage: discardErrorMessage,
+    resetError: resetDiscardError,
+  } = useDiscardFile(workspaceId);
 
   // Clicked-file selection, persisted per-workspace so it survives the panel
   // unmounting on a section-tab switch (reconciled with the atom-driven one below).
@@ -71,23 +81,31 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
     [setSelected],
   );
 
-  const handleDiscardRequest = useCallback((filePath: string): void => {
-    setDiscardTarget(filePath);
-  }, []);
+  const handleDiscardRequest = useCallback(
+    (filePath: string): void => {
+      resetDiscardError();
+      setDiscardTarget(filePath);
+    },
+    [resetDiscardError],
+  );
 
+  // The dialog stays open until the discard lands, so a failure is shown in it.
   const handleDiscardConfirm = useCallback((): void => {
-    if (discardTarget) {
-      void discardFile(discardTarget);
+    if (discardTarget === null) {
+      return;
+    }
+    const discardedPath = discardTarget;
+    discardFile(discardedPath, () => {
       // Clear the viewer if the discarded file is the one being shown, whether it
       // is driven by the local click or by a shared single-kind diff tab (an agent
       // open / chat file-chip). Clearing only the local half would leave the tab
       // still resolving to the just-discarded file.
-      setSelected((prev) => (prev?.filePath === discardTarget ? null : prev));
-      if (activeTab?.kind === "single" && changesSelectionFromTab(activeTab)?.filePath === discardTarget) {
+      setSelected((prev) => (prev?.filePath === discardedPath ? null : prev));
+      if (activeTab?.kind === "single" && changesSelectionFromTab(activeTab)?.filePath === discardedPath) {
         closeDiffTab({ workspaceId, filePath: activeTab.filePath });
       }
       setDiscardTarget(null);
-    }
+    });
   }, [discardTarget, discardFile, setSelected, activeTab, closeDiffTab, workspaceId]);
 
   // After committing, the uncommitted changes clear, so reset the viewer. Drop
@@ -156,11 +174,20 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
         <DiffScopePicker
           scope={scope}
           onScopeChange={setScope}
+          vcs={vcs}
           hasTargetBranch={hasTargetBranch}
           uncommittedCount={uncommittedStatusMap.size}
           allCount={allStatusMap.size}
         />
       </Flex>
+      {/* In a jj workspace every file error is a new file jj refused to snapshot,
+          which has no diff and so no row in the tree; it is listed here in both
+          scopes. */}
+      {vcs === "jj" && (
+        <div className={styles.leftOutFiles}>
+          <JjLeftOutFilesBanner fileErrors={diff?.fileErrors ?? {}} />
+        </div>
+      )}
       <ChangesTreeView
         workspaceId={workspaceId}
         viewMode={viewMode}
@@ -180,6 +207,9 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
           if (!open) setDiscardTarget(null);
         }}
         filePath={discardTarget ?? ""}
+        vcs={vcs}
+        isDiscarding={isDiscarding}
+        errorMessage={discardErrorMessage}
         onConfirm={handleDiscardConfirm}
       />
     </Flex>

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff.ts";
+import { diffBaseCommitId } from "~/pages/workspace/diffPanel/diffBase.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types/fileBrowser.ts";
 import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils/fileTree.ts";
 import { isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils/fileType.ts";
@@ -29,19 +30,19 @@ export type DiffViewerContent = {
   /** True when the selection diffs against the target branch (the "All" scope). */
   isTargetBranchDiff: boolean;
   /**
-   * Commit SHA of merge-base(target, HEAD) — the ref the vs-target-branch
-   * diff's old-side line numbers reference. Used as the base ref for old-side
-   * file content so hunk expansion stays in sync. Null when there is no
-   * target branch / merge-base.
+   * The commit the selected scope's diff was taken against, as the backend
+   * named it — the diff's old-side line numbers reference it, so old-side file
+   * content is read there and hunk expansion stays in sync. Null when the diff
+   * has no single base; the viewer then shows no before-image.
    */
-  targetBranchMergeBase: string | null;
+  baseCommitId: string | null;
   /** True while a workspace-diff fetch is in flight. */
   isFetching: boolean;
   commitHash: string | null;
   errorMessage: string | null;
 };
 
-const EMPTY_CONTENT: Omit<DiffViewerContent, "isFetching" | "targetBranchMergeBase"> = {
+const EMPTY_CONTENT: Omit<DiffViewerContent, "isFetching" | "baseCommitId"> = {
   filePath: null,
   tabFilePath: null,
   previousFilePath: null,
@@ -76,7 +77,7 @@ export const useDiffViewerContent = (workspaceId: string, selection: DiffSelecti
     return parseDiff(diff.targetBranchDiff);
   }, [diff?.targetBranchDiff]);
 
-  const memoized = useMemo((): Omit<DiffViewerContent, "isFetching" | "targetBranchMergeBase"> => {
+  const memoized = useMemo((): Omit<DiffViewerContent, "isFetching" | "baseCommitId"> => {
     if (!selection) return EMPTY_CONTENT;
 
     if (selection.kind === "file-view") {
@@ -151,5 +152,9 @@ export const useDiffViewerContent = (workspaceId: string, selection: DiffSelecti
     };
   }, [selection, parsedUncommittedDiff, parsedTargetBranchDiff, diff?.fileErrors]);
 
-  return { ...memoized, isFetching, targetBranchMergeBase: diff?.targetBranchMergeBase ?? null };
+  const baseCommitId = diffBaseCommitId({
+    diff,
+    scope: memoized.isTargetBranchDiff ? "vs-target-branch" : "uncommitted",
+  });
+  return { ...memoized, isFetching, baseCommitId };
 };

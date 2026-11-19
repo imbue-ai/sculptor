@@ -5,11 +5,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { TaskStatus } from "~/api";
 import { agentIdsAtom } from "~/common/state/atoms/agents.ts";
+import type { WorkspaceVcs } from "~/common/utils/workspaceVcs.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/pages/workspace/layout/atoms/section.ts";
 import { EMPTY_WORKSPACE_LAYOUT } from "~/pages/workspace/layout/persistence/snapshot.ts";
 
 import type { DynamicAgentInput } from "./dynamicPanels.tsx";
 import { deriveDynamicPanels } from "./dynamicPanels.tsx";
+import type { PanelDefinition } from "./panelRegistry.ts";
 import {
   activePanelComponentInSubSectionAtom,
   buildExtensionPanelDefinitions,
@@ -37,7 +39,7 @@ beforeEach(() => {
 
 describe("static panel registry", () => {
   it("contains the eight static panels with correct default sections", () => {
-    const defs = buildStaticPanelDefinitions();
+    const defs = buildStaticPanelDefinitions("git");
     expect(defs.map((d) => d.id)).toEqual([
       "files",
       "changes",
@@ -60,8 +62,16 @@ describe("static panel registry", () => {
     expect(defs.every((d) => d.kind === "static")).toBe(true);
   });
 
+  it("names the commits panel Revisions in a jj workspace, keeping its id", () => {
+    const commitsIn = (vcs: WorkspaceVcs): PanelDefinition | undefined =>
+      buildStaticPanelDefinitions(vcs).find((definition) => definition.id === "commits");
+
+    expect(commitsIn("git")?.displayName).toBe("Commits");
+    expect(commitsIn("jj")?.displayName).toBe("Revisions");
+  });
+
   it("has no enable/disable flags on a definition", () => {
-    const def = buildStaticPanelDefinitions()[0];
+    const def = buildStaticPanelDefinitions("git")[0];
     expect(def).not.toHaveProperty("enabled");
     expect(def).not.toHaveProperty("defaultEnabled");
     expect(def).not.toHaveProperty("isBuiltin");
@@ -171,7 +181,7 @@ describe("activePanelComponentInSubSectionAtom", () => {
     registerPanelComponent("files", filesComponent);
 
     const store = createStore();
-    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions("git"));
     store.set(activeWorkspaceIdAtom, "ws-join");
     store.set(workspaceLayoutAtom, {
       ...EMPTY_WORKSPACE_LAYOUT,
@@ -215,7 +225,7 @@ describe("resolvedActivePanelIdInSubSectionAtom", () => {
     registerPanelComponent("files", filesComponent);
     const store = seedStore("ws-unregistered-active");
     // Static panels only: the extension panel named by the layout has no definition.
-    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions("git"));
 
     expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe("files");
     // The body renders the same resolved id the header highlights.
@@ -232,7 +242,7 @@ describe("resolvedActivePanelIdInSubSectionAtom", () => {
       activePanel: { left: EXTENSION_PANEL_ID },
       expanded: { left: true },
     });
-    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions("git"));
 
     expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBeUndefined();
     expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBeUndefined();
@@ -241,12 +251,12 @@ describe("resolvedActivePanelIdInSubSectionAtom", () => {
   it("self-heals back to the persisted active id when its definition (re)registers", () => {
     registerPanelComponent("files", () => null);
     const store = seedStore("ws-self-heal");
-    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions("git"));
     expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe("files");
 
     // The extension (re)loads: its definitions join the registry and — because the
     // fallback never pruned the layout — the persisted active id wins again.
-    store.set(panelRegistryAtom, [...buildStaticPanelDefinitions(), ...extensionDefinitions]);
+    store.set(panelRegistryAtom, [...buildStaticPanelDefinitions("git"), ...extensionDefinitions]);
     expect(store.get(resolvedActivePanelIdInSubSectionAtom("left"))).toBe(EXTENSION_PANEL_ID);
     expect(store.get(activePanelComponentInSubSectionAtom("left"))).toBe(extensionComponent);
     expect(store.get(workspaceLayoutAtom).activePanel.left).toBe(EXTENSION_PANEL_ID);
@@ -274,7 +284,7 @@ describe("isSubSectionPanelLoadingAtom", () => {
     const store = seedWithAgentPanel();
     // `agentIdsAtom` left at its `undefined` default (agent snapshot in flight),
     // registry empty (the agent panel has no definition yet).
-    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions("git"));
 
     expect(store.get(activePanelComponentInSubSectionAtom("center"))).toBeUndefined();
     expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(true);
@@ -282,7 +292,7 @@ describe("isSubSectionPanelLoadingAtom", () => {
 
   it("reports NOT loading once the agent snapshot has arrived, even if still unresolved", () => {
     const store = seedWithAgentPanel();
-    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions("git"));
     // The first agent frame lands (agentless: an empty array is still "loaded").
     store.set(agentIdsAtom, []);
 
@@ -296,7 +306,7 @@ describe("isSubSectionPanelLoadingAtom", () => {
     const store = seedWithAgentPanel();
     // The agent panel registers (its component becomes resolvable).
     store.set(panelRegistryAtom, [
-      ...buildStaticPanelDefinitions(),
+      ...buildStaticPanelDefinitions("git"),
       ...deriveDynamicPanels([makeAgent({ agentId: "t1" })], []),
     ]);
 
@@ -310,7 +320,7 @@ describe("isSubSectionPanelLoadingAtom", () => {
     const store = createStore();
     store.set(activeWorkspaceIdAtom, "ws-empty-center");
     store.set(workspaceLayoutAtom, EMPTY_WORKSPACE_LAYOUT);
-    store.set(panelRegistryAtom, buildStaticPanelDefinitions());
+    store.set(panelRegistryAtom, buildStaticPanelDefinitions("git"));
 
     expect(store.get(isSubSectionPanelLoadingAtom("center"))).toBe(false);
   });

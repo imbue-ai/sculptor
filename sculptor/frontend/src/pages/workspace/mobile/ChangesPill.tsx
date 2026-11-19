@@ -9,6 +9,7 @@ import { openInReusableTab } from "~/common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { canCreatePrAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
+import { useWorkspaceVcs } from "~/common/state/hooks/useWorkspaceVcs.ts";
 import { useGitAndOpenInRuntime } from "~/components/commandPalette/contextActions/useGitAndOpenInRuntime.ts";
 import { DiffScopePicker } from "~/pages/workspace/diffPanel/DiffScopePicker.tsx";
 import type { DiffScope } from "~/pages/workspace/diffPanel/types/diffPanel.ts";
@@ -59,6 +60,7 @@ const reviewDotClass = (prStatus: PrStatusInfo): string => {
 export const ChangesPill = ({ onReviewAll }: ChangesPillProps): ReactElement | null => {
   const { workspaceID } = useWorkspacePageParams();
   const workspace = useWorkspace(workspaceID);
+  const vcs = useWorkspaceVcs(workspaceID);
   const git = useGitAndOpenInRuntime();
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
   // The rule every Create PR entry point shares, so "+ PR" is disabled exactly when the desktop button is.
@@ -223,6 +225,7 @@ export const ChangesPill = ({ onReviewAll }: ChangesPillProps): ReactElement | n
           <DiffScopePicker
             scope={scope}
             onScopeChange={setScope}
+            vcs={vcs}
             hasTargetBranch={hasTargetBranch}
             uncommittedCount={uncommittedMap.size}
             allCount={allMap.size}

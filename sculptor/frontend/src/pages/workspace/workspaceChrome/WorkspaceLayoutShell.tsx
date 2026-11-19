@@ -20,6 +20,7 @@ import { useOrphanedLayoutGc } from "~/pages/workspace/layout/persistence/orphan
 import { SectionGrid } from "~/pages/workspace/layout/SectionGrid.tsx";
 
 import { AgentDeleteConfirmation } from "./AgentDeleteConfirmation.tsx";
+import { StaleWorkingCopyBanner } from "./StaleWorkingCopyBanner.tsx";
 import { TerminalCloseConfirmation } from "./TerminalCloseConfirmation.tsx";
 import { WorkspaceHeader } from "./WorkspaceHeader.tsx";
 import styles from "./WorkspaceLayoutShell.module.scss";
@@ -50,6 +51,9 @@ export const WorkspaceLayoutShell = (): ReactElement => {
     <PanelDndProvider>
       <div className={styles.shell} data-active-workspace-id={activeWorkspaceId ?? ""}>
         {!isMaximized && <WorkspaceHeader />}
+        {/* Shown even with a section maximized: jj records none of the files'
+            changes until the stale working copy is updated. */}
+        {activeWorkspaceId !== null && <StaleWorkingCopyBanner workspaceId={activeWorkspaceId} />}
         <SectionGrid />
       </div>
       {/* Headless owners of the panel-tab close confirmations, driven by the shared

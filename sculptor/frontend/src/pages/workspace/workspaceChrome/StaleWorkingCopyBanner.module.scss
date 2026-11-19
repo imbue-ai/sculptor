@@ -1,0 +1,6 @@
+// The banner runs edge to edge across its column, so it has square corners
+// and keeps its height.
+.banner {
+  border-radius: 0;
+  flex-shrink: 0;
+}

@@ -1,17 +1,17 @@
-"""Regression test: Individual file diff must fetch oldLines from HEAD in
-uncommitted scope.
+"""Regression test: Individual file diff must fetch oldLines from the head
+commit in uncommitted scope.
 
 When viewing uncommitted changes (HEAD → working tree), the "old" file
-content for hunk expansion must come from HEAD — not from the target branch.
-The Changes tab defaults to "All" (vs-target-branch) scope, which correctly
-uses the target branch ref.  This test explicitly switches to "Uncommitted"
-scope to verify that HEAD is used there.
+content for hunk expansion must come from the workspace's head commit, which
+the backend names on the diff artifact as the uncommitted diff's base — not
+from the target branch. The Changes tab defaults to "All" (vs-target-branch)
+scope, which uses the target's merge base. This test explicitly switches to
+"Uncommitted" scope to verify that the head commit is used there.
 
-Without baseRefOverride="HEAD" in the uncommitted scope, useFileLines falls
-back to getBaseRef() which returns e.g. "main".  When committed changes on
-the workspace branch significantly alter a file's line count vs "main",
-Pierre's DiffHunksRenderer crashes with "newLine or oldLine doesnt exist
-for context" because the target-branch line array is too short.
+When committed changes on the workspace branch significantly alter a file's
+line count vs the target, reading oldLines at the target makes Pierre's
+DiffHunksRenderer crash with "newLine or oldLine doesnt exist for context"
+because the target-branch line array is too short.
 
 This is the same class of bug as the Review All / Shiki regression
 (test_regression_review_all_shiki_error.py), but affects the individual file
@@ -19,6 +19,7 @@ diff panel rather than the combined review view.
 """
 
 import json
+from pathlib import Path
 
 from playwright.sync_api import Response
 from playwright.sync_api import expect
@@ -52,7 +53,10 @@ _EDIT_STEPS = ",".join(
     for i in (5, 100, 200, 300, 400, 500, 590)
 )
 
-_PROMPT = f"""\
+
+def _prompt(head_commit_file: Path) -> str:
+    """Commit a 600-line README, record the new head commit in `head_commit_file`, then edit the README."""
+    return f"""\
 fake_claude:multi_step `{{
   "steps": [
     {{
@@ -68,6 +72,12 @@ fake_claude:multi_step `{{
         "command": "git add README.md && git commit -m 'Expand README to 600 lines'"
       }}
     }},
+    {{
+      "command": "bash",
+      "args": {{
+        "command": "git rev-parse HEAD > '{head_commit_file}'"
+      }}
+    }},
     {_EDIT_STEPS}
   ]
 }}`"""
@@ -75,17 +85,17 @@ fake_claude:multi_step `{{
 
 @user_story("to view an individual file diff without the diff panel crashing")
 def test_individual_file_diff_does_not_crash_with_committed_line_count_changes(
-    sculptor_instance_: SculptorInstance,
+    sculptor_instance_: SculptorInstance, tmp_path: Path
 ) -> None:
-    """Opening an individual file diff must request old file content from HEAD.
+    """Opening an individual file diff must request old file content at the head commit.
 
-    The diff panel shows uncommittedDiff (HEAD → working tree), so
-    useFileLines must pass gitRef="HEAD" to the read-file-at-ref API.
-    Without the baseRefOverride="HEAD" fix, it falls back to the target
-    branch (e.g. "main") whose file may have a completely different line
-    count, causing Pierre to crash.
+    The diff panel shows uncommittedDiff (HEAD → working tree), so useFileLines
+    must read the old side at the workspace's head commit. Reading it at the
+    target branch, whose README has a completely different line count, makes
+    Pierre crash.
     """
     page = sculptor_instance_.page
+    head_commit_file = tmp_path / "head_commit"
 
     # Capture the gitRef used in read-file-at-ref requests for README.md.
     captured_git_refs: list[str] = []
@@ -103,13 +113,14 @@ def test_individual_file_diff_does_not_crash_with_committed_line_count_changes(
 
     page.on("response", _on_response)
 
-    task_page = start_task_and_wait_for_ready(page, prompt=_PROMPT)
+    task_page = start_task_and_wait_for_ready(page, prompt=_prompt(head_commit_file))
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+    head_commit_id = head_commit_file.read_text().strip()
 
     # Switch to the Changes tab and explicitly select the "Uncommitted" scope.
-    # The default scope is "All" (vs-target-branch), which correctly uses the
-    # target branch ref.  This test verifies the uncommitted scope uses HEAD.
+    # The default scope is "All" (vs-target-branch), which uses the target's
+    # merge base.  This test verifies the uncommitted scope uses the head commit.
     task_page.activate_changes_panel(scope="uncommitted")
 
     changes_panel = task_page.get_changes_panel()
@@ -126,14 +137,13 @@ def test_individual_file_diff_does_not_crash_with_committed_line_count_changes(
     expect(diff_panel).to_contain_text("MODIFIED")
 
     # The key assertion: the read-file-at-ref request for README.md must
-    # use gitRef="HEAD", not the target branch.  Without baseRefOverride,
-    # useFileLines falls back to getBaseRef() which returns "main" for this
-    # test repo (no targetBranch configured).  "main" has ~2 lines while
-    # HEAD has 600, causing Pierre to crash on hunk offset lookups.
+    # use the head commit, not the target branch.  The target's README has
+    # ~2 lines while the head commit's has 600, so a target read crashes
+    # Pierre on hunk offset lookups.
     readme_refs = [ref for ref in captured_git_refs if ref]
     assert len(readme_refs) > 0, "Expected at least one read-file-at-ref call for README.md"
-    assert all(ref == "HEAD" for ref in readme_refs), (
+    assert all(ref == head_commit_id for ref in readme_refs), (
         f"read-file-at-ref for README.md used wrong git ref: {readme_refs}. "
-        + "Expected 'HEAD' but got a target-branch ref, which would cause Pierre to crash "
-        + "when committed changes alter the file's line count vs the target branch."
+        + f"Expected the head commit {head_commit_id}; any other ref, such as the target branch, "
+        + "makes Pierre crash when committed changes alter the file's line count vs the target branch."
     )

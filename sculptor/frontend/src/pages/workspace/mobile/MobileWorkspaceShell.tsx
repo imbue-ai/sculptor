@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/hooks/navigation.ts";
 import { WorkspaceDrawer } from "~/components/mobile/WorkspaceDrawer.tsx";
+import { StaleWorkingCopyBanner } from "~/pages/workspace/workspaceChrome/StaleWorkingCopyBanner.tsx";
 
 import { ChatPanelContent } from "../chat/ChatPanelContent.tsx";
 import { AgentSheet } from "./AgentSheet.tsx";
@@ -52,6 +53,7 @@ export const MobileWorkspaceShell = ({ agentID }: { agentID: string }): ReactEle
         onOpenReview={() => setOverlay("review")}
         onOpenTerminal={() => setOverlay("terminal")}
       />
+      <StaleWorkingCopyBanner workspaceId={workspaceID} />
 
       <div className={styles.chatArea}>
         {/* The status row floats over the top of the chat (transparent
