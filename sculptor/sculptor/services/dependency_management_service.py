@@ -815,8 +815,6 @@ class DependencyManagementService(Service):
                 logger.debug("Stopping the dependency status refresher: concurrency group is exiting")
                 return
             except Exception:
-                # Warn only on the first failure of a streak, so a status that keeps
-                # failing to compute does not log every interval.
                 if has_warned_refresh_failure:
                     logger.debug("Dependency status refresh failed (repeat)")
                 else:
@@ -839,9 +837,8 @@ class DependencyManagementService(Service):
     def resolve_binary_path(self, tool: Dependency) -> str | None:
         """Resolve the binary path for a dependency based on the active mode.
 
-        A path other than the last computed status's means the tool was installed,
-        removed or moved since, as when a jj command fails because jj went away, so
-        a refresh is requested.
+        A path other than the one in the last computed status means the tool was
+        installed, removed or moved since, so a refresh is requested.
         """
         path = self._resolve_configured_binary_path(tool)
         status = self._status
@@ -1335,7 +1332,7 @@ class DependencyManagementService(Service):
         """JJ_AVAILABLE as jj reports it now, for a gate about to let jj act on the user's repository.
 
         A readiness other than the last computed status's requests a refresh, so
-        every window and the jj poller learn of it too.
+        every observer learns of it too.
         """
         readiness = self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
         status = self._status

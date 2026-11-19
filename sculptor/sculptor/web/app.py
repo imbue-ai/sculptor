@@ -3355,7 +3355,7 @@ def skip_account_setup(
 def get_dependencies_status(
     request: Request, user_session: UserSession = Depends(get_user_session)
 ) -> DependenciesStatus:
-    """Check every dependency now, as a re-check does, and return the status that every open window is also sent."""
+    """Check every dependency now and return the status, which every open window is also sent."""
     services = get_services_from_request_or_websocket(request)
     return services.dependency_management_service.refresh_status()
 
@@ -4553,9 +4553,9 @@ def _get_typed_artifact_data(
 
 @router.get("/api/v1/health")
 def get_health_check(request: Request) -> HealthCheckResponse:
-    """Liveness, version and environment facts, with the last computed dependency status; runs no tool.
+    """Liveness, version and environment facts, with the last computed dependency status.
 
-    Every open window calls this every few seconds.
+    Runs no tool, because every open window polls it.
     """
     services = get_services_from_request_or_websocket(request)
     user_config = get_user_config_instance()
