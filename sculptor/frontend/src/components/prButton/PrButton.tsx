@@ -119,7 +119,6 @@ CreatePrButtonFace.displayName = "CreatePrButtonFace";
 
 type CreatePrInputs = {
   workspaceId: string;
-  targetBranch: string;
   gitProvider: GitProvider;
 };
 
@@ -149,8 +148,8 @@ const useCreatePr = ({ workspaceId, gitProvider }: CreatePrInputs): CreatePrCont
 
 type CreatePrButtonProps = CreatePrInputs;
 
-const CreatePrButton = ({ workspaceId, targetBranch, gitProvider }: CreatePrButtonProps): ReactElement => {
-  const { isDisabled, handleCreate } = useCreatePr({ workspaceId, targetBranch, gitProvider });
+const CreatePrButton = ({ workspaceId, gitProvider }: CreatePrButtonProps): ReactElement => {
+  const { isDisabled, handleCreate } = useCreatePr({ workspaceId, gitProvider });
   const editPrompt = useEditAgentPrompt({ workspaceId, kind: "pr-creation" });
 
   return (
@@ -444,6 +443,7 @@ const ErrorPrButton = ({ error }: ErrorPrButtonProps): ReactElement => {
 };
 
 type AssignPrButtonProps = CreatePrInputs & {
+  targetBranch: string;
   prStatus: PrStatusInfo;
   onSwitchTarget?: (newTarget: string) => void;
 };
@@ -455,7 +455,7 @@ const AssignPrButton = ({
   gitProvider,
   onSwitchTarget,
 }: AssignPrButtonProps): ReactElement => {
-  const { isDisabled: isCreateDisabled, handleCreate } = useCreatePr({ workspaceId, targetBranch, gitProvider });
+  const { isDisabled: isCreateDisabled, handleCreate } = useCreatePr({ workspaceId, gitProvider });
 
   const handleSwitchTarget = (): void => {
     if (prStatus.mismatchedPrTargetBranch && onSwitchTarget) {
@@ -549,7 +549,7 @@ export const PrButton = ({
         />
       );
     }
-    return <CreatePrButton workspaceId={workspaceId} targetBranch={targetBranch} gitProvider={gitProvider} />;
+    return <CreatePrButton workspaceId={workspaceId} gitProvider={gitProvider} />;
   }
 
   if (prStatus.prState === "open") {
