@@ -36,7 +36,7 @@ Integration tests considered:
 | HELP | 0 | 2 | 1 | 3 |
 | HOME | 2 | 4 | 14 | 20 |
 | ADDWS | 8 | 17 | 4 | 29 |
-| ADDREPO | 6 | 5 | 2 | 13 |
+| ADDREPO | 6 | 4 | 3 | 13 |
 | ONB | 11 | 10 | 15 | 36 |
 | WS | 40 | 26 | 20 | 86 |
 | CHAT | 21 | 16 | 9 | 46 |
@@ -48,7 +48,7 @@ Integration tests considered:
 | MENT | 5 | 2 | 3 | 10 |
 | SKILL | 2 | 1 | 0 | 3 |
 | ACT | 2 | 3 | 1 | 6 |
-| **Total** | **181** | **170** | **144** | **495** |
+| **Total** | **181** | **169** | **145** | **495** |
 
 **Under the integration-only standard, 37% of scenarios are completely covered, 34% partially, and
 29% not at all.** (Counts are derived directly from the two sections below.)
@@ -145,7 +145,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | ADDWS-029 | Partial | test_create_jj_workspaces.py::test_create_jj_workspaces_from_the_dialog_and_the_sidebar (sidebar "+" creates a jj workspace with the jj badge and pill) | Make jj unusable; click the repository's "+"; assert the Add Workspace form opens for that repository. |
 | ADDREPO-001 | Partial | test_multi_repo.py::test_adding_duplicate_repo_shows_error; test_regression_settings_delete_repo_stays_on_page.py::test_adding_repo_stays_on_settings_page; test_add_repo_remote_picker.py (dialog opens on GitHub source) | Assert the source picker defaults to GitHub with a Local Folder option, and that Local Folder shows a focused path input + a Browse button on desktop. |
 | ADDREPO-002 | Missing | — | Open the dialog, click Cancel / Escape / overlay; assert it closes with no changes. |
-| ADDREPO-003 | Partial | test_path_autocomplete_keyboard.py::test_cmd_enter_submits_path | While validation is in progress, attempt to close; assert the dialog stays open. |
+| ADDREPO-003 | Missing | — | While validation is in progress, attempt to close; assert the dialog stays open. |
 | ADDREPO-004 | Partial | test_multi_repo.py::test_create_new_project_from_add_workspace_page (adds via Settings UI) | Focused dialog test: enter a valid path, click "Add Repository"; assert it closes and the new repo is selected in the dropdown. |
 | ADDREPO-005 | Missing | — | Type a path, close the dialog, reopen it; assert the path input is empty. |
 | ADDREPO-006 | Partial | test_path_autocomplete_keyboard.py::test_autocomplete_shows_submit_hint; test_files_panel.py::test_path_autocomplete_shows_tilde_for_home_directory | Assert the debounce spinner before results and the "No matching directories" message when empty. |
