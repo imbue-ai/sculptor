@@ -198,8 +198,7 @@ _style_exclude := '__snapshots__|test_data'
 
 # Defines list_tracked_files, which prints the repository's tracked files when
 # run from the repository root. A jj workspace has no .git, and git run in one
-# lists the files of whatever checkout encloses it, usually none, so there jj
-# lists them: the pinned jj from `just install-jj`, else the jj on PATH.
+# lists the files of whatever checkout encloses it, so there jj lists them.
 _list_tracked_files_fn := '''
 list_tracked_files() {
   if [ -e .git ]; then
@@ -1618,8 +1617,8 @@ test-unit-backend junitxml="": install-jj
 # Xcode 16, the oldest git on a platform Sculptor ships for; 2.39.5 is the last
 # release of that line, and Debian 12's git.
 _oldest_supported_git := "2.39.5"
-# The oldest git the pinned jj accepts: jj runs git to fetch and push, and refuses
-# a git older than 2.42.0.
+# The oldest git the pinned jj accepts: jj runs git to fetch and push, and
+# refuses anything older.
 _oldest_git_for_jj := "2.42.0"
 
 # Run the VCS seam's unit tests against old gits that scripts/build_git.sh builds

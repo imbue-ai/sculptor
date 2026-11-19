@@ -194,10 +194,9 @@ jobs:
           fail_on_failure: false
           require_tests: false
 
-  # The job above runs the runner's recent git. This one runs the VCS seam's
-  # unit tests against the oldest gits Sculptor and the pinned jj accept (see
-  # `test-vcs-oldest-git` in the justfile), so a git command those reject fails
-  # here first.
+  # Runs the VCS seam's unit tests against the oldest gits Sculptor and the
+  # pinned jj accept (`just test-vcs-oldest-git`). The runner's own git is
+  # recent, so a command an old git rejects passes everywhere else.
   vcs-tests-on-oldest-git:
     name: VCS tests on the oldest supported git
     runs-on: ubuntu-latest

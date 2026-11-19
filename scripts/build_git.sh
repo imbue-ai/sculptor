@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Usage: build_git.sh <version> <prefix>
 #
-# Builds a release of git from source into <prefix>, for `just test-vcs-oldest-git`.
-# Does nothing if <prefix> already holds that version. The build leaves out what
-# the VCS tests do not use (HTTP transport, translations, the Perl, Python and Tk
-# parts), so it needs only a C compiler, make and the zlib headers.
+# Builds a release of git from source into <prefix>, for testing Sculptor
+# against old gits. Does nothing if <prefix> already holds that version. The
+# build leaves out what the VCS tests do not use, so it needs only a C
+# compiler, make and the zlib headers.
 set -euo pipefail
 
 version="$1"
