@@ -5,6 +5,7 @@ import { WorkspaceInitializationStrategy } from "~/api";
 import {
   defaultSourceFor,
   hasRequiredCreationFields,
+  isCreationBlockedOnJj,
   offeredCreationModes,
   repositoryWorkspaceVcs,
   resolveCreationMode,
@@ -158,4 +159,18 @@ describe("offeredCreationModes", () => {
       expect(offeredCreationModes(inputs)).toEqual(expected);
     },
   );
+});
+
+describe("isCreationBlockedOnJj", () => {
+  it.each([
+    { mode: JJ_WORKSPACE, vcs: "jj", expected: false },
+    { mode: JJ_WORKSPACE, vcs: "jj-checking", expected: true },
+    { mode: JJ_WORKSPACE, vcs: "jj-unavailable", expected: true },
+    // Clone and in-place are git, so jj's state never holds them up.
+    { mode: CLONE, vcs: "jj-unavailable", expected: false },
+    { mode: IN_PLACE, vcs: "jj-checking", expected: false },
+    { mode: WORKTREE, vcs: "git", expected: false },
+  ] as const)("is $expected for $mode in a $vcs repository", ({ mode, vcs, expected }) => {
+    expect(isCreationBlockedOnJj({ mode, vcs })).toBe(expected);
+  });
 });

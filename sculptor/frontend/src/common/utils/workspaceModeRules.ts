@@ -131,6 +131,18 @@ export const repositoryWorkspaceVcs = (facts: {
   }
 };
 
+/**
+ * Whether creating in `mode` must wait on jj: a jj workspace, in a repository
+ * whose jj is unavailable or not yet checked. Every create surface holds back
+ * by this rule.
+ */
+export const isCreationBlockedOnJj = (inputs: {
+  mode: WorkspaceInitializationStrategy;
+  vcs: RepositoryWorkspaceVcs;
+}): boolean =>
+  inputs.mode === WorkspaceInitializationStrategy.JJ_WORKSPACE &&
+  (inputs.vcs === "jj-unavailable" || inputs.vcs === "jj-checking");
+
 /** A mode that gives the workspace a checkout of its own: a git worktree or a jj workspace. */
 export type IsolatedCreationMode =
   typeof WorkspaceInitializationStrategy.WORKTREE | typeof WorkspaceInitializationStrategy.JJ_WORKSPACE;

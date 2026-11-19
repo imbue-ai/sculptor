@@ -27,6 +27,7 @@ import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
 import {
   defaultSourceFor,
   hasRequiredCreationFields,
+  isCreationBlockedOnJj,
   isolatedModeFor,
   resolveCreationMode,
   WORKSPACE_MODE_RULES,
@@ -202,7 +203,7 @@ export const NewWorkspaceForm = ({
   // A repository that uses jj for new workspaces creates none while jj is
   // unavailable, or while it is not yet known whether jj is; the callout below
   // says why only once jj is known to be unavailable.
-  const isBlockedOnJj = isJjMode && (repositoryVcs === "jj-unavailable" || repositoryVcs === "jj-checking");
+  const isBlockedOnJj = isCreationBlockedOnJj({ mode, vcs: repositoryVcs });
   const isJjKnownUnavailable = isJjMode && repositoryVcs === "jj-unavailable";
   const jjBookmarks = useJjBookmarkChoices({
     projectId: selectedProjectId,

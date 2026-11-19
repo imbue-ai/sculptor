@@ -1,7 +1,8 @@
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useState } from "react";
 
-import { getCurrentBranch, previewBranchName, WorkspaceInitializationStrategy } from "~/api";
+import type { WorkspaceInitializationStrategy } from "~/api";
+import { getCurrentBranch, previewBranchName } from "~/api";
 import type { StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { repositoryWorkspaceVcsAtomFamily } from "~/common/state/atoms/repositoryWorkspaceVcs.ts";
@@ -11,6 +12,7 @@ import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import {
   hasRequiredCreationFields,
+  isCreationBlockedOnJj,
   resolveCreationMode,
   WORKSPACE_MODE_RULES,
 } from "~/common/utils/workspaceModeRules.ts";
@@ -89,10 +91,7 @@ export const useCreateWorkspaceFromSidebar = (): UseCreateWorkspaceFromSidebarRe
       const mode = resolveCreationMode({ remembered: remembered?.mode, vcs });
       // The dialog waits for jj's availability, says why a jj workspace cannot
       // be created now, and links to where it can be fixed.
-      if (
-        (vcs === "jj-unavailable" || vcs === "jj-checking") &&
-        mode === WorkspaceInitializationStrategy.JJ_WORKSPACE
-      ) {
+      if (isCreationBlockedOnJj({ mode, vcs })) {
         setModalState({ open: true, presetProjectId: projectId });
         return;
       }
