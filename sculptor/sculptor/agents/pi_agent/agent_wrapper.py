@@ -65,6 +65,7 @@ from sculptor.agents.default.constants import JJ_REQUESTED_BOOKMARK_PROMPT
 from sculptor.agents.default.constants import JJ_SKILL_NAME
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
+from sculptor.agents.default.utils import is_jj_workspace
 from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
@@ -129,7 +130,6 @@ from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
 from sculptor.agents.pi_agent.tool_rendering import map_pi_tool_call
 from sculptor.common.plugin import get_plugin_dirs
-from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.common import generate_id
 from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.secrets_utils import Secret
@@ -828,7 +828,7 @@ class PiAgent(DefaultAgentWrapper):
         env_prompt = self.environment.get_system_prompt()
         if env_prompt:
             parts.append(env_prompt.strip())
-        if self._is_jj_workspace():
+        if is_jj_workspace(self.environment):
             parts.append(_PI_JJ_SKILL_REQUIRED_PROMPT)
             requested_bookmark = self._read_requested_bookmark()
             if requested_bookmark is not None:
@@ -836,19 +836,6 @@ class PiAgent(DefaultAgentWrapper):
         if self.system_prompt:
             parts.append(f"<User instructions>\n{self.system_prompt.strip()}\n</User instructions>")
         return "\n\n".join(parts)
-
-    def _is_jj_workspace(self) -> bool:
-        match self.environment.get_initialization_strategy():
-            case (
-                WorkspaceInitializationStrategy.IN_PLACE
-                | WorkspaceInitializationStrategy.CLONE
-                | WorkspaceInitializationStrategy.WORKTREE
-            ):
-                return False
-            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-                return True
-            case _ as unreachable:
-                assert_never(unreachable)
 
     def _read_requested_bookmark(self) -> str | None:
         provider = self.jj_bookmark_facts_provider
@@ -1616,7 +1603,7 @@ class PiAgent(DefaultAgentWrapper):
 
     def _claim_jj_skill_invocation(self) -> bool:
         """Whether this turn invokes the jj skill: a jj workspace's first turn of the session; recorded once true."""
-        if not self._is_jj_workspace() or JJ_SKILL_NAME not in self._discovered_skill_names:
+        if not is_jj_workspace(self.environment) or JJ_SKILL_NAME not in self._discovered_skill_names:
             return False
         if get_state_file_contents(self.environment, PI_JJ_SKILL_SESSION_STATE_FILE) == self._session_id:
             return False

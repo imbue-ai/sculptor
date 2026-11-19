@@ -12,7 +12,6 @@ from threading import Event
 from typing import Any
 from typing import Callable
 from typing import Mapping
-from typing import assert_never
 
 from loguru import logger
 
@@ -40,9 +39,9 @@ from sculptor.agents.default.errors import InterruptFailure
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.default.utils import get_warning_message
+from sculptor.agents.default.utils import is_jj_workspace
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.config.user_config import UserConfig
-from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.processes.local_process import RunningProcess
@@ -108,20 +107,6 @@ def resolve_auto_rename_reminder(
 
 # The jj stack state the previous chat message saw, so a bookmark nudge is sent once per state.
 _JJ_BOOKMARK_NUDGE_STATE_FILE = "jj_bookmark_nudge_stack_state.json"
-
-
-def _is_jj_workspace(environment: AgentExecutionEnvironment) -> bool:
-    match environment.get_initialization_strategy():
-        case (
-            WorkspaceInitializationStrategy.IN_PLACE
-            | WorkspaceInitializationStrategy.CLONE
-            | WorkspaceInitializationStrategy.WORKTREE
-        ):
-            return False
-        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
-            return True
-        case _ as unreachable:
-            assert_never(unreachable)
 
 
 class ClaudeProcessManager:
@@ -221,7 +206,7 @@ class ClaudeProcessManager:
 
     def _resolve_jj_workspace_reminders(self) -> JjWorkspaceReminders | None:
         """The jj reminders for a chat message in this workspace; None for a git workspace."""
-        if not _is_jj_workspace(self.environment):
+        if not is_jj_workspace(self.environment):
             return None
         provider = self._jj_bookmark_facts_provider
         if provider is None:
@@ -621,7 +606,7 @@ class ClaudeProcessManager:
         env_system_prompt = self.environment.get_system_prompt()
         if env_system_prompt:
             full_system_prompt = f"{full_system_prompt}\n{env_system_prompt}"
-        if _is_jj_workspace(self.environment):
+        if is_jj_workspace(self.environment):
             full_system_prompt = f"{full_system_prompt}\n{CLAUDE_JJ_SKILL_REQUIRED_PROMPT}"
 
         if self._system_prompt:
