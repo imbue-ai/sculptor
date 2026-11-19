@@ -354,7 +354,7 @@ def _rewrite_skill_invocation(text: str, discovered_skill_names: frozenset[str])
     if name not in discovered_skill_names:
         return text
     bare_name = name.rsplit(":", 1)[-1]
-    return f"/skill:{bare_name}{rest}"
+    return f"{_PI_SKILL_INVOCATION_PREFIX}{bare_name}{rest}"
 
 
 def _render_synthesized_skill(name: str, description: str, body: str) -> str:
