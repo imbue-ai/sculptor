@@ -42,7 +42,9 @@ tar -xJf "$tmp/$tarball" -C "$tmp"
 
 echo "Building git $version into $prefix..."
 rm -rf "$prefix"
-if ! make -C "$tmp/git-$version" -j"$(getconf _NPROCESSORS_ONLN)" prefix="$prefix" \
+# These releases predate C23, which makes `unreachable` a macro that collides
+# with a function of that name in git; compilers defaulting to C23 reject them.
+if ! make -C "$tmp/git-$version" -j"$(getconf _NPROCESSORS_ONLN)" prefix="$prefix" CFLAGS="-O2 -std=gnu17" \
   NO_GETTEXT=1 NO_TCLTK=1 NO_OPENSSL=1 NO_CURL=1 NO_EXPAT=1 NO_PERL=1 NO_PYTHON=1 NO_INSTALL_HARDLINKS=1 \
   install >"$tmp/build.log" 2>&1; then
   tail -n 50 "$tmp/build.log" >&2
