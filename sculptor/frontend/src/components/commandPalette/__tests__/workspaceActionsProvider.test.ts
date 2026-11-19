@@ -247,6 +247,16 @@ describe("buildWorkspaceActionsProvider", () => {
     );
   });
 
+  it("commit row says nothing of staging in a jj workspace, which has no staging area", () => {
+    seedWorkspace("ws1", "Active", WorkspaceInitializationStrategy.JJ_WORKSPACE);
+    setWorkspaceIds(["ws1"]);
+    const cmds = buildWorkspaceActionsProvider(
+      makeCommandRuntime(),
+      makeActionRuntime({ hasUncommittedChanges: true }),
+    ).produce(wsCtx("ws1"));
+    expect(cmds.find((c) => c.id === "workspaces.action.ws1.commit")?.subtitle).toBe("Commit current changes with jj");
+  });
+
   it("create_pr disabled subtitle uses pull request terminology", () => {
     seedWorkspace("ws1", "Active");
     setWorkspaceIds(["ws1"]);

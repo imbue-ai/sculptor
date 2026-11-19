@@ -522,6 +522,12 @@ describe("NewWorkspaceForm", () => {
       );
     });
 
+    it("labels the filled-in name under the title as a bookmark", async () => {
+      renderJjRepositoryForm();
+
+      await waitFor(() => expect(screen.getByLabelText("bookmark")).toHaveValue("sculptor/test-branch"));
+    });
+
     it("creates a jj workspace with no source, so it starts from its target", async () => {
       renderJjRepositoryForm();
 

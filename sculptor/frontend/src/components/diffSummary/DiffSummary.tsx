@@ -51,7 +51,9 @@ export const DiffSummary = ({ workspaceId }: DiffSummaryProps): ReactElement | n
       <span className={styles.additions}>+{stats.additions}</span>
       <span className={styles.deletions}>-{stats.deletions}</span>
       <span className={styles.separator}>&middot;</span>
-      <span className={styles.fileCount}>{stats.filesChanged} files</span>
+      <span className={styles.fileCount}>
+        {stats.filesChanged} {stats.filesChanged === 1 ? "file" : "files"}
+      </span>
     </Button>
   );
 };

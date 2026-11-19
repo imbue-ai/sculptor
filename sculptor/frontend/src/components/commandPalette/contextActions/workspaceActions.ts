@@ -2,6 +2,7 @@ import { ExternalLink, GitCommitVertical, GitPullRequestArrow, Pencil, Trash2 } 
 
 import { ElementIds } from "../../../api";
 import { WORKSPACE_MODE_RULES } from "../../../common/utils/workspaceModeRules.ts";
+import { workspaceVcsOf } from "../../../common/utils/workspaceVcs.ts";
 import type { WorkspaceAction, WorkspaceActionRuntime } from "./types/contextActions.ts";
 
 /**
@@ -21,7 +22,9 @@ export const buildWorkspaceActions = (runtime: WorkspaceActionRuntime): Readonly
     id: "commit",
     title: "Commit changes",
     icon: GitCommitVertical,
-    paletteSubtitle: "Stage and commit current changes",
+    // jj has no staging area.
+    getPaletteSubtitle: (ws): string =>
+      workspaceVcsOf(ws) === "jj" ? "Commit current changes with jj" : "Stage and commit current changes",
     paletteOrder: 10,
     paletteKeywords: ["git", "save"],
     disabled: (ws): boolean => !runtime.hasUncommittedChanges(ws) || !runtime.canCommit(ws),

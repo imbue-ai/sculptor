@@ -4,7 +4,7 @@ import { useAtomValue } from "jotai";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import type { CiBabysitterConfig, JjIdentity, Project } from "../../../api";
+import type { CiBabysitterConfig, DependencyInfo, JjIdentity, Project } from "../../../api";
 import { ElementIds, setJjIdentity, UserConfigField } from "../../../api";
 import { dependenciesStatusAtom, refreshDependenciesStatus } from "../../../common/state/atoms/dependenciesStatus";
 import { projectsArrayAtom } from "../../../common/state/atoms/projects.ts";
@@ -80,6 +80,14 @@ const JjRepositoriesRow = ({
     )}
   </SettingRow>
 );
+
+const describeJjSource = (jj: DependencyInfo): string => {
+  if (jj.source === "MANAGED") {
+    return "Managed";
+  }
+  // Managed mode runs a jj on PATH while no managed copy is installed.
+  return jj.mode === "MANAGED" ? "On your PATH, until the managed copy is installed" : "External binary";
+};
 
 type JjSettingsSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
@@ -230,7 +238,7 @@ export const JjSettingsSection = ({ onSettingChange }: JjSettingsSectionProps): 
             <Flex align="center" gap="2">
               <CheckCircledIcon color="var(--green-9)" />
               <Text size="2" color="green" data-testid={ElementIds.JJ_UP_TO_DATE}>
-                {jj.source === "EXTERNAL" ? `v${jj.version} — External binary` : `v${jj.version} — Managed`}
+                v{jj.version} — {describeJjSource(jj)}
               </Text>
             </Flex>
           ) : jj?.isVersionInRange === false ? (

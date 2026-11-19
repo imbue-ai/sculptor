@@ -2,6 +2,7 @@ import { CrossCircledIcon, ExclamationTriangleIcon, InfoCircledIcon } from "@rad
 import { Button, Callout, Code, Dialog, Flex, Spinner, Text } from "@radix-ui/themes";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
+import { Fragment } from "react";
 
 import type { JjColocationBlocker, JjColocationPreflight, JjColocationWarning } from "~/api";
 import { ElementIds, getProjectJjPreflight } from "~/api";
@@ -87,6 +88,24 @@ const usePreflight = (projectId: string): PreflightResult => {
   return { status: "loaded", preflight: query.data };
 };
 
+// A path has no break opportunities of its own, so the theme's
+// overflow-wrap would wrap a long one inside a directory name. A <wbr> after
+// each slash lets it wrap between directories instead.
+const WrappablePath = ({ path }: { path: string }): ReactElement => (
+  <>
+    {path.split("/").map((segment, index) => (
+      <Fragment key={index}>
+        {index > 0 && (
+          <>
+            /<wbr />
+          </>
+        )}
+        {segment}
+      </Fragment>
+    ))}
+  </>
+);
+
 const JjColocationDialogBody = ({
   projectId,
   projectPath,
@@ -102,8 +121,11 @@ const JjColocationDialogBody = ({
   return (
     <Flex direction="column" gap="3">
       <Text size="2">
-        Sculptor will run <Code>jj git init --colocate</Code> in <Code>{projectPath}</Code>. When it finishes, new
-        workspaces in this repository are jj workspaces.
+        Sculptor will run <Code>jj git init --colocate</Code> in{" "}
+        <Code>
+          <WrappablePath path={projectPath} />
+        </Code>
+        . When it finishes, new workspaces in this repository are jj workspaces.
       </Text>
       <Text size="2">
         Git keeps working in this repository: your files, your branch and HEAD stay as they are. Afterwards git shows

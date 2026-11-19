@@ -424,6 +424,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
             if (!open) setDeleteTarget(null);
           }}
           entityType="workspace"
+          workspaceId={deleteTarget?.objectId}
           entityName={deleteTarget?.description ?? ""}
           onConfirm={handleDeleteConfirm}
         />

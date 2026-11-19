@@ -15,7 +15,7 @@ import { ContextMenu, Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Maximize2, Minimize2, PanelBottom, PanelRight, Pencil, Trash2, X } from "lucide-react";
 import type { ReactElement } from "react";
-import { Fragment, memo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { agentRenameTargetAtom } from "~/components/commandPalette/contextActions/atoms/contextActions.ts";
@@ -95,6 +95,26 @@ const renderPanelContextMenuItem = (item: PanelContextMenuItem): ReactElement =>
   );
 };
 
+// Scroll the tab strip, and nothing above it, until the tab shows whole inside
+// the strip's padding. Element.scrollIntoView would also scroll the section's
+// clipping ancestors.
+const revealTabInStrip = (tab: HTMLElement): void => {
+  const strip = tab.closest<HTMLElement>("[role=tablist]");
+  if (strip === null) {
+    return;
+  }
+  const tabRect = tab.getBoundingClientRect();
+  const stripRect = strip.getBoundingClientRect();
+  const { paddingLeft, paddingRight } = getComputedStyle(strip);
+  const visibleLeft = stripRect.left + parseFloat(paddingLeft);
+  const visibleRight = stripRect.right - parseFloat(paddingRight);
+  if (tabRect.left < visibleLeft) {
+    strip.scrollLeft -= visibleLeft - tabRect.left;
+  } else if (tabRect.right > visibleRight) {
+    strip.scrollLeft += tabRect.right - visibleRight;
+  }
+};
+
 type PanelTabProps = {
   panelId: PanelId;
   subSection: SubSectionId;
@@ -137,10 +157,18 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const section = toSection(subSection);
   const existingSplit = useAtomValue(sectionSplitForSectionAtom(section));
   const splitPanel = useSetAtom(splitSectionAtom);
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, node, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: panelId,
     data: { kind: "panel", panelId, from: subSection, index },
   });
+
+  // The strip scrolls rather than shrinking its tabs, so a tab activated past its
+  // edge would stay cut off, close button and all.
+  useEffect(() => {
+    if (isActive && node.current !== null) {
+      revealTabInStrip(node.current);
+    }
+  }, [isActive, node]);
 
   if (definition === undefined) {
     return null;
@@ -243,9 +271,9 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   // itself is focused — keydowns inside children (rename input, close button)
   // don't start a drag. Pointer listeners are dropped while renaming so text
   // selection inside the input can't move the panel.
-  const setTabRef = (node: HTMLElement | null): void => {
-    setNodeRef(node);
-    setActivatorNodeRef(node);
+  const setTabRef = (element: HTMLElement | null): void => {
+    setNodeRef(element);
+    setActivatorNodeRef(element);
   };
 
   // The label ellipsis-clips at a fixed max-width, so a tooltip is only useful when the
@@ -473,9 +501,12 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
       }
     : undefined;
 
+  // gap="2" keeps the ghost IconButtons' negative margins from overlapping the
+  // tab strip and each other, so a click at the strip's edge lands on a tab.
   return (
     <Flex
       align="center"
+      gap="2"
       className={styles.header}
       style={headerStyle}
       data-maximized={isMaximized ? "true" : undefined}
