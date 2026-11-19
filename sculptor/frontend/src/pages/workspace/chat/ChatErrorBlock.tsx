@@ -40,8 +40,7 @@ const UNAVAILABLE_TOOLS: ReadonlyArray<UnavailableTool> = [
     recoveredLabel: "installed",
     getInstalled: (status: DependenciesStatus): boolean => status.pi.installed,
   },
-  // A jj workspace's agent stops before running jj when jj cannot be used:
-  // not installed, not runnable, too old, or with no author identity.
+  // A jj workspace's agent stops, saying why, before running jj when jj cannot be used.
   {
     errorSuffix: "JjUnavailableError",
     name: "jj",

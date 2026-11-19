@@ -1,7 +1,7 @@
 // The messages the Commit and Create PR actions send to a workspace's agent,
 // built in one place so every entry point sends the same text.
 
-/** The two prompts a workspace's agent is sent from its actions, each with a git and an optional jj setting. */
+/** A prompt a workspace's agent is sent from one of its actions; each has a git setting and an optional jj one. */
 export type AgentPromptKind = "commit" | "pr-creation";
 
 /**

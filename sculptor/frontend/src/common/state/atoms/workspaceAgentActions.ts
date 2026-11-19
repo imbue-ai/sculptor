@@ -334,8 +334,7 @@ const readMessageWorkspace = (get: Getter, workspaceId: string): PromptWorkspace
 /**
  * Which setting a workspace's Commit or Create PR prompt comes from: a git
  * workspace's git prompt; a jj workspace's jj prompt, or, while no jj prompt is
- * set, the git prompt in its place. The messages and the Edit prompt menus both
- * follow it.
+ * set, the git prompt in its place.
  */
 export type AgentPromptSource = "git" | "jj" | "git-for-jj";
 

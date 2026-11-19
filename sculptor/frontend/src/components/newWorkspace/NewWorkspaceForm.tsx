@@ -200,10 +200,8 @@ export const NewWorkspaceForm = ({
   // A remembered source belongs to the mode it was picked for: a bookmark is no worktree's source.
   const rememberedSourceBranch = rememberedSettings?.mode === mode ? rememberedSettings.sourceBranch : undefined;
   const isJjMode = workspaceVcsOf({ initializationStrategy: mode }) === "jj";
-  // A repository that uses jj for new workspaces creates none while jj is
-  // unavailable, or while it is not yet known whether jj is; the callout below
-  // says why only once jj is known to be unavailable.
   const isBlockedOnJj = isCreationBlockedOnJj({ mode, vcs: repositoryVcs });
+  // The callout says why only once jj is known to be unavailable, not while it is still being checked.
   const isJjKnownUnavailable = isJjMode && repositoryVcs === "jj-unavailable";
   const jjBookmarks = useJjBookmarkChoices({
     projectId: selectedProjectId,

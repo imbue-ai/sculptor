@@ -153,8 +153,9 @@ export const ciBabysitterMergeConflictPromptAtom = atom<string>(
   (get) => get(ciBabysitterConfigAtom)?.mergeConflictPrompt ?? DEFAULT_CI_BABYSITTER_MERGE_CONFLICT_PROMPT,
 );
 
-// The prompts sent instead of the two above when the PR comes from a jj
-// workspace; null means the git prompt is used.
+// The prompts sent instead of the babysitter's pipeline-failed and
+// merge-conflict prompts when the PR comes from a jj workspace; null means the
+// git prompt is used.
 export const ciBabysitterJjPipelineFailedPromptAtom = atom<string | null>(
   (get) => get(ciBabysitterConfigAtom)?.jjPipelineFailedPrompt ?? null,
 );
