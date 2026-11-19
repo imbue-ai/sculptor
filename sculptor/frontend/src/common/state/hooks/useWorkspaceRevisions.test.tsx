@@ -8,7 +8,7 @@ import type * as api from "~/api";
 import type { RevisionHistoryResponse, Workspace } from "~/api";
 import { WorkspaceInitializationStrategy } from "~/api";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import { queryClient } from "~/common/state/queryClient.ts";
+import { invalidateWorkspaceRevisionsQueries, queryClient } from "~/common/state/queryClient.ts";
 
 import { useWorkspaceRevisions } from "./useWorkspaceRevisions.ts";
 
@@ -60,6 +60,16 @@ describe("useWorkspaceRevisions", () => {
     expect(mockGetWorkspaceRevisions).toHaveBeenCalledWith(
       expect.objectContaining({ path: { workspace_id: WORKSPACE_ID } }),
     );
+  });
+
+  it("reads the revisions again once they are invalidated", async () => {
+    mockGetWorkspaceRevisions.mockResolvedValue({ data: HISTORY });
+    const { result } = renderRevisions(WorkspaceInitializationStrategy.JJ_WORKSPACE);
+    await waitFor(() => expect(result.current.data).toEqual(HISTORY));
+
+    invalidateWorkspaceRevisionsQueries(WORKSPACE_ID);
+
+    await waitFor(() => expect(mockGetWorkspaceRevisions).toHaveBeenCalledTimes(2));
   });
 
   it("asks nothing of a git workspace, which has commits instead", () => {
