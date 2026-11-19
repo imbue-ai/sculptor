@@ -1,8 +1,8 @@
 """A jj workspace row for tests of services that read a workspace from the database.
 
-jj workspaces cannot be created through the workspace service's create path
-yet, so the row is written through the service and its checkout built with
-jj's seam directly, at `<environment_path>/code`.
+The workspace service's create path writes only the row; an environment builds
+the checkout when an agent starts. Here jj's seam builds it directly, at
+`<environment_path>/code`, so a test needs no environment.
 """
 
 from pathlib import Path
