@@ -1324,9 +1324,6 @@ pyrefly-check:
 # Creates a production build of the Sculptor webapp and backend.
 [group("build")]
 dist:
-    # The ENVIRONMENT variable gets eventually passed to sculptor/builder/cli.py,
-    # where it's used to derive environment variables defining sentry DSN and release ID,
-    # which then get picked up as Vite defines and affect the built JS files.
     @just ENVIRONMENT=production build-frontend build-backend
 
 # Builds a "sidecar" of the Sculptor webapp backend.
