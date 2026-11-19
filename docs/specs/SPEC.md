@@ -840,11 +840,12 @@ usable — "jj {version} is available, managed by Sculptor." — or names what s
 jj is not installed, does not run, is an unsupported version, runs a git older than jj accepts (or finds
 none), or has **no author identity**; or the user's own login shell runs a different jj outside the
 supported versions — which blocks jj because that jj shares the colocated repository. jj is usable only
-when none of those holds, and every surface that refuses for it gives the same reason sentence.
+when none of those holds. The repository's jj switches, the colocation dialog and an agent that cannot
+start give the same reason sentence; the Add Workspace form says only that jj is unavailable.
 Sculptor accepts the pinned jj release or any later 0.x release; it can download and manage a pinned
 copy — first only when you click **Install jj**, then replacing it at startup if it is broken or out of
-range — or use a jj on your `PATH` or at a custom path. When the login shell runs a different jj that is
-supported, the section lists it as **jj in your terminal**, since workspace terminals run it while
+range — or use a jj on your `PATH` or at a custom path. When the login shell runs a different jj, the
+section lists it as **jj in your terminal**, since workspace terminals run it while
 agents run Sculptor's. When jj has no author identity, the section offers a form, prefilled from your
 global git identity, that writes `user.name` and `user.email` to your jj user config. A **Re-check**
 button, and opening the section, check again for changes made outside Sculptor.
@@ -891,13 +892,14 @@ the requested bookmark name greyed out, and with neither it shows the working co
 description. Hovering opens a card with the bookmarks, the working copy's change id, commit id and
 description, its flags (empty, conflict, divergent, stale), and the target; clicking copies the bookmark,
 or the change id. The target selector lists the repository's bookmarks, reading **No target bookmark**
-when none is set. At the end of each agent turn, while the workspace has no bookmark, Sculptor creates
+when none is set. At the end of each Claude or Pi agent turn, while the workspace has no bookmark, Sculptor creates
 the requested bookmark on the newest described revision — if exactly one is newest and the name is free.
 Sculptor never moves a bookmark afterwards; agents are told to keep it on their newest described change,
 and a Claude agent is reminded when described work sits above its bookmark or has none. Claude and Pi
 agents in a jj workspace are told that git fails there, are asked to use the bundled jj skill before any
 version-control command; chat agents run with jj's editor disabled, and are told to pass `-m`
-wherever jj would ask for a description.
+wherever jj would ask for a description, and to stop and name the jj they found if `jj --version` is
+older than Sculptor supports.
 
 **Changes, revisions and commits.** The Files panel (→ §7.5) renames **Commits** to **Revisions**: a
 list of the workspace's revisions from its fork point with the target up to the working copy, newest
@@ -924,8 +926,8 @@ copy by itself, and an agent that hits one is told to update it, check the resul
 commit or push. Sculptor sets that limit to 10 MiB in jj workspaces, configurable as **Maximum new file
 size** in the Jujutsu section; an existing workspace picks up a changed value when Sculptor next resumes
 it. The Changes panel of a jj workspace lists such files, in both scopes, in a "jj left N new file(s)
-out" banner with each path, jj's reason, and an "Open Jujutsu settings" link; the banner updates when the
-workspace's diff is next recomputed, after an agent's turn, and appears in no other view.
+out" banner with each path, jj's reason, and an "Open Jujutsu settings" link; the banner updates whenever
+the workspace's diff is recomputed, such as after an agent changes files, and appears in no other view.
 
 **When jj becomes unusable.** Existing jj workspaces keep their files, but no agent starts in them and
 the setup command does not run until jj is usable again; an agent that cannot start shows **jj Not Available**
@@ -1000,9 +1002,11 @@ hold across every workspace and agent.
 By default an agent works in an **isolated copy** of your repository, so it can read, edit, and run
 real commands freely without ever touching your own checkout — the files you have open stay exactly as
 you left them. Working **in place** in your actual checkout is the deliberate, opt-in exception. A
-**jj workspace** isolates the same way a worktree does, with a working copy of its own; the one change
-it makes to your checkout is the one you confirm when you colocate the repository with jj, which adds a
-`.jj` beside your `.git` and which Sculptor never undoes (→ §7.14). An
+**jj workspace** isolates the same way a worktree does, with a working copy of its own, but it shares
+the repository's jj history with your checkout: creating one records your checkout's uncommitted edits
+in its jj working-copy commit, and the workspace's bookmarks live in the shared repository. Colocating
+a repository with jj adds a `.jj` beside your `.git`; Sculptor does that only when you confirm it, and
+never undoes a colocation (→ §7.14). An
 agent's edits are committed onto a **workspace branch** (in a jj workspace, its revisions and
 bookmark) that belongs to that workspace; nothing is
 ever pushed to a remote, and no pull request is opened, unless you take that action yourself. The
@@ -1225,8 +1229,8 @@ used throughout:
   the workspace kind a repository with jj turned on creates instead of a worktree.
 - **Bookmark** — jj's name for a revision; pushed, it becomes a git branch. A jj workspace is named by
   one.
-- **Revision** — a jj change. The workspace's **working copy** is itself a revision, which jj updates
-  as files change.
+- **Revision** — a jj change. The workspace's **working copy** is itself a revision, which every jj
+  command first updates with the files' changes.
 - **Stale working copy** — a jj workspace whose revision another jj operation rewrote; jj records no
   changes there until the working copy is updated.
 - **Plan mode** — an agent investigates and proposes a plan for your approval before changing files.

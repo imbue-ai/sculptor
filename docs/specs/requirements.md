@@ -252,7 +252,8 @@ packaging Sculptor):
   `user.email`); and, when it is otherwise usable, any different jj the user's login shell runs must
   also be in that range, since it shares the colocated repository. The readiness check reports the
   first of those that fails, in that order
-  (`_jj_readiness_from_check`, `sculptor/sculptor/services/dependency_management_service.py`), and
+  (`_jj_readiness_from_check`, then `_with_login_shell_jj` for the login shell's jj,
+  `sculptor/sculptor/services/dependency_management_service.py`), and
   `sculptor/sculptor/services/jj_availability.py` words it for the user (`SPEC.md` §7.14).
 
 ---
@@ -436,18 +437,27 @@ These hold only for repositories that use jj (`SPEC.md` §7.14; REQ-COMPAT-024).
   to **600 s** (`COLOCATION_INIT_TIMEOUT_SECONDS`). Git submodules, Git LFS, a `.jj` not colocated with
   the `.git`, and a stopped git merge/rebase/cherry-pick/revert block it; git hooks and a sparse
   checkout are warnings (`sculptor/sculptor/services/project_jj_state_service/colocation_preflight.py`).
+  Every repository jj route answers **409** "Cannot read the repository: …" when the repository cannot
+  be read. Colocating, turning the use-jj switch on, and listing bookmarks also answer **412** while jj
+  is unavailable, and **409** for a pre-flight blocker or a repository that is not colocated; the
+  pre-flight itself reports jj's unavailability in its answer instead
+  (`sculptor/sculptor/web/project_jj_routes.py`).
 - **REQ-INT-061 (MUST).** **Workspace creation.** A jj workspace is made with
   `jj workspace add --no-colocate --name <workspace id> -r <base> --sparse-patterns full <dir>` and holds
   no `.git` (`jj_repo_queries.py`). Its base is the source if given, else the target; a base must be a
   local bookmark (`main`), a remote bookmark (`main@origin`), or a full commit id — git-style refs such
-  as `origin/main` are refused with HTTP 400 (`jj_revsets.py`; `sculptor/sculptor/web/app.py`
-  `_validate_workspace_creation_request`). The default target is the first remote bookmark on jj's
-  `trunk()`, else local `main`, else `master`. The requested bookmark name must be a valid git branch
-  name without `@` that no local, remote or git branch already uses (HTTP 400 / 409).
+  as `origin/main` are refused with HTTP 400 (`jj_revsets.py`; `WorkspaceBaseNotFoundError`,
+  `sculptor/sculptor/services/workspace_service/default_implementation.py`). The default target is the
+  first remote bookmark on jj's `trunk()`, else local `main`, else `master`. The requested bookmark name
+  must be a valid git branch name without `@` that no local, remote or git branch already uses (HTTP
+  400 / 409, `_validate_workspace_creation_request`, `sculptor/sculptor/web/app.py`); it is checked
+  before the base, so a request with both wrong gets the name's error.
 - **REQ-INT-062 (MUST).** **Process environment.** Starting or resuming a jj workspace's environment —
   for a chat or terminal agent, or to re-run the setup command — first passes a jj readiness check and
-  is refused while jj is unusable; HTTP routes that would run jj answer **412** with the same reason
-  sentence (`_prepare_vcs_for_launch`, `sculptor/sculptor/services/workspace_service/default_implementation.py`;
+  is refused while jj is unusable. Creating a jj workspace, re-running its setup command, updating a
+  stale working copy, and the repository jj routes that colocate, turn the use-jj switch on or list
+  bookmarks answer **412** with the same reason sentence; reads such as the revision list, and a
+  discard, run jj without that check (`_prepare_vcs_for_launch`, `sculptor/sculptor/services/workspace_service/default_implementation.py`;
   `sculptor/sculptor/services/jj_availability.py`). Processes in a jj workspace get `internal/jj-bin`
   first on `PATH`, `GIT_CEILING_DIRECTORIES` set to the workspace's parent directory so git cannot find
   an enclosing repository, and `GH_REPO` naming the GitHub repository when `origin` is on GitHub; chat
@@ -455,8 +465,11 @@ These hold only for repositories that use jj (`SPEC.md` §7.14; REQ-COMPAT-024).
   has not set them.
 - **REQ-INT-063 (SHOULD).** **State polling.** The jj poller runs a cycle every **3 s**, re-reads a
   repository only when its jj operation heads, its member workspaces, or a member's target change, and
-  forces a re-read every **20** cycles; its reads never snapshot a working copy, and it does nothing while
-  jj is unusable (`sculptor/sculptor/services/workspace_service/jj_workspace_poller.py`).
+  forces a re-read every **20** cycles; its reads never snapshot a working copy. It does nothing while
+  Sculptor's jj cannot read a repository (not installed, not running, or an unsupported version), and
+  keeps reading through a blocker that stops only writes, such as a missing author identity
+  (`can_jj_read`, `sculptor/sculptor/services/jj_availability.py`;
+  `sculptor/sculptor/services/workspace_service/jj_workspace_poller.py`).
 - **REQ-INT-064 (MUST).** **Pull requests.** A jj workspace's pull request is looked up with `gh`, taking
   the workspace's bookmarks in rank order as the head and the target bookmark's name as the base (`main`
   for `main@origin`), and only for a GitHub `origin` (`jj_workspace_vcs.py`;

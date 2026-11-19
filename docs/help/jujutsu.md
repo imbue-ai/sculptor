@@ -146,8 +146,8 @@ name and `--branch` the source.
 
 In a jj workspace the top bar shows a pill naming the workspace's bookmark.
 
-Sculptor creates the bookmark you asked for at the end of an agent's turn, on
-the newest revision that has a description. It does this only while the
+Sculptor creates the bookmark you asked for at the end of a Claude or Pi agent's
+turn, on the newest revision that has a description. It does this only while the
 workspace has no bookmark, exactly one described revision is newest, and the
 name is still free. Until the bookmark exists, the pill shows the name greyed
 out. Sculptor never moves a bookmark: keeping it on the newest work is the
@@ -190,7 +190,7 @@ The Files panel uses jj's terms in a jj workspace:
 - **Discard changes** restores the file from the working copy's parent. The
   dialog notes that the discarded content stays recoverable from the jj
   operation log.
-- **Commit** asks the agent to commit with jj. See [Prompts](#prompts).
+- The **Commit** button asks the agent to commit with jj. See [Prompts](#prompts).
 
 ---
 
@@ -218,7 +218,7 @@ next run a jj command in that checkout.
 
 **Settings > Jujutsu** holds the prompts sent from jj workspaces:
 
-- **jj commit prompt** is sent when you click **Commit**.
+- **jj commit prompt** is sent when you click the **Commit** button.
 - **jj PR creation prompt** is sent when you click **Create PR**.
 - **jj CI Babysitter pipeline prompt** and **jj CI Babysitter merge conflict
   prompt** are sent by the [CI Babysitter](ci_babysitter.md) for pull requests
@@ -236,8 +236,8 @@ which opens it on this page. Until then it offers **Edit prompt...**, which
 edits the git prompt and links to **Set a jj commit prompt** or **Set a jj PR
 creation prompt**.
 
-**Repositories using jj** lists the repositories whose new workspaces are jj
-workspaces, each with a **Configure** link.
+**Repositories using jj** lists the repositories that have **Use jj for new
+workspaces created in this repository** on, each with a **Configure** link.
 
 ---
 
@@ -265,9 +265,9 @@ mention such a file to you rather than change jj's configuration.
 The Changes tab of a jj workspace lists such files in a banner, **jj left N new
 files out**, in both the **Working copy** and **All** scopes. The banner gives
 each file's path with jj's reason, says to raise the limit or delete the files,
-and links to **Settings > Jujutsu**. It appears when Sculptor next recomputes
-the workspace's diff, which is after an agent's turn. It appears nowhere else:
-not in the Revisions tab, the file tree, or the diff view.
+and links to **Settings > Jujutsu**. It updates whenever Sculptor recomputes the
+workspace's diff, for example after an agent changes files. It appears nowhere
+else: not in the Revisions tab, the file tree, or the diff view.
 
 Change the limit under **Settings > Jujutsu > Maximum new file size**, from 1 to
 1024 MiB. An existing jj workspace picks up the new value when Sculptor next
@@ -282,9 +282,9 @@ and Sculptor does not fall back to a worktree. The create form says "This
 repository creates jj workspaces, and jj is unavailable." with an **Open
 Jujutsu settings** link.
 
-Sculptor says why in the same words wherever it refuses: the repository's jj
-switches, the colocation dialog, and an agent that can't start. **Settings >
-Jujutsu** shows the same problem as its callout. The reasons, and what to do:
+The repository's jj switches, the colocation dialog, and an agent that can't
+start all give the reason in the same words. **Settings > Jujutsu** shows the
+same problem as its callout. The reasons, and what to do:
 
 - **"jj is not installed: install it or set its path on the Jujutsu settings
   page".** Click **Install jj**, or switch **Binary Source** to **Custom** and
@@ -307,7 +307,9 @@ Jujutsu** shows the same problem as its callout. The reasons, and what to do:
   directory first on PATH".** Your colocated repository is also read by the jj
   in your own terminal, so that jj must be a supported version too. Upgrade or
   uninstall it, or change your shell profile so it no longer comes first on
-  `PATH`.
+  `PATH`. An agent that finds an older jj first on its own `PATH` is told to stop
+  using jj and tell you which jj it found, rather than install one or change
+  `PATH` itself.
 - **"jj has no author identity: set its user.name and user.email on the
   Jujutsu settings page".** Fill in **Author identity** and click **Save
   identity**.

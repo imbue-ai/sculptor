@@ -247,7 +247,7 @@ Every scenario that is **not** Complete, grouped by area. **Missing** = no integ
 | Scenario | Status | Existing integration test(s) | Integration tests to add |
 |----------|--------|------------------------------|--------------------------|
 | CHAT-001 | Partial | test_alpha_chat_intro.py::test_alpha_chat_intro_shows_names_and_reacts_to_renames; ::test_intro_text_renders_above_first_message | Assert intro also shows project/branch, creation time, source-branch info, shared-code warning, and the `/sculptor:help` hint. |
-| CHAT-002 | Missing | — | Assert intro wording per workspace type: "Working directly in {branch}", "Branched off {branch}", "Cloned {branch} from {project}", "jj workspace on {source} from {project}" plus the jj no-git line. |
+| CHAT-002 | Missing | — | Assert intro wording per workspace type: "Working directly in {project}", "Branched off {branch} from {project}", "Cloned {branch} from {project}", "jj workspace on {source} from {project}" plus the jj no-git line. |
 | CHAT-003 | Partial | test_workspace_setup_status.py::test_setup_card_shows_succeeded | Assert the card's setup-step label, progress indicator, and elapsed-time fields specifically. |
 | CHAT-006 | Partial | test_status_pill.py::test_status_pill_shows_animation; test_status_pill_background_wait.py::test_status_pill_shows_waiting_during_background_task; test_regression_auto_compact_indicator.py::test_auto_compaction_indicator_lifecycle | Assert "Thinking…"/"Streaming…"/"Calling Tools…" label text and the frozen-vs-live elapsed counter. |
 | CHAT-007 | Missing | — | Assert the pill shows "X / N · {task subject}" while the agent is active with a plan (existing tests cover only the post-turn "X of N done" summary). |

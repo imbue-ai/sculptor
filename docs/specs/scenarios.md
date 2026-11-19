@@ -791,7 +791,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Then: an amber callout reads "This repository creates jj workspaces, and jj is unavailable." with an "Open Jujutsu settings" link that opens the Jujutsu settings section; the Create button stays disabled, and no Worktree is offered in place of the jj workspace.
 
 - **ADDWS-029 — Quick-create from the sidebar in a jj repository**
-  - Given: a repository that uses jj is listed in the sidebar.
+  - Given: a repository that uses jj is listed in the sidebar, and its last workspace was not created as Clone or In-place.
   - When: the user clicks the repository's "+".
   - Then: a jj workspace and its first agent are created and opened, with the "jj" badge and the identity pill in the banner; while jj is unusable or still being checked, the Add Workspace form opens for that repository instead.
 
@@ -1007,7 +1007,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **WS-024 — Edit PR prompt before creating**
   - Given: the Create PR button is shown.
-  - When: the user right-clicks it and clicks "Edit prompt…".
+  - When: the user right-clicks it and clicks "Edit prompt...".
   - Then: a dialog opens to edit the prompt; Save updates it and closes.
 
 - **WS-025 — Open PR display**
@@ -1355,7 +1355,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **CHAT-002 — Intro reflects workspace type**
   - Given: the workspace is in-place / branched / cloned / a jj workspace.
   - When: the intro renders.
-  - Then: it shows "Working directly in {branch}", "Branched off {branch}", "Cloned {branch} from {project}", or "jj workspace on {source} from {project}" accordingly; a jj workspace adds the line "This workspace has no git inside. Agents use jj for version control here.".
+  - Then: it shows "Working directly in {project}", "Branched off {branch} from {project}", "Cloned {branch} from {project}", or "jj workspace on {source} from {project}" accordingly, followed by the creation time; a jj workspace adds the line "This workspace has no git inside. Agents use jj for version control here.".
 
 - **CHAT-003 — Setup status card in intro**
   - Given: the workspace has pending setup commands.
@@ -1951,7 +1951,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **PANEL-058 — Revisions tab in a jj workspace**
   - Given: a jj workspace.
   - When: the user opens the Files panel's history tab.
-  - Then: the tab reads "Revisions"; it lists the revisions from the workspace's fork point with its target up to the working copy, newest first, each with its description's first line (or "(no description set)"), change id with the unique prefix in bold, "+A -D · N files", relative time and commit id, blue bookmark badges, and "working copy", "empty", "conflict" or "divergent" chips; the footer reads "fork point ({target} · {commit})"; "Loading revisions…" shows while loading and "No revisions available" when there is nothing to show.
+  - Then: the tab reads "Revisions"; it lists the revisions from the workspace's fork point with its target up to the working copy, newest first, each with its description's first line (or "(no description set)"), change id with the unique prefix in bold, "+A -D · N files", relative time and commit id, blue bookmark badges, and "working copy", "empty", "conflict" or "divergent" chips; the footer reads "fork point ({target} · {commit})"; "Loading revisions…" shows while loading and "No revisions available" when the revisions cannot be read.
 
 - **PANEL-059 — Open a revision's files**
   - Given: the Revisions tab lists revisions.
@@ -2483,12 +2483,12 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **SET-049 — jj source mode, install, path & versions**
   - Given: the Jujutsu section.
   - When: the user switches Binary Source between Managed and Custom, clicks "Install jj", or enters a Binary path and clicks "Apply".
-  - Then: Status shows "v{version} — Managed", "v{version} — External binary", "v{version} — Needs {minimum} or a newer compatible version", "No path configured", "Does not run", or "Not installed"; Managed shows "Install jj", then "Installing..." with a progress bar, then "Up to date", or the install error with "Retry"; Minimum version, Detected version and Active path are listed; when the login shell runs a different, supported jj, a "jj in your terminal" row shows its path and version.
+  - Then: Status shows "v{version} — Managed", "v{version} — External binary", "v{version} — Needs {minimum} or a newer compatible version", "No path configured", "Does not run", or "Not installed"; Managed shows "Install jj", then "Installing..." with a progress bar, then "Up to date", or the install error with "Retry"; Minimum version, Detected version and Active path are listed; when the login shell runs a different jj, a "jj in your terminal" row shows its path and version.
 
 - **SET-050 — jj author identity**
   - Given: the Jujutsu section.
   - When: jj has an identity, or the user fills in the Name and Email fields (prefilled from the global git identity when jj has none) and clicks "Save identity".
-  - Then: Author identity shows "{name} <{email}>", and after a save the availability callout turns green; a failed save shows the error (default "Could not save the identity"); while jj is not installed or does not run the row reads "Read once jj is installed and runs."
+  - Then: Author identity shows "{name} <{email}>" while nothing stops jj, and after a save the availability callout turns green; a failed save shows the error (default "Could not save the identity"); while anything other than a missing identity stops jj, the row reads "Read once jj is installed and runs."
 
 - **SET-051 — Maximum new file size**
   - Given: the Jujutsu section.
