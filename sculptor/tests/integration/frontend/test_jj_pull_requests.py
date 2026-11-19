@@ -10,6 +10,7 @@ test names the head itself; it also records the `GH_REPO` it was run with, which
 how `gh` finds the repository from a checkout with no `.git`.
 """
 
+import json
 import stat
 import subprocess
 from pathlib import Path
@@ -53,14 +54,22 @@ elif [[ "$*" == *"graphql"* ]]; then
 fi
 """
 
-_OPEN_PR_NODES = (
-    '[{"number":42,"title":"Add notes","url":"https://github.com/sculptor-tests/jj-fixture/pull/42",'
-    + '"state":"OPEN","baseRefName":"main","repository":{"nameWithOwner":"'
-    + _NAME_WITH_OWNER
-    + '"},"headRefName":"'
-    + _BOOKMARK
-    + '","mergeable":"MERGEABLE","commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]},'
-    + '"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]'
+_OPEN_PR_NODES = json.dumps(
+    [
+        {
+            "number": 42,
+            "title": "Add notes",
+            "url": f"https://github.com/{_NAME_WITH_OWNER}/pull/42",
+            "state": "OPEN",
+            "baseRefName": "main",
+            "repository": {"nameWithOwner": _NAME_WITH_OWNER},
+            "headRefName": _BOOKMARK,
+            "mergeable": "MERGEABLE",
+            "commits": {"nodes": [{"commit": {"statusCheckRollup": None}}]},
+            "latestReviews": {"nodes": []},
+            "reviewThreads": {"nodes": []},
+        }
+    ]
 )
 
 
