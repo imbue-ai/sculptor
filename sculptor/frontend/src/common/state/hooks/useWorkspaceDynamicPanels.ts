@@ -58,7 +58,7 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const allAgents = useAtomValue(agentsArrayAtom);
   const allTerminalTabs = useAtomValue(terminalTabStateAtom);
   const extensionPanels = useAtomValue(extensionPanelsAtom);
-  // The static panels' labels follow the workspace's VCS (Commits or Revisions).
+  // The static panels' labels follow the workspace's VCS.
   const vcs = useWorkspaceVcs(workspaceId);
   const setPanelRegistry = useSetAtom(panelRegistryAtom);
   const setTerminalTabs = useSetAtom(terminalTabStateAtom);

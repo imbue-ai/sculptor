@@ -3,8 +3,8 @@
   min-height: 0;
 }
 
-// Scrolls on its own past 40% of the list's height, so the changed-files tree
-// below it keeps the rest however many files jj left out.
+// Scrolls on its own past a share of the list's height, so the changed-files
+// tree below it keeps the rest however many files jj left out.
 .leftOutFiles {
   flex: 0 1 auto;
   max-height: 40%;

@@ -182,7 +182,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
       </Flex>
       {/* In a jj workspace every file error is a new file jj refused to snapshot,
           which has no diff and so no row in the tree; it is listed here in both
-          scopes, in a region capped so it never squeezes the tree out. */}
+          scopes. */}
       {vcs === "jj" && (
         <div className={styles.leftOutFiles}>
           <JjLeftOutFilesBanner fileErrors={diff?.fileErrors ?? {}} />

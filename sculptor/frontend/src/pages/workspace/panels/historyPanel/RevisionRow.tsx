@@ -74,10 +74,8 @@ type RevisionRowProps = {
 };
 
 /**
- * One jj revision in the Revisions panel: its description's first line, its
- * change id with the unique prefix emphasised, stats, time and commit id, and
- * chips for its bookmarks and flags. Clicking it lists its files. An empty
- * working copy is muted, since it holds nothing yet.
+ * One jj revision in the Revisions panel. Clicking it lists its files. An
+ * empty working copy is muted, since it holds nothing yet.
  */
 export const RevisionRow = ({
   revision,

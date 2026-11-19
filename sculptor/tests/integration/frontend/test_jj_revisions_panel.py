@@ -82,10 +82,9 @@ def _describe_then_new_prompt(jj_path: Path) -> str:
 def _open_jj_workspace_agent(page: Page) -> PlaywrightTaskPage:
     """Create a jj workspace and its first agent through the API, and open the agent's chat.
 
-    A freshly spawned instance boots onto Home with no workspaces, so Home opens
-    the new-workspace dialog once the first workspace snapshot arrives. Created
-    before that snapshot, the workspace would race it, and a dialog that won
-    the race would stay open over the workspace; so the offer is settled first.
+    A freshly spawned instance has no workspaces, so Home opens the
+    new-workspace dialog once the first workspace snapshot arrives; the offer
+    is settled first so that dialog cannot open over the workspace.
     """
     settle_first_run_offer(page)
     base_url = resolve_backend_api_url(page)
