@@ -10,14 +10,11 @@ from uuid import uuid4
 
 import pytest
 
-from sculptor.config.user_config import DependencyPaths
 from sculptor.database.models import Workspace
 from sculptor.foundation.async_monkey_patches_test import record_logged_error_levels
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
-from sculptor.services.user_config.user_config import get_default_user_config_instance
-from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
 from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFacts
 from sculptor.services.workspace_service.jj_bookmark_facts import JjStackBookmarks
@@ -29,17 +26,6 @@ from sculptor.testing.jj_repos import run_jj
 from sculptor.testing.jj_workspace_rows import create_jj_workspace_row
 
 _REQUESTED_BOOKMARK = "dev/graph-view"
-
-
-@pytest.fixture
-def jj_resolved_to_the_pinned_binary(jj_binary: JjBinary) -> Iterator[None]:
-    set_user_config_instance(
-        get_default_user_config_instance().model_copy(
-            update={"dependency_paths": DependencyPaths(jj=str(jj_binary.path))}
-        )
-    )
-    yield
-    set_user_config_instance(None)
 
 
 @pytest.fixture
