@@ -41,6 +41,11 @@ _FAKE_CLAUDE_PREFIX = "fake_claude:"
 # turn after a backend restart reuses the conversation's settings.
 _ECHO_LAUNCH_ARGS_ENV_VAR = "CLAUDE_FAKE_ECHO_LAUNCH_ARGS"
 
+# When this env var is set (forwarded like the one above), every cycle appends an
+# assistant text message echoing the appended system prompt and the turn's prompt,
+# so a test can assert what the agent was actually told.
+ECHO_PROMPTS_ENV_VAR = "CLAUDE_FAKE_ECHO_PROMPTS"
+
 
 def _build_launch_args_echo(parsed: argparse.Namespace) -> str:
     """Render the parsed launch args as a stable, greppable one-liner."""
@@ -57,6 +62,11 @@ def _build_launch_args_echo(parsed: argparse.Namespace) -> str:
         f"resumed={'yes' if parsed.resume else 'no'}",
     ]
     return f"[FakeClaude] launch-args: {' '.join(parts)}"
+
+
+def build_prompts_echo(system_prompt: str, prompt: str) -> str:
+    """Render the appended system prompt and the turn's prompt as one text block."""
+    return f"[FakeClaude] system prompt:\n{system_prompt}\n[FakeClaude] prompt:\n{prompt}"
 
 
 # Seconds to stall a resumed /compact so integration tests can observe the
@@ -239,6 +249,7 @@ def _run_cycle(
     persist_session: bool,
     replay_user_messages: bool,
     launch_args_echo: str | None = None,
+    echoed_system_prompt: str | None = None,
 ) -> int | None:
     """Run one full ``init → messages → result`` cycle for a single user frame.
 
@@ -306,22 +317,28 @@ def _run_cycle(
         return 1
 
     if launch_args_echo is not None:
-        # Mirror handle_default's shape: streaming events first, then the
-        # persistence message. The live chat renders from the stream — a bare
-        # persistence TextBlock that was never streamed does not surface.
-        echo_message_id = generate_id("msg")
-        if emit_streaming:
-            all_messages.extend(make_streaming_text_events(message_id=echo_message_id, text=launch_args_echo))
-        all_messages.append(
-            make_assistant_message(
-                message_id=echo_message_id,
-                content_blocks=[make_text_block(launch_args_echo)],
-            )
-        )
+        all_messages.extend(_make_echo_messages(launch_args_echo, emit_streaming))
+    if echoed_system_prompt is not None:
+        all_messages.extend(_make_echo_messages(build_prompts_echo(echoed_system_prompt, prompt), emit_streaming))
 
     all_messages.append(make_end_message(session_id, result=end_result))
     _emit_jsonl(all_messages)
     return None
+
+
+def _make_echo_messages(text: str, emit_streaming: bool) -> list[dict]:
+    """An assistant text message carrying `text`.
+
+    Mirrors handle_default's shape: streaming events first, then the
+    persistence message. The live chat renders from the stream — a bare
+    persistence TextBlock that was never streamed does not surface.
+    """
+    echo_message_id = generate_id("msg")
+    messages: list[dict] = []
+    if emit_streaming:
+        messages.extend(make_streaming_text_events(message_id=echo_message_id, text=text))
+    messages.append(make_assistant_message(message_id=echo_message_id, content_blocks=[make_text_block(text)]))
+    return messages
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -362,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
     system_commands = _extract_fake_claude_commands(parsed.append_system_prompt) if parsed.append_system_prompt else []
 
     launch_args_echo = _build_launch_args_echo(parsed) if os.environ.get(_ECHO_LAUNCH_ARGS_ENV_VAR) else None
+    echoed_system_prompt = (parsed.append_system_prompt or "") if os.environ.get(ECHO_PROMPTS_ENV_VAR) else None
 
     # `-p <question>` carries the prompt on argv (e.g. the /btw forked
     # invocation) — a single cycle, no stdin loop.
@@ -377,6 +395,7 @@ def main(argv: list[str] | None = None) -> int:
             persist_session=persist_session,
             replay_user_messages=parsed.replay_user_messages,
             launch_args_echo=launch_args_echo,
+            echoed_system_prompt=echoed_system_prompt,
         )
         return exit_code if exit_code is not None else 0
 
@@ -401,6 +420,7 @@ def main(argv: list[str] | None = None) -> int:
                 persist_session=persist_session,
                 replay_user_messages=parsed.replay_user_messages,
                 launch_args_echo=launch_args_echo,
+                echoed_system_prompt=echoed_system_prompt,
             )
             if exit_code is not None:
                 return exit_code
@@ -419,6 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         persist_session=persist_session,
         replay_user_messages=parsed.replay_user_messages,
         launch_args_echo=launch_args_echo,
+        echoed_system_prompt=echoed_system_prompt,
     )
     return exit_code if exit_code is not None else 0
 

@@ -1,10 +1,12 @@
 from typing import Annotated
 from typing import TypeGuard
+from typing import assert_never
 from typing import get_args
 from typing import get_origin
 
 from loguru import logger
 
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
@@ -16,6 +18,20 @@ from sculptor.interfaces.environments.errors import EnvironmentFailure
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import TaskID
 from sculptor.state.messages import Message
+
+
+def is_jj_workspace(environment: AgentExecutionEnvironment) -> bool:
+    match environment.get_initialization_strategy():
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            return False
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            return True
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def get_warning_message(

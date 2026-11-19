@@ -66,6 +66,7 @@ def get_services(
         task_service=services.task_service,
         git_repo_service=services.git_repo_service,
         pr_polling_service=pr_polling_service,
+        read_cached_jj_state=services.workspace_service.get_cached_jj_state,
     )
     project_jj_state_concurrency_group = concurrency_group.make_concurrency_group("project_jj_state")
     project_jj_state_service = ProjectJjStateService(

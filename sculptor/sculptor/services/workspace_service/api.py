@@ -25,11 +25,13 @@ if TYPE_CHECKING:
     # runtime import here would cycle.
     from sculptor.web import data_types as web_data_types
 from sculptor.services.data_model_service.data_types import DataModelTransaction
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFactsProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
 from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
+from sculptor.services.workspace_service.vcs.jj_data_types import JjInitialBookmarkOutcome
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 
 
@@ -206,6 +208,24 @@ class WorkspaceService(Service, ABC):
         The provider asks ``SetupCommandRunner`` for the absolute setup-log
         path internally — callers never need to compute workspace state
         directories themselves.
+        """
+
+    @abstractmethod
+    def make_jj_bookmark_facts_provider(self, workspace_id: WorkspaceID) -> JjBookmarkFactsProvider:
+        """Build a workspace-scoped provider of what the agent reminders say about a jj workspace's bookmarks.
+
+        Reading it runs neither jj nor git: the jj state is the jj poller's cache.
+        """
+
+    @abstractmethod
+    def attempt_initial_bookmark(self, workspace_id: WorkspaceID) -> JjInitialBookmarkOutcome | None:
+        """After an agent's turn in a jj workspace, create its requested bookmark while its stack has none.
+
+        Then has the jj poller scan at once rather than on its next cycle, so the
+        reminders for the agent's next message see this turn's work. Returns what
+        the attempt did; None when there was nothing to attempt: a git workspace, a
+        missing one, one that requested no bookmark, one whose published state
+        already has a bookmark, or one whose jj commands failed.
         """
 
     @abstractmethod

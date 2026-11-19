@@ -14,8 +14,10 @@ from uuid import uuid4
 
 import pytest
 
+from sculptor.agents.testing.fake_claude import ECHO_PROMPTS_ENV_VAR
 from sculptor.agents.testing.fake_claude import _parse_prompt
 from sculptor.agents.testing.fake_claude import _read_prompt_from_stream_json_stdin
+from sculptor.agents.testing.fake_claude import build_prompts_echo
 from sculptor.agents.testing.fake_claude_commands import _ABSORBED_FRAMES
 from sculptor.agents.testing.fake_claude_commands import _STDIN_EOF
 from sculptor.agents.testing.fake_claude_commands import _STDIN_ROUTER
@@ -778,6 +780,7 @@ def _run_fake_claude_stream_json(
     append_system_prompt: str | None = None,
     replay_user_messages: bool = False,
     home: Path | None = None,
+    extra_env: dict[str, str] | None = None,
     timeout: float = 30.0,
 ) -> subprocess.CompletedProcess[str]:
     """Run FakeClaude in stream-json input mode, feeding ``stdin_text`` then EOF.
@@ -802,7 +805,7 @@ def _run_fake_claude_stream_json(
         argv.append("--replay-user-messages")
     if append_system_prompt is not None:
         argv.extend(["--append-system-prompt", append_system_prompt])
-    env = {**os.environ, "HOME": str(home)} if home is not None else None
+    env = {**os.environ, **({} if home is None else {"HOME": str(home)}), **(extra_env or {})}
     return subprocess.run(
         argv,
         input=stdin_text,
@@ -910,6 +913,19 @@ def test_stream_json_system_prompt_directives_run_once_on_first_cycle() -> None:
     assistant_texts = [e["message"]["content"][0]["text"] for e in events if e.get("type") == "assistant"]
     # SYSTEM runs exactly once, in the first cycle ahead of TURN1; TURN2's cycle has none.
     assert assistant_texts == ["SYSTEM", "TURN1", "TURN2"]
+
+
+def test_stream_json_echoes_the_system_prompt_and_each_prompt_when_asked() -> None:
+    frames = [_user_frame("first prompt"), _user_frame("second prompt")]
+    result = _run_fake_claude_stream_json(
+        "".join(frames), append_system_prompt="the system prompt", extra_env={ECHO_PROMPTS_ENV_VAR: "1"}
+    )
+    assert result.returncode == 0, result.stderr
+
+    events = _top_level_events(result.stdout)
+    assistant_texts = [e["message"]["content"][0]["text"] for e in events if e.get("type") == "assistant"]
+    assert build_prompts_echo("the system prompt", "first prompt") in assistant_texts
+    assert build_prompts_echo("the system prompt", "second prompt") in assistant_texts
 
 
 def test_stream_json_interrupt_between_cycles_exits_with_sigterm_code() -> None:

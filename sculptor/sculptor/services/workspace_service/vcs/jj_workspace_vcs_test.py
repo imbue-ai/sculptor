@@ -25,6 +25,7 @@ from sculptor.services.workspace_service.vcs.git_cli import GitCli
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
+from sculptor.services.workspace_service.vcs.jj_data_types import JjInitialBookmarkOutcome
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.jj_workspace_vcs import DEFAULT_JJ_WORKSPACE_SETUP_COMMAND
 from sculptor.services.workspace_service.vcs.jj_workspace_vcs import JjWorkspaceVcs
@@ -597,6 +598,112 @@ def test_get_pull_request_refs_raises_when_the_checkout_is_gone(
 
     with pytest.raises(VcsCommandError):
         jj_vcs.get_pull_request_refs(checkout, target_ref=_BASE, requested_ref_name=None)
+
+
+def _bookmarked_commit_id(jj_binary: JjBinary, repo_dir: Path, name: str) -> str | None:
+    """The commit the local bookmark `name` points at; None when there is no such bookmark."""
+    revset = f'present(bookmarks(exact:"{name}"))'
+    return _commit_id(jj_binary, repo_dir, revset) or None
+
+
+def test_create_initial_bookmark_puts_the_requested_bookmark_on_the_newest_described_change(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _commit_change(jj_binary, checkout.checkout_path, "b.txt", "b\n", "second")
+
+    outcome = jj_vcs.create_initial_bookmark(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert outcome is JjInitialBookmarkOutcome.CREATED
+    assert _bookmarked_commit_id(jj_binary, checkout.checkout_path, "feat") == _commit_id(
+        jj_binary, checkout.checkout_path, "@-"
+    )
+
+
+def test_create_initial_bookmark_snapshots_the_agents_last_edits_first(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _jj(jj_binary, checkout.checkout_path, "describe", "-m", "work in the working copy")
+    (checkout.checkout_path / "late.txt").write_text("written after the last jj command\n")
+
+    outcome = jj_vcs.create_initial_bookmark(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert outcome is JjInitialBookmarkOutcome.CREATED
+    files = _jj(jj_binary, checkout.checkout_path, "--ignore-working-copy", "file", "list", "-r", "feat")
+    assert "late.txt" in files.split()
+
+
+@pytest.mark.parametrize("bookmark_names", [("mine",), ("mine", "also-mine")])
+def test_create_initial_bookmark_leaves_a_stack_that_already_has_bookmarks_alone(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, bookmark_names: tuple[str, ...]
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    _set_bookmarks(jj_binary, checkout.checkout_path, "@-", *bookmark_names)
+    _commit_change(jj_binary, checkout.checkout_path, "b.txt", "b\n", "second")
+
+    outcome = jj_vcs.create_initial_bookmark(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert outcome is JjInitialBookmarkOutcome.STACK_HAS_A_BOOKMARK
+    assert _bookmarked_commit_id(jj_binary, checkout.checkout_path, "feat") is None
+
+
+def test_create_initial_bookmark_waits_while_the_work_is_undescribed(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    (checkout.checkout_path / "a.txt").write_text("a\n")
+
+    outcome = jj_vcs.create_initial_bookmark(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert outcome is JjInitialBookmarkOutcome.NO_SINGLE_NEWEST_DESCRIBED_REVISION
+    assert _bookmarked_commit_id(jj_binary, checkout.checkout_path, "feat") is None
+
+
+def test_create_initial_bookmark_waits_while_two_described_changes_are_both_newest(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary
+) -> None:
+    _make_merge_working_copy(jj_binary, checkout.checkout_path)
+
+    outcome = jj_vcs.create_initial_bookmark(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert outcome is JjInitialBookmarkOutcome.NO_SINGLE_NEWEST_DESCRIBED_REVISION
+    assert _bookmarked_commit_id(jj_binary, checkout.checkout_path, "feat") is None
+
+
+def test_create_initial_bookmark_leaves_a_requested_name_another_stack_has_taken(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    _jj(jj_binary, jj_colocated_repo.path, "--ignore-working-copy", "new", "--no-edit", "-m", "elsewhere", _BASE)
+    _set_bookmarks(jj_binary, jj_colocated_repo.path, 'description(exact:"elsewhere\n")', "feat")
+    taken_commit_id = _bookmarked_commit_id(jj_binary, jj_colocated_repo.path, "feat")
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+
+    outcome = jj_vcs.create_initial_bookmark(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert outcome is JjInitialBookmarkOutcome.NAME_UNAVAILABLE
+    assert _bookmarked_commit_id(jj_binary, checkout.checkout_path, "feat") == taken_commit_id
+
+
+def test_create_initial_bookmark_leaves_a_requested_name_that_exists_only_on_a_remote(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    _push_bookmark_from(jj_binary, jj_colocated_repo.path, "feat", _BASE)
+    _jj(jj_binary, jj_colocated_repo.path, "--ignore-working-copy", "bookmark", "forget", "feat")
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+
+    outcome = jj_vcs.create_initial_bookmark(checkout, target_ref=_BASE, requested_ref_name="feat")
+
+    assert outcome is JjInitialBookmarkOutcome.NAME_UNAVAILABLE
+    assert _bookmarked_commit_id(jj_binary, checkout.checkout_path, "feat") is None
+
+
+def test_create_initial_bookmark_raises_in_a_stale_workspace(
+    jj_vcs: JjWorkspaceVcs, checkout: CheckoutLocation, jj_binary: JjBinary, jj_colocated_repo: JjColocatedRepo
+) -> None:
+    _commit_change(jj_binary, checkout.checkout_path, "a.txt", "a\n", "first")
+    make_workspace_stale(jj_binary, jj_colocated_repo.path, checkout.checkout_path)
+
+    with pytest.raises(JjWorkingCopyStaleError):
+        jj_vcs.create_initial_bookmark(checkout, target_ref=_BASE, requested_ref_name="feat")
 
 
 def _advance_origin_main(jj_binary: JjBinary, repo: JjColocatedRepo, file_name: str) -> None:

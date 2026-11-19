@@ -20,6 +20,7 @@ from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFactsProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
@@ -37,6 +38,7 @@ class ClaudeCodeSDKAgent(DefaultAgentWrapper):
     project: Project
     workspace_id: WorkspaceID | None = None
     setup_state_provider: SetupStateProvider | None = None
+    jj_bookmark_facts_provider: JjBookmarkFactsProvider | None = None
     _claude_process_manager: ClaudeProcessManager | None = PrivateAttr(default=None)
 
     def set_conversation_launch_settings(
@@ -83,6 +85,7 @@ class ClaudeCodeSDKAgent(DefaultAgentWrapper):
             workspace_id=self.workspace_id,
             setup_state_provider=self.setup_state_provider,
             project_naming_pattern=self.project.naming_pattern,
+            jj_bookmark_facts_provider=self.jj_bookmark_facts_provider,
         )
 
     def _push_message(self, message: Message) -> bool:

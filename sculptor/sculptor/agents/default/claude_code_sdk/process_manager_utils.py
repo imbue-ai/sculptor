@@ -11,10 +11,13 @@ from typing import Any
 from typing import cast
 
 from loguru import logger
+from pydantic import Field
 
 from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRenameHint
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.constants import FAST_MODE_MODELS
+from sculptor.agents.default.constants import JJ_REQUESTED_BOOKMARK_PROMPT
+from sculptor.agents.default.constants import JJ_SKILL_NAME
 from sculptor.config.user_config import NightMode
 from sculptor.config.user_config import is_night_mode_active
 from sculptor.foundation.async_monkey_patches import log_exception
@@ -27,6 +30,7 @@ from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.errors import IllegalOperationError
 from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFacts
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
@@ -296,6 +300,85 @@ The naming conventions below apply here and OVERRIDE the guidance above where th
     return _AUTO_RENAME_REMINDER_PREFIX + branch_block + conventions_block + _AUTO_RENAME_REMINDER_SUFFIX
 
 
+_JJ_SKILL_PREACTIVATION_REMINDER = f"""<system-reminder>
+This is a jj (Jujutsu) workspace. Before you do anything else, invoke the `{JJ_SKILL_NAME}` skill with the Skill tool (skill="{JJ_SKILL_NAME}") and follow it for all version control here. If the skill is not in your available-skills list, call the Skill tool anyway; the harness will return a clear error if it truly doesn't exist.
+</system-reminder>
+
+"""
+
+
+def _build_jj_bookmark_reminder(requested_bookmark: str) -> str:
+    return f"""<system-reminder>
+{JJ_REQUESTED_BOOKMARK_PROMPT.format(requested_bookmark=requested_bookmark)}
+</system-reminder>
+
+"""
+
+
+class JjBookmarkNudge(FrozenModel):
+    """Described work on a jj workspace's stack that no bookmark names yet."""
+
+    bookmark: str | None = Field(
+        description="The stack's one bookmark, which the work sits above; None when it has none"
+    )
+    requested_bookmark: str | None
+    unbookmarked_revision_count: int = Field(description="Described revisions above the bookmark, or all of them")
+
+
+def select_jj_bookmark_nudge(facts: JjBookmarkFacts) -> JjBookmarkNudge | None:
+    """The nudge the stack calls for: described work above its one bookmark, or described work and no bookmark.
+
+    A stack with several bookmarks gets none, since the agent arranged them on
+    purpose; so does one whose only bookmark is the target's own name.
+    """
+    stack = facts.stack
+    if stack is None or stack.unbookmarked_revision_count == 0:
+        return None
+    if not stack.bookmarks:
+        bookmark = None
+    elif len(stack.bookmarks) == 1 and stack.primary_bookmark is not None:
+        bookmark = stack.primary_bookmark
+    else:
+        return None
+    return JjBookmarkNudge(
+        bookmark=bookmark,
+        requested_bookmark=facts.requested_bookmark,
+        unbookmarked_revision_count=stack.unbookmarked_revision_count,
+    )
+
+
+def _build_jj_bookmark_nudge(nudge: JjBookmarkNudge) -> str:
+    count = nudge.unbookmarked_revision_count
+    changes = "1 described change" if count == 1 else f"{count} described changes"
+    if nudge.bookmark is not None:
+        verb = "sits" if count == 1 else "sit"
+        body = f"{changes} on your stack {verb} above its bookmark `{nudge.bookmark}`. Before you push, move the bookmark onto your newest described change: `jj bookmark set {nudge.bookmark} -r <revision>`, where the revision is `@-` when your working copy is a new, empty change."
+    else:
+        verb = "has" if count == 1 else "have"
+        body = f"{changes} on your stack {verb} no bookmark, so nothing names your work for a push or a pull request."
+        if nudge.requested_bookmark is None:
+            body += " Create a bookmark on your newest described change: `jj bookmark create <name> -r <revision>`."
+        else:
+            body += f" Sculptor creates `{nudge.requested_bookmark}` on your newest described change when a turn ends, but only while that name is free and exactly one described change is newest. If the name is taken, create a bookmark under another name on your newest described change: `jj bookmark create <name> -r <revision>`."
+    return f"""<system-reminder>
+{body}
+</system-reminder>
+
+"""
+
+
+class JjWorkspaceReminders(FrozenModel):
+    """The reminders for an agent in a jj workspace; `None` in its place, for a git workspace, emits none.
+
+    The first message of a conversation tells the agent to invoke the jj skill
+    and, when the workspace has a ``requested_bookmark``, which bookmark
+    Sculptor creates for its work. Any chat message carries ``bookmark_nudge``.
+    """
+
+    requested_bookmark: str | None
+    bookmark_nudge: JjBookmarkNudge | None = None
+
+
 def get_user_instructions(
     message: ChatInputUserMessage | ResumeAgentResponseRunnerMessage | UserQuestionAnswerMessage,
     file_paths: tuple[str, ...],
@@ -304,6 +387,7 @@ def get_user_instructions(
     is_first_message: bool = False,
     setup_state: SetupReminderState | None = None,
     auto_rename: AutoRenameReminder | None = None,
+    jj_workspace: JjWorkspaceReminders | None = None,
 ) -> str:
     if isinstance(message, ChatInputUserMessage):
         user_instructions = _strip_and_unescape_html(message.text)
@@ -340,6 +424,10 @@ The user has configured the following environment variables for this agent: {", 
             user_instructions = env_var_instructions + user_instructions
         if is_first_message and auto_rename is not None:
             user_instructions = _build_auto_rename_reminder(auto_rename) + user_instructions
+        if is_first_message and jj_workspace is not None and jj_workspace.requested_bookmark is not None:
+            user_instructions = _build_jj_bookmark_reminder(jj_workspace.requested_bookmark) + user_instructions
+        if jj_workspace is not None and jj_workspace.bookmark_nudge is not None:
+            user_instructions = _build_jj_bookmark_nudge(jj_workspace.bookmark_nudge) + user_instructions
         # Prepend the setup reminder after the auto-rename one so it ends up above it: a
         # running or failed setup command is higher-priority first-message context than the
         # rename nudge, and shouldn't be pushed down by it.
@@ -349,6 +437,10 @@ The user has configured the following environment variables for this agent: {", 
             skill_name = skill_invocation_match.group(1)
             if skill_name not in _CLAUDE_CLI_BUILTINS:
                 user_instructions = _build_skill_invocation_reminder(skill_name) + user_instructions
+        # Prepended last, so the agent reads it first: the jj skill governs every
+        # version-control step that follows, including those of a skill the user invoked.
+        if is_first_message and jj_workspace is not None:
+            user_instructions = _JJ_SKILL_PREACTIVATION_REMINDER + user_instructions
     elif isinstance(message, ResumeAgentResponseRunnerMessage):
         user_instructions = """<system-reminder>\nYour previous response was interrupted. Please continue from where you left off. DO NOT respond to this message, just keep continuing with your previous reply as if you had not been stopped part-way through.\n</system-reminder>"""
     elif isinstance(message, UserQuestionAnswerMessage):

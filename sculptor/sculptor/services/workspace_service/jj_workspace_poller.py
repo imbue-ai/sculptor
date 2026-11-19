@@ -123,6 +123,9 @@ class JjWorkspacePoller:
         self._state_by_workspace: dict[WorkspaceID, WorkspaceJjStateInfo] = {}
         self._target_info_by_workspace: dict[WorkspaceID, WorkspaceTargetBranchesInfo] = {}
 
+        # ``_scan_lock`` serializes scans: the loop's, and those ``scan_now`` runs on its
+        # caller's thread. The cache below is read and written only inside a scan.
+        self._scan_lock = threading.Lock()
         self._scan_by_store: dict[Path, _StoreScan] = {}
         # Workspaces and stores whose last scan failed, so a lasting failure is logged once.
         self._failed_scan_keys: set[WorkspaceID | Path] = set()
@@ -175,10 +178,15 @@ class JjWorkspacePoller:
     def stop(self) -> None:
         self._stop_event.set()
 
+    def scan_now(self) -> None:
+        """Scan on the caller's thread and publish what changed, so a jj operation just made shows at once."""
+        with self._scan_lock:
+            self._scan_once()
+
     def _run_loop(self) -> None:
         while not self._stop_event.wait(_JJ_POLL_INTERVAL_IN_SECONDS):
             try:
-                self._scan_once()
+                self.scan_now()
             except Exception as e:
                 log_exception(e, "jj workspace scan cycle failed", priority=ExceptionPriority.LOW_PRIORITY)
 

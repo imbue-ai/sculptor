@@ -139,3 +139,43 @@ def test_described_revisions_count_only_when_they_descend_from_the_primary_bookm
 
     assert projection.primary_bookmark == "feat"
     assert projection.unbookmarked_revision_count == 0
+
+
+def test_the_newest_described_revision_of_a_linear_stack_is_the_highest_described_one() -> None:
+    revisions = [
+        _revision("c0", ["c1"], is_described=False),
+        _revision("c1", ["c2"]),
+        _revision("c2", [_FORK_POINT]),
+    ]
+
+    projection = project_jj_stack(revisions, "c0", None, "main")
+
+    assert projection.newest_described_commit_ids == ("c1",)
+
+
+def test_a_described_working_copy_is_the_newest_described_revision() -> None:
+    projection = project_jj_stack(_linear_stack([], []), "c0", None, "main")
+
+    assert projection.newest_described_commit_ids == ("c0",)
+
+
+def test_a_stack_with_no_described_revision_has_no_newest_described_revision() -> None:
+    revisions = [_revision("c0", ["c1"], is_described=False), _revision("c1", [_FORK_POINT], is_described=False)]
+
+    projection = project_jj_stack(revisions, "c0", None, "main")
+
+    assert projection.newest_described_commit_ids == ()
+
+
+def test_an_undescribed_merge_of_described_sides_has_a_newest_described_revision_on_each_side() -> None:
+    revisions = [
+        _revision("merge", ["near_side", "far_side_1"], is_described=False),
+        _revision("near_side", ["shared"]),
+        _revision("far_side_1", ["far_side_2"]),
+        _revision("far_side_2", ["shared"]),
+        _revision("shared", [_FORK_POINT]),
+    ]
+
+    projection = project_jj_stack(revisions, "merge", None, "main")
+
+    assert projection.newest_described_commit_ids == ("far_side_1", "near_side")

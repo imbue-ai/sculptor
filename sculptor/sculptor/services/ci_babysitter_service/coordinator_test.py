@@ -71,6 +71,7 @@ from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runner
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_polling_service import PrPollingService
 
@@ -306,6 +307,11 @@ class _FakeEnv:
         # Most-recent-first agent tasks the resolver sees through the coordinator's
         # own transactions (used by get_state_snapshot's proactive resolve).
         self.tasks: list[Task] = []
+        # What the jj poller last published for the workspace; None for a git workspace.
+        self.jj_state: WorkspaceJjStateInfo | None = None
+
+    def read_cached_jj_state(self, workspace_id: WorkspaceID) -> WorkspaceJjStateInfo | None:
+        return self.jj_state if workspace_id == self.workspace_id else None
 
 
 class _FakeTransaction(_StubTransaction):
@@ -546,6 +552,7 @@ def _build_coordinator(
         task_service=task_service,
         git_repo_service=_make_fake_git_repo_service(concurrency_group),
         pr_polling_service=pr_polling_service,
+        read_cached_jj_state=env.read_cached_jj_state,
     )
     return coordinator, task_service
 
@@ -970,6 +977,113 @@ def test_pipeline_failed_dispatch_dedupes_per_pipeline_id(
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=2))
     assert len(task_service.create_message_calls) == 2
     assert state.last_dispatched_pipeline_failed_id == 2
+
+
+def _make_jj_prompt_config(jj_failed_prompt: str | None, jj_conflict_prompt: str | None) -> UserConfig:
+    config = _make_user_config()
+    babysitter = config.ci_babysitter.model_copy(
+        update={"jj_pipeline_failed_prompt": jj_failed_prompt, "jj_merge_conflict_prompt": jj_conflict_prompt}
+    )
+    return config.model_copy(update={"ci_babysitter": babysitter})
+
+
+def _make_jj_workspace(env: _FakeEnv, primary_bookmark: str | None) -> None:
+    env.workspace = env.workspace.model_copy(
+        update={"initialization_strategy": WorkspaceInitializationStrategy.JJ_WORKSPACE}
+    )
+    bookmarks = () if primary_bookmark is None else (primary_bookmark,)
+    env.jj_state = WorkspaceJjStateInfo(
+        workspace_id=env.workspace_id,
+        working_copy_change_id="zzzzzzzz",
+        working_copy_change_id_prefix_length=1,
+        working_copy_description="",
+        is_working_copy_empty=True,
+        bookmarks=bookmarks,
+        primary_bookmark=primary_bookmark,
+        unbookmarked_revision_count=0,
+        has_conflict=False,
+        is_divergent=False,
+        is_working_copy_stale=False,
+    )
+
+
+def _send_failed_then_conflicted(coordinator: CIBabysitterCoordinator, env: _FakeEnv) -> None:
+    _seed_baseline(coordinator, env.workspace_id)
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    coordinator._handle_status(
+        _make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1, has_conflicts=True)
+    )
+
+
+_JJ_SUFFIX_FOR_FEAT = (
+    "This is a jj workspace, with no git inside it. The pull request is on the bookmark `feat`: to update it,"
+    + " move `feat` onto your fixed work and push it with `jj git push -b feat`."
+)
+
+
+def test_a_jj_workspace_gets_the_jj_prompts_then_the_jj_suffix_naming_the_pull_requests_bookmark(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    _make_jj_workspace(env, primary_bookmark="feat")
+    patch_user_config.config = _make_jj_prompt_config("JJ_FAILED_PROMPT", "JJ_CONFLICT_PROMPT")
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+
+    _send_failed_then_conflicted(coordinator, env)
+
+    assert [message.text for message, _ in task_service.create_message_calls] == [
+        f"JJ_FAILED_PROMPT\n\n{_JJ_SUFFIX_FOR_FEAT}",
+        f"JJ_CONFLICT_PROMPT\n\n{_JJ_SUFFIX_FOR_FEAT}",
+    ]
+
+
+def test_a_jj_workspace_falls_back_to_the_git_prompts_and_still_gets_the_jj_suffix(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    _make_jj_workspace(env, primary_bookmark="feat")
+    patch_user_config.config = _make_jj_prompt_config(None, None)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+
+    _send_failed_then_conflicted(coordinator, env)
+
+    assert [message.text for message, _ in task_service.create_message_calls] == [
+        f"FAILED_PROMPT\n\n{_JJ_SUFFIX_FOR_FEAT}",
+        f"CONFLICT_PROMPT\n\n{_JJ_SUFFIX_FOR_FEAT}",
+    ]
+
+
+def test_a_jj_workspace_without_a_known_bookmark_gets_a_jj_suffix_that_names_none(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    _make_jj_workspace(env, primary_bookmark=None)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+
+    [(message, _)] = task_service.create_message_calls
+    assert message.text == (
+        "FAILED_PROMPT\n\nThis is a jj workspace, with no git inside it. The pull request is on one of this"
+        + " workspace's bookmarks: to update it, move that bookmark onto your fixed work and push it with"
+        + " `jj git push -b <bookmark>`."
+    )
+
+
+def test_a_git_workspace_keeps_the_git_prompts_when_the_jj_prompts_are_set(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    patch_user_config.config = _make_jj_prompt_config("JJ_FAILED_PROMPT", "JJ_CONFLICT_PROMPT")
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    coordinator._handle_status(
+        _make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1, has_conflicts=True)
+    )
+
+    assert [message.text for message, _ in task_service.create_message_calls] == [
+        "FAILED_PROMPT",
+        "CONFLICT_PROMPT",
+    ]
 
 
 # Agent resolution for babysitter tasks: _resolve_babysitter_agent maps the

@@ -304,6 +304,7 @@ def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:
     launch); a value ⇒ it is present (resume launch).
     """
     env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_initialization_strategy.return_value = WorkspaceInitializationStrategy.IN_PLACE
     env.get_tool_binary_path.return_value = "/bin/pi"
     version_result = MagicMock()
     version_result.stdout = ""
@@ -337,6 +338,7 @@ def _make_agent_with_attachments_env(tmp_path: Path, image_bytes: bytes = b"") -
     """An agent whose environment records writes and serves ``image_bytes`` on read."""
     attachments_dir = tmp_path / "attachments"
     env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_initialization_strategy.return_value = WorkspaceInitializationStrategy.IN_PLACE
     env.get_attachments_path.return_value = attachments_dir
     env.read_file.return_value = image_bytes
     return _make_agent(env), env, attachments_dir
@@ -710,6 +712,7 @@ def _make_probe_env(probe_process: MagicMock) -> MagicMock:
     """A MagicMock environment whose binary + version preflight pass and whose
     `run_process_in_background` returns `probe_process` (the canned probe RPC)."""
     env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_initialization_strategy.return_value = WorkspaceInitializationStrategy.IN_PLACE
     env.get_tool_binary_path.return_value = "/bin/pi"
     version_result = MagicMock()
     version_result.stdout = ""

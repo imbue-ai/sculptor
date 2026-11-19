@@ -1,3 +1,5 @@
+from enum import StrEnum
+from enum import auto
 from pathlib import Path
 
 from pydantic import Field
@@ -65,6 +67,9 @@ class JjStackProjection(FrozenModel):
     unbookmarked_revision_count: int = Field(
         description="Described revisions above the primary bookmark; every described revision when there is none"
     )
+    newest_described_commit_ids: tuple[str, ...] = Field(
+        description="The described revisions no other described revision descends from, nearest the working copy first"
+    )
 
     @property
     def primary_bookmark(self) -> str | None:
@@ -72,6 +77,15 @@ class JjStackProjection(FrozenModel):
         if not self.pr_head_candidates:
             return None
         return self.pr_head_candidates[0]
+
+
+class JjInitialBookmarkOutcome(StrEnum):
+    """What one attempt to create a jj workspace's requested bookmark did."""
+
+    CREATED = auto()
+    STACK_HAS_A_BOOKMARK = auto()
+    NO_SINGLE_NEWEST_DESCRIBED_REVISION = auto()
+    NAME_UNAVAILABLE = auto()
 
 
 class JjHeadIdentity(FrozenModel):

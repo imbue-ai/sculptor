@@ -69,6 +69,9 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
+from sculptor.services.workspace_service.jj_bookmark_facts import DefaultJjBookmarkFactsProvider
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFactsProvider
+from sculptor.services.workspace_service.jj_bookmark_facts import JjStackBookmarks
 from sculptor.services.workspace_service.jj_orphan_sweep import forget_orphaned_jj_workspaces
 from sculptor.services.workspace_service.jj_workspace_poller import JjWorkspacePoller
 from sculptor.services.workspace_service.jj_workspace_poller import PublishedJjReadiness
@@ -88,9 +91,11 @@ from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavaila
 from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
+from sculptor.services.workspace_service.vcs.jj_data_types import JjInitialBookmarkOutcome
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
 from sculptor.services.workspace_service.vcs.jj_repo_queries import update_stale
+from sculptor.services.workspace_service.vcs.jj_workspace_vcs import JjWorkspaceVcs
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
@@ -264,6 +269,70 @@ class DefaultWorkspaceService(WorkspaceService):
 
     def make_setup_state_provider(self, workspace_id: str) -> SetupStateProvider:
         return DefaultSetupStateProvider(self.setup_runner, workspace_id)
+
+    def make_jj_bookmark_facts_provider(self, workspace_id: WorkspaceID) -> JjBookmarkFactsProvider:
+        return DefaultJjBookmarkFactsProvider(workspace_id, self.data_model_service, self._read_cached_stack_bookmarks)
+
+    def attempt_initial_bookmark(self, workspace_id: WorkspaceID) -> JjInitialBookmarkOutcome | None:
+        with self.data_model_service.open_transaction(request_id=RequestID()) as transaction:
+            workspace = transaction.get_workspace(workspace_id)
+            location = None if workspace is None else self._find_jj_checkout_location(workspace, transaction)
+        if workspace is None or location is None:
+            return None
+        outcome = self._create_requested_bookmark(workspace, location)
+        with self._jj_workspace_poller_lock:
+            poller = self._jj_workspace_poller_instance
+        if poller is not None:
+            poller.scan_now()
+        return outcome
+
+    def _find_jj_checkout_location(
+        self, workspace: Workspace, transaction: DataModelTransaction
+    ) -> CheckoutLocation | None:
+        """Where a jj workspace's checkout lives; None for a git workspace or a jj workspace without one."""
+        match workspace.initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                return None
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                try:
+                    return self._get_checkout_location(workspace, transaction)
+                except WorkspaceNotFoundError:
+                    return None
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def _create_requested_bookmark(
+        self, workspace: Workspace, location: CheckoutLocation
+    ) -> JjInitialBookmarkOutcome | None:
+        requested_bookmark = workspace.requested_branch_name
+        published_state = self.get_cached_jj_state(workspace.object_id)
+        if requested_bookmark is None or (published_state is not None and published_state.bookmarks):
+            return None
+        vcs = self.get_workspace_vcs(workspace.initialization_strategy)
+        assert isinstance(vcs, JjWorkspaceVcs), "jj workspaces have jj version control"
+        try:
+            with self._tracking_stale_working_copy(workspace.object_id):
+                outcome = vcs.create_initial_bookmark(location, workspace.target_branch, requested_bookmark)
+        except VcsCommandError as e:
+            logger.debug("Cannot create bookmark {} in workspace {}: {}", requested_bookmark, workspace.object_id, e)
+            return None
+        logger.debug("Attempt at bookmark {} in workspace {}: {}", requested_bookmark, workspace.object_id, outcome)
+        return outcome
+
+    def _read_cached_stack_bookmarks(self, workspace_id: WorkspaceID) -> JjStackBookmarks | None:
+        state = self.get_cached_jj_state(workspace_id)
+        if state is None:
+            return None
+        return JjStackBookmarks(
+            working_copy_change_id=state.working_copy_change_id,
+            bookmarks=state.bookmarks,
+            primary_bookmark=state.primary_bookmark,
+            unbookmarked_revision_count=state.unbookmarked_revision_count,
+        )
 
     def _persist_setup_state(self, change: SetupStateChanged) -> None:
         fields: WorkspaceFieldUpdate = {

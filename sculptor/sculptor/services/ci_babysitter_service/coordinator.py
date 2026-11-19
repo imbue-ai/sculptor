@@ -13,9 +13,11 @@ is a regular Task row and is fully persistent.
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Empty
 from queue import Queue
+from typing import assert_never
 
 from loguru import logger
 from pydantic import PrivateAttr
@@ -29,6 +31,7 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.pydantic_serialization import SerializableModel
@@ -58,6 +61,7 @@ from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.state.messages import model_for_new_record
 from sculptor.web.data_types import StreamingUpdateSourceTypes
+from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.derived import is_agent_busy_or_waiting
 from sculptor.web.derived import scan_terminal_signal_state
@@ -118,6 +122,47 @@ class Disabled:
 ResolvedBabysitterAgent = ChatAgent | DriveableTerminal | Disabled
 
 
+def compose_babysitter_prompt(
+    git_prompt: str,
+    jj_prompt: str | None,
+    initialization_strategy: WorkspaceInitializationStrategy,
+    pull_request_bookmark: str | None,
+) -> str:
+    """The message for a workspace of this kind.
+
+    A git workspace gets the git prompt. A jj workspace gets its own prompt when
+    one is set, else the git prompt, followed by how to update a pull request
+    from a jj workspace: by moving and pushing `pull_request_bookmark`.
+    """
+    match initialization_strategy:
+        case (
+            WorkspaceInitializationStrategy.IN_PLACE
+            | WorkspaceInitializationStrategy.CLONE
+            | WorkspaceInitializationStrategy.WORKTREE
+        ):
+            return git_prompt
+        case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+            prompt = git_prompt if jj_prompt is None else jj_prompt
+            return f"{prompt}\n\n{_build_jj_prompt_suffix(pull_request_bookmark)}"
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _build_jj_prompt_suffix(pull_request_bookmark: str | None) -> str:
+    if pull_request_bookmark is None:
+        update = (
+            "The pull request is on one of this workspace's bookmarks: to update it, move that bookmark onto"
+            + " your fixed work and push it with `jj git push -b <bookmark>`."
+        )
+    else:
+        update = (
+            f"The pull request is on the bookmark `{pull_request_bookmark}`: to update it, move"
+            + f" `{pull_request_bookmark}` onto your fixed work and push it with"
+            + f" `jj git push -b {pull_request_bookmark}`."
+        )
+    return f"This is a jj workspace, with no git inside it. {update}"
+
+
 def _driveable_terminal_from_registration(registration_id: str) -> DriveableTerminal | None:
     """A DriveableTerminal stamped from the *live* registration, or None when the
     registration is gone or has revoked automated-prompt opt-in.
@@ -175,6 +220,7 @@ class CIBabysitterCoordinator(Service):
     _task_service: TaskService = PrivateAttr()
     _git_repo_service: GitRepoService = PrivateAttr()
     _pr_polling_service: PrPollingService = PrivateAttr()
+    _read_cached_jj_state: Callable[[WorkspaceID], WorkspaceJjStateInfo | None] = PrivateAttr()
     _queue: Queue[StreamingUpdateSourceTypes] = PrivateAttr(default_factory=Queue)
     _state: dict[WorkspaceID, CIBabysitterState] = PrivateAttr(default_factory=dict)
     _lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
@@ -188,12 +234,15 @@ class CIBabysitterCoordinator(Service):
         task_service: TaskService,
         git_repo_service: GitRepoService,
         pr_polling_service: PrPollingService,
+        read_cached_jj_state: Callable[[WorkspaceID], WorkspaceJjStateInfo | None],
     ) -> None:
+        """`read_cached_jj_state` is the jj poller's last-published state of a workspace, read without running jj."""
         super().__init__(concurrency_group=concurrency_group)
         self._data_model_service = data_model_service
         self._task_service = task_service
         self._git_repo_service = git_repo_service
         self._pr_polling_service = pr_polling_service
+        self._read_cached_jj_state = read_cached_jj_state
 
     def start(self) -> None:
         # Note: in-memory state is rebuilt lazily on first poll per
@@ -390,9 +439,11 @@ class CIBabysitterCoordinator(Service):
             return
 
         if transition is Transition.PIPELINE_FAILED:
-            prompt_text = config.ci_babysitter.pipeline_failed_prompt
+            git_prompt = config.ci_babysitter.pipeline_failed_prompt
+            jj_prompt = config.ci_babysitter.jj_pipeline_failed_prompt
         elif transition is Transition.MERGE_CONFLICT:
-            prompt_text = config.ci_babysitter.merge_conflict_prompt
+            git_prompt = config.ci_babysitter.merge_conflict_prompt
+            jj_prompt = config.ci_babysitter.jj_merge_conflict_prompt
         else:
             logger.error("CIBabysitterCoordinator: _dispatch_prompt called with non-actionable {}", transition)
             return
@@ -401,7 +452,19 @@ class CIBabysitterCoordinator(Service):
         # gates above stay here; only delivery differs per agent kind, via the
         # single deliver_prompt_to_agent seam below.
         with self._data_model_service.open_transaction(RequestID()) as transaction:
+            workspace = transaction.get_workspace(state.workspace_id)
+            if workspace is None:
+                logger.debug("CIBabysitterCoordinator: workspace={} is gone, not dispatching", state.workspace_id)
+                return
             resolved = self._resolve_babysitter_agent(state.workspace_id, state.project_id, config, transaction)
+        jj_state = self._read_cached_jj_state(state.workspace_id)
+        prompt_text = compose_babysitter_prompt(
+            git_prompt,
+            jj_prompt,
+            workspace.initialization_strategy,
+            None if jj_state is None else jj_state.primary_bookmark,
+        )
+
         if isinstance(resolved, Disabled):
             # No spawn, no task. The reason surfaces to the UI on every status
             # read, which recomputes persistent reasons proactively.

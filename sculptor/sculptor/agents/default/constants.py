@@ -143,3 +143,17 @@ This directory has a `.jj` directory and no `.git`, so every `git` command fails
 - If a command fails with "The working copy is stale", run `jj workspace update-stale`, check the result with `jj st`, and tell the user what happened.
 </Environment mode>
 """
+
+# The vendored jj skill as Claude names it: the `jujutsu` skill of the `sculptor-jj` plugin.
+JJ_SKILL_NAME: Final[str] = "sculptor-jj:jujutsu"
+
+# Appended to a Claude agent's system prompt in a jj workspace, so the rule outlives
+# the first-message reminder through compaction and `/clear`.
+CLAUDE_JJ_SKILL_REQUIRED_PROMPT: Final[str] = f"""
+The `{JJ_SKILL_NAME}` skill is required for version control in this workspace. If its instructions are not in your context, invoke it with the Skill tool (skill="{JJ_SKILL_NAME}") before you run any version-control command.
+"""
+
+# Formatted with `requested_bookmark`: which bookmark Sculptor creates for a jj workspace's work, and when.
+JJ_REQUESTED_BOOKMARK_PROMPT: Final[str] = (
+    """Sculptor names this workspace's work with the jj bookmark `{requested_bookmark}`. Until a bookmark is on your stack, Sculptor creates `{requested_bookmark}` on your newest described change each time one of your turns ends, if the name is free. So describe your work with `jj describe -m` or `jj commit -m`, and do not create a bookmark under another name. Keep the bookmark on your newest described change as you go, for example `jj bookmark set {requested_bookmark} -r @-`."""
+)

@@ -27,6 +27,7 @@ from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.harness import AgentRunContext
 from sculptor.interfaces.agents.harness import Harness
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFactsProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 
 
@@ -61,9 +62,13 @@ def create_agent_for_run(context: AgentRunContext) -> Agent:
     match context.task_data.agent_config:
         case ClaudeCodeSDKAgentConfig() as agent_config:
             setup_state_provider: SetupStateProvider | None = None
+            jj_bookmark_facts_provider: JjBookmarkFactsProvider | None = None
             if context.task_state.workspace_id is not None:
                 setup_state_provider = context.workspace_service.make_setup_state_provider(
                     str(context.task_state.workspace_id)
+                )
+                jj_bookmark_facts_provider = context.workspace_service.make_jj_bookmark_facts_provider(
+                    context.task_state.workspace_id
                 )
             return ClaudeCodeSDKAgent(
                 config=agent_config,
@@ -75,6 +80,7 @@ def create_agent_for_run(context: AgentRunContext) -> Agent:
                 on_diff_needed=context.on_diff_needed,
                 workspace_id=context.task_state.workspace_id,
                 setup_state_provider=setup_state_provider,
+                jj_bookmark_facts_provider=jj_bookmark_facts_provider,
                 harness=CLAUDE_CODE_HARNESS,
             )
         case HelloAgentConfig() as agent_config:
@@ -97,6 +103,11 @@ def create_agent_for_run(context: AgentRunContext) -> Agent:
                 on_diff_needed=context.on_diff_needed,
                 harness=PI_HARNESS,
                 preselected_model=context.task_state.current_model,
+                jj_bookmark_facts_provider=(
+                    None
+                    if context.task_state.workspace_id is None
+                    else context.workspace_service.make_jj_bookmark_facts_provider(context.task_state.workspace_id)
+                ),
             )
         # Terminal configs (TerminalAgentConfig / RegisteredTerminalAgentConfig)
         # never reach this function: they are dispatched to

@@ -12,6 +12,8 @@ from sculptor.agents.default.claude_code_sdk.branch_rename_hint import BranchRen
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import AutoRenameReminder
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import JjBookmarkNudge
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import JjWorkspaceReminders
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_synthetic_diff_from_tool_input
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_tool_content
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import _extract_edits
@@ -19,6 +21,7 @@ from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_cl
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_user_instructions
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import parse_claude_code_json_lines
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import resolve_fast_mode
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import select_jj_bookmark_nudge
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
@@ -40,6 +43,8 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.services.workspace_service.jj_bookmark_facts import JjBookmarkFacts
+from sculptor.services.workspace_service.jj_bookmark_facts import JjStackBookmarks
 from sculptor.services.workspace_service.setup_command_runner import FailedSetup
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
@@ -923,3 +928,158 @@ def test_get_user_instructions_omits_the_branch_rename_without_a_hint() -> None:
     result = get_user_instructions(message, file_paths=(), is_first_message=True, auto_rename=AutoRenameReminder())
     assert _AUTO_RENAME_MARKER in result
     assert "git branch -m" not in result
+
+
+# Markers that only appear in the jj workspace reminders.
+_JJ_SKILL_MARKER = 'skill="sculptor-jj:jujutsu"'
+_JJ_BOOKMARK_MARKER = "Sculptor names this workspace's work with the jj bookmark"
+
+
+def test_get_user_instructions_tells_a_jj_workspace_agent_to_invoke_the_jj_skill_before_anything_else() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message, file_paths=(), is_first_message=True, jj_workspace=JjWorkspaceReminders(requested_bookmark=None)
+    )
+    assert result.startswith("<system-reminder>")
+    assert result.index(_JJ_SKILL_MARKER) < result.index("</system-reminder>")
+    assert "Before you do anything else" in result
+    assert result.endswith("hello")
+
+
+def test_get_user_instructions_puts_the_jj_skill_above_a_skill_the_user_invoked_and_the_setup_reminder() -> None:
+    message = ChatInputUserMessage(text="/address-comments XYZ")
+    setup_state = RunningSetup(command="npm ci", pid=12345, log_path="/abs/setup_log.txt")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        setup_state=setup_state,
+        jj_workspace=JjWorkspaceReminders(requested_bookmark=None),
+    )
+    jj_skill_idx = result.index(_JJ_SKILL_MARKER)
+    assert jj_skill_idx < result.index(_SKILL_INVOCATION_PREAMBLE + "/address-comments")
+    assert jj_skill_idx < result.index(_SETUP_RUNNING_PREAMBLE)
+
+
+def test_get_user_instructions_names_the_requested_bookmark_on_a_jj_workspace_first_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=True,
+        auto_rename=AutoRenameReminder(),
+        jj_workspace=JjWorkspaceReminders(requested_bookmark="dev/graph-view"),
+    )
+    assert _JJ_BOOKMARK_MARKER + " `dev/graph-view`" in result
+    assert "jj bookmark set dev/graph-view -r @-" in result
+    assert "git branch -m" not in result
+
+
+def test_get_user_instructions_has_no_bookmark_reminder_for_a_jj_workspace_without_a_requested_bookmark() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message, file_paths=(), is_first_message=True, jj_workspace=JjWorkspaceReminders(requested_bookmark=None)
+    )
+    assert _JJ_SKILL_MARKER in result
+    assert _JJ_BOOKMARK_MARKER not in result
+
+
+def test_get_user_instructions_sends_the_jj_first_message_reminders_only_on_the_first_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=False,
+        jj_workspace=JjWorkspaceReminders(requested_bookmark="dev/graph-view"),
+    )
+    assert result == "hello"
+
+
+def test_get_user_instructions_has_no_jj_reminders_for_a_git_workspace() -> None:
+    message = ChatInputUserMessage(text="hello")
+    result = get_user_instructions(message, file_paths=(), is_first_message=True)
+    assert _JJ_SKILL_MARKER not in result
+    assert _JJ_BOOKMARK_MARKER not in result
+
+
+def _stack(
+    bookmarks: tuple[str, ...], primary_bookmark: str | None, unbookmarked_revision_count: int
+) -> JjStackBookmarks:
+    return JjStackBookmarks(
+        working_copy_change_id="zzzzzzzz",
+        bookmarks=bookmarks,
+        primary_bookmark=primary_bookmark,
+        unbookmarked_revision_count=unbookmarked_revision_count,
+    )
+
+
+@pytest.mark.parametrize(
+    "stack",
+    [
+        None,
+        _stack((), None, 0),
+        _stack(("feat",), "feat", 0),
+        _stack(("feat", "other"), "feat", 2),
+        _stack(("main",), None, 1),
+    ],
+)
+def test_select_jj_bookmark_nudge_stays_quiet_unless_described_work_lags_the_only_bookmark_or_has_none(
+    stack: JjStackBookmarks | None,
+) -> None:
+    assert select_jj_bookmark_nudge(JjBookmarkFacts(requested_bookmark="feat", stack=stack)) is None
+
+
+def test_select_jj_bookmark_nudge_names_the_bookmark_that_described_work_sits_above() -> None:
+    facts = JjBookmarkFacts(requested_bookmark="dev/graph-view", stack=_stack(("feat",), "feat", 2))
+
+    assert select_jj_bookmark_nudge(facts) == JjBookmarkNudge(
+        bookmark="feat", requested_bookmark="dev/graph-view", unbookmarked_revision_count=2
+    )
+
+
+def test_select_jj_bookmark_nudge_reports_described_work_without_a_bookmark() -> None:
+    facts = JjBookmarkFacts(requested_bookmark="dev/graph-view", stack=_stack((), None, 1))
+
+    assert select_jj_bookmark_nudge(facts) == JjBookmarkNudge(
+        bookmark=None, requested_bookmark="dev/graph-view", unbookmarked_revision_count=1
+    )
+
+
+def test_get_user_instructions_nudges_to_move_a_lagging_bookmark_on_any_message() -> None:
+    message = ChatInputUserMessage(text="hello")
+    nudge = JjBookmarkNudge(bookmark="feat", requested_bookmark="feat", unbookmarked_revision_count=2)
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=False,
+        jj_workspace=JjWorkspaceReminders(requested_bookmark="feat", bookmark_nudge=nudge),
+    )
+    assert result.startswith("<system-reminder>\n2 described changes on your stack sit above its bookmark `feat`.")
+    assert "jj bookmark set feat -r" in result
+    assert result.endswith("hello")
+
+
+def test_get_user_instructions_nudges_to_create_a_bookmark_for_described_work_without_one() -> None:
+    message = ChatInputUserMessage(text="hello")
+    nudge = JjBookmarkNudge(bookmark=None, requested_bookmark="dev/graph-view", unbookmarked_revision_count=1)
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=False,
+        jj_workspace=JjWorkspaceReminders(requested_bookmark="dev/graph-view", bookmark_nudge=nudge),
+    )
+    assert "1 described change on your stack has no bookmark" in result
+    assert "`dev/graph-view`" in result
+    assert "jj bookmark create" in result
+
+
+def test_get_user_instructions_does_not_nudge_with_a_question_answer() -> None:
+    message = _make_question_answer_message()
+    nudge = JjBookmarkNudge(bookmark="feat", requested_bookmark="feat", unbookmarked_revision_count=2)
+    result = get_user_instructions(
+        message,
+        file_paths=(),
+        is_first_message=False,
+        jj_workspace=JjWorkspaceReminders(requested_bookmark="feat", bookmark_nudge=nudge),
+    )
+    assert "described change" not in result

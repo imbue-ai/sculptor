@@ -163,6 +163,7 @@ def test_service_collection(
         task_service=_test_task_service,
         git_repo_service=_test_git_repo_service,
         pr_polling_service=pr_polling_service,
+        read_cached_jj_state=_test_workspace_service.get_cached_jj_state,
     )
     pi_login_service = PiLoginService(
         concurrency_group=test_root_concurrency_group.make_concurrency_group("pi_login_service"),
