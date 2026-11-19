@@ -20,6 +20,7 @@ import os
 import shlex
 import signal
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 
 import psutil
@@ -207,6 +208,23 @@ def reap_stale_shell(pid: int) -> None:
     except PermissionError:
         # macOS raises this for foreign processes — treat as "not ours".
         logger.debug("No permission to inspect/signal pid {}; skipping reap", pid)
+
+
+def with_path_prefixes_first(command: str, path_prefixes: Sequence[Path]) -> str:
+    """`command`, first putting `path_prefixes` back in front of PATH, which the login shell's profile may have reordered.
+
+    The result is typed into the user's own shell, whatever it is, so it uses
+    nothing beyond `export` and `"$PATH"`.
+
+    >>> with_path_prefixes_first("claude", (Path("/internal/jj-bin"),))
+    'export PATH=/internal/jj-bin:"$PATH"; claude'
+    >>> with_path_prefixes_first("claude", ())
+    'claude'
+    """
+    if not path_prefixes:
+        return command
+    quoted_prefixes = shlex.quote(os.pathsep.join(str(prefix) for prefix in path_prefixes))
+    return f'export PATH={quoted_prefixes}:"$PATH"; {command}'
 
 
 def write_launch_command(manager: LocalTerminalManager, command: str, timeout_seconds: float = 5.0) -> None:

@@ -30,6 +30,11 @@ const BLOCKER_COPY = {
     title: "jj has no author identity.",
     action: () => "Set the name and email jj records on your changes under Author identity below.",
   },
+  SHADOWED: {
+    title: "Your login shell runs a jj that Sculptor does not support.",
+    action: (minimumVersion) =>
+      `Sculptor needs jj ${minimumVersion} or a newer compatible version, because your repositories are shared with the jj you run yourself. Upgrade or remove this jj, or stop your shell profile putting its directory first on PATH, then Re-check.`,
+  },
 } as const satisfies Record<JjBlocker, BlockerCopy>;
 
 /** The failing check's finding, for the blockers that carry one. */
@@ -38,6 +43,7 @@ const describeFinding = (readiness: Exclude<JjReadiness, JjAvailable>): string |
     case "NOT_RUNNABLE":
       return readiness.error;
     case "UNSUPPORTED_VERSION":
+    case "SHADOWED":
       return readiness.version === null
         ? `${readiness.path} reports no recognizable jj version`
         : `${readiness.path} reports jj ${readiness.version}`;

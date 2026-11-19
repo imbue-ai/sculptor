@@ -5,17 +5,22 @@ PATH that holds nothing else, so a test can tell when a read ran a probe.
 """
 
 from collections.abc import Iterator
+from pathlib import Path
 from queue import Queue
 
 import pytest
 
 import sculptor.services.dependency_management_service as dependency_management_service_module
+from sculptor.config.user_config import DependencyPaths
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.testing.jj_repos import JJ_TEST_USER_EMAIL
 from sculptor.testing.jj_repos import JJ_TEST_USER_NAME
 from sculptor.testing.jj_repos import JjBinary
+from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.recording_binaries import RecordingBinaries
 from sculptor.testing.recording_binaries import recording_git_and_jj  # noqa: F401
 from sculptor.web.data_types import DependenciesStatus
@@ -187,3 +192,55 @@ def test_a_running_service_refreshes_the_status_soon_after_a_gate_finds_jj_chang
 
     assert refreshed_status.jj_readiness == probed_readiness
     assert isinstance(probed_readiness, JjNoIdentity)
+
+
+def _log_each_login_shell_run(jj_isolated_env: JjIsolatedEnv, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Make the user's login shell bash, with a profile that logs each run to the returned file."""
+    runs_log = jj_isolated_env.home_path / "profile_runs.log"
+    runs_log.touch()
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    (jj_isolated_env.home_path / ".bash_profile").write_text(f'echo ran >> "{runs_log}"\n')
+    return runs_log
+
+
+def test_timed_refreshes_keep_the_login_shells_last_answer_and_a_re_check_asks_it_again(
+    recording_git_and_jj: RecordingBinaries,  # noqa: F811
+    jj_isolated_env: JjIsolatedEnv,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(dependency_management_service_module, "_DEPENDENCY_STATUS_REFRESH_INTERVAL_SECONDS", 0.05)
+    profile_runs_log = _log_each_login_shell_run(jj_isolated_env, monkeypatch)
+    service = _unstarted_service()
+    queue: Queue[DependenciesStatus] = Queue()
+    service.add_observer_queue(queue)
+
+    with service.run():
+        timed_statuses = [queue.get(timeout=10.0) for _ in range(4)]
+        runs_after_the_timed_refreshes = profile_runs_log.read_text().splitlines()
+        service.recheck_status()
+        runs_after_the_re_check = profile_runs_log.read_text().splitlines()
+
+    assert [isinstance(status.jj_readiness, JjAvailable) for status in timed_statuses] == [True, True, True, True]
+    assert runs_after_the_timed_refreshes == ["ran"]
+    assert runs_after_the_re_check == ["ran", "ran"]
+
+
+def test_a_refresh_asks_the_login_shell_again_when_the_jj_sculptor_resolves_moves(
+    recording_git_and_jj: RecordingBinaries,  # noqa: F811
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    service: DependencyManagementService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile_runs_log = _log_each_login_shell_run(jj_isolated_env, monkeypatch)
+    service.get_status()
+    set_user_config_instance(
+        get_user_config_instance().model_copy(
+            update={"dependency_paths": DependencyPaths(claude="CUSTOM", pi="CUSTOM", jj=str(jj_binary.path))}
+        )
+    )
+
+    status = service.refresh_status()
+
+    assert status.jj.path == str(jj_binary.path)
+    assert profile_runs_log.read_text().splitlines() == ["ran", "ran"]

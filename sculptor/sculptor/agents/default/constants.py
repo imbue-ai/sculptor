@@ -126,7 +126,8 @@ You can push changes normally with `git push`, but NEVER do so without explicit 
 </Environment mode>
 """
 
-# Formatted with `snapshot_max_new_file_size_mib`, the user's configured jj snapshot limit.
+# Formatted with `snapshot_max_new_file_size_mib`, the user's configured jj snapshot limit, and
+# `minimum_jj_version`, the oldest jj Sculptor supports.
 JJ_WORKSPACE_MODE_PROMPT: Final[str] = """
 <Environment mode>
 You are working in a jj (Jujutsu) workspace of the user's local repository (jj workspace mode).
@@ -141,6 +142,7 @@ This directory has a `.jj` directory and no `.git`, so every `git` command fails
 - `gh` finds the repository through `GH_REPO`, since there is no `.git` to read, but it cannot tell which bookmark is yours: pass `--head <bookmark>`, for example to `gh pr create`.
 - jj does not snapshot a new file larger than {snapshot_max_new_file_size_mib} MiB: it warns and leaves the file untracked. Tell the user about such a file rather than changing jj's configuration.
 - If a command fails with "The working copy is stale", run `jj workspace update-stale`, check the result with `jj st`, and tell the user what happened.
+- If `jj --version` reports a version below {minimum_jj_version}, another jj is ahead of Sculptor's on your PATH: stop using jj, do not install jj or change PATH yourself, and tell the user which jj `command -v jj` finds.
 </Environment mode>
 """
 

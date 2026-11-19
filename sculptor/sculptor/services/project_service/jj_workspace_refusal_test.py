@@ -14,8 +14,10 @@ from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.testing.jj_repos import JjBinary
 from sculptor.testing.jj_repos import JjColocatedRepo
+from sculptor.testing.jj_repos import JjIsolatedEnv
 from sculptor.testing.jj_repos import JjWorkspace
 from sculptor.testing.jj_repos import run_jj
+from sculptor.web.data_types import JjBlocker
 
 
 @pytest.fixture
@@ -67,6 +69,29 @@ def test_a_jj_workspace_of_a_colocated_repository_resolves_to_the_repository_roo
     jj_colocated_repo: JjColocatedRepo,
     jj_workspace: JjWorkspace,
 ) -> None:
+    assert (
+        resolve_project_in_jj_workspace(jj_workspace.path, jj, dependency_management_service)
+        == jj_colocated_repo.path.resolve()
+    )
+
+
+def test_a_jj_workspace_resolves_while_the_login_shell_runs_an_older_jj_since_sculptor_reads_it_with_its_own(
+    jj: JjCli,
+    dependency_management_service: DependencyManagementService,
+    jj_colocated_repo: JjColocatedRepo,
+    jj_workspace: JjWorkspace,
+    jj_isolated_env: JjIsolatedEnv,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cargo_bin = tmp_path / "cargo_bin"
+    cargo_bin.mkdir()
+    (cargo_bin / "jj").write_text("#!/bin/sh\necho 'jj 0.28.2'\n")
+    (cargo_bin / "jj").chmod(0o755)
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    (jj_isolated_env.home_path / ".bash_profile").write_text(f'export PATH="{cargo_bin}:$PATH"\n')
+    assert dependency_management_service.get_status().jj_readiness.blocker == JjBlocker.SHADOWED
+
     assert (
         resolve_project_in_jj_workspace(jj_workspace.path, jj, dependency_management_service)
         == jj_colocated_repo.path.resolve()

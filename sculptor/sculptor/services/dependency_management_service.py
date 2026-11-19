@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import tempfile
@@ -49,6 +50,7 @@ from sculptor.services.voice_models import VOICE_MODELS_PIN
 from sculptor.services.voice_models import VOICE_MODELS_TOOL_NAME
 from sculptor.services.voice_models import find_voice_model_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import parse_env_file
+from sculptor.services.workspace_service.environment_manager.environments.spawned_pty_process import TERMINAL_TYPE
 from sculptor.utils.build import get_internal_folder
 from sculptor.utils.build import get_sculptor_folder
 from sculptor.web.data_types import AuthResult
@@ -65,7 +67,9 @@ from sculptor.web.data_types import JjNoIdentity
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
 from sculptor.web.data_types import JjReadiness
+from sculptor.web.data_types import JjShadowed
 from sculptor.web.data_types import JjUnsupportedVersion
+from sculptor.web.data_types import LoginShellJj
 from sculptor.web.data_types import VersionRangeInfo
 
 
@@ -85,6 +89,13 @@ class DependencyCheckResult(FrozenModel):
     probe_error: str | None = None
 
 
+class _LoginShellAnswer(FrozenModel):
+    """Which other jj the user's login shell ran, when last asked with `sculptor_jj` first on PATH."""
+
+    sculptor_jj: str
+    login_shell_jj: LoginShellJj | None
+
+
 class JjIdentityError(Exception):
     """jj's author identity could not be written to the user's jj config."""
 
@@ -98,6 +109,8 @@ _DEFAULT_RETENTION_KEEP = 2
 # How often a running service recomputes the status with no event asking for it,
 # because a tool can be installed, removed or reconfigured outside Sculptor.
 _DEPENDENCY_STATUS_REFRESH_INTERVAL_SECONDS = 60.0
+# A login shell runs the user's whole profile; one slower than this is not waited for.
+_LOGIN_SHELL_PROBE_TIMEOUT_SECONDS = 10.0
 
 
 def _is_valid_custom_binary(value: str) -> bool:
@@ -585,6 +598,16 @@ def _await_gh_device_code(process: RunningProcess) -> tuple[str | None, str | No
         time.sleep(0.2)
 
 
+def _with_login_shell_jj(readiness: JjReadiness, login_shell_jj: LoginShellJj | None) -> JjReadiness:
+    """`readiness`, unless jj is otherwise ready and the user's login shell runs an unsupported jj instead of Sculptor's.
+
+    A supported jj the shell runs instead is only reported, in the status's `login_shell_jj`.
+    """
+    if not isinstance(readiness, JjAvailable) or login_shell_jj is None or login_shell_jj.is_version_in_range:
+        return readiness
+    return JjShadowed(blocker=JjBlocker.SHADOWED, path=login_shell_jj.path, version=login_shell_jj.version)
+
+
 class DependencyManagementService(Service):
     # Serializes the download+verify+stage operation. Held by the background
     # download thread for the entire duration of _download_verify_stage.
@@ -627,6 +650,8 @@ class DependencyManagementService(Service):
     # Set to have the status refresher recompute the status now rather than at its next timed refresh.
     _status_refresh_requested: threading.Event = PrivateAttr(default_factory=threading.Event)
     _status_refresher_thread: ObservableThread | None = PrivateAttr(default=None)
+    # The login shell's last answer, and the jj it was asked about. Guarded by _status_computation_lock.
+    _login_shell_answer: _LoginShellAnswer | None = PrivateAttr(default=None)
     _observer_queues: set[Queue[Any]] = PrivateAttr(default_factory=set)
     # Cooperative cancellation: set by stop() so the background install thread
     # can wrap up at the next chunk boundary instead of being interrupted by
@@ -795,8 +820,20 @@ class DependencyManagementService(Service):
             return self._compute_and_publish_status()
 
     def refresh_status(self) -> DependenciesStatus:
-        """Compute every dependency's status now, keep it for reads, and push it to every observer."""
+        """Compute every dependency's status now, keep it for reads, and push it to every observer.
+
+        The user's login shell, which runs their whole profile, is asked which jj it
+        runs only the first time, and again when the jj Sculptor resolves moves; other
+        refreshes, the timed ones included, keep its last answer. An edit to the
+        user's shell profile is therefore seen on `recheck_status` or at restart.
+        """
         with self._status_computation_lock:
+            return self._compute_and_publish_status()
+
+    def recheck_status(self) -> DependenciesStatus:
+        """`refresh_status` for the user's explicit re-check, which also asks the user's login shell again."""
+        with self._status_computation_lock:
+            self._login_shell_answer = None
             return self._compute_and_publish_status()
 
     def _run_status_refresher(self) -> None:
@@ -949,7 +986,10 @@ class DependencyManagementService(Service):
         binary = self.resolve_binary_path(tool)
         if binary is None:
             return DependencyCheckResult(installed=False)
+        return self._check_binary(tool, binary)
 
+    def _check_binary(self, tool: Dependency, binary: str) -> DependencyCheckResult:
+        """Whether `binary` runs, and the version of `tool` it reports."""
         try:
             result = self.concurrency_group.run_process_to_completion(
                 [binary, "--version"],
@@ -1211,7 +1251,10 @@ class DependencyManagementService(Service):
             self._gh_auth_session = None
 
     def _get_status(self) -> DependenciesStatus:
-        """Compute the current status of all dependencies (no side effects)."""
+        """Compute the current status of all dependencies; call only while holding ``_status_computation_lock``.
+
+        Asking the login shell keeps its answer for later computations.
+        """
         git_check = self.check_installed(Dependency.GIT)
         claude_check = self.check_installed(Dependency.CLAUDE)
         pi_check = self.check_installed(Dependency.PI)
@@ -1266,6 +1309,13 @@ class DependencyManagementService(Service):
 
         gh_info = self._get_remote_cli_info(Dependency.GH)
 
+        jj_readiness = self._jj_readiness_from_check(jj_check)
+        login_shell_jj = (
+            self._read_login_shell_jj(jj_check.path)
+            if isinstance(jj_readiness, JjAvailable) and jj_check.path is not None
+            else None
+        )
+
         return DependenciesStatus(
             git=git_info,
             claude=claude_info,
@@ -1276,7 +1326,8 @@ class DependencyManagementService(Service):
             jj=self._build_optional_tool_info(
                 Dependency.JJ, JJ_VERSION_RANGE, jj_check, config, progress_by_tool, error_by_tool
             ),
-            jj_readiness=self._jj_readiness_from_check(jj_check),
+            jj_readiness=_with_login_shell_jj(jj_readiness, login_shell_jj),
+            login_shell_jj=login_shell_jj,
             voice_models=self._get_voice_models_installer().build_info(),
         )
 
@@ -1331,12 +1382,16 @@ class DependencyManagementService(Service):
     def probe_jj_readiness(self) -> JjReadiness:
         """JJ_AVAILABLE as jj reports it now, for a gate about to let jj act on the user's repository.
 
-        A readiness other than the last computed status's requests a refresh, so
-        every observer learns of it too.
+        Which jj the user's login shell runs comes from the last computed status,
+        since asking the shell runs their whole profile. A readiness other than
+        that status's requests a refresh, so every observer learns of it too.
         """
         readiness = self._jj_readiness_from_check(self.check_installed(Dependency.JJ))
         status = self._status
-        if status is not None and status.jj_readiness != readiness:
+        if status is None:
+            return readiness
+        readiness = _with_login_shell_jj(readiness, status.login_shell_jj)
+        if status.jj_readiness != readiness:
             self._status_refresh_requested.set()
         return readiness
 
@@ -1359,6 +1414,73 @@ class DependencyManagementService(Service):
             suggested_identity=JjIdentity(
                 name=identity.name or git_identity.name, email=identity.email or git_identity.email
             ),
+        )
+
+    def _read_login_shell_jj(self, sculptor_jj: str) -> LoginShellJj | None:
+        """The login shell's last answer for `sculptor_jj`, asking the shell when there is none."""
+        answer = self._login_shell_answer
+        if answer is None or answer.sculptor_jj != sculptor_jj:
+            answer = _LoginShellAnswer(sculptor_jj=sculptor_jj, login_shell_jj=self._find_login_shell_jj(sculptor_jj))
+            self._login_shell_answer = answer
+        return answer.login_shell_jj
+
+    def _find_login_shell_jj(self, sculptor_jj: str) -> LoginShellJj | None:
+        """The other jj an interactive login shell of the user's runs with `sculptor_jj` first on PATH, as a workspace terminal does.
+
+        None when the shell runs `sculptor_jj`, finds no jj, or cannot be read.
+        """
+        shell = os.environ.get("SHELL", "/bin/bash")
+        base_env = self._build_agent_probe_env() or os.environ
+        with tempfile.TemporaryDirectory(prefix="sculptor-jj-probe-") as probe_directory:
+            sculptor_jj_directory = Path(probe_directory) / "bin"
+            sculptor_jj_directory.mkdir()
+            (sculptor_jj_directory / "jj").symlink_to(sculptor_jj)
+            # A file of its own rather than stdout, which the profile prints to as well.
+            login_shell_path_file = Path(probe_directory) / "login-shell-path"
+            probe_env = {
+                **base_env,
+                "PATH": os.pathsep.join([str(sculptor_jj_directory), base_env.get("PATH", "")]),
+                "TERM": TERMINAL_TYPE,
+            }
+            try:
+                process = self.concurrency_group.start_background_process_from_factory(
+                    lambda: run_background(
+                        [
+                            shell,
+                            "-l",
+                            "-i",
+                            "-c",
+                            f"/usr/bin/printenv PATH > {shlex.quote(str(login_shell_path_file))}",
+                        ],
+                        timeout=_LOGIN_SHELL_PROBE_TIMEOUT_SECONDS,
+                        cwd=Path(tempfile.gettempdir()),
+                        env=probe_env,
+                        # A session of its own, since an interactive shell takes over the
+                        # controlling terminal of the session it runs in and keeps it.
+                        isolate_process_group=True,
+                    )
+                )
+                process.wait()
+            except ProcessError as e:
+                logger.debug("Could not start the login shell {}: {}", shell, e)
+                return None
+            if process.get_timed_out():
+                logger.debug("The login shell {} did not finish within {}s", shell, _LOGIN_SHELL_PROBE_TIMEOUT_SECONDS)
+                return None
+            try:
+                login_shell_path = login_shell_path_file.read_text().strip()
+            except FileNotFoundError:
+                logger.debug("The login shell {} wrote no PATH", shell)
+                return None
+            found = shutil.which("jj", path=login_shell_path)
+            # Inside the probe directory's lifetime, so its link still resolves to `sculptor_jj`.
+            if found is None or Path(found).resolve() == Path(sculptor_jj).resolve():
+                return None
+        version = self._check_binary(Dependency.JJ, found).version
+        return LoginShellJj(
+            path=found,
+            version=version,
+            is_version_in_range=version is not None and self.is_version_in_range(version, Dependency.JJ),
         )
 
     def _run_jj_outside_any_repo(self, binary: str, arguments: Sequence[str]) -> str:

@@ -46,7 +46,9 @@ from sculptor.web.data_types import JjIdentity
 from sculptor.web.data_types import JjNoIdentity
 from sculptor.web.data_types import JjNotInstalled
 from sculptor.web.data_types import JjNotRunnable
+from sculptor.web.data_types import JjShadowed
 from sculptor.web.data_types import JjUnsupportedVersion
+from sculptor.web.data_types import LoginShellJj
 
 
 class _JjTestHome(FrozenModel):
@@ -392,6 +394,163 @@ def test_startup_never_downloads_jj_when_no_managed_copy_exists(
     jj_service._auto_install_if_needed()
 
     assert jj_service._install_thread == {}
+
+
+def _jj_stub_in(directory: Path, version_output: str) -> Path:
+    directory.mkdir()
+    stub = directory / "jj"
+    stub.write_text(f'#!/bin/bash\necho "{version_output}"\n')
+    stub.chmod(0o755)
+    return stub
+
+
+def _make_login_profile_put_first(
+    directory: Path, jj_isolated_env: JjIsolatedEnv, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Make the user's login shell bash, with a profile that puts `directory` first on PATH and logs each run to the returned file.
+
+    The profile also prints a greeting, as many do, so the tests show the probe is not misled by what a profile prints.
+    """
+    runs_log = jj_isolated_env.home_path / "profile_runs.log"
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    (jj_isolated_env.home_path / ".bash_profile").write_text(
+        f'echo "Welcome back!"\necho ran >> "{runs_log}"\nexport PATH="{directory}:$PATH"\n'
+    )
+    return runs_log
+
+
+def test_jj_is_unavailable_while_the_login_shell_runs_an_older_jj_instead_of_sculptors(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stage_managed_jj(jj_test_home, JJ_PINNED_VERSION, jj_binary.path)
+    cargo_jj = _jj_stub_in(tmp_path / "cargo_bin", f"jj 0.28.2-{uuid4().hex}")
+    _make_login_profile_put_first(cargo_jj.parent, jj_isolated_env, monkeypatch)
+    _configure_jj("MANAGED")
+
+    status = jj_service.get_status()
+
+    assert status.login_shell_jj == LoginShellJj(path=str(cargo_jj), version="0.28.2", is_version_in_range=False)
+    assert status.jj_readiness == JjShadowed(blocker=JjBlocker.SHADOWED, path=str(cargo_jj), version="0.28.2")
+
+
+def test_a_supported_jj_the_login_shell_runs_instead_of_sculptors_is_reported_without_blocking_jj(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stage_managed_jj(jj_test_home, JJ_PINNED_VERSION, jj_binary.path)
+    homebrew_jj = _jj_stub_in(tmp_path / "homebrew_bin", "jj 0.99.0")
+    _make_login_profile_put_first(homebrew_jj.parent, jj_isolated_env, monkeypatch)
+    _configure_jj("MANAGED")
+
+    status = jj_service.get_status()
+
+    assert status.login_shell_jj == LoginShellJj(path=str(homebrew_jj), version="0.99.0", is_version_in_range=True)
+    assert status.jj_readiness == JjAvailable(
+        blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL)
+    )
+
+
+def test_readiness_is_unchanged_when_the_login_shell_finds_no_other_jj(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stage_managed_jj(jj_test_home, JJ_PINNED_VERSION, jj_binary.path)
+    directory_without_jj = tmp_path / "tools"
+    directory_without_jj.mkdir()
+    _make_login_profile_put_first(directory_without_jj, jj_isolated_env, monkeypatch)
+    _configure_jj("MANAGED")
+
+    status = jj_service.get_status()
+
+    assert status.login_shell_jj is None
+    assert status.jj_readiness == JjAvailable(
+        blocker=None, identity=JjIdentity(name=JJ_TEST_USER_NAME, email=JJ_TEST_USER_EMAIL)
+    )
+
+
+def test_the_login_shell_is_asked_with_the_term_a_workspace_terminal_gives_it(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stage_managed_jj(jj_test_home, JJ_PINNED_VERSION, jj_binary.path)
+    cargo_jj = _jj_stub_in(tmp_path / "cargo_bin", "jj 0.28.2")
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    monkeypatch.setenv("TERM", "dumb")
+    (jj_isolated_env.home_path / ".bash_profile").write_text(
+        f'[ "$TERM" = dumb ] && return\nexport PATH="{cargo_jj.parent}:$PATH"\n'
+    )
+    _configure_jj("MANAGED")
+
+    status = jj_service.get_status()
+
+    assert status.jj_readiness == JjShadowed(blocker=JjBlocker.SHADOWED, path=str(cargo_jj), version="0.28.2")
+
+
+def test_the_login_shell_is_first_asked_once_jj_is_otherwise_ready(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stage_managed_jj(jj_test_home, JJ_PINNED_VERSION, jj_binary.path)
+    cargo_jj = _jj_stub_in(tmp_path / "cargo_bin", "jj 0.28.2")
+    profile_runs_log = _make_login_profile_put_first(cargo_jj.parent, jj_isolated_env, monkeypatch)
+    _configure_jj("MANAGED")
+    monkeypatch.delenv("JJ_USER")
+    monkeypatch.delenv("JJ_EMAIL")
+    status_without_an_identity = jj_service.get_status()
+    has_asked_the_shell_without_an_identity = profile_runs_log.exists()
+    monkeypatch.setenv("JJ_USER", JJ_TEST_USER_NAME)
+    monkeypatch.setenv("JJ_EMAIL", JJ_TEST_USER_EMAIL)
+
+    status_with_an_identity = jj_service.refresh_status()
+
+    assert isinstance(status_without_an_identity.jj_readiness, JjNoIdentity)
+    assert has_asked_the_shell_without_an_identity is False
+    assert status_with_an_identity.jj_readiness == JjShadowed(
+        blocker=JjBlocker.SHADOWED, path=str(cargo_jj), version="0.28.2"
+    )
+
+
+def test_a_gate_reads_the_login_shell_jj_of_the_last_computed_status_without_starting_a_shell(
+    jj_test_home: _JjTestHome,
+    jj_binary: JjBinary,
+    jj_isolated_env: JjIsolatedEnv,
+    jj_service: DependencyManagementService,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stage_managed_jj(jj_test_home, JJ_PINNED_VERSION, jj_binary.path)
+    cargo_jj = _jj_stub_in(tmp_path / "cargo_bin", "jj 0.28.2")
+    profile_runs_log = _make_login_profile_put_first(cargo_jj.parent, jj_isolated_env, monkeypatch)
+    _configure_jj("MANAGED")
+
+    readiness_before_any_status = jj_service.probe_jj_readiness()
+    jj_service.get_status()
+    readiness_after_the_status = jj_service.probe_jj_readiness()
+
+    assert isinstance(readiness_before_any_status, JjAvailable)
+    assert readiness_after_the_status == JjShadowed(blocker=JjBlocker.SHADOWED, path=str(cargo_jj), version="0.28.2")
+    assert profile_runs_log.read_text().splitlines() == ["ran"]
 
 
 def _jj_release_tarball(version: str) -> bytes:

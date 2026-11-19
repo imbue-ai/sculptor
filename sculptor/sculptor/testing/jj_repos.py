@@ -46,6 +46,7 @@ class JjIsolatedEnv(FrozenModel):
     jj_config_path: Path
     git_config_path: Path
     config_home_path: Path
+    home_path: Path
     user_name: str
     user_email: str
 
@@ -156,7 +157,7 @@ def jj_binary() -> JjBinary:
 
 @pytest.fixture
 def jj_isolated_env(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> JjIsolatedEnv:
-    """Give jj and git an empty user config and a test identity for the duration of a test."""
+    """Give jj and git an empty user config and a test identity, and login shells an empty HOME, for the duration of a test."""
     root = tmp_path_factory.mktemp("jj_env")
     jj_config_path = root / "jj" / "config.toml"
     jj_config_path.parent.mkdir()
@@ -176,10 +177,17 @@ def jj_isolated_env(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytes
     # jj keeps per-repo and per-workspace config under $XDG_CONFIG_HOME/jj/repos even when
     # JJ_CONFIG is set, so without this, tests would write into the developer's config dir.
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home_path))
+    # Readiness asks the user's login shell which jj it runs, so without an empty HOME, and
+    # no ZDOTDIR sending zsh elsewhere, a developer's shell profile would decide what tests see.
+    home_path = root / "home"
+    home_path.mkdir()
+    monkeypatch.setenv("HOME", str(home_path))
+    monkeypatch.delenv("ZDOTDIR", raising=False)
     return JjIsolatedEnv(
         jj_config_path=jj_config_path,
         git_config_path=git_config_path,
         config_home_path=config_home_path,
+        home_path=home_path,
         user_name=JJ_TEST_USER_NAME,
         user_email=JJ_TEST_USER_EMAIL,
     )
