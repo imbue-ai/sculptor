@@ -69,6 +69,18 @@ def read_remote_names(git: GitCli, repo_path: Path) -> frozenset[str]:
     return frozenset(line.strip() for line in output.splitlines() if line.strip())
 
 
+def strip_remote_prefix(branch: str, remote_names: frozenset[str]) -> str:
+    """The branch a target ref names on its remote: "origin/feature/foo" → "feature/foo".
+
+    Only a first path segment that names one of `remote_names` is stripped, so a
+    local branch such as "release/1.0" is returned unchanged.
+    """
+    remote_name, separator, remote_branch = branch.partition("/")
+    if separator and remote_name in remote_names:
+        return remote_branch
+    return branch
+
+
 def read_origin_url(git: GitCli, repo_path: Path) -> str | None:
     """The URL of the `origin` remote, or None when there is no such remote."""
     result = git.run_git(

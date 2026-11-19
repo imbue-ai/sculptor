@@ -317,7 +317,7 @@ class _RecordingPrPollingService:
 def _notify_branch_infos(
     pr_polling_service: _RecordingPrPollingService,
     branch_infos: list[WorkspaceBranchInfo],
-    last_branch_by_workspace: dict[WorkspaceID, str],
+    last_branch_by_workspace: dict[WorkspaceID, str | None],
 ) -> list[StreamingUpdateSourceTypes]:
     data: list[StreamingUpdateSourceTypes] = list(branch_infos)
     _notify_pr_polling_service(
@@ -329,7 +329,7 @@ def _notify_branch_infos(
 def test_notify_does_not_start_pr_polling_for_a_checkout_that_cannot_be_read() -> None:
     pr_polling_service = _RecordingPrPollingService()
     workspace_id = WorkspaceID()
-    last_branch_by_workspace: dict[WorkspaceID, str] = {}
+    last_branch_by_workspace: dict[WorkspaceID, str | None] = {}
     flagged = WorkspaceBranchInfo(current_branch=None, checkout_problem="no .git", workspace_id=workspace_id)
 
     _notify_branch_infos(pr_polling_service, [flagged], last_branch_by_workspace)
@@ -349,7 +349,7 @@ def test_notify_does_not_start_pr_polling_for_a_checkout_that_cannot_be_read() -
 def test_notify_keeps_the_last_branch_while_a_checkout_cannot_be_read() -> None:
     pr_polling_service = _RecordingPrPollingService()
     workspace_id = WorkspaceID()
-    last_branch_by_workspace: dict[WorkspaceID, str] = {workspace_id: "feat-1"}
+    last_branch_by_workspace: dict[WorkspaceID, str | None] = {workspace_id: "feat-1"}
     flagged = WorkspaceBranchInfo(current_branch=None, checkout_problem="no .git", workspace_id=workspace_id)
     recovered = WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id)
 

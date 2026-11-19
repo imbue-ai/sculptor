@@ -42,6 +42,8 @@ from sculptor.services.workspace_service.vcs.git_log_parsing import parse_numsta
 from sculptor.services.workspace_service.vcs.git_repo_queries import does_ref_exist
 from sculptor.services.workspace_service.vcs.git_repo_queries import is_well_formed_branch_name
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_identity
+from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
+from sculptor.services.workspace_service.vcs.git_repo_queries import strip_remote_prefix
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 
 # Fetches the origin remote if present, and succeeds silently when there is no
@@ -624,13 +626,20 @@ class GitWorkspaceVcs(WorkspaceVcs):
     def get_pull_request_refs(
         self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
     ) -> PullRequestRefs:
-        """The checked-out branch as the only head candidate, whatever the target and requested name.
+        """The checked-out branch as the only head candidate, and the target's branch on its remote as the base.
 
-        A detached HEAD has no candidate. Failures read as "nothing to look up",
-        so PR polling reports no pull request rather than erroring.
+        A detached HEAD has no candidate. Failures to read the branch read as
+        "nothing to look up", so PR polling reports no pull request rather than erroring.
         """
         branch_name = self._read_checked_out_branch(location.checkout_path)
-        return PullRequestRefs(head_ref_names=() if branch_name is None else (branch_name,))
+        base_ref_name = (
+            None
+            if target_ref is None
+            else strip_remote_prefix(target_ref, read_remote_names(self._git, location.repo_path))
+        )
+        return PullRequestRefs(
+            head_ref_names=() if branch_name is None else (branch_name,), base_ref_name=base_ref_name
+        )
 
     def agent_environment(self, location: CheckoutLocation) -> AgentVcsEnvironment:
         return AgentVcsEnvironment()

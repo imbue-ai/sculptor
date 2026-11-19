@@ -597,6 +597,33 @@ def test_git_run_in_a_jj_workspace_by_the_target_scan_is_logged_once_at_error(
     assert [info.current_branch for info in branch_infos] == ["wsbranch"]
 
 
+def test_git_run_in_a_jj_workspace_right_after_an_ordinary_scan_failure_is_still_logged_at_error(
+    tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli
+) -> None:
+    jj_workspace = tmp_path / "jj-workspace"
+    (jj_workspace / ".jj").mkdir(parents=True)
+    workspace = _FakeWorkspace(WorkspaceID(), ProjectID())
+    scan_count = [0]
+
+    def resolve_working_dir(_workspace: Workspace) -> Path | None:
+        scan_count[0] += 1
+        if scan_count[0] == 1:
+            raise WorkspaceNotFoundError(workspace.object_id)
+        git_cli.run_git(["status"], jj_workspace, is_read_only=True)
+        return jj_workspace
+
+    poller = _build_poller(
+        [workspace], {}, test_root_concurrency_group, git_cli, resolve_working_dir=resolve_working_dir
+    )
+
+    with expect_exact_logged_errors(["Branch scan is skipping", _JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            poller._scan_once()
+            poller._scan_once()
+
+    assert levels == ["LOW_PRIORITY", "ERROR"]
+
+
 def test_a_jj_workspace_gets_neither_a_branch_nor_target_branches(
     tmp_path: Path, test_root_concurrency_group: ConcurrencyGroup, git_cli: GitCli, git_invocation_log: Path
 ) -> None:

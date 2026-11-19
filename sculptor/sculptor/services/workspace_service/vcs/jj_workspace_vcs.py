@@ -46,7 +46,6 @@ from sculptor.services.workspace_service.vcs.git_repo_queries import is_well_for
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_cli import JjCli
 from sculptor.services.workspace_service.vcs.jj_cli import JjSnapshotPolicy
-from sculptor.services.workspace_service.vcs.jj_data_types import JjBookmarkSymbol
 from sculptor.services.workspace_service.vcs.jj_data_types import JjHeadIdentity
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionRecord
@@ -63,13 +62,13 @@ from sculptor.services.workspace_service.vcs.jj_repo_queries import read_remotes
 from sculptor.services.workspace_service.vcs.jj_repo_queries import read_workspace_config_path
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_commit_id
 from sculptor.services.workspace_service.vcs.jj_repo_queries import resolve_trunk_symbol
+from sculptor.services.workspace_service.vcs.jj_repo_queries import select_target_candidates
 from sculptor.services.workspace_service.vcs.jj_repo_queries import set_workspace_config
 from sculptor.services.workspace_service.vcs.jj_repo_queries import snapshot_working_copy
 from sculptor.services.workspace_service.vcs.jj_revsets import JjRevset
-from sculptor.services.workspace_service.vcs.jj_revsets import format_bookmark_symbol
+from sculptor.services.workspace_service.vcs.jj_revsets import bookmark_name_of_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import is_full_commit_id
 from sculptor.services.workspace_service.vcs.jj_revsets import local_bookmark_revset
-from sculptor.services.workspace_service.vcs.jj_revsets import parse_bookmark_symbol
 from sculptor.services.workspace_service.vcs.jj_revsets import revset_for_base
 from sculptor.services.workspace_service.vcs.jj_revsets import root_file_fileset
 from sculptor.services.workspace_service.vcs.jj_revsets import working_copy_revset
@@ -271,7 +270,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
             repo_path, JjRevset(f"{local_bookmark_revset(created_ref_name)} & ::{working_copy_commit_id}")
         ):
             own_bookmarks.add(created_ref_name)
-        own_bookmarks.discard(_target_bookmark_name(target_ref))
+        own_bookmarks.discard(bookmark_name_of_symbol(target_ref))
         own_bookmarks -= self._read_bookmarks_on_other_stacks(repo_path, location.checkout_name, target_commit_id)
         return own_bookmarks
 
@@ -336,11 +335,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
 
     def list_target_candidates(self, repo_path: Path) -> list[str]:
         """Every local and remote bookmark that points at one commit, as a jj symbol such as `main@origin`."""
-        return [
-            format_bookmark_symbol(JjBookmarkSymbol(name=bookmark.name, remote=bookmark.remote))
-            for bookmark in list_bookmarks(self._jj, repo_path)
-            if bookmark.commit_id is not None
-        ]
+        return select_target_candidates(list_bookmarks(self._jj, repo_path))
 
     def validate_new_ref_name(self, repo_path: Path, ref_name: str) -> RefNameValidation:
         """A bookmark name must be a valid git branch name without `@`, and unused locally, on every remote and in git.
@@ -398,15 +393,16 @@ class JjWorkspaceVcs(WorkspaceVcs):
     def get_pull_request_refs(
         self, location: CheckoutLocation, target_ref: str | None, requested_ref_name: str | None
     ) -> PullRequestRefs:
-        """The stack's bookmarks, most likely PR head first, never the target's own name; none when jj fails."""
+        """The stack's bookmarks, most likely PR head first, never the target's own name, with that name as the base.
+
+        Raises `VcsCommandError` when jj cannot read the stack, so PR polling sees the failure.
+        """
         checkout = location.checkout_path
-        try:
-            commit_id = self._read_working_copy_commit_id(checkout)
-            projection = self._project_stack(checkout, commit_id, target_ref, requested_ref_name)
-        except VcsCommandError as e:
-            logger.debug("Cannot read the bookmarks of {}: {}", checkout, e)
-            return PullRequestRefs(head_ref_names=())
-        return PullRequestRefs(head_ref_names=projection.pr_head_candidates)
+        commit_id = self._read_working_copy_commit_id(checkout)
+        projection = self._project_stack(checkout, commit_id, target_ref, requested_ref_name)
+        return PullRequestRefs(
+            head_ref_names=projection.pr_head_candidates, base_ref_name=bookmark_name_of_symbol(target_ref)
+        )
 
     def _read_working_copy_commit_id(self, checkout: Path) -> str:
         """The working-copy commit as last snapshotted."""
@@ -428,7 +424,7 @@ class JjWorkspaceVcs(WorkspaceVcs):
             revisions,
             working_copy_commit_id,
             requested_ref_name,
-            _target_bookmark_name(target_ref),
+            bookmark_name_of_symbol(target_ref),
             tracked_bookmark_names,
         )
 
@@ -668,16 +664,6 @@ def _stack_revset(working_copies: JjRevset, target_commit_id: str | None) -> JjR
     if target_commit_id is None:
         return JjRevset(f"(::({working_copies}) & mutable()) | ({working_copies})")
     return JjRevset(f"(::({working_copies}) ~ ::{target_commit_id}) | ({working_copies})")
-
-
-def _target_bookmark_name(target_ref: str | None) -> str | None:
-    """The bookmark name in a target symbol, such as `main` for `main@origin`."""
-    if target_ref is None:
-        return None
-    try:
-        return parse_bookmark_symbol(target_ref).name
-    except InvalidRevisionError:
-        return None
 
 
 def _parse_revision_record(row: Sequence[Any], working_copy_commit_id: str) -> JjRevisionRecord:

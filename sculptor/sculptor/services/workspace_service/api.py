@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
     # Imported only for type-checking: web.data_types imports this module, so a
     # runtime import here would cycle.
-    from sculptor.web.data_types import StreamingUpdateSourceTypes
+    from sculptor.web import data_types as web_data_types
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
 from sculptor.services.workspace_service.vcs.data_types import CommitRecord
@@ -86,6 +86,14 @@ class WorkspaceRevisionHistoryUnavailableError(ExpectedError):
         super().__init__(f"Workspace {workspace_id} has git commits, not revisions")
 
 
+class WorkspaceWorkingCopyUpdateUnavailableError(ExpectedError):
+    """Raised when asked to update the working copy of a workspace that has no jj working copy, as a git workspace."""
+
+    def __init__(self, workspace_id: WorkspaceID) -> None:
+        self.workspace_id = workspace_id
+        super().__init__(f"Workspace {workspace_id} is a git workspace, which has no jj working copy to update")
+
+
 class WorkspaceFilesUnavailableError(ExpectedError):
     """Raised when the workspace file list cannot be produced right now.
 
@@ -116,17 +124,20 @@ class WorkspaceService(Service, ABC):
     """
 
     @abstractmethod
-    def add_observer(self, queue: "Queue[StreamingUpdateSourceTypes]") -> None:
-        """Subscribe a queue to per-workspace git state (current branch, target branches).
+    def add_observer(self, queue: "Queue[web_data_types.StreamingUpdateSourceTypes]") -> None:
+        """Subscribe a queue to per-workspace version-control state.
 
-        Backfills current state immediately, then pushes updates as the branch
-        scan detects them. A single process-global scanner serves all observers,
+        That is a git workspace's current branch, a jj workspace's jj state, and
+        either kind's target branches.
+
+        Backfills current state immediately, then pushes updates as the scans
+        detect them. One process-global scanner per kind serves all observers,
         so websocket streams subscribe here rather than each starting their own
         per-workspace pollers. Per-connection scope filtering is the caller's job.
         """
 
     @abstractmethod
-    def remove_observer(self, queue: "Queue[StreamingUpdateSourceTypes]") -> None:
+    def remove_observer(self, queue: "Queue[web_data_types.StreamingUpdateSourceTypes]") -> None:
         """Unsubscribe a queue previously passed to ``add_observer``."""
 
     @abstractmethod
@@ -136,6 +147,14 @@ class WorkspaceService(Service, ABC):
         A pure cache read — never forks git, resumes an environment, or starts
         the scanning machinery. Returns None when the branch is unknown (the
         workspace hasn't been scanned yet, or the scanner isn't running).
+        """
+
+    @abstractmethod
+    def get_cached_jj_state(self, workspace_id: WorkspaceID) -> "web_data_types.WorkspaceJjStateInfo | None":
+        """Return the jj scanner's cached state for a jj workspace.
+
+        A pure cache read, like ``get_cached_current_branch``. Returns None for a
+        git workspace and for a jj workspace that has not been scanned yet.
         """
 
     @abstractmethod
@@ -501,6 +520,20 @@ class WorkspaceService(Service, ABC):
         Raises:
             WorkspaceNotFoundError: If the workspace does not exist or has no checkout yet.
             WorkspaceRevisionHistoryUnavailableError: If the workspace is a git workspace.
+        """
+
+    @abstractmethod
+    def update_stale_working_copy(self, workspace_id: WorkspaceID, transaction: DataModelTransaction) -> None:
+        """Bring a jj workspace's stale working copy up to date with its repository, then refresh its diff.
+
+        Runs only on the user's request, never on its own: updating a working
+        copy whose latest edits jj never snapshotted can lose them.
+
+        Raises:
+            WorkspaceNotFoundError: If the workspace does not exist or has no checkout yet.
+            WorkspaceWorkingCopyUpdateUnavailableError: If the workspace is a git workspace.
+            JjUnavailableError: If jj cannot be used right now; its message says why.
+            VcsCommandError: If jj cannot update the working copy.
         """
 
     # Workspace File Operations

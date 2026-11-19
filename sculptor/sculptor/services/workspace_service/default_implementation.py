@@ -53,6 +53,7 @@ from sculptor.services.workspace_service.api import WorkspaceFilesUnavailableErr
 from sculptor.services.workspace_service.api import WorkspaceNotFoundError
 from sculptor.services.workspace_service.api import WorkspaceRevisionHistoryUnavailableError
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.services.workspace_service.api import WorkspaceWorkingCopyUpdateUnavailableError
 from sculptor.services.workspace_service.api import resolve_workspace_setup_command
 from sculptor.services.workspace_service.branch_poller import WorkspaceBranchPoller
 from sculptor.services.workspace_service.environment_manager.api import EnvironmentManager
@@ -67,10 +68,13 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     stop_terminals_for_environment,
 )
 from sculptor.services.workspace_service.jj_orphan_sweep import forget_orphaned_jj_workspaces
+from sculptor.services.workspace_service.jj_workspace_poller import JjWorkspacePoller
+from sculptor.services.workspace_service.jj_workspace_poller import PublishedJjReadiness
 from sculptor.services.workspace_service.setup_command_runner import DefaultSetupStateProvider
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.services.workspace_service.stale_working_copy_registry import StaleWorkingCopyRegistry
 from sculptor.services.workspace_service.vcs.checkout_layout import is_isolated_checkout
 from sculptor.services.workspace_service.vcs.checkout_paths import workspace_checkout_path
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
@@ -79,10 +83,12 @@ from sculptor.services.workspace_service.vcs.data_types import FileAtRefResult
 from sculptor.services.workspace_service.vcs.data_types import GitCommitHistory
 from sculptor.services.workspace_service.vcs.data_types import GitOperationResult
 from sculptor.services.workspace_service.vcs.errors import CheckoutFilesUnavailableError
+from sculptor.services.workspace_service.vcs.errors import JjWorkingCopyStaleError
 from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.interfaces import WorkspaceVcs
 from sculptor.services.workspace_service.vcs.jj_data_types import JjRevisionHistory
 from sculptor.services.workspace_service.vcs.jj_repo_queries import is_jj_colocated
+from sculptor.services.workspace_service.vcs.jj_repo_queries import update_stale
 from sculptor.services.workspace_service.vcs.vcs_runners import VcsRunners
 from sculptor.services.workspace_service.vcs.vcs_runners import build_vcs_runners
 from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make_workspace_vcs
@@ -91,6 +97,7 @@ from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.timeout import timeout_monitor
 from sculptor.utils.type_utils import extract_leaf_types
 from sculptor.web.data_types import StreamingUpdateSourceTypes
+from sculptor.web.data_types import WorkspaceJjStateInfo
 
 _ENVIRONMENT_CREATION_TIMEOUT_SECONDS = 60
 _DIFF_METADATA_FILENAME = "DIFF.meta.json"
@@ -125,6 +132,10 @@ class DefaultWorkspaceService(WorkspaceService):
     _setup_runner_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     _branch_poller_instance: WorkspaceBranchPoller | None = PrivateAttr(default=None)
     _branch_poller_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    _jj_workspace_poller_instance: JjWorkspacePoller | None = PrivateAttr(default=None)
+    _jj_workspace_poller_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    _stale_working_copies: StaleWorkingCopyRegistry = PrivateAttr(default_factory=StaleWorkingCopyRegistry)
+    _published_jj_readiness: PublishedJjReadiness = PrivateAttr(default_factory=PublishedJjReadiness)
 
     @property
     def setup_runner(self) -> SetupCommandRunner:
@@ -153,11 +164,34 @@ class DefaultWorkspaceService(WorkspaceService):
                 )
             return self._branch_poller_instance
 
+    @property
+    def _jj_workspace_poller(self) -> JjWorkspacePoller:
+        """The process-global jj-state scanner this service owns, built lazily like the branch poller."""
+        with self._jj_workspace_poller_lock:
+            if self._jj_workspace_poller_instance is None:
+                self.dependency_management_service.add_observer_queue(self._published_jj_readiness.updates)
+                self._jj_workspace_poller_instance = JjWorkspacePoller(
+                    concurrency_group=self.concurrency_group,
+                    read_workspaces=self._read_workspaces,
+                    jj=self.vcs_runners.jj,
+                    resolve_working_dir=self.get_workspace_working_directory,
+                    refresh_diff_on_working_copy_change=self.maybe_refresh_workspace_diff,
+                    stale_working_copies=self._stale_working_copies,
+                    read_jj_readiness=self._published_jj_readiness.read_latest,
+                )
+            return self._jj_workspace_poller_instance
+
+    def _read_workspaces(self) -> list[Workspace]:
+        with self.data_model_service.open_transaction(RequestID()) as transaction:
+            return list(transaction.get_workspaces())
+
     def add_observer(self, queue: Queue[StreamingUpdateSourceTypes]) -> None:
         self._branch_poller.add_observer(queue)
+        self._jj_workspace_poller.add_observer(queue)
 
     def remove_observer(self, queue: Queue[StreamingUpdateSourceTypes]) -> None:
         self._branch_poller.remove_observer(queue)
+        self._jj_workspace_poller.remove_observer(queue)
 
     def get_cached_current_branch(self, workspace_id: WorkspaceID) -> str | None:
         # Read the instance directly instead of going through the lazy
@@ -168,6 +202,14 @@ class DefaultWorkspaceService(WorkspaceService):
         if poller is None:
             return None
         return poller.get_current_branch(workspace_id)
+
+    def get_cached_jj_state(self, workspace_id: WorkspaceID) -> WorkspaceJjStateInfo | None:
+        # Like ``get_cached_current_branch``, a pure cache read never builds the poller.
+        with self._jj_workspace_poller_lock:
+            poller = self._jj_workspace_poller_instance
+        if poller is None:
+            return None
+        return poller.get_jj_state(workspace_id)
 
     def reconcile_setup_state(self) -> None:
         """Bring persisted setup state into a coherent state on app startup.
@@ -296,6 +338,7 @@ class DefaultWorkspaceService(WorkspaceService):
     def start(self) -> None:
         """Start the workspace service."""
         self._branch_poller.start()
+        self._jj_workspace_poller.start()
 
     def stop(self) -> None:
         """Stop the workspace service.
@@ -307,6 +350,9 @@ class DefaultWorkspaceService(WorkspaceService):
         """
         if self._branch_poller_instance is not None:
             self._branch_poller_instance.stop()
+        if self._jj_workspace_poller_instance is not None:
+            self._jj_workspace_poller_instance.stop()
+            self.dependency_management_service.remove_observer_queue(self._published_jj_readiness.updates)
         if self._setup_runner_instance is not None:
             self._setup_runner_instance.stop_all()
         stop_all_terminals()
@@ -853,7 +899,8 @@ class DefaultWorkspaceService(WorkspaceService):
 
             # Generate the diff artifact (outside transaction — may be slow)
             vcs = self.get_workspace_vcs(workspace.initialization_strategy)
-            diff_artifact = vcs.compute_diff_artifact(location, target_branch, effective_context_lines)
+            with self._tracking_stale_working_copy(workspace_id):
+                diff_artifact = vcs.compute_diff_artifact(location, target_branch, effective_context_lines)
 
             # Store the artifact to disk
             artifact_dir = self._get_workspace_artifact_dir(workspace_id)
@@ -892,6 +939,16 @@ class DefaultWorkspaceService(WorkspaceService):
             raise
         finally:
             lock.release()
+
+    @contextmanager
+    def _tracking_stale_working_copy(self, workspace_id: WorkspaceID) -> Generator[None, None, None]:
+        """Mark the workspace stale when the snapshotting call inside fails as stale, and fresh when it succeeds."""
+        try:
+            yield
+        except JjWorkingCopyStaleError:
+            self._stale_working_copies.mark_stale(workspace_id)
+            raise
+        self._stale_working_copies.mark_fresh(workspace_id)
 
     def maybe_refresh_workspace_diff(
         self,
@@ -1036,9 +1093,32 @@ class DefaultWorkspaceService(WorkspaceService):
 
         location = self._get_checkout_location(workspace, transaction)
         vcs = self.get_workspace_vcs(workspace.initialization_strategy)
-        return vcs.get_revision_history(
-            location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
-        )
+        with self._tracking_stale_working_copy(workspace_id):
+            return vcs.get_revision_history(
+                location, target_ref=workspace.target_branch, base_commit_id=workspace.source_git_hash
+            )
+
+    def update_stale_working_copy(self, workspace_id: WorkspaceID, transaction: DataModelTransaction) -> None:
+        workspace = transaction.get_workspace(workspace_id)
+        if workspace is None:
+            raise WorkspaceNotFoundError(workspace_id)
+
+        location = self._get_checkout_location(workspace, transaction)
+        match workspace.initialization_strategy:
+            case (
+                WorkspaceInitializationStrategy.IN_PLACE
+                | WorkspaceInitializationStrategy.CLONE
+                | WorkspaceInitializationStrategy.WORKTREE
+            ):
+                raise WorkspaceWorkingCopyUpdateUnavailableError(workspace_id)
+            case WorkspaceInitializationStrategy.JJ_WORKSPACE:
+                require_jj_available(self.dependency_management_service.get_jj_readiness())
+                logger.debug("Updating the stale working copy of workspace {}", workspace_id)
+                update_stale(self.vcs_runners.jj, location.checkout_path)
+            case _ as unreachable:
+                assert_never(unreachable)
+        self._stale_working_copies.mark_fresh(workspace_id)
+        self.maybe_refresh_workspace_diff(workspace_id)
 
     # Workspace File Operations
 

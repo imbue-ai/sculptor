@@ -5,6 +5,7 @@ import queue
 import shutil
 import threading
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -31,7 +32,9 @@ from sculptor.testing.jj_repos import make_github_looking_origin
 from sculptor.testing.jj_repos import run_jj
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
+from sculptor.web.data_types import WorkspaceJjStateInfo
 from sculptor.web.derived import PrStatusInfo
+from sculptor.web.derived import PrStatusInfoCleared
 from sculptor.web.derived import WorkspaceBranchInfo
 from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.pr_polling_service import _CooldownDeferred
@@ -84,6 +87,9 @@ def _make_service() -> PrPollingService:
     svc._rate_limit_by_host = {}
     svc._round_failed_hosts = set()
     svc._cold_start_logged_hosts = set()
+    svc._round_failing_workspace_ids = set()
+    svc._first_fallback_failure_by_workspace = {}
+    svc._jj_workspace_logged_workspace_ids = set()
     svc._governed_interval = None
     workspace_service = MagicMock()
     workspace_service.get_workspace_working_directory.return_value = None
@@ -157,7 +163,10 @@ def _make_fake_gh(directory: Path, nodes: list[dict]) -> Path:
     """A gh that answers the per-workspace query with `nodes` and records the directory it ran in."""
     payload = directory / "gh-payload.json"
     payload.write_text(json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}}))
-    return _write_script(directory / "gh", f'pwd -P > "{directory / "gh-cwd"}"\ncat "{payload}"')
+    return _write_script(
+        directory / "gh",
+        f'pwd -P > "{directory / "gh-cwd"}"\nprintf "%s\\n" "$@" > "{directory / "gh-args"}"\ncat "{payload}"',
+    )
 
 
 def _make_git_cli(concurrency_group: ConcurrencyGroup, gh: Path | None) -> GitCli:
@@ -248,6 +257,21 @@ def test_detached_head_reports_no_pr_without_running_gh(
 
 
 @pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_a_github_origin_without_an_owner_and_name_reports_no_pr_without_running_gh(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", "https://github.example.com/enterprise/org/repo.git")
+    checkout = _make_repo(tmp_path / "checkout", "feat-1", None)
+    # gh cannot be resolved, so running it would surface as `cli_missing`.
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    workspace_id, state = _register_checkout(svc, repo, checkout)
+
+    status = svc._fetch_status(workspace_id, state)
+
+    assert status == PrStatusInfo(workspace_id=workspace_id, pr_state="none")
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
 def test_round_reads_the_origin_from_the_main_repo_not_the_checkout(
     test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
 ) -> None:
@@ -260,8 +284,8 @@ def test_round_reads_the_origin_from_the_main_repo_not_the_checkout(
 
     assert lookup is not None
     assert lookup.host == "github.example.com"
-    assert lookup.name_with_owner == "org/repo"
-    assert lookup.head_ref_name == "feat-1"
+    assert (lookup.repository_owner, lookup.repository_name) == ("org", "repo")
+    assert lookup.head_ref_names == ("feat-1",)
     assert lookup.working_dir == checkout
 
 
@@ -378,6 +402,105 @@ def test_jj_checkout_is_logged_once_at_error_across_rounds_and_fallback_polls(
     assert levels == ["ERROR"]
 
 
+def _rebuild_poll_state(svc: PrPollingService, state: _WorkspacePollState) -> _WorkspacePollState:
+    """Replace a workspace's poll state with a fresh one, as every workspace update does."""
+    rebuilt = _WorkspacePollState(
+        workspace_id=state.workspace_id,
+        initialization_strategy=state.initialization_strategy,
+        checkout_location=state.checkout_location,
+        target_branch=state.target_branch,
+        requested_branch_name=state.requested_branch_name,
+        is_open=state.is_open,
+    )
+    svc._workspace_poll_state[state.workspace_id] = rebuilt
+    return rebuilt
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_jj_checkout_is_logged_once_at_error_even_after_its_poll_state_is_rebuilt(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    svc = _make_service_with_git(test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None))
+    _, state = _register_checkout(svc, repo, _make_jj_checkout(tmp_path / "jj-checkout"))
+
+    with expect_exact_logged_errors([_JJ_WORKSPACE_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+            _rebuild_poll_state(svc, state)
+            svc._run_round(_make_user_config())
+
+    assert levels == ["ERROR"]
+
+
+class _UnexpectedResolverError(Exception):
+    """Raised by a binary resolver standing in for a failure no handler anticipates."""
+
+
+def _raise_unexpected_resolver_error(tool: Dependency) -> str | None:
+    raise _UnexpectedResolverError(f"cannot resolve {tool}")
+
+
+def _make_service_whose_jj_fails_unexpectedly(concurrency_group: ConcurrencyGroup) -> PrPollingService:
+    svc = _make_service_with_git(concurrency_group, _make_git_cli(concurrency_group, None))
+    svc._runners = VcsRunners(git=svc._runners.git, jj=JjCli(concurrency_group, _raise_unexpected_resolver_error))
+    return svc
+
+
+# What PR polling logs, once per workspace, when the round cannot resolve a workspace.
+_ROUND_SKIP_LOG = "PR search round skips workspace"
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_round_skips_a_workspace_that_fails_unexpectedly_and_still_resolves_the_others(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    on_target_checkout = _make_repo(tmp_path / "on-target", "main", _GITHUB_ORIGIN)
+    svc = _make_service_whose_jj_fails_unexpectedly(test_root_concurrency_group)
+    failing_ws, failing_state = _register_checkout(
+        svc,
+        repo,
+        _make_jj_checkout(tmp_path / "jj-checkout"),
+        target_branch="main@origin",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+    on_target_ws, _ = _register_checkout(svc, repo, on_target_checkout)
+
+    with expect_exact_logged_errors([_ROUND_SKIP_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+            _rebuild_poll_state(svc, failing_state)
+            svc._run_round(_make_user_config())
+
+    assert levels == ["LOW_PRIORITY"]
+    assert failing_ws not in svc._cache
+    assert svc._cache[on_target_ws] == PrStatusInfo(workspace_id=on_target_ws, pr_state="none")
+
+
+@pytest.mark.usefixtures("hermetic_git", "decoy_gh_on_path")
+def test_a_failing_fallback_poll_is_logged_once_even_after_its_poll_state_is_rebuilt(
+    test_root_concurrency_group: ConcurrencyGroup, tmp_path: Path
+) -> None:
+    repo = _make_repo(tmp_path / "repo", "main", _GITHUB_ORIGIN)
+    svc = _make_service_whose_jj_fails_unexpectedly(test_root_concurrency_group)
+    workspace_id, state = _register_checkout(
+        svc,
+        repo,
+        _make_jj_checkout(tmp_path / "jj-checkout"),
+        target_branch="main@origin",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+
+    with expect_exact_logged_errors(["Failed to get PR status for workspace"]):
+        with record_logged_error_levels() as levels:
+            first_poll = svc._execute_poll(workspace_id, state)
+            second_poll = svc._execute_poll(workspace_id, _rebuild_poll_state(svc, state))
+
+    assert (first_poll, second_poll) == (None, None)
+    assert levels == ["LOW_PRIORITY"]
+
+
 @pytest.mark.usefixtures("decoy_gh_on_path")
 def test_a_jj_workspace_is_looked_up_through_jj_and_runs_no_git_in_its_checkout(
     test_root_concurrency_group: ConcurrencyGroup,
@@ -411,7 +534,167 @@ def test_a_jj_workspace_is_looked_up_through_jj_and_runs_no_git_in_its_checkout(
 
     assert levels == []
     assert isinstance(status, PrStatusInfo)
+    assert (status.pr_state, status.pr_iid, status.mismatched_pr_iid) == ("open", 7, None)
     assert Path((tmp_path / "gh-cwd").read_text().strip()) == checkout.resolve()
+    gh_arguments = (tmp_path / "gh-args").read_text().splitlines()
+    assert {"owner=sculptor-tests", "name=jj-fixture", "branch=feat-1"} <= set(gh_arguments)
+
+
+_JJ_FIXTURE_REPOSITORY = "sculptor-tests/jj-fixture"
+
+
+def _make_jj_workspace_with_bookmarks(
+    jj_binary: JjBinary, repo: JjColocatedRepo, checkout: Path, bookmarks_oldest_first: Sequence[str]
+) -> None:
+    """A jj workspace of `repo` with one described revision per bookmark, each bookmark on its own revision."""
+    run_jj(
+        jj_binary,
+        ("workspace", "add", "--no-colocate", "--name", checkout.name, "-r", repo.default_bookmark, str(checkout)),
+        cwd=repo.path,
+    )
+    for bookmark in bookmarks_oldest_first:
+        (checkout / f"{bookmark}.txt").write_text(f"{bookmark}\n")
+        run_jj(jj_binary, ("commit", "-m", f"work for {bookmark}"), cwd=checkout)
+        run_jj(jj_binary, ("bookmark", "create", "-r", "@-", bookmark), cwd=checkout)
+
+
+def _make_fake_gh_answering_both_queries(
+    directory: Path, search_nodes: list[dict], repository_nodes: list[dict]
+) -> Path:
+    """A gh that answers the batched search with `search_nodes` and the per-workspace query with `repository_nodes`.
+
+    It appends every argument of every call to `gh-args`, each call starting with a `gh-call` line.
+    """
+    search_payload = directory / "gh-search-payload.json"
+    search_payload.write_text(
+        json.dumps({"data": {"search": {"pageInfo": {"hasNextPage": False}, "nodes": search_nodes}}})
+    )
+    repository_payload = directory / "gh-repository-payload.json"
+    repository_payload.write_text(json.dumps({"data": {"repository": {"pullRequests": {"nodes": repository_nodes}}}}))
+    arguments_log = directory / "gh-args"
+    body = "\n".join(
+        (
+            f"echo gh-call >> {arguments_log}",
+            'for argument in "$@"; do',
+            f'  echo "$argument" >> {arguments_log}',
+            "done",
+            'for argument in "$@"; do',
+            f'  case "$argument" in q=*) cat {search_payload}; exit 0;; esac',
+            "done",
+            f"cat {repository_payload}",
+        )
+    )
+    return _write_script(directory / "gh", body)
+
+
+def _register_jj_workspace(
+    svc: PrPollingService, repo: JjColocatedRepo, checkout: Path
+) -> tuple[WorkspaceID, _WorkspacePollState]:
+    return _register_checkout(
+        svc,
+        repo.path,
+        checkout,
+        target_branch=f"{repo.default_bookmark}@origin",
+        initialization_strategy=WorkspaceInitializationStrategy.JJ_WORKSPACE,
+    )
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_the_round_finds_a_jj_workspaces_open_pull_request_on_any_of_its_bookmarks(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    _make_jj_workspace_with_bookmarks(jj_binary, jj_colocated_repo, checkout, ("lower", "upper"))
+    lower_node = _open_search_node(
+        9, repo=_JJ_FIXTURE_REPOSITORY, head="lower", base=jj_colocated_repo.default_bookmark
+    )
+    gh = _make_fake_gh_answering_both_queries(tmp_path, search_nodes=[lower_node], repository_nodes=[])
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh), jj_binary.path
+    )
+    workspace_id, _ = _register_jj_workspace(svc, jj_colocated_repo, checkout)
+
+    svc._run_round(_make_user_config())
+
+    assert (svc._cache[workspace_id].pr_state, svc._cache[workspace_id].pr_iid) == ("open", 9)
+    assert workspace_id in svc._matched_workspaces
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_the_fallback_asks_gh_about_a_jj_workspaces_primary_bookmark_only(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    _make_jj_workspace_with_bookmarks(jj_binary, jj_colocated_repo, checkout, ("lower", "upper"))
+    gh = _make_fake_gh_answering_both_queries(tmp_path, search_nodes=[], repository_nodes=[])
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh), jj_binary.path
+    )
+    workspace_id, state = _register_jj_workspace(svc, jj_colocated_repo, checkout)
+
+    status = svc._fetch_status(workspace_id, state)
+
+    assert status == PrStatusInfo(workspace_id=workspace_id, pr_state="none")
+    gh_arguments = (tmp_path / "gh-args").read_text().splitlines()
+    assert gh_arguments.count("gh-call") == 1
+    assert [argument for argument in gh_arguments if argument.startswith("branch=")] == ["branch=upper"]
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_a_jj_workspace_without_bookmarks_reports_no_pull_request_without_running_gh(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    _make_jj_workspace_with_bookmarks(jj_binary, jj_colocated_repo, checkout, ())
+    gh = _make_fake_gh_answering_both_queries(tmp_path, search_nodes=[], repository_nodes=[])
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, gh), jj_binary.path
+    )
+    workspace_id, state = _register_jj_workspace(svc, jj_colocated_repo, checkout)
+
+    svc._run_round(_make_user_config())
+    status = svc._fetch_status(workspace_id, state)
+
+    assert status == PrStatusInfo(workspace_id=workspace_id, pr_state="none")
+    assert svc._cache[workspace_id] == status
+    assert not (tmp_path / "gh-args").exists()
+
+
+@pytest.mark.usefixtures("decoy_gh_on_path")
+def test_the_round_logs_once_that_it_cannot_read_a_jj_workspaces_bookmarks(
+    test_root_concurrency_group: ConcurrencyGroup,
+    tmp_path: Path,
+    jj_binary: JjBinary,
+    jj_colocated_repo: JjColocatedRepo,
+) -> None:
+    make_github_looking_origin(jj_colocated_repo.path, jj_colocated_repo.remote_path)
+    checkout = tmp_path / "jj-workspace"
+    _make_jj_workspace_with_bookmarks(jj_binary, jj_colocated_repo, checkout, ("feat-1",))
+    shutil.rmtree(checkout)
+    svc = _make_service_with_git(
+        test_root_concurrency_group, _make_git_cli(test_root_concurrency_group, None), jj_binary.path
+    )
+    workspace_id, _ = _register_jj_workspace(svc, jj_colocated_repo, checkout)
+
+    with expect_exact_logged_errors([_ROUND_SKIP_LOG]):
+        with record_logged_error_levels() as levels:
+            svc._run_round(_make_user_config())
+            svc._run_round(_make_user_config())
+
+    assert levels == ["LOW_PRIORITY"]
+    assert workspace_id not in svc._cache
 
 
 # ---------------------------------------------------------------------------
@@ -539,7 +822,7 @@ def test_on_branch_changed_bypasses_pending_dedup() -> None:
 def test_notify_first_branch_info_calls_on_workspace_ready() -> None:
     svc = MagicMock(spec=PrPollingService)
     workspace_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {}
+    last_branch: dict[WorkspaceID, str | None] = {}
 
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id),
@@ -554,7 +837,7 @@ def test_notify_first_branch_info_calls_on_workspace_ready() -> None:
 def test_notify_same_branch_does_not_trigger_anything() -> None:
     svc = MagicMock(spec=PrPollingService)
     workspace_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {workspace_id: "feat-1"}
+    last_branch: dict[WorkspaceID, str | None] = {workspace_id: "feat-1"}
 
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=workspace_id),
@@ -568,7 +851,7 @@ def test_notify_same_branch_does_not_trigger_anything() -> None:
 def test_notify_branch_change_calls_on_branch_changed() -> None:
     svc = MagicMock(spec=PrPollingService)
     workspace_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {workspace_id: "feat-1"}
+    last_branch: dict[WorkspaceID, str | None] = {workspace_id: "feat-1"}
 
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-2", workspace_id=workspace_id),
@@ -582,7 +865,7 @@ def test_notify_branch_change_calls_on_branch_changed() -> None:
 
 def test_notify_none_service_is_noop() -> None:
     workspace_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {}
+    last_branch: dict[WorkspaceID, str | None] = {}
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="main", workspace_id=workspace_id),
     ]
@@ -598,7 +881,7 @@ def test_notify_skips_out_of_scope_branch_info() -> None:
     svc = MagicMock(spec=PrPollingService)
     in_scope_id = WorkspaceID()
     out_of_scope_id = WorkspaceID()
-    last_branch: dict[WorkspaceID, str] = {}
+    last_branch: dict[WorkspaceID, str | None] = {}
 
     data: list[StreamingUpdateSourceTypes] = [
         WorkspaceBranchInfo(current_branch="feat-1", workspace_id=out_of_scope_id),
@@ -608,6 +891,72 @@ def test_notify_skips_out_of_scope_branch_info() -> None:
     svc.on_workspace_ready.assert_not_called()
     svc.on_branch_changed.assert_not_called()
     assert out_of_scope_id not in last_branch
+
+
+def _jj_state(workspace_id: WorkspaceID, bookmarks: tuple[str, ...], description: str = "") -> WorkspaceJjStateInfo:
+    return WorkspaceJjStateInfo(
+        workspace_id=workspace_id,
+        working_copy_change_id="zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        working_copy_change_id_prefix_length=1,
+        working_copy_description=description,
+        is_working_copy_empty=True,
+        bookmarks=bookmarks,
+        primary_bookmark=bookmarks[0] if bookmarks else None,
+        unbookmarked_revision_count=0,
+        has_conflict=False,
+        is_divergent=False,
+        is_working_copy_stale=False,
+    )
+
+
+def _notify_jj_states(
+    svc: PrPollingService, last_head: dict[WorkspaceID, str | None], *states: WorkspaceJjStateInfo
+) -> list[StreamingUpdateSourceTypes]:
+    data: list[StreamingUpdateSourceTypes] = list(states)
+    _notify_pr_polling_service(svc, data, last_head, lambda _workspace_id: True)
+    return data[len(states) :]
+
+
+def test_a_jj_workspaces_first_state_starts_its_pr_polling_even_without_a_bookmark() -> None:
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+    _add_workspace_poll_state(svc, workspace_id)
+
+    injected = _notify_jj_states(svc, {}, _jj_state(workspace_id, bookmarks=()))
+
+    assert workspace_id in svc._pending
+    assert injected == []
+
+
+def test_a_new_primary_bookmark_clears_a_jj_workspaces_pr_status_and_polls_it_again() -> None:
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+    _add_workspace_poll_state(svc, workspace_id)
+    svc._cache[workspace_id] = PrStatusInfo(workspace_id=workspace_id, pr_state="open", pr_iid=3)
+    last_head: dict[WorkspaceID, str | None] = {workspace_id: None}
+
+    injected = _notify_jj_states(svc, last_head, _jj_state(workspace_id, bookmarks=("feat-1",)))
+
+    assert injected == [PrStatusInfoCleared(workspace_id=workspace_id)]
+    assert workspace_id not in svc._cache
+    assert workspace_id in svc._pending
+    assert last_head == {workspace_id: "feat-1"}
+
+
+def test_a_jj_state_that_keeps_its_primary_bookmark_leaves_pr_polling_alone() -> None:
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+    _add_workspace_poll_state(svc, workspace_id)
+    status = PrStatusInfo(workspace_id=workspace_id, pr_state="open", pr_iid=3)
+    svc._cache[workspace_id] = status
+
+    injected = _notify_jj_states(
+        svc, {workspace_id: "feat-1"}, _jj_state(workspace_id, bookmarks=("feat-1", "other"), description="new")
+    )
+
+    assert injected == []
+    assert svc._cache[workspace_id] == status
+    assert workspace_id not in svc._pending
 
 
 # ---------------------------------------------------------------------------
@@ -1078,10 +1427,11 @@ def _candidate(
         workspace_id=workspace_id,
         working_dir=_WORKING_DIR,
         gh_env={},
-        head_ref_name=head_ref_name,
+        head_ref_names=(head_ref_name,),
         base_ref_name=target_branch,
         host=host,
-        name_with_owner=repo,
+        repository_owner=repo.split("/")[0],
+        repository_name=repo.split("/")[1],
     )
 
 

@@ -41,9 +41,7 @@ from sculptor.services.user_config.user_config import read_jj_snapshot_max_new_f
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.vcs.data_types import CheckoutLocation
 from sculptor.services.workspace_service.vcs.errors import GitCommandInJjWorkspaceError
-from sculptor.services.workspace_service.vcs.errors import VcsCommandError
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
-from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.repo_urls import extract_remote_hostname
 from sculptor.services.workspace_service.vcs.repo_urls import is_github_remote_url
 from sculptor.services.workspace_service.vcs.repo_urls import parse_remote_owner_and_name
@@ -52,7 +50,6 @@ from sculptor.services.workspace_service.vcs.workspace_vcs_selection import make
 from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.cli_status_utils import GhRunner
 from sculptor.web.cli_status_utils import run_gh_with_retry
-from sculptor.web.cli_status_utils import strip_remote_prefix
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_status import GithubRateLimit
@@ -289,21 +286,26 @@ class _PullRequestLookup:
     """What one poll looks a workspace's pull request up by.
 
     Carries everything the batched round and the per-workspace fallback need
-    without re-reading git: the workspace's repo identity (``name_with_owner``,
-    ``None`` if the origin couldn't be parsed into owner/repo — such a workspace
-    is always unmatched and falls back) and its ``head_ref_name`` (the index
-    key), the PR base its target names (``base_ref_name``) for the per-workspace
-    derivation, and the checkout and environment gh runs with. Short-circuited
-    workspaces (no PR head / on target / non-GitHub) never get one.
+    without re-reading git: the workspace's repository by owner and name, its
+    candidate PR heads, most likely first (with the repository, the index keys
+    the round tries in order; the per-workspace fallback asks gh about the first
+    only), the PR base its target names (``base_ref_name``), and the checkout
+    and environment gh runs with. Short-circuited workspaces (no PR head / on
+    target / non-GitHub / no owner and name) never get one.
     """
 
     workspace_id: WorkspaceID
     working_dir: Path
     gh_env: Mapping[str, str]
-    head_ref_name: str
+    head_ref_names: tuple[str, ...]
     base_ref_name: str
     host: str
-    name_with_owner: str | None
+    repository_owner: str
+    repository_name: str
+
+    @property
+    def name_with_owner(self) -> str:
+        return f"{self.repository_owner}/{self.repository_name}"
 
 
 def _build_pr_index(nodes: Sequence[dict]) -> dict[tuple[str, str], list[dict]]:
@@ -324,6 +326,15 @@ def _build_pr_index(nodes: Sequence[dict]) -> dict[tuple[str, str], list[dict]]:
     return index
 
 
+def _find_open_pr_nodes(index: Mapping[tuple[str, str], list[dict]], lookup: _PullRequestLookup) -> list[dict]:
+    """The indexed open-PR nodes of the first of the lookup's PR heads that has any; empty when none has."""
+    for head_ref_name in lookup.head_ref_names:
+        nodes = index.get((lookup.name_with_owner, head_ref_name))
+        if nodes:
+            return nodes
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Per-workspace poll state
 # ---------------------------------------------------------------------------
@@ -338,9 +349,7 @@ class _WorkspacePollState:
         "requested_branch_name",
         "is_open",
         "is_deleted",
-        "first_failure",
         "poll_generation",
-        "is_jj_workspace_logged",
     )
 
     def __init__(
@@ -359,10 +368,7 @@ class _WorkspacePollState:
         self.requested_branch_name = requested_branch_name
         self.is_open = is_open
         self.is_deleted = False
-        self.first_failure: tuple[datetime.datetime, Exception] | None = None
         self.poll_generation: int = 0
-        # Whether git running in this workspace's jj checkout has been logged.
-        self.is_jj_workspace_logged = False
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +420,14 @@ class PrPollingService(Service):
     _round_failed_hosts: set[str] = PrivateAttr(default_factory=set)
     # Hosts whose cold-start unmatched-fetch count has already been logged.
     _cold_start_logged_hosts: set[str] = PrivateAttr(default_factory=set)
+    # What is remembered so a lasting per-workspace failure is logged when it starts, not every
+    # round or poll. Kept here, not on the poll state, because every workspace update rebuilds that.
+    # The first fallback failure is kept with its time for the trace of later ones.
+    _round_failing_workspace_ids: set[WorkspaceID] = PrivateAttr(default_factory=set)
+    _first_fallback_failure_by_workspace: dict[WorkspaceID, tuple[datetime.datetime, Exception]] = PrivateAttr(
+        default_factory=dict
+    )
+    _jj_workspace_logged_workspace_ids: set[WorkspaceID] = PrivateAttr(default_factory=set)
 
     def __init__(
         self,
@@ -551,6 +565,9 @@ class PrPollingService(Service):
             state.is_deleted = True
         self._cache.pop(workspace_id, None)
         self._matched_workspaces.discard(workspace_id)
+        self._round_failing_workspace_ids.discard(workspace_id)
+        self._first_fallback_failure_by_workspace.pop(workspace_id, None)
+        self._jj_workspace_logged_workspace_ids.discard(workspace_id)
 
     def on_branch_changed(self, workspace_id: WorkspaceID) -> None:
         """Invalidate cached result and force-enqueue for immediate poll.
@@ -565,9 +582,9 @@ class PrPollingService(Service):
         # The workspace's identity changed — any "matched by the last round" flag
         # is stale, so don't let it suppress this immediate fallback fetch.
         self._matched_workspaces.discard(workspace_id)
+        self._first_fallback_failure_by_workspace.pop(workspace_id, None)
         state = self._workspace_poll_state.get(workspace_id)
         if state is not None:
-            state.first_failure = None
             state.poll_generation += 1
 
         # Force-enqueue by clearing pending status first, so this bypasses
@@ -730,9 +747,7 @@ class PrPollingService(Service):
 
         unmatched_count = 0
         for candidate in candidates:
-            nodes = (
-                index.get((candidate.name_with_owner, candidate.head_ref_name)) if candidate.name_with_owner else None
-            )
+            nodes = _find_open_pr_nodes(index, candidate)
             if nodes:
                 # The branch carries at least one of the user's open PRs — derive
                 # this workspace's status directly from them (open if one targets
@@ -792,18 +807,18 @@ class PrPollingService(Service):
         """Resolve a workspace for the round, emitting its status when it short-circuits.
 
         Returns a candidate only for a GitHub workspace off its target branch (the
-        population the search can match). A ``VcsCommandError`` or the jj tripwire
-        while reading one workspace skips that workspace for this round instead of
-        failing the round.
+        population the search can match). Any failure while reading one workspace
+        skips that workspace for this round instead of ending the round for all.
         """
         try:
             lookup = self._resolve_pull_request_lookup(workspace_id, state)
-        except VcsCommandError as e:
-            logger.debug("PR search round: skipping workspace {}: {}", workspace_id, e)
-            return None
         except GitCommandInJjWorkspaceError as e:
-            self._log_jj_workspace_once(state, e)
+            self._log_jj_workspace_once(workspace_id, e)
             return None
+        except Exception as e:
+            self._log_round_failure_once(workspace_id, e)
+            return None
+        self._round_failing_workspace_ids.discard(workspace_id)
         if isinstance(lookup, PrStatusInfo):
             self._emit_status(workspace_id, lookup)
             return None
@@ -816,9 +831,10 @@ class PrPollingService(Service):
 
         Applies the short-circuits *before* a workspace can enter a round or
         fallback: not ready (no checkout) → ``None``; no PR head (e.g. a detached
-        HEAD) or no target / non-GitHub origin / on the target branch → ``none``
-        with zero gh calls. The origin and remote names are read from the main
-        repository, which exists even when a checkout has no ``.git`` of its own.
+        HEAD) or no target / non-GitHub origin / an origin with no owner and name /
+        on the target branch → ``none`` with zero gh calls. The heads and the base
+        come from the workspace's VCS; the origin is read from the main repository,
+        which exists even when a checkout has no ``.git`` of its own.
         """
         location = self._resolve_checkout_location(workspace_id, state)
         if location is None:
@@ -833,30 +849,47 @@ class PrPollingService(Service):
             self.concurrency_group,
             read_jj_snapshot_max_new_file_size_mib,
         )
-        head_ref_names = vcs.get_pull_request_refs(
+        refs = vcs.get_pull_request_refs(
             location, target_ref=target_branch, requested_ref_name=state.requested_branch_name
-        ).head_ref_names
-        if not head_ref_names:
+        )
+        head_ref_names = refs.head_ref_names
+        base_ref_name = refs.base_ref_name
+        if not head_ref_names or base_ref_name is None:
             return no_pr_status
         origin_url = read_origin_url(self._runners.git, location.repo_path)
         if origin_url is None or not is_github_remote_url(origin_url):
             return no_pr_status
-        base_ref_name = strip_remote_prefix(target_branch, read_remote_names(self._runners.git, location.repo_path))
         if head_ref_names[0] == base_ref_name:
             return no_pr_status
         owner_and_name = parse_remote_owner_and_name(origin_url)
+        if owner_and_name is None:
+            return no_pr_status
+        repository_owner, repository_name = owner_and_name
         return _PullRequestLookup(
             workspace_id=workspace_id,
             working_dir=location.checkout_path,
             gh_env=vcs.agent_environment(location).environment_variables,
-            head_ref_name=head_ref_names[0],
+            head_ref_names=head_ref_names,
             base_ref_name=base_ref_name,
             host=extract_remote_hostname(origin_url),
-            name_with_owner=f"{owner_and_name[0]}/{owner_and_name[1]}" if owner_and_name is not None else None,
+            repository_owner=repository_owner,
+            repository_name=repository_name,
+        )
+
+    def _log_round_failure_once(self, workspace_id: WorkspaceID, error: Exception) -> None:
+        """Log that the round cannot resolve a workspace when that starts, not on every round it lasts."""
+        if workspace_id in self._round_failing_workspace_ids:
+            logger.trace("PR search round still skipping workspace {}: {}", workspace_id, error)
+            return
+        self._round_failing_workspace_ids.add(workspace_id)
+        log_exception(
+            error,
+            f"PR search round skips workspace {workspace_id} until it can be read",
+            priority=ExceptionPriority.LOW_PRIORITY,
         )
 
     def _gh_runner(self, lookup: _PullRequestLookup) -> GhRunner:
-        """Run gh in the workspace's checkout, where gh expands ``{owner}``/``{repo}`` from its remotes."""
+        """Run gh in the workspace's checkout, with the environment its VCS gives it, such as jj's ``GH_REPO``."""
         return lambda arguments: run_gh_with_retry(self._runners.git, arguments, lookup.working_dir, lookup.gh_env)
 
     def _emit_status(self, workspace_id: WorkspaceID, status: PrStatusInfo) -> None:
@@ -1049,19 +1082,20 @@ class PrPollingService(Service):
     ) -> PrStatusInfo | _CooldownDeferred | None:
         try:
             status = self._fetch_status(workspace_id, state)
-            state.first_failure = None
+            self._first_fallback_failure_by_workspace.pop(workspace_id, None)
             return status
         except GitCommandInJjWorkspaceError as e:
-            self._log_jj_workspace_once(state, e)
+            self._log_jj_workspace_once(workspace_id, e)
             return None
         except Exception as e:
-            if state.first_failure is None:
-                state.first_failure = (datetime.datetime.now(), e)
+            first_failure = self._first_fallback_failure_by_workspace.get(workspace_id)
+            if first_failure is None:
+                self._first_fallback_failure_by_workspace[workspace_id] = (datetime.datetime.now(), e)
                 log_exception(
                     e, message="Failed to get PR status for workspace", priority=ExceptionPriority.LOW_PRIORITY
                 )
                 return None
-            original_time, original_exc = state.first_failure
+            original_time, original_exc = first_failure
             logger.trace(
                 "Still failing to get PR status: {} (original was {} @ {})",
                 e,
@@ -1070,12 +1104,12 @@ class PrPollingService(Service):
             )
             return None
 
-    def _log_jj_workspace_once(self, state: _WorkspacePollState, error: GitCommandInJjWorkspaceError) -> None:
+    def _log_jj_workspace_once(self, workspace_id: WorkspaceID, error: GitCommandInJjWorkspaceError) -> None:
         """Report at ERROR, once per workspace, that PR polling ran git in a jj workspace, which is a dispatch bug."""
-        if state.is_jj_workspace_logged:
+        if workspace_id in self._jj_workspace_logged_workspace_ids:
             return
-        state.is_jj_workspace_logged = True
-        log_exception(error, f"PR polling skips workspace {state.workspace_id}: it ran git in a jj workspace")
+        self._jj_workspace_logged_workspace_ids.add(workspace_id)
+        log_exception(error, f"PR polling skips workspace {workspace_id}: it ran git in a jj workspace")
 
     def _respect_throttle(self) -> _CooldownDeferred | None:
         """Apply the global throttle before an API-backed poll.
@@ -1136,6 +1170,13 @@ class PrPollingService(Service):
         deferred = self._respect_throttle()
         if deferred is not None:
             return deferred
-        status = fetch_pr_status(self._gh_runner(lookup), workspace_id, lookup.head_ref_name, lookup.base_ref_name)
+        status = fetch_pr_status(
+            self._gh_runner(lookup),
+            workspace_id,
+            lookup.head_ref_names[0],
+            lookup.base_ref_name,
+            lookup.repository_owner,
+            lookup.repository_name,
+        )
         self._note_rate_limit(status)
         return status

@@ -11,6 +11,7 @@ from sculptor.services.workspace_service.vcs.git_repo_queries import read_head_i
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_origin_url
 from sculptor.services.workspace_service.vcs.git_repo_queries import read_remote_names
 from sculptor.services.workspace_service.vcs.git_repo_queries import resolve_main_repo_path
+from sculptor.services.workspace_service.vcs.git_repo_queries import strip_remote_prefix
 
 
 def test_read_head_identity_reports_the_checked_out_branch(git_cli: GitCli, git_repo: Path) -> None:
@@ -87,3 +88,23 @@ def test_read_remote_names_lists_every_remote(git_cli: GitCli, git_repo: Path) -
 
 def test_read_remote_names_is_empty_without_remotes(git_cli: GitCli, git_repo: Path) -> None:
     assert read_remote_names(git_cli, git_repo) == frozenset()
+
+
+def test_strip_remote_prefix_drops_the_remote_from_a_remote_tracking_target() -> None:
+    assert strip_remote_prefix("origin/main", frozenset({"origin"})) == "main"
+
+
+def test_strip_remote_prefix_keeps_the_rest_of_a_nested_remote_branch() -> None:
+    assert strip_remote_prefix("origin/feature/foo", frozenset({"origin"})) == "feature/foo"
+
+
+def test_strip_remote_prefix_drops_any_remote_of_the_repository() -> None:
+    assert strip_remote_prefix("upstream/main", frozenset({"origin", "upstream"})) == "main"
+
+
+def test_strip_remote_prefix_keeps_a_local_branch_whose_name_has_a_slash() -> None:
+    assert strip_remote_prefix("release/1.0", frozenset({"origin"})) == "release/1.0"
+
+
+def test_strip_remote_prefix_keeps_a_branch_without_a_slash() -> None:
+    assert strip_remote_prefix("main", frozenset({"origin"})) == "main"

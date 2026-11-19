@@ -130,6 +130,9 @@ class PullRequestRefs(FrozenModel):
     head_ref_names: tuple[str, ...] = Field(
         description="Candidate PR head names, most likely first; empty when there is nothing to look up"
     )
+    base_ref_name: str | None = Field(
+        description="The branch a pull request into the target names as its base; None when the target names none"
+    )
 
 
 class AgentVcsEnvironment(FrozenModel):

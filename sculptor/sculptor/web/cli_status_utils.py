@@ -81,18 +81,6 @@ def classify_cli_error(stderr: str) -> CliErrorCategory:
     return "transient"
 
 
-def strip_remote_prefix(branch: str, remote_names: frozenset[str]) -> str:
-    """The branch a target ref names on its remote: "origin/feature/foo" → "feature/foo".
-
-    Only a first path segment that names one of `remote_names` is stripped, so a
-    local branch such as "release/1.0" is returned unchanged.
-    """
-    remote_name, separator, remote_branch = branch.partition("/")
-    if separator and remote_name in remote_names:
-        return remote_branch
-    return branch
-
-
 def run_gh_with_retry(
     git_cli: GitCli, arguments: Sequence[str], cwd: Path, extra_env: Mapping[str, str]
 ) -> VcsCommandResult:
