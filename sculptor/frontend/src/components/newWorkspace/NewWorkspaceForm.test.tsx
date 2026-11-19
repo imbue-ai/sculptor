@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import type { ComponentProps } from "react";
@@ -7,12 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DependenciesStatus, ModelOption, Project } from "~/api";
 import { ElementIds, getActiveProjects, WorkspaceInitializationStrategy } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
+import { projectJjStateAtomFamily } from "~/common/state/atoms/projectJjState.ts";
 import { projectAtomFamily, updateProjectsAtom } from "~/common/state/atoms/projects.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { SettingsSection } from "~/pages/settings/sections.ts";
 
 import {
   keepNewWorkspaceDialogOpenAtom,
+  lastCreationSettingsByProjectIdAtom,
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDraftAtom,
 } from "./newWorkspaceAtoms.ts";
@@ -22,7 +24,7 @@ import { NewWorkspaceForm } from "./NewWorkspaceForm.tsx";
 // post-create callbacks — so everything that reaches the backend is stubbed at
 // its module seam: the project fetches, the create flow, the per-repo branch
 // info, the terminal-agent registrations, the debounced branch-name
-// preview/validation queries, and the pi model catalog.
+// preview/validation queries, the jj bookmark choices, and the pi model catalog.
 const { mockCreateWorkspace, mockUsePiModels } = vi.hoisted(() => ({
   mockCreateWorkspace: vi.fn(),
   mockUsePiModels: vi.fn(),
@@ -114,13 +116,26 @@ vi.mock("~/common/state/hooks/useTerminalAgentRegistrations.ts", () => ({
 
 // Honors the override argument the same way the real hook does (override wins
 // over the auto preview), so a seeded or user-edited branch name is observable
-// in the rendered field and in the create call's `branchName`.
+// in the rendered field and in the create call's `branchName`. A test that needs
+// the validator's verdict on the name sets `mockBranchNameStatus.current`.
+const { mockBranchNameStatus } = vi.hoisted(() => ({ mockBranchNameStatus: { current: "available" } }));
 vi.mock("~/components/newWorkspace/hooks/useBranchNamePreview.ts", () => ({
   useBranchNamePreview: ({ override }: { override: string | null }): unknown => ({
     preview: "sculptor/test-branch",
     displayedValue: override ?? "sculptor/test-branch",
     isLoading: false,
-    status: "available",
+    status: mockBranchNameStatus.current,
+  }),
+}));
+
+vi.mock("~/common/state/hooks/useJjBookmarkChoices.ts", () => ({
+  useJjBookmarkChoices: (): unknown => ({
+    bookmarks: [
+      { symbol: "main@origin", name: "main", remote: "origin", commitId: "a1" },
+      { symbol: "release", name: "release", remote: null, commitId: "b2" },
+    ],
+    isFetching: false,
+    refetch: vi.fn(),
   }),
 }));
 
@@ -148,11 +163,7 @@ const renderForm = (
 const renderPiForm = (props: Partial<FormProps> = {}): ReturnType<typeof renderWithProviders> => {
   const store = createStore();
   store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
-  store.set(lastWorkspaceCreationSettingsAtom, {
-    projectId: "p1",
-    agentType: "pi",
-    initStrategy: WorkspaceInitializationStrategy.WORKTREE,
-  });
+  store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "pi" });
   return renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} {...props} />, { store });
 };
 
@@ -168,6 +179,7 @@ describe("NewWorkspaceForm", () => {
   beforeEach(() => {
     mockCreateWorkspace.mockResolvedValue({ ok: true, workspaceId: "w1" });
     mockRepoInfo.current = REPO_INFO;
+    mockBranchNameStatus.current = "available";
     // Default the catalog to still-resolving; the Claude tests never read it, and
     // the pi tests override per case.
     mockUsePiModels.mockReturnValue(piModelsResolving());
@@ -398,7 +410,8 @@ describe("NewWorkspaceForm", () => {
     const renderFormInMode = (mode: WorkspaceInitializationStrategy): void => {
       const store = createStore();
       store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
-      store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude", initStrategy: mode });
+      store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude" });
+      store.set(lastCreationSettingsByProjectIdAtom, { p1: { mode } });
       renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
     };
 
@@ -434,6 +447,201 @@ describe("NewWorkspaceForm", () => {
     });
   });
 
+  describe("the mode remembered per repository", () => {
+    const { CLONE, WORKTREE, JJ_WORKSPACE } = WorkspaceInitializationStrategy;
+
+    const renderFormRemembering = (
+      byProjectId: Readonly<Record<string, { mode: WorkspaceInitializationStrategy; sourceBranch?: string }>>,
+    ): void => {
+      const store = createStore();
+      store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
+      store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "claude" });
+      store.set(lastCreationSettingsByProjectIdAtom, byProjectId);
+      renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    };
+
+    it("starts in the selected repository's last mode and source", async () => {
+      renderFormRemembering({ p1: { mode: CLONE, sourceBranch: "release" } });
+
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: "p1", mode: CLONE, sourceBranch: "release" }),
+      );
+    });
+
+    it("does not carry another repository's mode into this one", async () => {
+      renderFormRemembering({ p2: { mode: CLONE, sourceBranch: "release" } });
+
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: "p1", mode: WORKTREE, sourceBranch: "main" }),
+      );
+    });
+
+    it("creates a worktree from the current branch in a git repository last used for a jj workspace", async () => {
+      renderFormRemembering({ p1: { mode: JJ_WORKSPACE, sourceBranch: "main@origin" } });
+
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: "p1", mode: WORKTREE, sourceBranch: "main" }),
+      );
+    });
+  });
+
+  describe("in a repository that creates jj workspaces", () => {
+    const renderJjRepositoryForm = (): void => {
+      const store = createStore();
+      store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One", useJjForNewWorkspaces: true } as Project]);
+      store.set(projectJjStateAtomFamily("p1"), {
+        projectId: "p1",
+        colocation: "COLOCATED",
+        colocationError: null,
+        createsJjWorkspaces: true,
+      });
+      store.set(dependenciesStatusAtom, {
+        git: { installed: true },
+        claude: { installed: true },
+        pi: { installed: false },
+        gh: { installed: false },
+        jj: { installed: true },
+        jjReadiness: { blocker: null, identity: { name: "Dev", email: "dev@example.com" } },
+      } as DependenciesStatus);
+      renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+    };
+
+    it("offers a jj workspace in place of Worktree and asks for a bookmark name", async () => {
+      renderJjRepositoryForm();
+
+      expect(await screen.findByTestId(ElementIds.MODE_SELECTOR)).toHaveTextContent("jj workspace");
+      expect(screen.getByTestId(ElementIds.BRANCH_NAME_INPUT)).toHaveAttribute(
+        "placeholder",
+        "Bookmark name (required)",
+      );
+    });
+
+    it("creates a jj workspace with no source, so it starts from its target", async () => {
+      renderJjRepositoryForm();
+
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+          branchName: "sculptor/test-branch",
+          sourceBranch: undefined,
+        }),
+      );
+    });
+
+    it("lists the repository's bookmarks as sources and creates from the one picked", async () => {
+      renderJjRepositoryForm();
+
+      await waitFor(() => expect(screen.getByTestId(ElementIds.BRANCH_SELECTOR)).toHaveTextContent("same as target"));
+      await userEvent.click(screen.getByTestId(ElementIds.BRANCH_SELECTOR));
+      const releaseOption = (await screen.findAllByTestId(ElementIds.BRANCH_OPTION)).find(
+        (option) => within(option).queryByText("release") !== null,
+      );
+      expect(releaseOption).toBeDefined();
+      await userEvent.click(releaseOption as HTMLElement);
+      await clickCreate();
+
+      expect(mockCreateWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: WorkspaceInitializationStrategy.JJ_WORKSPACE, sourceBranch: "release" }),
+      );
+    });
+
+    it("says a taken name is a bookmark that already exists", async () => {
+      mockBranchNameStatus.current = "exists";
+      renderJjRepositoryForm();
+
+      await waitFor(() =>
+        expect(screen.getByTestId(ElementIds.BRANCH_NAME_COLLISION_ERROR)).toHaveTextContent(
+          "Bookmark 'sculptor/test-branch' already exists",
+        ),
+      );
+    });
+
+    it("routes the jj workspace chip to the repository's settings and dismisses the dialog", async () => {
+      const onDismiss = vi.fn();
+      const store = createStore();
+      store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One", useJjForNewWorkspaces: true } as Project]);
+      store.set(projectJjStateAtomFamily("p1"), {
+        projectId: "p1",
+        colocation: "COLOCATED",
+        colocationError: null,
+        createsJjWorkspaces: true,
+      });
+      renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={onDismiss} />, { store });
+
+      fireEvent.click(await screen.findByTestId(ElementIds.MODE_SELECTOR));
+
+      expect(mockOpenSettings).toHaveBeenCalledWith(SettingsSection.REPOSITORIES, "p1");
+      expect(onDismiss).toHaveBeenCalled();
+    });
+  });
+
+  it("keeps Create disabled, saying nothing, until it knows whether jj is available", async () => {
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One", useJjForNewWorkspaces: true } as Project]);
+    store.set(projectJjStateAtomFamily("p1"), {
+      projectId: "p1",
+      colocation: "ABSENT",
+      colocationError: null,
+      createsJjWorkspaces: false,
+    });
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
+
+    await waitFor(() => expect(screen.getByTestId(ElementIds.MODE_SELECTOR)).toHaveTextContent("jj workspace"));
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON)).toBeDisabled();
+    expect(screen.queryByTestId(ElementIds.NEW_WORKSPACE_JJ_UNAVAILABLE_CALLOUT)).not.toBeInTheDocument();
+
+    act(() => {
+      store.set(dependenciesStatusAtom, {
+        git: { installed: true },
+        claude: { installed: true },
+        pi: { installed: false },
+        gh: { installed: false },
+        jj: { installed: false },
+        jjReadiness: { blocker: "NOT_INSTALLED" },
+      } as DependenciesStatus);
+    });
+
+    expect(await screen.findByTestId(ElementIds.NEW_WORKSPACE_JJ_UNAVAILABLE_CALLOUT)).toBeInTheDocument();
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON)).toBeDisabled();
+  });
+
+  it("blocks Create in a repository that uses jj while jj is unavailable, and links to the Jujutsu page", async () => {
+    const onDismiss = vi.fn();
+    const store = createStore();
+    store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One", useJjForNewWorkspaces: true } as Project]);
+    // Without jj the repository cannot be read as colocated, so it creates no jj workspaces.
+    store.set(projectJjStateAtomFamily("p1"), {
+      projectId: "p1",
+      colocation: "ABSENT",
+      colocationError: null,
+      createsJjWorkspaces: false,
+    });
+    store.set(dependenciesStatusAtom, {
+      git: { installed: true },
+      claude: { installed: true },
+      pi: { installed: false },
+      gh: { installed: false },
+      jj: { installed: false },
+      jjReadiness: { blocker: "NOT_INSTALLED" },
+    } as DependenciesStatus);
+    renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={onDismiss} />, { store });
+
+    const callout = await screen.findByTestId(ElementIds.NEW_WORKSPACE_JJ_UNAVAILABLE_CALLOUT);
+    expect(screen.getByTestId(ElementIds.NEW_WORKSPACE_CREATE_BUTTON)).toBeDisabled();
+    fireEvent.click(within(callout).getByText("Open Jujutsu settings"));
+
+    expect(mockOpenSettings).toHaveBeenCalledWith(SettingsSection.JJ);
+    expect(onDismiss).toHaveBeenCalled();
+  });
+
   it("dismisses the dialog when Install Pi routes to settings from the agent picker", async () => {
     // With no usable pi binary, the picker's pi entry reads "Install Pi" and
     // routes to Settings — which lands underneath the host dialog, so choosing
@@ -446,6 +654,8 @@ describe("NewWorkspaceForm", () => {
       claude: { installed: false },
       pi: { installed: false },
       gh: { installed: false },
+      jj: { installed: false },
+      jjReadiness: { blocker: "NOT_INSTALLED" },
     } as DependenciesStatus);
     renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={onDismiss} />, { store });
 
@@ -471,11 +681,7 @@ describe("NewWorkspaceForm", () => {
     mockUsePiModels.mockReturnValue(piModelsEmpty());
     const store = createStore();
     store.set(updateProjectsAtom, [{ objectId: "p1", name: "Repo One" } as Project]);
-    store.set(lastWorkspaceCreationSettingsAtom, {
-      projectId: "p1",
-      agentType: "pi",
-      initStrategy: WorkspaceInitializationStrategy.WORKTREE,
-    });
+    store.set(lastWorkspaceCreationSettingsAtom, { projectId: "p1", agentType: "pi" });
     renderWithProviders(<NewWorkspaceForm onCreated={vi.fn()} onDismiss={vi.fn()} />, { store });
 
     fireEvent.change(screen.getByTestId(ElementIds.WORKSPACE_NAME_INPUT), {

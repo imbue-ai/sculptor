@@ -5,13 +5,13 @@ import { Pencil, Play, RotateCcw, Square, TerminalIcon } from "lucide-react";
 import type { CSSProperties, HTMLAttributes, KeyboardEvent, ReactElement, ReactNode } from "react";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 
-import { ElementIds } from "~/api";
+import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { workspaceSetupOutputAtomFamily } from "~/common/state/atoms/workspaceSetupOutput";
 import { workspaceSetupStatusAtomFamily } from "~/common/state/atoms/workspaceSetupStatus";
+import { useDefaultSetupCommand } from "~/common/state/hooks/useDefaultSetupCommand.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings";
 import { useProject } from "~/common/state/hooks/useProjects";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
-import { resolveWorkspaceSetupCommand } from "~/common/utils/setupDefaults";
 
 import bashStyles from "./bashBlockStyles.module.scss";
 import type { BashBlockState } from "./BashStatusBadge";
@@ -35,6 +35,19 @@ const POPOVER_STYLE: CSSProperties = {
 };
 
 const postNoBody = async (path: string): Promise<Response> => fetch(path, { method: "POST" });
+
+// The command a workspace's next setup runs, resolved as the backend's
+// `resolve_workspace_setup_command` does: a project that never configured one
+// runs its workspace kind's default, an empty string means the user cleared it
+// (run nothing), and any other string is the user's own. Undefined while the
+// backend has not yet named the default.
+const resolveSetupCommand = (inputs: {
+  storedCommand: string | null | undefined;
+  defaultCommand: string | null | undefined;
+}): string | null | undefined => {
+  if (inputs.storedCommand === "") return null;
+  return inputs.storedCommand ?? inputs.defaultCommand;
+};
 
 const useElapsedSinceStart = (startedAt: number | null, isRunning: boolean): string => {
   const [now, setNow] = useState<number>(() => Date.now() / 1000);
@@ -127,6 +140,9 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
   const output = useAtomValue(workspaceSetupOutputAtomFamily(workspaceId));
   const workspace = useWorkspace(workspaceId);
   const project = useProject(workspace?.projectId ?? "");
+  const defaultSetupCommand = useDefaultSetupCommand(
+    workspace?.initializationStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
+  );
   const openSettings = useOpenSettings();
   const popoverOutputRef = useRef<HTMLDivElement | null>(null);
   const rowRef = useRef<HTMLDivElement | null>(null);
@@ -195,10 +211,10 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
     </Tooltip>
   );
 
-  // Mirror the backend's tri-state resolution: a null stored value runs the
-  // current default ("git fetch origin ..."), an empty string means the user
-  // cleared it (run nothing), any other string is custom.
-  const currentCommand = resolveWorkspaceSetupCommand(project?.workspaceSetupCommand);
+  const currentCommand = resolveSetupCommand({
+    storedCommand: project?.workspaceSetupCommand,
+    defaultCommand: defaultSetupCommand,
+  });
 
   if (status === null) {
     return <SetupConfigPrompt />;
@@ -208,6 +224,10 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
   // project now has one, offer a one-click Run; otherwise fall back to the
   // configure-CTA.
   if (status.status === "not_configured") {
+    if (currentCommand === undefined) {
+      return null;
+    }
+
     if (currentCommand === null) {
       return <SetupConfigPrompt />;
     }
@@ -263,7 +283,7 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
   //    migrated rows where we genuinely don't know what ran)
   const persistedCommand =
     typeof workspace?.setupCommand === "string" && workspace.setupCommand.length > 0 ? workspace.setupCommand : null;
-  const commandRan = persistedCommand ?? (isMigrated ? null : currentCommand);
+  const commandRan = persistedCommand ?? (isMigrated ? null : (currentCommand ?? null));
   const commandHeader = commandRan
     ? joinCommandForHeader(commandRan)
     : isMigrated
@@ -336,19 +356,20 @@ export const SetupStatusCard = ({ workspaceId }: SetupStatusCardProps): ReactEle
     status.status === "failed" && typeof status.exitCode === "number" ? `Exit code ${status.exitCode}\n` : "";
   const logText = `${exitCodePrefix}${rawLogText}`;
   // The card is clickable to open the popover for any non-legacy run.
-  // Commands that produce no stdout (e.g. the default
-  // `git fetch origin 2>/dev/null || true`) still benefit from a
+  // Commands that produce no stdout (e.g. the default fetch, which
+  // discards its stderr) still benefit from a
   // popover so the user can confirm the run finished and see the
   // empty-output placeholder, rather than the row silently going inert.
   const canOpenPopover = shouldShowLog;
   const hasLogText = logText.length > 0;
-  const hasCommandChanged = persistedCommand !== null && currentCommand !== null && persistedCommand !== currentCommand;
+  const hasCommandChanged =
+    persistedCommand !== null && typeof currentCommand === "string" && persistedCommand !== currentCommand;
   // Rerun is gated on the project having a command — the backend reads it from
   // `project.workspace_setup_command` and 422s when blank, so an unguarded
   // button would silently no-op when the user has cleared the setting.
   const isRerunVisible =
     (status.status === "succeeded" || status.status === "failed" || status.status === "legacy") &&
-    currentCommand !== null;
+    typeof currentCommand === "string";
 
   const aside = (
     <>

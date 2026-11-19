@@ -26,6 +26,7 @@ const fakeAgent = (id: string): Agent =>
 
 type WorkspaceRuntimeOverrides = {
   hasUncommittedChanges?: boolean;
+  canCommit?: boolean;
   hasOpenPr?: boolean;
   canCreatePr?: boolean;
   canOpenInOS?: boolean;
@@ -40,6 +41,7 @@ const makeWorkspaceRuntime = (overrides: WorkspaceRuntimeOverrides = {}): Worksp
   openMergeRequest: vi.fn(),
   openInApp: vi.fn(),
   hasUncommittedChanges: vi.fn(() => overrides.hasUncommittedChanges ?? false),
+  canCommit: vi.fn(() => overrides.canCommit ?? true),
   hasOpenPr: vi.fn(() => overrides.hasOpenPr ?? false),
   canCreatePr: vi.fn(() => overrides.canCreatePr ?? true),
   canOpenInOS: vi.fn(() => overrides.canOpenInOS ?? true),
@@ -89,6 +91,14 @@ describe("buildWorkspaceActions", () => {
     const ws = fakeWorkspace("w1");
     expect(noChanges.find((a) => a.id === "commit")?.disabled?.(ws)).toBe(true);
     expect(withChanges.find((a) => a.id === "commit")?.disabled?.(ws)).toBe(false);
+  });
+
+  it("commit is disabled, and says why, while the shared Commit rule says no", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime({ hasUncommittedChanges: true, canCommit: false }));
+    const commit = actions.find((a) => a.id === "commit");
+    const ws = fakeWorkspace("w1");
+    expect(commit?.disabled?.(ws)).toBe(true);
+    expect(commit?.disabledReason?.(ws)).toBe("The workspace's agent can't take a prompt right now");
   });
 
   it("commit perform routes to runtime.commitChanges", () => {

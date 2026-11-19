@@ -1,4 +1,4 @@
-import type { Atom, PrimitiveAtom, WritableAtom } from "jotai";
+import type { Atom, PrimitiveAtom, SetStateAction, WritableAtom } from "jotai";
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
@@ -70,18 +70,15 @@ export const keepNewWorkspaceDialogOpenAtom: WritableAtom<boolean, [boolean], vo
 );
 
 /**
- * The settings of the last successful create. Seeds the modal's defaults and
- * powers the sidebar "+" direct-create. Persisted; extends today's MRU
- * project + last-used agent type into the full set the direct-create reuses.
+ * The repository and first-agent type of the last successful create. Seeds the
+ * modal's defaults and powers the sidebar "+" direct-create. Persisted.
  *
  * `undefined` means "no successful create yet" — consumers fall back to their
- * own defaults (the MRU project, the last-used agent type, worktree mode).
+ * own defaults (the MRU project, the last-used agent type).
  */
 export type WorkspaceCreationSettings = {
   projectId: string;
-  sourceBranch?: string;
   agentType: StoredAgentType;
-  initStrategy: WorkspaceInitializationStrategy;
 };
 
 export const lastWorkspaceCreationSettingsAtom: WritableAtom<
@@ -91,6 +88,28 @@ export const lastWorkspaceCreationSettingsAtom: WritableAtom<
 > = atomWithStorage<WorkspaceCreationSettings | undefined>(
   "sculptor-last-workspace-creation-settings",
   undefined,
+  undefined,
+  { getOnInit: true },
+);
+
+/**
+ * The mode and source of the last successful create in one repository. A mode
+ * is remembered per repository because what it means depends on the
+ * repository: a jj workspace replayed into a repository that creates git
+ * worktrees would be refused.
+ */
+export type ProjectCreationSettings = {
+  mode: WorkspaceInitializationStrategy;
+  sourceBranch?: string;
+};
+
+export const lastCreationSettingsByProjectIdAtom: WritableAtom<
+  Readonly<Record<string, ProjectCreationSettings>>,
+  [SetStateAction<Readonly<Record<string, ProjectCreationSettings>>>],
+  void
+> = atomWithStorage<Readonly<Record<string, ProjectCreationSettings>>>(
+  "sculptor-last-workspace-creation-settings-by-project",
+  {},
   undefined,
   { getOnInit: true },
 );

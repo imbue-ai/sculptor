@@ -1,12 +1,10 @@
 import { Button, ContextMenu } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { CSSProperties, ReactElement } from "react";
-import { useState } from "react";
 
 import { ElementIds } from "~/api";
-import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
-import { canPromptActiveAgentAtomFamily, commitActionAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
-import { buildCommitMessage } from "~/common/utils/agentPrompts.ts";
+import { canCommitAtomFamily, commitActionAtomFamily } from "~/common/state/atoms/workspaceAgentActions.ts";
+import { useEditAgentPrompt } from "~/common/state/hooks/useEditAgentPrompt.ts";
 
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
@@ -24,16 +22,16 @@ type CommitButtonProps = {
 export const CommitButton = ({ workspaceId, changesCount, onCommit }: CommitButtonProps): ReactElement => {
   // Committing sends the prompt through the workspace-scoped action rather
   // than the mounted chat's `chatActionsAtom` closures — the Changes panel is
-  // usually the active center tab, which unmounts the chat.
-  const canPromptAgent = useAtomValue(canPromptActiveAgentAtomFamily(workspaceId));
-  const sendCommitMessage = useSetAtom(commitActionAtomFamily(workspaceId));
-  const commitPrompt = useAtomValue(commitPromptAtom);
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  // usually the active center tab, which unmounts the chat. The action builds
+  // the workspace's message itself.
+  const canCommit = useAtomValue(canCommitAtomFamily(workspaceId));
+  const commit = useSetAtom(commitActionAtomFamily(workspaceId));
+  const editPrompt = useEditAgentPrompt({ workspaceId, kind: "commit" });
 
-  const isDisabled = changesCount === 0 || !canPromptAgent;
+  const isDisabled = changesCount === 0 || !canCommit;
 
   const handleClick = (): void => {
-    void sendCommitMessage(buildCommitMessage({ prompt: commitPrompt }));
+    void commit();
     onCommit?.();
   };
 
@@ -54,10 +52,14 @@ export const CommitButton = ({ workspaceId, changesCount, onCommit }: CommitButt
           </Button>
         </ContextMenu.Trigger>
         <ContextMenu.Content size="1">
-          <ContextMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</ContextMenu.Item>
+          <ContextMenu.Item onSelect={editPrompt.handleMenuSelect}>{editPrompt.menuLabel}</ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Root>
-      <CommitPromptDialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen} />
+      <CommitPromptDialog
+        open={editPrompt.isDialogOpen}
+        onOpenChange={editPrompt.handleDialogOpenChange}
+        isJjFallback={editPrompt.isJjFallback}
+      />
     </>
   );
 };

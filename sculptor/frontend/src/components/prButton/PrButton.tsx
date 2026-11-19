@@ -2,22 +2,20 @@ import { ContextMenu, DropdownMenu, Flex, IconButton, Popover, Spinner, Text, To
 import { useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronDown, ChevronUp, CopyIcon, GitMergeIcon, Info, PlusIcon, TriangleAlert } from "lucide-react";
 import { posthog } from "posthog-js";
-import type { ReactElement } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { ButtonHTMLAttributes, ReactElement } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 
 import type { PrStatusInfo } from "../../api";
 import { ElementIds } from "../../api";
 import { openInReusableTab } from "../../common/reusableTabTarget.ts";
 import { prStatusAtomFamily } from "../../common/state/atoms/prStatus.ts";
-import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
-import {
-  canPromptActiveAgentAtomFamily,
-  createPrActionAtomFamily,
-} from "../../common/state/atoms/workspaceAgentActions.ts";
+import { canCreatePrAtomFamily, createPrActionAtomFamily } from "../../common/state/atoms/workspaceAgentActions.ts";
 import { workspaceTargetBranchesAtomFamily } from "../../common/state/atoms/workspaceTargetBranches.ts";
+import { useEditAgentPrompt } from "../../common/state/hooks/useEditAgentPrompt.ts";
 import type { GitProvider } from "../../common/state/hooks/useGitProvider.ts";
-import { buildCreatePrMessage } from "../../common/utils/agentPrompts.ts";
+import { useWorkspace } from "../../common/state/hooks/useWorkspace.ts";
 import { isPrBaseOtherThanTarget } from "../../common/utils/prBaseNames.ts";
+import { WORKSPACE_MODE_RULES } from "../../common/utils/workspaceModeRules.ts";
 import styles from "./PrButton.module.scss";
 import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
 import { PrPromptDialog } from "./PrPromptDialog.tsx";
@@ -97,24 +95,30 @@ type PrButtonProps = {
 type CreatePrButtonFaceProps = {
   onClick?: () => void;
   isDisabled?: boolean;
-};
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "disabled" | "type">;
 
-const CreatePrButtonFace = ({ onClick, isDisabled = false }: CreatePrButtonFaceProps): ReactElement => (
-  <button
-    type="button"
-    className={styles.createButton}
-    onClick={onClick}
-    disabled={isDisabled}
-    data-testid={ElementIds.PR_BUTTON_CREATE}
-  >
-    <PlusIcon size={12} className={styles.plusIcon} />
-    <Text size="1">Create PR</Text>
-  </button>
+// Forwards its ref and the remaining props to the button, because the context
+// menu trigger it sits in attaches its right-click handler through them.
+const CreatePrButtonFace = forwardRef<HTMLButtonElement, CreatePrButtonFaceProps>(
+  ({ onClick, isDisabled = false, ...triggerProps }, ref) => (
+    <button
+      {...triggerProps}
+      ref={ref}
+      type="button"
+      className={styles.createButton}
+      onClick={onClick}
+      disabled={isDisabled}
+      data-testid={ElementIds.PR_BUTTON_CREATE}
+    >
+      <PlusIcon size={12} className={styles.plusIcon} />
+      <Text size="1">Create PR</Text>
+    </button>
+  ),
 );
+CreatePrButtonFace.displayName = "CreatePrButtonFace";
 
 type CreatePrInputs = {
   workspaceId: string;
-  targetBranch: string;
   gitProvider: GitProvider;
 };
 
@@ -124,11 +128,11 @@ type CreatePrControl = {
 };
 
 // Sends through the workspace-scoped action, so the prompt reaches the
-// workspace's current agent whether or not its chat panel is mounted.
-const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs): CreatePrControl => {
-  const prCreationPrompt = useAtomValue(prCreationPromptAtom);
-  const canPromptAgent = useAtomValue(canPromptActiveAgentAtomFamily(workspaceId));
-  const sendCreatePrMessage = useSetAtom(createPrActionAtomFamily(workspaceId));
+// workspace's current agent whether or not its chat panel is mounted. The
+// action builds the workspace's message itself.
+const useCreatePr = ({ workspaceId, gitProvider }: CreatePrInputs): CreatePrControl => {
+  const canCreatePr = useAtomValue(canCreatePrAtomFamily(workspaceId));
+  const createPr = useSetAtom(createPrActionAtomFamily(workspaceId));
 
   const handleCreate = (): void => {
     posthog.capture("pr.create_initiated", {
@@ -136,17 +140,17 @@ const useCreatePr = ({ workspaceId, targetBranch, gitProvider }: CreatePrInputs)
       // The branch name is user-entered text (it can encode feature/ticket/
       // customer names), so it is deliberately not recorded.
     });
-    void sendCreatePrMessage(buildCreatePrMessage({ prompt: prCreationPrompt, targetBranch }));
+    void createPr();
   };
 
-  return { isDisabled: !canPromptAgent, handleCreate };
+  return { isDisabled: !canCreatePr, handleCreate };
 };
 
 type CreatePrButtonProps = CreatePrInputs;
 
-const CreatePrButton = ({ workspaceId, targetBranch, gitProvider }: CreatePrButtonProps): ReactElement => {
-  const { isDisabled, handleCreate } = useCreatePr({ workspaceId, targetBranch, gitProvider });
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+const CreatePrButton = ({ workspaceId, gitProvider }: CreatePrButtonProps): ReactElement => {
+  const { isDisabled, handleCreate } = useCreatePr({ workspaceId, gitProvider });
+  const editPrompt = useEditAgentPrompt({ workspaceId, kind: "pr-creation" });
 
   return (
     <>
@@ -155,18 +159,24 @@ const CreatePrButton = ({ workspaceId, targetBranch, gitProvider }: CreatePrButt
           <CreatePrButtonFace onClick={handleCreate} isDisabled={isDisabled} />
         </ContextMenu.Trigger>
         <ContextMenu.Content size="1">
-          <ContextMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</ContextMenu.Item>
+          <ContextMenu.Item onSelect={editPrompt.handleMenuSelect}>{editPrompt.menuLabel}</ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Root>
-      <PrPromptDialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen} />
+      <PrPromptDialog
+        open={editPrompt.isDialogOpen}
+        onOpenChange={editPrompt.handleDialogOpenChange}
+        isJjFallback={editPrompt.isJjFallback}
+      />
     </>
   );
 };
 
 // Without a target branch there is nothing to open a pull request into, so
 // Create PR stays in place but disabled until the user picks a target.
-const NoTargetPrButton = (): ReactElement => (
-  <Tooltip content="Sculptor couldn't find a target branch for this workspace. Pick one from the target selector to create a PR.">
+const NoTargetPrButton = ({ refNoun }: { refNoun: "branch" | "bookmark" }): ReactElement => (
+  <Tooltip
+    content={`Sculptor couldn't find a target ${refNoun} for this workspace. Pick one from the target selector to create a PR.`}
+  >
     {/* Radix Tooltip does not fire on a disabled button, so the span carries the hover. */}
     <span style={{ display: "inline-flex" }}>
       <CreatePrButtonFace isDisabled />
@@ -433,6 +443,7 @@ const ErrorPrButton = ({ error }: ErrorPrButtonProps): ReactElement => {
 };
 
 type AssignPrButtonProps = CreatePrInputs & {
+  targetBranch: string;
   prStatus: PrStatusInfo;
   onSwitchTarget?: (newTarget: string) => void;
 };
@@ -444,7 +455,7 @@ const AssignPrButton = ({
   gitProvider,
   onSwitchTarget,
 }: AssignPrButtonProps): ReactElement => {
-  const { isDisabled: isCreateDisabled, handleCreate } = useCreatePr({ workspaceId, targetBranch, gitProvider });
+  const { isDisabled: isCreateDisabled, handleCreate } = useCreatePr({ workspaceId, gitProvider });
 
   const handleSwitchTarget = (): void => {
     if (prStatus.mismatchedPrTargetBranch && onSwitchTarget) {
@@ -487,6 +498,7 @@ export const PrButton = ({
 }: PrButtonProps): ReactElement | null => {
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceId));
   const prBaseNames = useAtomValue(workspaceTargetBranchesAtomFamily(workspaceId))?.prBaseNames ?? {};
+  const workspace = useWorkspace(workspaceId);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const effectiveError: EffectiveError | null = prStatus?.errorCategory
@@ -517,7 +529,9 @@ export const PrButton = ({
     }
 
     if (targetBranch === null) {
-      return <NoTargetPrButton />;
+      // A workspace not loaded yet has no kind to name its refs by; git's word stands in.
+      const refNoun = workspace === null ? "branch" : WORKSPACE_MODE_RULES[workspace.initializationStrategy].nameNoun;
+      return <NoTargetPrButton refNoun={refNoun} />;
     }
 
     const isMismatchRelevant =
@@ -535,7 +549,7 @@ export const PrButton = ({
         />
       );
     }
-    return <CreatePrButton workspaceId={workspaceId} targetBranch={targetBranch} gitProvider={gitProvider} />;
+    return <CreatePrButton workspaceId={workspaceId} gitProvider={gitProvider} />;
   }
 
   if (prStatus.prState === "open") {

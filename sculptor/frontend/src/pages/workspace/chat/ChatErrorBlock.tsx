@@ -12,30 +12,41 @@ import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 
 import styles from "./ChatView.module.scss";
 
-// Agent binaries that, when missing or invalid, surface a friendly "not
-// available" block with a link to the settings section where a managed copy can
-// be installed, instead of a raw traceback. `getInstalled` reads the live
-// dependency status so a green "installed" badge can appear if the binary
-// reappears after the error.
-type BinaryNotFoundTool = {
+// Tools that, when missing, invalid or otherwise unusable, surface a friendly
+// "not available" block with the reason and a link to the settings section
+// where they are fixed, instead of a raw traceback. `getInstalled` reads the
+// live dependency status so a green badge can appear if the tool becomes usable
+// after the error; `recoveredLabel` is what that badge says.
+type UnavailableTool = {
   errorSuffix: string;
   name: string;
   settingsSection: string;
+  recoveredLabel: string;
   getInstalled: (status: DependenciesStatus) => boolean;
 };
 
-const BINARY_NOT_FOUND_TOOLS: ReadonlyArray<BinaryNotFoundTool> = [
+const UNAVAILABLE_TOOLS: ReadonlyArray<UnavailableTool> = [
   {
     errorSuffix: "ClaudeBinaryNotFoundError",
     name: "Claude",
     settingsSection: "DEPENDENCIES",
+    recoveredLabel: "installed",
     getInstalled: (status: DependenciesStatus): boolean => status.claude.installed,
   },
   {
     errorSuffix: "PiBinaryNotFoundError",
     name: "Pi",
     settingsSection: "PI",
+    recoveredLabel: "installed",
     getInstalled: (status: DependenciesStatus): boolean => status.pi.installed,
+  },
+  // A jj workspace's agent stops, saying why, before running jj when jj cannot be used.
+  {
+    errorSuffix: "JjUnavailableError",
+    name: "jj",
+    settingsSection: "JJ",
+    recoveredLabel: "available",
+    getInstalled: (status: DependenciesStatus): boolean => status.jjReadiness.blocker === null,
   },
 ];
 
@@ -54,25 +65,25 @@ export const ChatErrorBlock = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasRetried, setHasRetried] = useState(false);
   const openSettings = useOpenSettings();
-  const binaryNotFoundTool = BINARY_NOT_FOUND_TOOLS.find((tool) => block.errorType?.endsWith(tool.errorSuffix));
+  const unavailableTool = UNAVAILABLE_TOOLS.find((tool) => block.errorType?.endsWith(tool.errorSuffix));
   const errorLabel = block.errorType ? block.errorType.split(".").pop() : "Request Failed";
-  const showRetry = !binaryNotFoundTool && isLastMessage && agentStatus !== TaskStatus.ERROR && onRetryRequest;
+  const showRetry = !unavailableTool && isLastMessage && agentStatus !== TaskStatus.ERROR && onRetryRequest;
   // The pi adapter's provider-auth turn failure leads with this phrasing
   // (humanize_pi_failure_reason); offer a one-click route to authenticate.
   const isAuthFailure = block.message?.includes("require authentication") ?? false;
 
-  if (binaryNotFoundTool) {
-    const isInstalled = dependenciesStatus ? binaryNotFoundTool.getInstalled(dependenciesStatus) : false;
+  if (unavailableTool) {
+    const isInstalled = dependenciesStatus ? unavailableTool.getInstalled(dependenciesStatus) : false;
     return (
       <>
         <div className={styles.errorBlock} data-testid={ElementIds.ERROR_BLOCK}>
           <div className={styles.errorHeader}>
             <Badge color={isInstalled ? "orange" : "red"} size="1" variant="soft">
-              {binaryNotFoundTool.name} Not Available
+              {unavailableTool.name} Not Available
             </Badge>
             <span className={styles.errorMessage}>
-              {block.message || `${binaryNotFoundTool.name} binary not found or is invalid.`}{" "}
-              <Link onClick={() => openSettings(binaryNotFoundTool.settingsSection)} style={{ cursor: "pointer" }}>
+              {block.message || `${unavailableTool.name} binary not found or is invalid.`}{" "}
+              <Link onClick={() => openSettings(unavailableTool.settingsSection)} style={{ cursor: "pointer" }}>
                 Go to Settings
               </Link>
             </span>
@@ -82,7 +93,7 @@ export const ChatErrorBlock = ({
           <Flex align="center" gap="1" style={{ paddingTop: "var(--space-1)" }}>
             <CheckCircledIcon color="var(--green-9)" />
             <Badge color="green" size="1" variant="soft">
-              {binaryNotFoundTool.name} installed
+              {unavailableTool.name} {unavailableTool.recoveredLabel}
             </Badge>
           </Flex>
         )}

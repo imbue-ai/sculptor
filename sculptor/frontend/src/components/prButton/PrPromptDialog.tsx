@@ -6,13 +6,16 @@ import { useState } from "react";
 import { ElementIds, UserConfigField } from "../../api";
 import { prCreationPromptAtom } from "../../common/state/atoms/userConfig.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
+import { JjPromptFallbackNotice } from "../JjPromptFallbackNotice.tsx";
 
 type PrPromptDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** This git prompt is what a jj workspace is sent, since no jj PR creation prompt is set. */
+  isJjFallback: boolean;
 };
 
-export const PrPromptDialog = ({ open, onOpenChange }: PrPromptDialogProps): ReactElement => {
+export const PrPromptDialog = ({ open, onOpenChange, isJjFallback }: PrPromptDialogProps): ReactElement => {
   const prCreationPrompt = useAtomValue(prCreationPromptAtom);
   const { updateField } = useUserConfig();
   const [promptValue, setPromptValue] = useState(prCreationPrompt);
@@ -48,6 +51,7 @@ export const PrPromptDialog = ({ open, onOpenChange }: PrPromptDialogProps): Rea
           This prompt is sent to the agent when you click Create PR. The agent will push your changes and create the
           pull request.
         </Dialog.Description>
+        {isJjFallback ? <JjPromptFallbackNotice kind="pr-creation" onLeave={(): void => onOpenChange(false)} /> : null}
         <TextArea
           value={promptValue}
           onChange={(e) => setPromptValue(e.target.value)}

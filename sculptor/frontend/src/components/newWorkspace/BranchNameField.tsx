@@ -1,5 +1,5 @@
 import { IconButton, Skeleton, Tooltip } from "@radix-ui/themes";
-import { GitBranchIcon, SparklesIcon } from "lucide-react";
+import { BookmarkIcon, GitBranchIcon, SparklesIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
@@ -33,11 +33,14 @@ type BranchNameFieldProps = {
   variant?: "chip" | "plain";
 };
 
+const capitalize = (word: string): string => `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+
 /**
  * The branch-name field: a monospace pill with input sanitization, a shuffle
  * button to re-roll the auto-filled name, a skeleton that stands in for the input
  * on a cold open, and an error row rendered only when a name is invalid or
- * clashes with an existing branch.
+ * clashes with an existing branch. A jj workspace names a bookmark, so the field
+ * says "bookmark" there.
  */
 export const BranchNameField = ({
   mode,
@@ -50,12 +53,12 @@ export const BranchNameField = ({
   disabled,
   variant = "chip",
 }: BranchNameFieldProps): ReactElement | undefined => {
-  const branchNameRule = WORKSPACE_MODE_RULES[mode].branchName;
+  const { branchName: branchNameRule, nameNoun } = WORKSPACE_MODE_RULES[mode];
   if (branchNameRule === "unused") {
     return undefined;
   }
 
-  const placeholder = branchNameRule === "required" ? "Branch name (required)" : "Branch name (optional)";
+  const placeholder = `${capitalize(nameNoun)} name (${branchNameRule})`;
   // The as-you-type sanitizer keeps most illegal characters out of `value`, so
   // "invalid" only fires on the residue it deliberately lets through (trailing
   // '.' or '/', a '.lock' suffix) — see sanitizeBranchName.ts.
@@ -85,7 +88,7 @@ export const BranchNameField = ({
       <div className={`${styles.pill} ${isPlain ? styles.pillPlain : ""} ${hasError ? styles.pillError : ""}`}>
         {isPlain ? null : (
           <span className={styles.prefix}>
-            <GitBranchIcon size={12} />
+            {nameNoun === "bookmark" ? <BookmarkIcon size={12} /> : <GitBranchIcon size={12} />}
           </span>
         )}
         {isColdLoading ? (
@@ -104,13 +107,13 @@ export const BranchNameField = ({
             autoComplete="off"
           />
         )}
-        <Tooltip content="Shuffle branch name">
+        <Tooltip content={`Shuffle ${nameNoun} name`}>
           <IconButton
             type="button"
             variant="ghost"
             size="1"
             className={styles.shuffleButton}
-            aria-label="Shuffle branch name"
+            aria-label={`Shuffle ${nameNoun} name`}
             data-testid={ElementIds.BRANCH_NAME_SHUFFLE_BUTTON}
             disabled={disabled}
             onClick={onShuffle}
@@ -125,11 +128,11 @@ export const BranchNameField = ({
         <div className={styles.errorSlot}>
           {isInvalid ? (
             <span className={styles.error} data-testid={ElementIds.BRANCH_NAME_INVALID_ERROR}>
-              &apos;{value}&apos; is not a valid branch name
+              &apos;{value}&apos; is not a valid {nameNoun} name
             </span>
           ) : (
             <span className={styles.error} data-testid={ElementIds.BRANCH_NAME_COLLISION_ERROR}>
-              Branch &apos;{value}&apos; already exists
+              {capitalize(nameNoun)} &apos;{value}&apos; already exists
             </span>
           )}
         </div>

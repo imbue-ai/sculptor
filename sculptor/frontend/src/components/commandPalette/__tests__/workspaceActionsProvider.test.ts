@@ -2,6 +2,7 @@ import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ExternalApp, Workspace } from "../../../api";
+import { WorkspaceInitializationStrategy } from "../../../api";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import type { WorkspaceActionRuntime } from "../contextActions/types/contextActions.ts";
 import type { PaletteContext } from "../types/commandPalette.ts";
@@ -44,9 +45,18 @@ const wsCtx = (id: string): PaletteContext => ({
   route: { ...ROOT_CTX.route, isHome: false, isWorkspace: true },
 });
 
-const seedWorkspace = (id: string, description: string): void => {
+const seedWorkspace = (
+  id: string,
+  description: string,
+  initializationStrategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.WORKTREE,
+): void => {
   const store = getDefaultStore();
-  store.set(workspaceAtomFamily(id), { objectId: id, description, isOpen: true } as unknown as Workspace);
+  store.set(workspaceAtomFamily(id), {
+    objectId: id,
+    description,
+    isOpen: true,
+    initializationStrategy,
+  } as unknown as Workspace);
 };
 
 const setWorkspaceIds = (ids: Array<string>): void => {
@@ -88,6 +98,7 @@ const makeCommandRuntime = (): CommandRuntime => {
 
 type ActionRuntimeOverrides = {
   hasUncommittedChanges?: boolean;
+  canCommit?: boolean;
   hasOpenPr?: boolean;
   canCreatePr?: boolean;
   canOpenInOS?: boolean;
@@ -101,6 +112,7 @@ const makeActionRuntime = (overrides: ActionRuntimeOverrides = {}): WorkspaceAct
   openMergeRequest: vi.fn(),
   openInApp: vi.fn(),
   hasUncommittedChanges: vi.fn(() => overrides.hasUncommittedChanges ?? false),
+  canCommit: vi.fn(() => overrides.canCommit ?? true),
   hasOpenPr: vi.fn(() => overrides.hasOpenPr ?? false),
   canCreatePr: vi.fn(() => overrides.canCreatePr ?? true),
   canOpenInOS: vi.fn(() => overrides.canOpenInOS ?? true),
@@ -238,11 +250,34 @@ describe("buildWorkspaceActionsProvider", () => {
   it("create_pr disabled subtitle uses pull request terminology", () => {
     seedWorkspace("ws1", "Active");
     setWorkspaceIds(["ws1"]);
+    const cmds = buildWorkspaceActionsProvider(
+      makeCommandRuntime(),
+      makeActionRuntime({ canCreatePr: false, hasOpenPr: true }),
+    ).produce(wsCtx("ws1"));
+    expect(cmds.find((c) => c.id === "workspaces.action.ws1.create_pr")?.subtitle).toBe(
+      "An open pull request already exists",
+    );
+  });
+
+  it("create_pr disabled subtitle names what is missing when no pull request is open", () => {
+    seedWorkspace("ws1", "Active");
+    setWorkspaceIds(["ws1"]);
     const cmds = buildWorkspaceActionsProvider(makeCommandRuntime(), makeActionRuntime({ canCreatePr: false })).produce(
       wsCtx("ws1"),
     );
     expect(cmds.find((c) => c.id === "workspaces.action.ws1.create_pr")?.subtitle).toBe(
-      "An open pull request already exists",
+      "Needs a target branch and an agent that can take a prompt",
+    );
+  });
+
+  it("create_pr disabled subtitle asks a jj workspace for a target bookmark", () => {
+    seedWorkspace("ws1", "Active", WorkspaceInitializationStrategy.JJ_WORKSPACE);
+    setWorkspaceIds(["ws1"]);
+    const cmds = buildWorkspaceActionsProvider(makeCommandRuntime(), makeActionRuntime({ canCreatePr: false })).produce(
+      wsCtx("ws1"),
+    );
+    expect(cmds.find((c) => c.id === "workspaces.action.ws1.create_pr")?.subtitle).toBe(
+      "Needs a target bookmark and an agent that can take a prompt",
     );
   });
 

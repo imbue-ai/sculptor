@@ -6,13 +6,16 @@ import { useState } from "react";
 import { UserConfigField } from "~/api";
 import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
+import { JjPromptFallbackNotice } from "~/components/JjPromptFallbackNotice.tsx";
 
 type CommitPromptDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** This git prompt is what a jj workspace is sent, since no jj commit prompt is set. */
+  isJjFallback: boolean;
 };
 
-export const CommitPromptDialog = ({ open, onOpenChange }: CommitPromptDialogProps): ReactElement => {
+export const CommitPromptDialog = ({ open, onOpenChange, isJjFallback }: CommitPromptDialogProps): ReactElement => {
   const commitPrompt = useAtomValue(commitPromptAtom);
   const { updateField } = useUserConfig();
   // Local draft of the prompt. While the dialog is open, reset the draft to the
@@ -42,6 +45,7 @@ export const CommitPromptDialog = ({ open, onOpenChange }: CommitPromptDialogPro
           This prompt is sent to the agent when you click Commit. The agent will commit your changes with an appropriate
           message.
         </Dialog.Description>
+        {isJjFallback ? <JjPromptFallbackNotice kind="commit" onLeave={(): void => onOpenChange(false)} /> : null}
         <TextArea
           value={promptValue}
           onChange={(e) => setPromptValue(e.target.value)}

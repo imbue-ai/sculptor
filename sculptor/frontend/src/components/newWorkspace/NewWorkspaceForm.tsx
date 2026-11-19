@@ -1,17 +1,10 @@
-import { Button, Flex, Skeleton, Switch, Tooltip } from "@radix-ui/themes";
+import { Button, Callout, Flex, Link, Skeleton, Switch, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { EffortLevel, ModelOption } from "~/api";
-import {
-  ElementIds,
-  getActiveProjects,
-  getMostRecentlyUsedProject,
-  type LlmModel,
-  ModelCatalogState,
-  WorkspaceInitializationStrategy,
-} from "~/api";
+import type { EffortLevel, ModelOption, WorkspaceInitializationStrategy } from "~/api";
+import { ElementIds, getActiveProjects, getMostRecentlyUsedProject, type LlmModel, ModelCatalogState } from "~/api";
 import {
   lastUsedAgentTypeAtom,
   resolveEffectiveAgentType,
@@ -19,9 +12,11 @@ import {
 } from "~/common/state/atoms/agentTabs.ts";
 import { isPiAvailableAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
+import { repositoryWorkspaceVcsAtomFamily } from "~/common/state/atoms/repositoryWorkspaceVcs.ts";
 import { type ToastContent, ToastType } from "~/common/state/atoms/toasts.ts";
 import { defaultEffortLevelAtom, defaultModelAtom, isDefaultFastModeAtom } from "~/common/state/atoms/userConfig.ts";
 import { useCreateWorkspace } from "~/common/state/hooks/useCreateWorkspace.ts";
+import { useJjBookmarkChoices } from "~/common/state/hooks/useJjBookmarkChoices.ts";
 import { useNightModeSuppressionReason } from "~/common/state/hooks/useNightModeSuppressionReason.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { usePiModels } from "~/common/state/hooks/usePiModels.ts";
@@ -29,7 +24,15 @@ import { useRepoInfo } from "~/common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { hasNoUsableModel } from "~/common/utils/modelConstants.ts";
 import { isDismissibleOverlayOpen } from "~/common/utils/overlays.ts";
-import { hasRequiredCreationFields, WORKSPACE_MODE_RULES } from "~/common/utils/workspaceModeRules.ts";
+import {
+  defaultSourceFor,
+  hasRequiredCreationFields,
+  isCreationBlockedOnJj,
+  isolatedModeFor,
+  resolveCreationMode,
+  WORKSPACE_MODE_RULES,
+} from "~/common/utils/workspaceModeRules.ts";
+import { workspaceVcsOf } from "~/common/utils/workspaceVcs.ts";
 import { createVoiceDraftComposer } from "~/common/voice/draftComposer.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { ModelSelector } from "~/components/ModelSelector.tsx";
@@ -38,10 +41,12 @@ import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";
 import { BranchNameField } from "~/components/newWorkspace/BranchNameField.tsx";
 import { BranchSelector } from "~/components/newWorkspace/BranchSelector.tsx";
 import { useBranchNamePreview } from "~/components/newWorkspace/hooks/useBranchNamePreview.ts";
+import { JjBookmarkSelector } from "~/components/newWorkspace/JjBookmarkSelector.tsx";
 import { ModeSelect } from "~/components/newWorkspace/ModeSelect.tsx";
 import type { NewWorkspaceDraft } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import {
   keepNewWorkspaceDialogOpenAtom,
+  lastCreationSettingsByProjectIdAtom,
   lastWorkspaceCreationSettingsAtom,
   newWorkspaceDraftAtom,
 } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
@@ -102,7 +107,9 @@ type NewWorkspaceFormProps = {
  * values are LOCAL component state, seeded from the open request's explicit
  * seeds, then the session draft (`newWorkspaceDraftAtom`, stashed on every
  * dismissal and cleared by a successful create), then
- * `lastWorkspaceCreationSettingsAtom` and the preset repo. Reuses this
+ * `lastWorkspaceCreationSettingsAtom` and the preset repo. The mode and source
+ * fall back to the selected repository's own last create
+ * (`lastCreationSettingsByProjectIdAtom`). Reuses this
  * branch's RepoSelector / BranchSelector / BranchNameField and the factored
  * create hook.
  */
@@ -118,6 +125,7 @@ export const NewWorkspaceForm = ({
   // State and hooks — atoms
   const projects = useAtomValue(projectsArrayAtom);
   const lastSettings = useAtomValue(lastWorkspaceCreationSettingsAtom);
+  const lastSettingsByProjectId = useAtomValue(lastCreationSettingsByProjectIdAtom);
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
   const isPiAvailable = useAtomValue(isPiAvailableAtom);
   const defaultModel = useAtomValue(defaultModelAtom);
@@ -154,9 +162,9 @@ export const NewWorkspaceForm = ({
   );
   const [workspaceName, setWorkspaceName] = useState<string>(() => initialTitle ?? draft?.title ?? "");
   const [prompt, setPrompt] = useState<string>(() => initialPrompt ?? draft?.prompt ?? "");
-  const [mode, setMode] = useState<WorkspaceInitializationStrategy>(
-    () => draft?.mode ?? lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
-  );
+  // The mode the user picked in this open (or the draft's); unset falls back
+  // to the selected repository's last mode.
+  const [pickedMode, setPickedMode] = useState<WorkspaceInitializationStrategy | undefined>(() => draft?.mode);
   const [agentTypeValue, setAgentTypeValue] = useState<StoredAgentType>(() => {
     const seed = draft?.agentTypeValue ?? lastSettings?.agentType ?? lastUsedAgentType;
     // Normalize the remembered seed. A bare "terminal" stays: it is a
@@ -165,12 +173,9 @@ export const NewWorkspaceForm = ({
     // launch (the picker still lists pi as "Install Pi").
     return seed === "pi" && !isPiAvailable ? "claude" : resolveStoredAgentType(seed);
   });
-  // A draft replaces the MRU branch seed even when it holds no explicit pick —
-  // its `sourceBranch: undefined` means the user was on the repo's current
-  // branch, not that the field should fall back to another repo's memory.
-  const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() =>
-    draft !== undefined ? draft.sourceBranch : lastSettings?.sourceBranch,
-  );
+  // The source the user picked in this open (or the draft's); unset falls back
+  // to the selected repository's last source for the mode, then the mode's default.
+  const [userSelectedBranch, setUserSelectedBranch] = useState<string | undefined>(() => draft?.sourceBranch);
   // `null` means "use the auto-filled preview"; any string means the user has
   // taken over. Both the value and the manual flag collapse into one piece of
   // state so they can never disagree.
@@ -189,6 +194,19 @@ export const NewWorkspaceForm = ({
   // Claude agent) still shows Claude's controls.
   const effectiveAgentType = resolveEffectiveAgentType(agentTypeValue, registrations).agentType;
   const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId);
+  const repositoryVcs = useAtomValue(repositoryWorkspaceVcsAtomFamily(selectedProjectId ?? ""));
+  const rememberedSettings = selectedProjectId === null ? undefined : lastSettingsByProjectId[selectedProjectId];
+  const mode = resolveCreationMode({ remembered: pickedMode ?? rememberedSettings?.mode, vcs: repositoryVcs });
+  // A remembered source belongs to the mode it was picked for: a bookmark is no worktree's source.
+  const rememberedSourceBranch = rememberedSettings?.mode === mode ? rememberedSettings.sourceBranch : undefined;
+  const isJjMode = workspaceVcsOf({ initializationStrategy: mode }) === "jj";
+  const isBlockedOnJj = isCreationBlockedOnJj({ mode, vcs: repositoryVcs });
+  // The callout says why only once jj is known to be unavailable, not while it is still being checked.
+  const isJjKnownUnavailable = isJjMode && repositoryVcs === "jj-unavailable";
+  const jjBookmarks = useJjBookmarkChoices({
+    projectId: selectedProjectId,
+    isEnabled: isJjMode && !isBlockedOnJj,
+  });
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const openSettings = useOpenSettings();
   // Fetch pi's host-side catalog only while pi is the selected agent type, so the
@@ -213,7 +231,13 @@ export const NewWorkspaceForm = ({
     shuffleNonce,
   });
 
-  const sourceBranch = useMemo(() => userSelectedBranch ?? repoInfo?.currentBranch, [userSelectedBranch, repoInfo]);
+  const sourceBranch = useMemo(
+    () =>
+      userSelectedBranch ??
+      rememberedSourceBranch ??
+      defaultSourceFor({ mode, currentBranch: repoInfo?.currentBranch }),
+    [userSelectedBranch, rememberedSourceBranch, mode, repoInfo],
+  );
   const modeRules = WORKSPACE_MODE_RULES[mode];
 
   // Effects — stash the form's entries whenever it unmounts, whatever closed
@@ -328,6 +352,18 @@ export const NewWorkspaceForm = ({
     openSettings(SettingsSection.PI);
     onDismiss();
   }, [openSettings, onDismiss]);
+  const handleGoToJjSettings = useCallback((): void => {
+    openSettings(SettingsSection.JJ);
+    onDismiss();
+  }, [openSettings, onDismiss]);
+  const handleGoToRepositorySettings = useCallback((): void => {
+    if (selectedProjectId === null) {
+      openSettings(SettingsSection.REPOSITORIES);
+    } else {
+      openSettings(SettingsSection.REPOSITORIES, selectedProjectId);
+    }
+    onDismiss();
+  }, [openSettings, onDismiss, selectedProjectId]);
   const handleProjectChange = useCallback((nextProjectId: string): void => {
     setSelectedProjectId(nextProjectId);
     // Switching repos invalidates branch choices made against the old repo.
@@ -335,10 +371,19 @@ export const NewWorkspaceForm = ({
     setUserSelectedBranch(undefined);
   }, []);
 
-  const handleModeChange = useCallback((nextMode: WorkspaceInitializationStrategy): void => {
-    setMode(nextMode);
-    setBranchNameOverride(null);
-  }, []);
+  const handleModeChange = useCallback(
+    (nextMode: WorkspaceInitializationStrategy): void => {
+      setPickedMode(nextMode);
+      setBranchNameOverride(null);
+      // A branch picked for git means nothing to jj, and a bookmark nothing to git.
+      if (workspaceVcsOf({ initializationStrategy: nextMode }) !== workspaceVcsOf({ initializationStrategy: mode })) {
+        setUserSelectedBranch(undefined);
+      }
+    },
+    [mode],
+  );
+
+  const handleBookmarkPickerOpen = jjBookmarks.refetch;
 
   const handleShuffle = useCallback((): void => {
     // Return to auto-fill mode and force a fresh preview fetch (re-rolls the
@@ -414,7 +459,8 @@ export const NewWorkspaceForm = ({
     // blocks Create; the backend re-checks at create time as the backstop.
     branchNameStatus === "exists" ||
     branchNameStatus === "invalid" ||
-    isPiPromptBlocked;
+    isPiPromptBlocked ||
+    isBlockedOnJj;
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmitDisabled || selectedProjectId === null) return;
@@ -437,7 +483,8 @@ export const NewWorkspaceForm = ({
 
     if (!result.ok) {
       if (result.error.kind === "branch-collision") {
-        setToast({ title: `Branch '${result.error.branchName}' already exists`, type: ToastType.ERROR });
+        const noun = WORKSPACE_MODE_RULES[mode].nameNoun === "bookmark" ? "Bookmark" : "Branch";
+        setToast({ title: `${noun} '${result.error.branchName}' already exists`, type: ToastType.ERROR });
       } else {
         setToast({
           title: "",
@@ -585,11 +632,26 @@ export const NewWorkspaceForm = ({
             className={styles.toolbarPill}
           />
 
-          <ModeSelect value={mode} onChange={handleModeChange} className={styles.toolbarPill} />
+          <ModeSelect
+            value={mode}
+            isolatedMode={isolatedModeFor(repositoryVcs)}
+            onChange={handleModeChange}
+            onOpenRepositorySettings={handleGoToRepositorySettings}
+            className={styles.toolbarPill}
+          />
 
-          {repoInfo ? (
-            modeRules.sourceBranch === "unused" ? (
-              <Tooltip content="In-place workspaces use the current branch in your repository">
+          {isJjMode ? (
+            <JjBookmarkSelector
+              bookmarks={jjBookmarks.bookmarks}
+              selectedBookmark={sourceBranch}
+              onBookmarkSelected={setUserSelectedBranch}
+              onOpen={handleBookmarkPickerOpen}
+              isLoading={jjBookmarks.isFetching}
+              className={styles.toolbarPill}
+            />
+          ) : repoInfo ? (
+            modeRules.sourceBranch.rule === "unused" ? (
+              <Tooltip content={modeRules.sourceBranch.whyUnused}>
                 <span style={{ display: "flex" }}>
                   <BranchSelector
                     fetchRepoInfo={fetchRepoInfo}
@@ -710,6 +772,23 @@ export const NewWorkspaceForm = ({
               </Flex>
             ) : null}
           </div>
+
+          {isJjKnownUnavailable ? (
+            <Callout.Root color="amber" size="1" data-testid={ElementIds.NEW_WORKSPACE_JJ_UNAVAILABLE_CALLOUT}>
+              <Callout.Text>
+                This repository creates jj workspaces, and jj is unavailable.{" "}
+                <Link
+                  href="#"
+                  onClick={(e): void => {
+                    e.preventDefault();
+                    handleGoToJjSettings();
+                  }}
+                >
+                  Open Jujutsu settings
+                </Link>
+              </Callout.Text>
+            </Callout.Root>
+          ) : null}
         </div>
 
         {/* ── Footer: keep-open toggle + Cmd+Enter hint + Create ── */}

@@ -1,10 +1,12 @@
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DependenciesStatus, DependencyInfo, JjReadiness } from "~/api";
-import { ElementIds } from "~/api";
+import type { DependenciesStatus, DependencyInfo, JjReadiness, Project, UserConfig } from "~/api";
+import { ElementIds, UserConfigField } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
+import { updateProjectsAtom } from "~/common/state/atoms/projects.ts";
+import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 
 import { JjSettingsSection } from "./JjSettingsSection.tsx";
@@ -22,6 +24,12 @@ vi.mock("~/api", async (importOriginal) => {
     setJjIdentity: mockSetJjIdentity,
   };
 });
+
+// Settings navigation is a route change; the repository links only need to ask for the right section.
+const { mockOpenSettings } = vi.hoisted(() => ({ mockOpenSettings: vi.fn() }));
+vi.mock("~/common/state/hooks/useOpenSettings.ts", () => ({
+  useOpenSettings: (): unknown => mockOpenSettings,
+}));
 
 const makeInfo = (overrides: Partial<DependencyInfo>): DependencyInfo => ({ installed: false, ...overrides });
 
@@ -117,5 +125,107 @@ describe("JjSettingsSection", () => {
 
     expect(mockSetJjIdentity).toHaveBeenCalledWith({ body: IDENTITY, meta: { skipWsAck: true } });
     expect(store.get(dependenciesStatusAtom)).toBe(NOT_INSTALLED);
+  });
+
+  describe("the repositories using jj", () => {
+    it("lists each repository that uses jj for new workspaces, with a link to its settings", () => {
+      store.set(updateProjectsAtom, [
+        {
+          objectId: "p1",
+          name: "Alpha",
+          userGitRepoUrl: "file:///repos/alpha",
+          useJjForNewWorkspaces: true,
+        } as Project,
+        { objectId: "p2", name: "Beta", userGitRepoUrl: "file:///repos/beta", useJjForNewWorkspaces: false } as Project,
+      ]);
+      renderSection();
+
+      const repositories = screen.getByTestId(ElementIds.JJ_REPOSITORIES);
+      expect(within(repositories).getByText("Alpha")).toBeInTheDocument();
+      expect(within(repositories).queryByText("Beta")).not.toBeInTheDocument();
+      fireEvent.click(within(repositories).getByRole("link", { name: "Configure" }));
+
+      expect(mockOpenSettings).toHaveBeenCalledWith("REPOSITORIES", "p1");
+    });
+
+    it("says where to turn jj on when no repository uses it", () => {
+      store.set(updateProjectsAtom, [{ objectId: "p2", name: "Beta", useJjForNewWorkspaces: false } as Project]);
+      renderSection();
+
+      expect(screen.getByTestId(ElementIds.JJ_REPOSITORIES)).toHaveTextContent(
+        "No repository uses jj for new workspaces yet.",
+      );
+    });
+  });
+
+  describe("the jj prompts", () => {
+    it.each([
+      { jjCommitPrompt: "Commit with jj", focused: "textbox" },
+      { jjCommitPrompt: null, focused: "button" },
+    ] as const)(
+      "focuses the prompt it was opened for: the field when set ($jjCommitPrompt), else its suggested wording",
+      ({ jjCommitPrompt, focused }) => {
+        store.set(userConfigAtom, { commitPrompt: "Commit it all", jjCommitPrompt } as UserConfig);
+        renderWithProviders(<JjSettingsSection onSettingChange={vi.fn().mockResolvedValue(undefined)} />, {
+          store,
+          initialEntries: ["/settings?section=JJ&focusPrompt=commit"],
+        });
+
+        const commitRow = screen.getByTestId(ElementIds.JJ_COMMIT_PROMPT_SETTING);
+        const target =
+          focused === "textbox"
+            ? within(commitRow).getByRole("textbox")
+            : within(commitRow).getByRole("button", { name: "Use suggested wording" });
+        expect(target).toHaveFocus();
+      },
+    );
+
+    const renderSectionSaving = (): ReturnType<typeof vi.fn> => {
+      const onSettingChange = vi.fn().mockResolvedValue(undefined);
+      renderWithProviders(<JjSettingsSection onSettingChange={onSettingChange} />, { store });
+      return onSettingChange;
+    };
+
+    it("falls back to the git commit and PR prompts until set, and saves each as its own setting", () => {
+      store.set(userConfigAtom, {
+        commitPrompt: "Commit it all",
+        prCreationPrompt: "Open a PR",
+        jjCommitPrompt: null,
+        jjPrCreationPrompt: "Push the bookmark and open a PR",
+      } as UserConfig);
+      const onSettingChange = renderSectionSaving();
+
+      const commitRow = screen.getByTestId(ElementIds.JJ_COMMIT_PROMPT_SETTING);
+      expect(within(commitRow).getByText("Commit it all")).toBeInTheDocument();
+      fireEvent.click(within(commitRow).getByRole("button", { name: "Use suggested wording" }));
+      const prRow = screen.getByTestId(ElementIds.JJ_PR_CREATION_PROMPT_SETTING);
+      expect(within(prRow).getByRole("textbox")).toHaveValue("Push the bookmark and open a PR");
+      fireEvent.click(within(prRow).getByRole("button", { name: "Use the git prompt" }));
+
+      expect(onSettingChange).toHaveBeenCalledWith(UserConfigField.JJ_COMMIT_PROMPT, expect.stringContaining("jj"));
+      expect(onSettingChange).toHaveBeenCalledWith(UserConfigField.JJ_PR_CREATION_PROMPT, null);
+    });
+
+    it("saves a jj CI babysitter prompt inside the babysitter's settings, keeping the rest", () => {
+      const ciBabysitter = {
+        enabled: true,
+        retryCap: 3,
+        pipelineFailedPrompt: "Fix the pipeline",
+        mergeConflictPrompt: "Fix the conflict",
+        jjPipelineFailedPrompt: null,
+        jjMergeConflictPrompt: null,
+      };
+      store.set(userConfigAtom, { ciBabysitter } as unknown as UserConfig);
+      const onSettingChange = renderSectionSaving();
+
+      const pipelineRow = screen.getByTestId(ElementIds.JJ_CI_PIPELINE_FAILED_PROMPT_SETTING);
+      expect(within(pipelineRow).getByText("Fix the pipeline")).toBeInTheDocument();
+      fireEvent.click(within(pipelineRow).getByRole("button", { name: "Use suggested wording" }));
+
+      expect(onSettingChange).toHaveBeenCalledWith(UserConfigField.CI_BABYSITTER, {
+        ...ciBabysitter,
+        jjPipelineFailedPrompt: expect.stringContaining("jj"),
+      });
+    });
   });
 });

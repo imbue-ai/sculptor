@@ -1,15 +1,17 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CodingAgentTaskView, PrStatusInfo, UserConfig } from "~/api";
-import { ElementIds, LlmModel, TaskStatus } from "~/api";
+import type { CodingAgentTaskView, PrStatusInfo, UserConfig, Workspace, WorkspaceJjStateInfo } from "~/api";
+import { ElementIds, LlmModel, TaskStatus, WorkspaceInitializationStrategy } from "~/api";
 import { reusableTabTarget } from "~/common/reusableTabTarget.ts";
 import { agentAtomFamily, agentIdsAtom } from "~/common/state/atoms/agents.ts";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { commitPromptSendFailedToastAtom } from "~/common/state/atoms/toasts.ts";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import { workspaceJjStateAtomFamily } from "~/common/state/atoms/workspaceJjState.ts";
+import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { workspaceTargetBranchesAtomFamily } from "~/common/state/atoms/workspaceTargetBranches.ts";
 import { renderWithProviders } from "~/common/utils/renderWithProviders.tsx";
 import { workspaceLayoutFamily } from "~/pages/workspace/layout/atoms/section.ts";
@@ -29,6 +31,12 @@ vi.mock("~/api", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return { ...actual, sendWorkspaceAgentMessages: sendMessagesMock };
 });
+
+// Settings navigation is a route change; the menu only needs to ask for the right page.
+const { mockOpenSettings } = vi.hoisted(() => ({ mockOpenSettings: vi.fn() }));
+vi.mock("~/common/state/hooks/useOpenSettings.ts", () => ({
+  useOpenSettings: (): unknown => mockOpenSettings,
+}));
 
 const WORKSPACE_ID = "ws-pr-1";
 const PR_URL = "https://github.com/imbue-ai/sculptor/pull/392";
@@ -51,6 +59,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   sendMessagesMock.mockReset();
+  mockOpenSettings.mockReset();
   localStorage.clear();
 });
 
@@ -86,6 +95,27 @@ describe("PrButton without a target branch", () => {
     });
 
     expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeDisabled();
+  });
+
+  it.each([
+    { kind: WorkspaceInitializationStrategy.WORKTREE, noun: "branch" },
+    { kind: WorkspaceInitializationStrategy.JJ_WORKSPACE, noun: "bookmark" },
+  ])("says a $kind workspace has no target $noun", async ({ kind, noun }) => {
+    const store = storeWith(prStatus({ prState: "none" }));
+    store.set(workspaceAtomFamily(WORKSPACE_ID), {
+      objectId: WORKSPACE_ID,
+      projectId: "proj-1",
+      initializationStrategy: kind,
+      targetBranch: null,
+    } as Workspace);
+    renderWithProviders(<PrButton workspaceId={WORKSPACE_ID} targetBranch={null} gitProvider="github" />, { store });
+
+    // A disabled button receives no pointer events, so the tooltip hangs off its wrapper.
+    const createButton = screen.getByTestId(ElementIds.PR_BUTTON_CREATE);
+    await userEvent.hover(createButton.parentElement ?? createButton);
+
+    const text = `Sculptor couldn't find a target ${noun} for this workspace. Pick one from the target selector to create a PR.`;
+    expect((await screen.findAllByText(text)).length).toBeGreaterThan(0);
   });
 });
 
@@ -168,6 +198,13 @@ const storeWithAgent = (inputs: {
 }): ReturnType<typeof createStore> => {
   const store = storeWith(inputs.status);
   store.set(userConfigAtom, { prCreationPrompt: PR_PROMPT } as unknown as UserConfig);
+  // The Create PR action reads the message's target from the workspace itself.
+  store.set(workspaceAtomFamily(WORKSPACE_ID), {
+    objectId: WORKSPACE_ID,
+    projectId: "proj-1",
+    initializationStrategy: WorkspaceInitializationStrategy.WORKTREE,
+    targetBranch: "origin/main",
+  } as Workspace);
   store.set(agentAtomFamily(AGENT_ID), {
     id: AGENT_ID,
     workspaceId: WORKSPACE_ID,
@@ -287,5 +324,46 @@ describe("PrButton disables its create controls while the workspace's current ag
     renderPrButton(storeWithAgent({ status: NO_PR, harness: CHAT_AGENT, activeCenterPanel: "agent" }));
 
     expect(screen.getByTestId(ElementIds.PR_BUTTON_CREATE)).toBeEnabled();
+  });
+});
+
+describe("PrButton's Edit prompt menu in a jj workspace", () => {
+  const storeWithJjWorkspace = (jjPrCreationPrompt: string | null): ReturnType<typeof createStore> => {
+    const store = storeWithAgent({ status: NO_PR, harness: CHAT_AGENT, activeCenterPanel: "agent" });
+    store.set(workspaceAtomFamily(WORKSPACE_ID), {
+      objectId: WORKSPACE_ID,
+      projectId: "proj-1",
+      initializationStrategy: WorkspaceInitializationStrategy.JJ_WORKSPACE,
+      targetBranch: "main@origin",
+    } as Workspace);
+    store.set(userConfigAtom, { prCreationPrompt: PR_PROMPT, jjPrCreationPrompt } as unknown as UserConfig);
+    // Create PR waits for the jj state, whose bookmark the message names.
+    store.set(workspaceJjStateAtomFamily(WORKSPACE_ID), {
+      workspaceId: WORKSPACE_ID,
+      bookmarks: ["dev/login"],
+      primaryBookmark: "dev/login",
+    } as unknown as WorkspaceJjStateInfo);
+    return store;
+  };
+
+  it("leads to the workspace's jj PR creation prompt on the Jujutsu page", async () => {
+    renderPrButton(storeWithJjWorkspace("Open a jj pull request"));
+
+    fireEvent.contextMenu(screen.getByTestId(ElementIds.PR_BUTTON_CREATE));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit jj prompt..." }));
+
+    expect(mockOpenSettings).toHaveBeenCalledWith("JJ", "pr-creation");
+  });
+
+  it("says the git prompt is sent while no jj prompt is set, and where to set one", async () => {
+    renderPrButton(storeWithJjWorkspace(null));
+
+    fireEvent.contextMenu(screen.getByTestId(ElementIds.PR_BUTTON_CREATE));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit prompt..." }));
+    const dialog = await screen.findByTestId(ElementIds.PR_PROMPT_DIALOG);
+    expect(dialog).toHaveTextContent("No jj PR creation prompt is set, so this jj workspace is sent this git prompt");
+    fireEvent.click(within(dialog).getByRole("link", { name: "Set a jj PR creation prompt" }));
+
+    expect(mockOpenSettings).toHaveBeenCalledWith("JJ", "pr-creation");
   });
 });

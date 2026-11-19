@@ -46,7 +46,13 @@
   color: var(--gray-11);
 }
 
-.pr:hover {
+/* Disabled when the shared Create PR rule says no, as the desktop button is. */
+.pr:disabled {
+  color: var(--gray-8);
+  cursor: not-allowed;
+}
+
+.pr:hover:not(:disabled) {
   background: var(--gray-a4);
 }
 

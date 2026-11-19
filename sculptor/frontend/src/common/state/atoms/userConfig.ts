@@ -114,6 +114,10 @@ export const prCreationPromptAtom = atom<string>(
   (get) => get(userConfigAtom)?.prCreationPrompt ?? DEFAULT_PR_CREATION_PROMPT,
 );
 
+// The prompt sent instead of the PR creation prompt from a jj workspace; null
+// means the git prompt is used, and Sculptor appends its jj suffix either way.
+export const jjPrCreationPromptAtom = atom<string | null>((get) => get(userConfigAtom)?.jjPrCreationPrompt ?? null);
+
 export const isPrPollingEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.prPollingEnabled ?? true);
 
 export const prPollIntervalAtom = atom<number>((get) => get(userConfigAtom)?.prPollIntervalSeconds ?? 30);
@@ -149,6 +153,17 @@ export const ciBabysitterMergeConflictPromptAtom = atom<string>(
   (get) => get(ciBabysitterConfigAtom)?.mergeConflictPrompt ?? DEFAULT_CI_BABYSITTER_MERGE_CONFLICT_PROMPT,
 );
 
+// The prompts sent instead of the babysitter's pipeline-failed and
+// merge-conflict prompts when the PR comes from a jj workspace; null means the
+// git prompt is used.
+export const ciBabysitterJjPipelineFailedPromptAtom = atom<string | null>(
+  (get) => get(ciBabysitterConfigAtom)?.jjPipelineFailedPrompt ?? null,
+);
+
+export const ciBabysitterJjMergeConflictPromptAtom = atom<string | null>(
+  (get) => get(ciBabysitterConfigAtom)?.jjMergeConflictPrompt ?? null,
+);
+
 // Which agent the babysitter drives: the discriminated union from the backend
 // (MRU | Claude | Pi | Registered{registrationId}); null until config loads.
 export const ciBabysitterAgentAtom = atom<NonNullable<CiBabysitterConfig["agent"]> | null>(
@@ -169,6 +184,10 @@ export const DEFAULT_COMMIT_PROMPT =
   "Stage every changed and untracked file, then commit with a comprehensive commit message. Do not leave any files unstaged.";
 
 export const commitPromptAtom = atom<string>((get) => get(userConfigAtom)?.commitPrompt ?? DEFAULT_COMMIT_PROMPT);
+
+// The prompt sent instead of the commit prompt from a jj workspace; null means
+// the git prompt is used, and Sculptor appends its jj suffix either way.
+export const jjCommitPromptAtom = atom<string | null>((get) => get(userConfigAtom)?.jjCommitPrompt ?? null);
 
 // Project environment variable settings
 export const envVarOverrideEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.envVarOverrideEnabled ?? false);
