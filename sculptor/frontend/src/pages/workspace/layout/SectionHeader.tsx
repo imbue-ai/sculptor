@@ -157,19 +157,18 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const section = toSection(subSection);
   const existingSplit = useAtomValue(sectionSplitForSectionAtom(section));
   const splitPanel = useSetAtom(splitSectionAtom);
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, node, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: panelId,
     data: { kind: "panel", panelId, from: subSection, index },
   });
-  const tabNodeRef = useRef<HTMLElement | null>(null);
 
   // The strip scrolls rather than shrinking its tabs, so a tab activated past its
   // edge would stay cut off, close button and all.
   useEffect(() => {
-    if (isActive && tabNodeRef.current !== null) {
-      revealTabInStrip(tabNodeRef.current);
+    if (isActive && node.current !== null) {
+      revealTabInStrip(node.current);
     }
-  }, [isActive]);
+  }, [isActive, node]);
 
   if (definition === undefined) {
     return null;
@@ -272,10 +271,9 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   // itself is focused — keydowns inside children (rename input, close button)
   // don't start a drag. Pointer listeners are dropped while renaming so text
   // selection inside the input can't move the panel.
-  const setTabRef = (node: HTMLElement | null): void => {
-    setNodeRef(node);
-    setActivatorNodeRef(node);
-    tabNodeRef.current = node;
+  const setTabRef = (element: HTMLElement | null): void => {
+    setNodeRef(element);
+    setActivatorNodeRef(element);
   };
 
   // The label ellipsis-clips at a fixed max-width, so a tooltip is only useful when the
