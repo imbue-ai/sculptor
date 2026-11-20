@@ -150,7 +150,10 @@ build_frontend_app() (
 
   # Inject telemetry/build env vars (eval so pnpm sees them in this subshell).
   # Defaults to production; CI sets SCULPTOR_BUILD_ENV=dev for non-release builds.
-  eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")"
+  # This runs in the frontend dir, so the sculptor project is its parent. Assign,
+  # then eval: a bare `eval "$(...)"` returns 0 even when the builder fails.
+  build_vars="$(uv run --project .. builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")"
+  eval "$build_vars"
 
 
   # <REPLACEMENT> begins here. We want to run:
