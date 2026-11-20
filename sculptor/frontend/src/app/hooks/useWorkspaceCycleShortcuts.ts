@@ -14,7 +14,7 @@ import { useCallback } from "react";
 import { sidebarOrderedWorkspacesAtom } from "~/app/nav/sidebarWorkspaceOrder.ts";
 import { useImbueNavigate } from "~/common/hooks/navigation.ts";
 import { useKeybindingHandler } from "~/common/keybindings/useKeybinding.ts";
-import { openWorkspaceTabAtom } from "~/common/state/atoms/workspaces.ts";
+import { agentIdsByWorkspaceAtom, openWorkspaceTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { useRegisterCommandAction } from "~/components/commandPalette/utils/commandActions.ts";
 import { activeWorkspaceIdAtom } from "~/pages/workspace/layout/atoms/section.ts";
 
@@ -39,11 +39,13 @@ const getWorkspaceIdFromHash = (): string | null => {
 export const useWorkspaceCycleShortcuts = (): void => {
   const store = useStore();
   const openWorkspaceTab = useSetAtom(openWorkspaceTabAtom);
-  const { navigateToWorkspace } = useImbueNavigate();
+  const { navigateToAgent, navigateToWorkspace } = useImbueNavigate();
 
   // Cycle to the adjacent workspace in the sidebar order, wrapping at the ends.
-  // Opening the tab before navigating gives keyboard cycling the same end state as
-  // clicking the workspace in the sidebar (the palette's navigate does the same).
+  // Opening the tab and going straight to the workspace's saved agent gives keyboard
+  // cycling the same end state as clicking the workspace in the sidebar. The bare
+  // /ws/<id> route leaves WorkspacePage to pick an agent in an effect after React
+  // commits, and that late redirect can undo a rapid second press.
   const cycleWorkspace = useCallback(
     (direction: CycleDirection): void => {
       const workspaces = store.get(sidebarOrderedWorkspacesAtom);
@@ -60,9 +62,14 @@ export const useWorkspaceCycleShortcuts = (): void => {
       const currentIndex = workspaces.findIndex((workspace) => workspace.objectId === currentId);
       const next = workspaces[stepIndex(workspaces.length, currentIndex, direction)];
       openWorkspaceTab(next.objectId);
+      const savedAgentId = store.get(agentIdsByWorkspaceAtom).get(next.objectId);
+      if (savedAgentId) {
+        navigateToAgent(next.objectId, savedAgentId);
+        return;
+      }
       navigateToWorkspace(next.objectId);
     },
-    [store, openWorkspaceTab, navigateToWorkspace],
+    [store, openWorkspaceTab, navigateToAgent, navigateToWorkspace],
   );
 
   // next_tab/previous_tab keep their legacy ids (see definitions.ts).
