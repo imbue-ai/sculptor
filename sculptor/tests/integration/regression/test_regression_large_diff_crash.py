@@ -18,10 +18,9 @@ This is the same class of bug as the Review All / Shiki regression
 diff panel rather than the combined review view.
 """
 
-import json
 from pathlib import Path
 
-from playwright.sync_api import Response
+from playwright.sync_api import Request
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -83,6 +82,14 @@ fake_claude:multi_step `{{
 }}`"""
 
 
+def _readme_read_ref(request: Request) -> str | None:
+    """The git ref `request` reads README.md at, or None when it is not a read of README.md at a ref."""
+    body = request.post_data_json if "read-file-at-ref" in request.url else None
+    if not body or body.get("path") != "README.md":
+        return None
+    return body["gitRef"]
+
+
 @user_story("to view an individual file diff without the diff panel crashing")
 def test_individual_file_diff_does_not_crash_with_committed_line_count_changes(
     sculptor_instance_: SculptorInstance, tmp_path: Path
@@ -96,22 +103,6 @@ def test_individual_file_diff_does_not_crash_with_committed_line_count_changes(
     """
     page = sculptor_instance_.page
     head_commit_file = tmp_path / "head_commit"
-
-    # Capture the gitRef used in read-file-at-ref requests for README.md.
-    captured_git_refs: list[str] = []
-
-    def _on_response(response: Response) -> None:
-        if "read-file-at-ref" not in response.url:
-            return
-        try:
-            req_body = response.request.post_data
-            if req_body and "README" in req_body:
-                parsed = json.loads(req_body)
-                captured_git_refs.append(parsed.get("gitRef", ""))
-        except (json.JSONDecodeError, AttributeError):
-            pass
-
-    page.on("response", _on_response)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_prompt(head_commit_file))
     chat_panel = task_page.get_chat_panel()
@@ -127,23 +118,37 @@ def test_individual_file_diff_does_not_crash_with_committed_line_count_changes(
     changes_tree = changes_panel.get_changes_tree()
     file_row = changes_tree.get_tree_rows().filter(has_text="README")
     expect(file_row.first).to_be_visible()
-    file_row.first.click()
 
-    # Wait for the diff to render and useFileLines to fetch old content.
-    # Use DIFF_PANEL (not DIFF_VIEW_UNIFIED) because the view type may be
-    # "split" if a prior test in the shared instance toggled the setting.
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
-    expect(diff_panel).to_contain_text("MODIFIED")
+    # Record the git ref of every README read the diff viewer makes in this scope.
+    readme_refs: list[str] = []
 
-    # The key assertion: the read-file-at-ref request for README.md must
-    # use the head commit, not the target branch.  The target's README has
-    # ~2 lines while the head commit's has 600, so a target read crashes
-    # Pierre on hunk offset lookups.
-    readme_refs = [ref for ref in captured_git_refs if ref]
-    assert len(readme_refs) > 0, "Expected at least one read-file-at-ref call for README.md"
-    assert all(ref == head_commit_id for ref in readme_refs), (
-        f"read-file-at-ref for README.md used wrong git ref: {readme_refs}. "
-        + f"Expected the head commit {head_commit_id}; any other ref, such as the target branch, "
-        + "makes Pierre crash when committed changes alter the file's line count vs the target branch."
-    )
+    def _on_request(request: Request) -> None:
+        ref = _readme_read_ref(request)
+        if ref is not None:
+            readme_refs.append(ref)
+
+    page.on("request", _on_request)
+    try:
+        # Opening the diff makes useFileLines read README's old side. That read
+        # can land after the diff panel paints, so wait for the request itself.
+        with page.expect_request(lambda request: _readme_read_ref(request) is not None):
+            file_row.first.click()
+
+        # Use DIFF_PANEL (not DIFF_VIEW_UNIFIED) because the view type may be
+        # "split" if a prior test in the shared instance toggled the setting.
+        diff_panel = task_page.get_diff_panel()
+        expect(diff_panel).to_be_visible()
+        expect(diff_panel).to_contain_text("MODIFIED")
+
+        # The key assertion: every README read must be at the head commit, not
+        # the target branch.  The target's README has ~2 lines while the head
+        # commit's has 600, so a target read crashes Pierre on hunk offset lookups.
+        assert len(readme_refs) > 0, "Expected at least one read-file-at-ref call for README.md"
+        assert all(ref == head_commit_id for ref in readme_refs), (
+            f"read-file-at-ref for README.md used wrong git ref: {readme_refs}. "
+            + f"Expected the head commit {head_commit_id}; any other ref, such as the target branch, "
+            + "makes Pierre crash when committed changes alter the file's line count vs the target branch."
+        )
+    finally:
+        # The page is shared across the session; leave its listener set clean.
+        page.remove_listener("request", _on_request)
