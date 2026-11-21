@@ -35,8 +35,8 @@ from sculptor.services.managed_tools import get_managed_tool
 from sculptor.services.managed_tools import get_managed_tools
 from sculptor.testing.jj_repos import JjBinary
 
-# Verified darwin-arm64 sha256 for pi 1.5.2; ``just bump-pi <version>`` refreshes it.
-_PI_DARWIN_ARM64_SHA256_1_5_2 = "56b5e194d485ced555667b8ba3276157a8272e9ecde9e001e428af80985bdd9b"
+# Verified darwin-arm64 sha256 for pi 1.6.0; ``just bump-pi <version>`` refreshes it.
+_PI_DARWIN_ARM64_SHA256_1_6_0 = "6429287b7ae98d726ec577815d14fd680e7c587e89ecc5153b4a145dc4adba33"
 
 
 def _instantiate_with_no_arguments(candidate: Callable[[], object]) -> object:
@@ -110,7 +110,7 @@ def test_pi_pin_asset_names_follow_the_pi_release_naming_for_each_platform() -> 
 
 
 def test_pi_pin_darwin_arm64_sha256_matches_the_verified_value() -> None:
-    assert PI_PIN.platforms["darwin-arm64"].sha256 == _PI_DARWIN_ARM64_SHA256_1_5_2
+    assert PI_PIN.platforms["darwin-arm64"].sha256 == _PI_DARWIN_ARM64_SHA256_1_6_0
 
 
 def test_pi_pin_platform_sha256s_are_distinct_lowercase_hex_digests() -> None:

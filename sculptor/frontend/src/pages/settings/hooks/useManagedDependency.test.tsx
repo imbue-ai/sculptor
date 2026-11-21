@@ -76,7 +76,7 @@ describe("useManagedDependency", () => {
       makeStatus({
         pi: makeInfo({
           installed: true,
-          version: "1.5.2",
+          version: "1.6.0",
           mode: "MANAGED",
           source: "MANAGED",
           isVersionInRange: true,
@@ -102,7 +102,7 @@ describe("useManagedDependency", () => {
       makeStatus({
         pi: makeInfo({
           installed: true,
-          version: "1.5.2",
+          version: "1.6.0",
           mode: "MANAGED",
           source: "EXTERNAL",
           isVersionInRange: true,
