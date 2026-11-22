@@ -18,6 +18,7 @@ See the [justfile](../../justfile).
 - [Testing](testing.md) — test organization, integration tests
 - [Linting](linting.md) — formatters, linters, ratchets
 - [CLI Tools](cli.md) — sculpt CLI and API client
+- [Managed tools](managed_tools.md) — Sculptor's managed copies of tools override the user's inside Sculptor
 - [Tracing](tracing.md) — distributed tracing and instrumentation
 - [PostHog](posthog.md) — product analytics
 - [Code review rules](review/) — review categories for [Sculptor](review/sculptor.md),

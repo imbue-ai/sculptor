@@ -7,6 +7,11 @@ dependency service rather than on the harness so the seam never imports
 into ``agents/`` here would recreate an import cycle. The version-range value
 types the service shares with the seam are defined here too, which keeps the
 dependency edge one-directional (service -> managed_tools).
+
+Every managed tool follows one policy, recorded in
+``docs/development/managed_tools.md``. Inside Sculptor the managed copy is the
+tool, and outside Sculptor it is invisible. Managed mode never falls back to a
+copy found on PATH.
 """
 
 import platform
