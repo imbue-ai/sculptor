@@ -52,6 +52,10 @@ When asked to create or manage pull requests, use the `gh` CLI to view, create, 
 
 If you create a new worktree, clone or copy of Sculptor, run `just rebuild` to install the proper dependencies.
 
+## Managed tools
+
+Sculptor's managed copies of tools (Claude Code, pi, jj) override the user's own copies inside Sculptor, and are invisible outside it. Before changing how Sculptor finds, installs or launches a tool, or what goes on the PATH of a process Sculptor starts, read `docs/development/managed_tools.md`.
+
 ## Formatting, Linting, and Type Checking
 
 When fixing lint errors, be careful with some common gotchas:

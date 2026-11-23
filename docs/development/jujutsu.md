@@ -3,9 +3,10 @@
 Status: **built**. The preparatory cleanup and every feature ticket
 (sections D13 and D14) are merged into main, the last on 2026-11-19; four
 follow-up cleanup tickets remain open (Open questions). This is the design
-of record: the brief, decisions 1 to 19, and the detailed design adjusted to
+of record: the brief, decisions 1 to 20, and the detailed design adjusted to
 them and to the cleanup validation of 2026-11-16. Section D15 lists the pull
-requests and where the code differs from the design.
+requests and where the code differs from the design. Decision 20, taken on
+2026-11-23, is not built yet.
 
 ## Goal
 
@@ -34,6 +35,8 @@ claude:
 - It is not required to be installed at startup.
 - It is managed from its own page in the settings panel.
 - Users either download a managed binary or set the path to a system `jj`.
+- With the managed binary chosen, it is the only jj that Sculptor and the
+  processes it launches run (decision 20).
 
 **JJ_AVAILABLE** is the master setting for jj: whether jj is enabled at all. It
 is not an independent, saved boolean. It is derived: JJ_AVAILABLE is true
@@ -80,8 +83,9 @@ Defined in the detailed design, section D11.
 
 ## Decisions
 
-Decisions 1 to 7 were taken on 2026-10-28, 8 to 18 on 2026-11-03, and 19 on
-2026-11-11; 16 and 19 were revised on 2026-11-13. All are binding.
+Decisions 1 to 7 were taken on 2026-10-28, 8 to 18 on 2026-11-03, 19 on
+2026-11-11, and 20 on 2026-11-23; 16 and 19 were revised on 2026-11-13. All
+are binding.
 
 1. **The minimum jj version is the pinned version.** Decided at 0.46.0; the
    pin moved to 0.47.1 with PR #504 on 2026-11-11, so the floor is 0.47.1
@@ -175,6 +179,22 @@ Decisions 1 to 7 were taken on 2026-10-28, 8 to 18 on 2026-11-03, and 19 on
     the next registration author: the loader rejects any `{...}` that is not
     a known placeholder, zsh does not word-split an unquoted expansion, and
     `${` is a syntax error in fish and tcsh.
+20. **The managed jj is the only jj inside Sculptor.** This applies the
+    general rule in [Managed tools are overrides inside
+    Sculptor](managed_tools.md) to jj.
+    - With jj set to Managed, Sculptor and every process it launches run the
+      managed jj when they run `jj` by name. That holds in jj and git
+      workspaces alike, whatever the user's shell profile puts first on PATH.
+    - Workspace terminals put Sculptor's jj first again after the profile has
+      run, as terminal agents and the setup command already do.
+    - Managed never falls back to a jj on PATH. Without a managed copy, jj is
+      not installed.
+    - A user who wants Sculptor to run their own jj chooses Custom.
+    - A jj the user runs outside Sculptor belongs to the user. When it is too
+      old to read what Sculptor's jj writes, Sculptor says so on the Jujutsu
+      page and before colocating a repository, and blocks nothing. This
+      replaces the `SHADOWED` readiness blocker.
+    - D15 lists what is not built yet.
 
 The global default-target-branch user setting was unrelated to this design:
 its value was git syntax, which jj mode cannot use. It was deleted
@@ -485,10 +505,16 @@ instead of relying on placeholder resolution.
 
 **PATH.** `<internal>/jj-bin/jj` is a symlink to the resolved binary (managed
 or custom), maintained like `sculpt-bin`, re-linked atomically when the target
-changes and removed when jj is unresolvable. It is prepended only for jj
-workspaces at the four launch sites: chat agents, terminal agents, workspace
-terminals, and the setup-command subprocess. Sculptor's own calls use the
-absolute path.
+changes and removed when jj is unresolvable. It is prepended at the four
+launch sites: chat agents, terminal agents, workspace terminals, and the
+setup-command subprocess. Sculptor's own calls use the absolute path.
+
+Decision 20 (2026-11-23) revised this paragraph in two ways:
+
+- jj-bin is prepended in every workspace. It was prepended only in jj
+  workspaces.
+- It is put first again after a login profile has run. Workspace terminals
+  did not re-apply it.
 
 **Environment.** `GH_REPO` as in D5 (never forced over a user's own value in
 terminals). `JJ_EDITOR=false` for chat agents only, so an editor-invoking jj
@@ -555,10 +581,10 @@ returns nothing for jj workspaces, so it never runs git there.
 | Version constant | import-free `services/jj_version.py` with `JJ_PINNED_VERSION = "0.46.0"` |
 | Pin table | `JJ_PIN`, shaped like `PI_PIN`, sha256 per platform baked in by `just bump-jj`; asset names derived from the version |
 | Platforms | `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64` (static musl builds), mapped to the upstream target triples |
-| Version policy (decision 18) | `min = pin = 0.46.0`, `max = 0.999.999`, recommended = pin. Any later 0.x passes, so a Homebrew jj keeps working; a bump raises the floor |
+| Version policy (decision 18) | `min = pin = 0.46.0`, `max = 0.999.999`, recommended = pin. Any later 0.x passes, so a Homebrew jj chosen as Custom keeps working; a bump raises the floor |
 | `binary_subpath` | `jj` (the tarball holds `./jj`, `./LICENSE`, `./README.md`) |
 | Startup | never installs when missing; refreshes an existing managed copy that fell out of range |
-| MANAGED with no download | falls back to a `jj` on PATH and reports `source=EXTERNAL`, like pi |
+| MANAGED with no download | `NOT_INSTALLED`, with the download offered; never a `jj` found on PATH. Decision 20 (2026-11-23) revised this; it fell back to a `jj` on PATH and reported `source=EXTERNAL`, like pi |
 | Version parsing | own parser: `^jj (\d+\.\d+\.\d+)(?:-\S+)?$`, because the shared parser keeps the `-<hash>` suffix and `packaging.Version` rejects it |
 | Probe output | every managed tool reads both stdout and stderr; `DependencyCheckResult.probe_error` carries stderr so a broken jj config reads as "not runnable" with the real message, not "not installed" |
 | Install flow | reused as is (`install_managed` to `_download_verify_stage` to atomic rename) |
@@ -1071,6 +1097,13 @@ Where the code differs from sections D1 to D12, and why:
   colocation, turning the switch on, listing bookmarks, creating a workspace,
   resolving `sculptor <path>`) calls `probe_jj_readiness()`, which always
   runs jj, so a stale "available" cannot let a write through.
+- **Decision 20 is not built yet (2026-11-23).** As built:
+  - A Managed jj with no download falls back to a `jj` on PATH.
+  - jj-bin is on PATH only in jj workspaces.
+  - A workspace terminal the user opens runs whatever the profile puts first,
+    and an out-of-range jj there is the `SHADOWED` blocker described below.
+
+  Each is to be brought in line with decision 20.
 - **Readiness has seven outcomes, not five (D7).** Beyond not installed, not
   runnable, unsupported version and no identity: `SHADOWED`, when the jj the
   user's login shell runs is out of range, because the repository is shared
