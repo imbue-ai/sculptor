@@ -6,13 +6,13 @@ How the production token reaches the FE bundle:
      sourced from the build environment (token values are not checked in).
   2. ``sculptor/builder/cli.py::setup_build_vars`` reads the value and prints
      ``export SCULPTOR_FRONTEND_POSTHOG_TOKEN=...`` (alongside Sentry vars).
-  3. The justfile's ``build-desktop-app`` and ``package-desktop-installer``
-     recipes ``eval $(uv run ... builder setup-build-vars ...)`` so those
-     ``export`` lines populate the shell env before ``npm run electron:*``.
-  4. Vite (``vite.web.config.ts`` and ``vite.electron.config.ts``) reads
-     ``SCULPTOR_FRONTEND_POSTHOG_TOKEN`` via ``loadEnv`` and bakes it as a
-     compile-time ``define`` constant named ``FRONTEND_POSTHOG_TOKEN``.
-  5. ``sculptor/frontend/src/common/Telemetry.ts`` reads
+  3. The justfile's packaging recipes run ``builder setup-build-vars`` and
+     ``eval`` its output, so those ``export`` lines populate the shell env
+     before ``pnpm run electron:*``.
+  4. Vite (``vite.base.config.ts``) reads ``SCULPTOR_FRONTEND_POSTHOG_TOKEN``
+     via ``loadEnv`` and bakes it as a compile-time ``define`` constant named
+     ``FRONTEND_POSTHOG_TOKEN``.
+  5. ``sculptor/frontend/src/common/telemetry/telemetry.ts`` reads
      ``FRONTEND_POSTHOG_TOKEN`` at runtime to initialize posthog-js.
 
 Phase 1 (SCU-763): only the FE-facing tokens are wired into the build. The
