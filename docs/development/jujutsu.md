@@ -84,8 +84,8 @@ Defined in the detailed design, section D11.
 ## Decisions
 
 Decisions 1 to 7 were taken on 2026-10-28, 8 to 18 on 2026-11-03, 19 on
-2026-11-11, and 20 on 2026-11-23; 16 and 19 were revised on 2026-11-13. All
-are binding.
+2026-11-11, and 20 on 2026-11-23; 16 and 19 were revised on 2026-11-13, and
+20 on 2026-11-27. All are binding.
 
 1. **The minimum jj version is the pinned version.** Decided at 0.46.0; the
    pin moved to 0.47.1 with PR #504 on 2026-11-11, so the floor is 0.47.1
@@ -189,11 +189,18 @@ are binding.
       run, as terminal agents and the setup command already do.
     - Managed never falls back to a jj on PATH. Without a managed copy, jj is
       not installed.
+    - That holds for a user whose Managed jj used to run a jj found on PATH.
+      They get the same error, which offers the download or Custom. Sculptor
+      does not switch them to Custom itself (revised 2026-11-27).
     - A user who wants Sculptor to run their own jj chooses Custom.
     - A jj the user runs outside Sculptor belongs to the user. When it is too
       old to read what Sculptor's jj writes, Sculptor says so on the Jujutsu
       page and before colocating a repository, and blocks nothing. This
       replaces the `SHADOWED` readiness blocker.
+    - When the user's jj is newer than Sculptor's, it can leave the repository
+      in a form Sculptor's jj cannot read. Sculptor then reports an error that
+      names both versions, and offers Custom with the newer jj as the fix
+      (revised 2026-11-27).
     - D15 lists what is not built yet.
 
 The global default-target-branch user setting was unrelated to this design:
@@ -1102,6 +1109,8 @@ Where the code differs from sections D1 to D12, and why:
   - jj-bin is on PATH only in jj workspaces.
   - A workspace terminal the user opens runs whatever the profile puts first,
     and an out-of-range jj there is the `SHADOWED` blocker described below.
+  - Nothing recognises a repository that a newer jj of the user's has left
+    unreadable to Sculptor's jj.
 
   Each is to be brought in line with decision 20.
 - **Readiness has seven outcomes, not five (D7).** Beyond not installed, not

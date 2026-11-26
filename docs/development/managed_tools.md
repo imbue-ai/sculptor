@@ -1,9 +1,11 @@
 # Managed tools are overrides inside Sculptor
 
-Status: **decided** on 2026-11-23. It binds every tool Sculptor manages, which
-today means Claude Code, pi and jj. The code does not follow it everywhere yet;
-[Where the code differs](#where-the-code-differs) lists the gaps known when it
-was written.
+Status: **decided** on 2026-11-23. It was revised on 2026-11-27 to settle
+what happens to existing users of the PATH fallback, and to cover a user's
+copy that is newer than Sculptor's. It binds every tool Sculptor manages,
+which today means Claude Code, pi and jj. The code does not follow it
+everywhere yet; [Where the code differs](#where-the-code-differs) lists the
+gaps known when it was written.
 
 ## The decision
 
@@ -41,6 +43,12 @@ The same four rules serve all three:
    so and offers to install or repair it. Sculptor never substitutes a copy it
    finds on PATH, because that would run an untested version under the
    managed label.
+
+   The rule holds for existing users too. A user whose Managed tool used to
+   run a copy found on PATH gets the not-installed error, with two fixes
+   offered: install Sculptor's copy, or choose Custom and name their own.
+   Sculptor does not switch them to Custom itself, because that would keep
+   running their copy without them having chosen it.
 4. **Custom is the way to opt out.** Sculptor checks the named copy's version
    against the range it supports, then uses that copy wherever it would have
    used the managed one. Rule 1 holds with the user's copy in its place, so
@@ -86,13 +94,24 @@ The binaries are separate. The user's identity and data are not.
     flag, as `JJ_EDITOR=false` does for chat agents. It never edits the user's
     files.
 - **Files that a tool writes into the user's repositories are also read by
-  the copy the user runs outside Sculptor.** A managed jj newer than the
-  user's own copy can leave a repository that their copy cannot read.
-  - Sculptor cannot fix the user's copy, and does not block its own work over
-    it.
-  - It names the user's copy and the version needed. It says so before the
-    first write that would expose that copy to the newer format, such as
-    colocating a repository.
+  the copy the user runs outside Sculptor.** The two copies can be different
+  versions, and the difference can break either side. jj, before 1.0, does
+  not promise that an older version reads what a newer one wrote.
+  - **When the user's copy is older,** a managed jj can leave a repository
+    that the user's copy cannot read. Choosing Managed accepts this. Managed
+    is the default, so many users never pick it consciously, and Sculptor
+    makes the choice an informed one:
+    - It names the user's copy and the version needed.
+    - It says so before the first write that would expose that copy to the
+      newer format, such as colocating a repository.
+    - It does not block its own work over the user's copy, which it cannot
+      fix.
+  - **When the user's copy is newer,** it can leave a repository that
+    Sculptor's managed jj cannot read. Choosing Managed does not accept this.
+    When Sculptor's copy fails to read a repository for this reason,
+    Sculptor reports a plain error that names both versions. The error
+    offers two fixes: choose Custom with the newer copy, or upgrade Sculptor
+    once a release pins a version that new.
 - **A managed tool's prerequisites are declared and checked.** A managed tool
   can run host programs that Sculptor does not manage: jj runs git to fetch
   and push. Each such prerequisite has a minimum version that readiness checks
@@ -150,7 +169,8 @@ exhaustive; a review of the codebase against this decision follows it.
   been downloaded. See `_resolve_optional_tool_path` in
   `sculptor/sculptor/services/dependency_management_service.py`, and the
   `DependencyPaths` docstring in `sculptor/sculptor/config/user_config.py`.
-  Managed Claude Code already never falls back.
+  Managed Claude Code already never falls back. Removing the fallback must
+  not switch existing users to Custom (rule 3).
 - **A workspace terminal the user opens runs whatever their profile puts
   first.**
   - For jj, an out-of-range copy found there is the `SHADOWED` readiness
@@ -162,11 +182,11 @@ exhaustive; a review of the codebase against this decision follows it.
     20 in [jujutsu.md](jujutsu.md).
 - **jj's directory (`jj-bin`) goes on PATH only in jj workspaces**, so a git
   workspace's terminal runs the user's own jj.
+- **No code recognises a repository that a newer jj of the user's has left
+  unreadable to Sculptor's jj.** So no error names both versions yet.
 
 ## Open questions
 
-- Existing users whose Managed pi or jj currently runs a copy found on PATH:
-  should Sculptor switch them to Custom with that copy, or ask them?
 - Should a source checkout treat the pinned jj that `just install-jj` places
   in the virtualenv as its managed copy, the way `get_sculpt_bin_dir` uses the
   virtualenv's `sculpt`?
