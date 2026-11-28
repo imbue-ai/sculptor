@@ -230,7 +230,7 @@ packaging Sculptor):
   minimum-version check** (searched; none found). The minimum supported git version is undefined
   (worktree support is the relevant capability). → OPEN-6 (§7). The git that jj runs for a jj
   workspace is the one exception, with a floor of its own (REQ-COMPAT-024).
-- **REQ-COMPAT-022 (SHOULD).** The **Pi** harness pins **1.5.2**; platforms
+- **REQ-COMPAT-022 (SHOULD).** The **Pi** harness pins **1.7.0**; platforms
   darwin-arm64, darwin-x64, linux-x64, with per-platform sha256 checksums
   (`sculptor/sculptor/services/managed_tools.py`). A version mismatch fails clearly (REQ-INT-022).
 - **REQ-COMPAT-023 (MUST, conditional).** The PR surface requires **`gh`** (GitHub CLI) present and
